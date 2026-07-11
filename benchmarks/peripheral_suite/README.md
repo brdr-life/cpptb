@@ -196,6 +196,32 @@ first, and writes every raw sample plus uncertainty and environment metadata to
 `benchmarks/peripheral_suite/results/spawn_ab.json`. It reports a direction only
 when the two-sided median confidence interval excludes `1.0x`.
 
+## Reconstructed Old/Current Runtime Diagnostic
+
+The E3 isolation diagnostic builds a separate executable from the corroborated
+pre-feature runtime and fixture snapshot without rebuilding the current DPI
+binary or regenerating its wrapper:
+
+```sh
+make peripheral-suite-runtime-old-diagnostic-build
+python3 benchmarks/peripheral_suite/tools/run_runtime_ab.py \
+  --iters 10000 --skip-build
+```
+
+The runner performs one warmup per binary followed by 16 adjacent old/new
+pairs, alternating the first slot exactly. It compares checks, simulation
+cycles, failures, and result identity before evaluating the paired new/old
+ratio, exact two-sided 95% median CI, both order strata, independent medians,
+slot effect, and half-split drift. An inconclusive material classification gets
+exactly one additional 16-pair batch. Workload disagreement or a diagnostic
+disagreement above 5% is an invalid environment; a confirmed regression or a
+final inconclusive result exits nonzero.
+
+Raw samples are durably appended to `results/runtime_ab_latest.jsonl`; final
+JSON and Markdown are atomically replaced at `results/runtime_ab_latest.json`
+and `results/runtime_ab_latest.md`. Source and binary hashes, full commands,
+tool metadata, and reconstruction/build provenance are included in the JSON.
+
 The I2C RTL includes old-style `#1` simulation delay annotations. This benchmark
 uses Verilator `--no-timing` for cocotb and C++ VPI so those annotations do not
 change those host event loop models. The pure SV and C++ DPI testbenches use
