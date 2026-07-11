@@ -111,21 +111,29 @@ uv run --no-project --python /opt/homebrew/bin/python3.12 --with cocotb \
 Run the comparison harness:
 
 ```sh
-python3 benchmarks/peripheral_suite/run_benchmark.py --iters 1000 --runs 15
+python3 benchmarks/peripheral_suite/run_benchmark.py --iters 1000
 ```
 
 The performance-critical loop contains only C++ DPI and pure SV. It warms both
-native binaries, measures 15 adjacent pairs, and alternates which member of a
+native binaries, measures 16 adjacent pairs, and alternates which member of a
 pair runs first. VPI and cocotb measurements are reported separately so their
 startup and host activity cannot interrupt the guard pairs. The guarded metric
 is `median(DPI process wall time / SV process wall time)` across those pairs.
+The initial pair count must be even and at least 16.
 
-A median above `1.10x` is a hard guard failure. When the median passes but the
-one-sided 95% upper bound exceeds `1.10x`, the runner collects one additional
-15-pair batch. It then evaluates all 30 pairs together; a still-inconclusive
-result passes with a warning, while a median above `1.10x` fails immediately.
-Workload mismatches, nonzero test failures, and invalid samples also fail
-immediately.
+A median strictly above `1.10x` is a valid hard guard failure only when the
+DPI-first and SV-first paired medians are both strictly above `1.05x` and the
+ratio of independent process-time medians is within 5% relative of the paired
+median. A threshold crossing that does not meet those validity checks is
+classified as `invalid_environment`; it never becomes a passing result. Valid
+strata never relax a guard failure. Exactly `1.10x` passes the hard threshold.
+
+When the median passes but the one-sided 95% upper bound exceeds `1.10x`, the
+runner collects one additional balanced 16-pair batch. It evaluates all 32
+pairs together; a still-inconclusive result passes with a warning. Workload
+mismatches, nonzero test failures, invalid samples, command failures, hard
+failures, and invalid environments exit nonzero after preserving available
+evidence.
 
 The C++ DPI fixture uses tracked `spawn()` by default, so the guard includes
 process lifecycle support. `spawn()` and `spawn_detached()` both reclaim root
@@ -137,15 +145,42 @@ Results are written to:
 
 - `benchmarks/peripheral_suite/results/latest.json`
 - `benchmarks/peripheral_suite/results/latest.md`
+- `benchmarks/peripheral_suite/results/latest.jsonl`
 
-Each JSON result should carry the raw ordered pairs and medians plus enough
+Every completed sample is appended to the JSONL journal with `flush` and
+`fsync`. Final and failure JSON/Markdown files are atomically replaced. Each
+JSON result carries the raw ordered pairs and medians plus enough
 metadata to reproduce or qualify the run: timestamp, commit and dirty state,
 host/OS/CPU, simulator/compiler/Python versions, build mode, command and
 iteration count, requested and measured pair counts, warmup policy, spawn
-mode, order per pair, confidence bounds, and guard/warning status. The
-Markdown result is a compact rendering of that data. Wall-time
+mode, binary SHA256, sequence index, slot, order per pair, order-stratified
+medians, independent-median agreement, confidence bounds, and guard/warning
+status. The Markdown result is a compact rendering of that data. Wall-time
 ratios near one are noise-sensitive and must not be described as proving that
 one implementation is faster.
+
+## C++ DPI A/A Diagnostic
+
+Run the environment diagnostic separately from the benchmark guard:
+
+```sh
+python3 benchmarks/peripheral_suite/tools/run_aa.py \
+  --iters 10000 --skip-build
+```
+
+The A/A runner uses the same C++ DPI binary, argv, tracked-spawn environment,
+and workload for labels A and B. It performs one warmup per label followed by
+20 balanced adjacent AB/BA pairs. It reports the paired B/A median, exact
+two-sided 95% median confidence interval, A-first and B-first strata,
+second-slot/first-slot median, order-stratum gap, and half-split drift.
+
+The result passes when the CI contains `1.0`, the paired median is in
+`[0.98, 1.02]`, and both strata are in `[0.97, 1.03]`. It fails when the CI
+excludes `1.0`, either stratum is outside `[0.95, 1.05]`, or the relative
+stratum gap exceeds 5%. An otherwise inconclusive result collects exactly one
+additional balanced 20-pair batch and classifies all 40 pairs. Results are
+written atomically to `results/aa_latest.json` and `results/aa_latest.md`, with
+incremental samples in `results/aa_latest.jsonl`.
 
 ## Tracked/Detached A/B
 

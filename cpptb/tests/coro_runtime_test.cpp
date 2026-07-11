@@ -1,6 +1,8 @@
+#include <array>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
+#include <optional>
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -351,7 +353,8 @@ Task<void> count_clock_cycles(Signal clock, uint64_t cycles,
     ++completions;
 }
 
-Task<void> collect_timeout(Edge trigger, SimTime timeout, uint32_t& outcome,
+template <EdgeTrigger Trigger>
+Task<void> collect_timeout(Trigger trigger, SimTime timeout, uint32_t& outcome,
                            uint32_t& resumes) {
     outcome = static_cast<uint32_t>(co_await with_timeout(trigger, timeout));
     ++resumes;
@@ -405,6 +408,52 @@ Task<void> put_then_cancel(Channel<uint32_t>& channel, uint32_t value,
                            Process target) {
     co_await channel.put(value);
     target.cancel();
+}
+
+struct ChannelMoveProbe {
+    uint32_t value = 0;
+    uint32_t completions = 0;
+    bool source_inactive = false;
+    bool destination_active = false;
+    bool destination_inactive_after_resume = false;
+};
+
+Task<void> channel_get_moved_awaiter(Channel<uint32_t>& channel,
+                                     ChannelMoveProbe& probe) {
+    std::optional<Channel<uint32_t>::GetAwaiter> moved;
+    {
+        Channel<uint32_t>::GetAwaiter source{channel};
+        moved.emplace(std::move(source));
+        probe.source_inactive = !source.active;
+        probe.destination_active = moved->active;
+    }
+
+    probe.value = co_await *moved;
+    probe.destination_inactive_after_resume = !moved->active;
+    ++probe.completions;
+}
+
+Task<void> channel_tagged_get(Channel<uint32_t>& channel, uint32_t id,
+                              std::vector<uint32_t>& values,
+                              std::vector<uint32_t>& order,
+                              std::array<uint32_t, 3>& completions) {
+    values.push_back(co_await channel.get());
+    order.push_back(id);
+    ++completions[id];
+}
+
+Task<void> channel_reentrant_get(Channel<uint32_t>& channel,
+                                 Process* cancel_reserved,
+                                 std::vector<uint32_t>& values,
+                                 std::vector<uint32_t>& order,
+                                 std::array<uint32_t, 3>& completions) {
+    const uint32_t value = co_await channel.get();
+    values.push_back(value);
+    order.push_back(0);
+    ++completions[0];
+
+    channel.put_nowait(value + 1);
+    cancel_reserved->cancel();
 }
 
 void trigger_event_cross_scheduler() {
@@ -595,21 +644,68 @@ int main() {
         uint32_t timed_out = 99;
         uint32_t winner_resumes = 0;
         uint32_t timeout_resumes = 0;
-        tb.spawn_detached(collect_timeout(Edge{winner_signal}, 5_ns, winner,
-                                          winner_resumes));
-        tb.spawn_detached(collect_timeout(Edge{timeout_signal}, 3_ns, timed_out,
-                                          timeout_resumes));
-        tb.notify_edge(winner_signal.id, EdgeKind::Any);
+        tb.spawn_detached(collect_timeout(FallingEdge{winner_signal}, 5_ns,
+                                          winner, winner_resumes));
+        tb.spawn_detached(collect_timeout(FallingEdge{timeout_signal}, 3_ns,
+                                          timed_out, timeout_resumes));
+        tb.notify_edge(winner_signal.id, EdgeKind::Falling);
         tb.set_time(3);
-        passed &= expect("with_timeout edge winner", winner,
+        passed &= expect("with_timeout FallingEdge trigger winner", winner,
                          static_cast<uint32_t>(TimeoutOutcome::Triggered));
-        passed &= expect("with_timeout timeout winner", timed_out,
+        passed &= expect("with_timeout FallingEdge timeout winner", timed_out,
                          static_cast<uint32_t>(TimeoutOutcome::TimedOut));
-        tb.notify_edge(timeout_signal.id, EdgeKind::Any);
+        tb.notify_edge(timeout_signal.id, EdgeKind::Falling);
         tb.set_time(5);
-        passed &= expect("with_timeout edge resumes once", winner_resumes, 1);
-        passed &= expect("with_timeout stale edge cleanup", timeout_resumes, 1);
-        passed &= expect("with_timeout done", tb.done() ? 1 : 0, 1);
+        passed &= expect("with_timeout stale timer never resumes",
+                         winner_resumes, 1);
+        passed &= expect("with_timeout stale FallingEdge never resumes",
+                         timeout_resumes, 1);
+        passed &= expect("with_timeout FallingEdge interest cleaned",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+        passed &= expect("with_timeout FallingEdge races done",
+                         tb.done() ? 1 : 0, 1);
+    }
+
+    {
+        const Signal signal{nullptr, 33, "edge_then_time_tie"};
+        Testbench tb;
+        uint32_t outcome = 99;
+        uint32_t completions = 0;
+        tb.spawn_detached(
+            collect_timeout(FallingEdge{signal}, 5_ns, outcome, completions));
+
+        tb.notify_edge(signal.id, EdgeKind::Falling);
+        tb.set_time(5);
+        passed &= expect("with_timeout tie edge-then-time chooses trigger",
+                         outcome,
+                         static_cast<uint32_t>(TimeoutOutcome::Triggered));
+        passed &= expect("with_timeout tie edge-then-time completes once",
+                         completions, 1);
+        passed &= expect("with_timeout tie edge-then-time has no stale wait",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+        passed &= expect("with_timeout tie edge-then-time done",
+                         tb.done() ? 1 : 0, 1);
+    }
+
+    {
+        const Signal signal{nullptr, 34, "time_then_edge_tie"};
+        Testbench tb;
+        uint32_t outcome = 99;
+        uint32_t completions = 0;
+        tb.spawn_detached(
+            collect_timeout(FallingEdge{signal}, 5_ns, outcome, completions));
+
+        tb.set_time(5);
+        tb.notify_edge(signal.id, EdgeKind::Falling);
+        passed &= expect("with_timeout tie time-then-edge chooses timeout",
+                         outcome,
+                         static_cast<uint32_t>(TimeoutOutcome::TimedOut));
+        passed &= expect("with_timeout tie time-then-edge completes once",
+                         completions, 1);
+        passed &= expect("with_timeout tie time-then-edge has no stale wait",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+        passed &= expect("with_timeout tie time-then-edge done",
+                         tb.done() ? 1 : 0, 1);
     }
 
     {
@@ -707,6 +803,29 @@ int main() {
     {
         Testbench tb;
         Channel<uint32_t> channel;
+        ChannelMoveProbe probe;
+        tb.spawn_detached(channel_get_moved_awaiter(channel, probe));
+        passed &= expect("Channel moved GetAwaiter source inactive",
+                         probe.source_inactive ? 1 : 0, 1);
+        passed &= expect("Channel moved GetAwaiter destination active",
+                         probe.destination_active ? 1 : 0, 1);
+        passed &= expect("Channel moved GetAwaiter remains parked",
+                         probe.completions, 0);
+
+        channel.put_nowait(92);
+        passed &= expect("Channel moved GetAwaiter receives reserved item",
+                         probe.value, 92);
+        passed &= expect("Channel moved GetAwaiter completes once",
+                         probe.completions, 1);
+        passed &= expect("Channel moved GetAwaiter deactivates on resume",
+                         probe.destination_inactive_after_resume ? 1 : 0, 1);
+        passed &= expect("Channel moved-from destructor consumes no item",
+                         channel.empty() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        Channel<uint32_t> channel;
         std::vector<uint32_t> values;
         tb.spawn_detached(channel_get(channel, values));
         tb.spawn_detached(channel_get(channel, values));
@@ -738,6 +857,41 @@ int main() {
                          surviving_values[0], 55);
         passed &= expect("Channel cancellation status",
                          cancelled.cancelled() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        Channel<uint32_t> channel;
+        std::vector<uint32_t> values;
+        std::vector<uint32_t> order;
+        std::array<uint32_t, 3> completions{};
+        Process cancel_reserved;
+
+        tb.spawn_detached(channel_reentrant_get(
+            channel, &cancel_reserved, values, order, completions));
+        cancel_reserved = tb.spawn(
+            channel_tagged_get(channel, 1, values, order, completions));
+        tb.spawn_detached(
+            channel_tagged_get(channel, 2, values, order, completions));
+
+        channel.put_nowait(70);
+        passed &= expect("Channel reentrant delivery count", values.size(), 2);
+        passed &= expect("Channel reentrant first value", values[0], 70);
+        passed &= expect("Channel reentrant handed-off value", values[1], 71);
+        passed &= expect("Channel reentrant first consumer order", order[0], 0);
+        passed &= expect("Channel reentrant survivor order", order[1], 2);
+        passed &= expect("Channel reentrant producer-consumer completes once",
+                         completions[0], 1);
+        passed &= expect("Channel reentrant cancelled consumer never resumes",
+                         completions[1], 0);
+        passed &= expect("Channel reentrant survivor completes once",
+                         completions[2], 1);
+        passed &= expect("Channel reentrant reserved consumer cancelled",
+                         cancel_reserved.cancelled() ? 1 : 0, 1);
+        passed &= expect("Channel reentrant handoff loses no item",
+                         channel.empty() ? 1 : 0, 1);
+        passed &= expect("Channel reentrant wake queue drains once",
+                         tb.done() ? 1 : 0, 1);
     }
 
     {

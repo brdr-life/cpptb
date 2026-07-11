@@ -90,7 +90,7 @@
   },
   "conformance": {
     "expected_iterations": 1,
-    "expected_checks": 161,
+    "expected_checks": 165,
     "expected_sim_cycles": 4,
     "expected_failures": 0,
     "negative_cases": [

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import datetime
+import hashlib
 import json
 import math
 import os
@@ -12,6 +13,7 @@ import socket
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -20,7 +22,12 @@ REPO = Path(__file__).resolve().parents[2]
 BENCH_DIR = REPO / "benchmarks" / "peripheral_suite"
 RESULT_DIR = BENCH_DIR / "results"
 MAX_DPI_OVER_SV_PROCESS_RATIO = 1.10
+# Kept for the standalone tracked/detached tool's established API.
 MIN_COMPARISON_PAIRS = 15
+MIN_CRITICAL_COMPARISON_PAIRS = 16
+EXTRA_COMPARISON_PAIRS = 16
+MIN_ORDER_STRATUM_FAILURE_RATIO = 1.05
+MAX_INDEPENDENT_PAIRED_DISAGREEMENT = 0.05
 DEFAULT_ITERATIONS = 10_000
 DEFAULT_SLOW_RUNS = 3
 CPP_VPI_BINARY = REPO / "build" / "benchmarks" / "peripheral_suite" / "peripheral_suite_host"
@@ -46,23 +53,98 @@ COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "/opt/homebrew/bin/python3
 RESULT_RE = re.compile(r"(?P<name>[A-Z_]+_RESULT)\s+(?P<fields>.*)")
 
 
+class CommandExecutionError(RuntimeError):
+    def __init__(self, command, returncode, output):
+        self.command = list(command)
+        self.returncode = returncode
+        self.output = output
+        super().__init__(
+            f"command failed with exit {returncode}: {' '.join(map(str, command))}"
+        )
+
+
+class ResultParseError(RuntimeError):
+    def __init__(self, expected_name, output):
+        self.expected_name = expected_name
+        self.output = output
+        super().__init__(f"missing {expected_name} in command output")
+
+
+class SampleJournal:
+    def __init__(self, path, truncate=False):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if truncate:
+            with self.path.open("w", encoding="utf-8") as stream:
+                stream.flush()
+                os.fsync(stream.fileno())
+
+    def append(self, entry):
+        with self.path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(entry, sort_keys=True) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+
+
+def atomic_write_text(path, text, replace=None):
+    """Durably replace path with text using a sibling temporary file."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    replace = replace or os.replace
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary_path = Path(stream.name)
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        replace(temporary_path, path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
+def atomic_write_json(path, value, replace=None):
+    atomic_write_text(path, json.dumps(value, indent=2) + "\n", replace=replace)
+
+
+def binary_sha256(path):
+    path = Path(path)
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except OSError:
+        return None
+
+
 def run_command(command, env=None):
     start = time.perf_counter()
-    completed = subprocess.run(
-        command,
-        cwd=REPO,
-        env=env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=REPO,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+    except OSError as error:
+        raise CommandExecutionError(command, None, str(error)) from error
     wall_ms = (time.perf_counter() - start) * 1000.0
     if completed.returncode != 0:
         print(completed.stdout)
-        raise SystemExit(
-            f"command failed with exit {completed.returncode}: {' '.join(map(str, command))}"
-        )
+        raise CommandExecutionError(command, completed.returncode, completed.stdout)
     return completed.stdout, wall_ms
 
 
@@ -157,7 +239,7 @@ def parse_result(output, expected_name):
         return fields
 
     print(output)
-    raise SystemExit(f"missing {expected_name} in command output")
+    raise ResultParseError(expected_name, output)
 
 
 def median(values):
@@ -298,10 +380,13 @@ def two_sided_median_confidence_interval(values, confidence=0.95):
 
 def _samples_by_run(summary, label):
     samples = summary.get("samples", [])
-    run_ids = [int(sample["run"]) for sample in samples]
+    try:
+        run_ids = [int(sample["run"]) for sample in samples]
+    except (KeyError, TypeError, ValueError) as error:
+        return None, f"invalid run ID in {label} samples: {error}"
     if len(run_ids) != len(set(run_ids)):
-        raise SystemExit(f"duplicate run IDs in {label} samples: {run_ids}")
-    return {int(sample["run"]): sample for sample in samples}
+        return None, f"duplicate run IDs in {label} samples: {run_ids}"
+    return {int(sample["run"]): sample for sample in samples}, None
 
 
 def paired_ratio_statistics(
@@ -310,23 +395,56 @@ def paired_ratio_statistics(
     numerator_label,
     denominator_label,
 ):
-    numerator_by_run = _samples_by_run(numerator_summary, numerator_label)
-    denominator_by_run = _samples_by_run(denominator_summary, denominator_label)
+    numerator_by_run, numerator_error = _samples_by_run(
+        numerator_summary, numerator_label
+    )
+    denominator_by_run, denominator_error = _samples_by_run(
+        denominator_summary, denominator_label
+    )
+    error = numerator_error or denominator_error
+    if error:
+        return {
+            "status": "invalid_samples",
+            "error": error,
+            "paired_ratios": [],
+        }
     if not numerator_by_run or numerator_by_run.keys() != denominator_by_run.keys():
-        raise SystemExit(
-            f"{numerator_label} and {denominator_label} samples must have matching run IDs"
-        )
+        return {
+            "status": "invalid_samples",
+            "error": (
+                f"{numerator_label} and {denominator_label} samples must have "
+                "matching run IDs"
+            ),
+            "paired_ratios": [],
+        }
 
     paired_ratios = []
     for run_id in sorted(numerator_by_run):
-        numerator_ms = float(numerator_by_run[run_id]["process_wall_ms"])
-        denominator_ms = float(denominator_by_run[run_id]["process_wall_ms"])
+        try:
+            numerator_ms = float(numerator_by_run[run_id]["process_wall_ms"])
+            denominator_ms = float(denominator_by_run[run_id]["process_wall_ms"])
+        except (KeyError, TypeError, ValueError) as error:
+            return {
+                "status": "invalid_samples",
+                "error": f"invalid process time in run {run_id}: {error}",
+                "paired_ratios": paired_ratios,
+            }
         if not math.isfinite(numerator_ms) or numerator_ms < 0:
-            raise SystemExit(f"{numerator_label} process time must be finite and non-negative")
+            return {
+                "status": "invalid_samples",
+                "error": (
+                    f"{numerator_label} process time must be finite and non-negative"
+                ),
+                "paired_ratios": paired_ratios,
+            }
         if not math.isfinite(denominator_ms) or denominator_ms <= 0:
-            raise SystemExit(
-                f"{denominator_label} process time must be finite and greater than zero"
-            )
+            return {
+                "status": "invalid_samples",
+                "error": (
+                    f"{denominator_label} process time must be finite and greater than zero"
+                ),
+                "paired_ratios": paired_ratios,
+            }
         paired_ratios.append(numerator_ms / denominator_ms)
 
     interval = two_sided_median_confidence_interval(paired_ratios)
@@ -338,6 +456,7 @@ def paired_ratio_statistics(
         direction = "inconclusive"
 
     return {
+        "status": "ok",
         "metric": f"median({numerator_label}_process_wall / {denominator_label}_process_wall by run)",
         "ratio": median(paired_ratios),
         "overhead_percent": (median(paired_ratios) - 1.0) * 100.0,
@@ -358,10 +477,19 @@ def check_dpi_vs_pure_sv(
 ):
     if max_ratio is None:
         max_ratio = MAX_DPI_OVER_SV_PROCESS_RATIO
-    if len(cpp_dpi_summary.get("samples", [])) < MIN_COMPARISON_PAIRS:
-        raise SystemExit(
-            f"C++ DPI/pure SV guard requires at least {MIN_COMPARISON_PAIRS} paired runs"
-        )
+    sample_count = len(cpp_dpi_summary.get("samples", []))
+    if sample_count < MIN_CRITICAL_COMPARISON_PAIRS or sample_count % 2:
+        return {
+            "status": "invalid_environment",
+            "verdict": "invalid_environment",
+            "validity": "invalid",
+            "error": (
+                "C++ DPI/pure SV guard requires an even count of at least "
+                f"{MIN_CRITICAL_COMPARISON_PAIRS} paired runs"
+            ),
+            "requested_pairs": sample_count,
+            "measured_pairs": sample_count,
+        }
 
     result = paired_ratio_statistics(
         cpp_dpi_summary,
@@ -369,39 +497,148 @@ def check_dpi_vs_pure_sv(
         "cpp_dpi",
         "pure_sv",
     )
+    if result["status"] == "invalid_samples":
+        result.update(
+            {
+                "status": "invalid_environment",
+                "verdict": "invalid_environment",
+                "validity": "invalid",
+                "measured_pairs": sample_count,
+            }
+        )
+        return result
+
+    dpi_by_run, _ = _samples_by_run(cpp_dpi_summary, "cpp_dpi")
+    sv_by_run, _ = _samples_by_run(pure_sv_summary, "pure_sv")
+    order_strata = {"cpp_dpi_first": [], "pure_sv_first": []}
+    invalid_orders = []
+    for run_id, ratio in zip(sorted(dpi_by_run), result["paired_ratios"]):
+        dpi_order = dpi_by_run[run_id].get("pair_order")
+        sv_order = sv_by_run[run_id].get("pair_order")
+        order = dpi_order or sv_order
+        if order is None:
+            order = ["cpp_dpi", "pure_sv"] if run_id % 2 else ["pure_sv", "cpp_dpi"]
+        if dpi_order is not None and sv_order is not None and dpi_order != sv_order:
+            invalid_orders.append(run_id)
+        elif order == ["cpp_dpi", "pure_sv"]:
+            order_strata["cpp_dpi_first"].append(ratio)
+        elif order == ["pure_sv", "cpp_dpi"]:
+            order_strata["pure_sv_first"].append(ratio)
+        else:
+            invalid_orders.append(run_id)
+
+    if invalid_orders or any(
+        len(values) != sample_count // 2 for values in order_strata.values()
+    ):
+        result.update(
+            {
+                "status": "invalid_environment",
+                "verdict": "invalid_environment",
+                "validity": "invalid",
+                "error": (
+                    "pair ordering must be balanced DPI-first/SV-first; invalid runs: "
+                    f"{invalid_orders}"
+                ),
+            }
+        )
+        return result
+
+    try:
+        dpi_median = float(cpp_dpi_summary["process_wall_ms_median"])
+        sv_median = float(pure_sv_summary["process_wall_ms_median"])
+    except (KeyError, TypeError, ValueError) as error:
+        result.update(
+            {
+                "status": "invalid_environment",
+                "verdict": "invalid_environment",
+                "validity": "invalid",
+                "error": f"invalid independent process medians: {error}",
+            }
+        )
+        return result
+    paired_median = result["ratio"]
+    if (
+        not math.isfinite(dpi_median)
+        or dpi_median < 0
+        or not math.isfinite(sv_median)
+        or sv_median <= 0
+        or paired_median <= 0
+    ):
+        result.update(
+            {
+                "status": "invalid_environment",
+                "verdict": "invalid_environment",
+                "validity": "invalid",
+                "error": "independent and paired process medians must be finite and positive",
+            }
+        )
+        return result
+    independent_ratio = dpi_median / sv_median
+    dpi_first_median = median(order_strata["cpp_dpi_first"])
+    sv_first_median = median(order_strata["pure_sv_first"])
+    relative_disagreement = abs(independent_ratio - paired_median) / paired_median
+    order_stratum_gap = abs(dpi_first_median - sv_first_median) / paired_median
     result.update(
         {
             "max_ratio": max_ratio,
-            "cpp_dpi_process_wall_ms": float(
-                cpp_dpi_summary["process_wall_ms_median"]
-            ),
-            "pure_sv_process_wall_ms": float(
-                pure_sv_summary["process_wall_ms_median"]
-            ),
+            "cpp_dpi_process_wall_ms": dpi_median,
+            "pure_sv_process_wall_ms": sv_median,
+            "dpi_first_paired_median": dpi_first_median,
+            "sv_first_paired_median": sv_first_median,
+            "independent_median_ratio": independent_ratio,
+            "independent_paired_relative_disagreement": relative_disagreement,
+            "order_stratum_gap": order_stratum_gap,
+            "order_strata": order_strata,
         }
     )
 
     if result["ratio"] > max_ratio:
-        raise SystemExit(
-            f"paired tracked C++ DPI/pure SV process ratio exceeded {max_ratio:.2f}x: "
-            f"median ratio = {result['ratio']:.3f}x "
-            f"({result['overhead_percent']:+.2f}%).\n"
-            f"Independent medians: {result['cpp_dpi_process_wall_ms']:.3f} ms DPI, "
-            f"{result['pure_sv_process_wall_ms']:.3f} ms SV.\n"
-            "Stop and consult before adding more framework features."
+        valid_failure = (
+            dpi_first_median > MIN_ORDER_STRATUM_FAILURE_RATIO
+            and sv_first_median > MIN_ORDER_STRATUM_FAILURE_RATIO
+            and relative_disagreement <= MAX_INDEPENDENT_PAIRED_DISAGREEMENT
         )
+        if valid_failure:
+            result.update(
+                {
+                    "status": "hard_failure",
+                    "verdict": "failed",
+                    "validity": "valid",
+                    "error": (
+                        f"paired tracked C++ DPI/pure SV process ratio exceeded "
+                        f"{max_ratio:.2f}x: median ratio = {result['ratio']:.3f}x"
+                    ),
+                }
+            )
+        else:
+            result.update(
+                {
+                    "status": "invalid_environment",
+                    "verdict": "invalid_environment",
+                    "validity": "invalid",
+                    "error": (
+                        "guard threshold was crossed, but order strata or independent "
+                        "medians do not validate the measurement environment"
+                    ),
+                }
+            )
+        return result
 
     upper_bound = result["one_sided_95_upper_median_bound"]["bound"]
     if upper_bound > max_ratio and not final:
         result["status"] = "needs_extra_batch"
+        result["verdict"] = "inconclusive"
     elif upper_bound > max_ratio:
         result["status"] = "passed_inconclusive"
+        result["verdict"] = "passed"
         result["warning"] = (
             f"median tracked C++ DPI/pure SV ratio passes at {result['ratio']:.3f}x, "
             f"but its one-sided 95% upper median bound is {upper_bound:.3f}x"
         )
     else:
         result["status"] = "passed"
+        result["verdict"] = "passed"
+    result["validity"] = "valid"
     return result
 
 
@@ -452,28 +689,81 @@ def collect_critical_pairs(
     start_run=1,
     dpi_sample_runner=None,
     sv_sample_runner=None,
+    journal=None,
+    requested_pairs=None,
+    binary_hashes=None,
 ):
     dpi_sample_runner = dpi_sample_runner or run_cpp_dpi_sample
     sv_sample_runner = sv_sample_runner or run_pure_sv_sample
     dpi_samples = []
     pure_sv_samples = []
+    requested_pairs = requested_pairs or pair_count
+    binary_hashes = binary_hashes or {
+        "cpp_dpi": binary_sha256(CPP_DPI_BINARY),
+        "pure_sv": binary_sha256(PURE_SV_BINARY),
+    }
 
     for offset in range(pair_count):
         run_id = start_run + offset
         if run_id % 2:
             dpi = dpi_sample_runner(run_id, iters, "tracked")
+            dpi.update(
+                {
+                    "binary_sha256": binary_hashes["cpp_dpi"],
+                    "sequence_index": run_id,
+                    "slot": 1,
+                    "pair_order": ["cpp_dpi", "pure_sv"],
+                    "requested_pair_count": requested_pairs,
+                    "measured_pair_count": run_id - 1,
+                }
+            )
+            if journal:
+                journal.append({"event": "sample", "label": "cpp_dpi", "sample": dpi})
             pure_sv = sv_sample_runner(run_id, iters)
             order = ["cpp_dpi", "pure_sv"]
+            pure_sv.update(
+                {
+                    "binary_sha256": binary_hashes["pure_sv"],
+                    "sequence_index": run_id,
+                    "slot": 2,
+                    "pair_order": order,
+                    "requested_pair_count": requested_pairs,
+                    "measured_pair_count": run_id,
+                }
+            )
+            if journal:
+                journal.append({"event": "sample", "label": "pure_sv", "sample": pure_sv})
         else:
             pure_sv = sv_sample_runner(run_id, iters)
+            pure_sv.update(
+                {
+                    "binary_sha256": binary_hashes["pure_sv"],
+                    "sequence_index": run_id,
+                    "slot": 1,
+                    "pair_order": ["pure_sv", "cpp_dpi"],
+                    "requested_pair_count": requested_pairs,
+                    "measured_pair_count": run_id - 1,
+                }
+            )
+            if journal:
+                journal.append({"event": "sample", "label": "pure_sv", "sample": pure_sv})
             dpi = dpi_sample_runner(run_id, iters, "tracked")
             order = ["pure_sv", "cpp_dpi"]
-        dpi["pair_order"] = order
-        pure_sv["pair_order"] = order
+            dpi.update(
+                {
+                    "binary_sha256": binary_hashes["cpp_dpi"],
+                    "sequence_index": run_id,
+                    "slot": 2,
+                    "pair_order": order,
+                    "requested_pair_count": requested_pairs,
+                    "measured_pair_count": run_id,
+                }
+            )
+            if journal:
+                journal.append({"event": "sample", "label": "cpp_dpi", "sample": dpi})
         dpi_samples.append(dpi)
         pure_sv_samples.append(pure_sv)
 
-    assert_same_workload({"cpp_dpi": dpi_samples, "pure_sv": pure_sv_samples})
     return dpi_samples, pure_sv_samples
 
 
@@ -482,27 +772,87 @@ def run_critical_comparison(
     comparison_runs,
     dpi_sample_runner=None,
     sv_sample_runner=None,
+    journal=None,
 ):
-    if comparison_runs < MIN_COMPARISON_PAIRS:
+    if comparison_runs < MIN_CRITICAL_COMPARISON_PAIRS or comparison_runs % 2:
         raise SystemExit(
-            f"comparison runs must be at least {MIN_COMPARISON_PAIRS}"
+            "comparison runs must be an even count of at least "
+            f"{MIN_CRITICAL_COMPARISON_PAIRS}"
         )
     dpi_sample_runner = dpi_sample_runner or run_cpp_dpi_sample
     sv_sample_runner = sv_sample_runner or run_pure_sv_sample
+    binary_hashes = {
+        "cpp_dpi": binary_sha256(CPP_DPI_BINARY),
+        "pure_sv": binary_sha256(PURE_SV_BINARY),
+    }
 
     # Warm both binaries before entering the adjacency-sensitive pair loop.
     dpi_warmup = dpi_sample_runner(0, iters, "tracked")
     sv_warmup = sv_sample_runner(0, iters)
     dpi_warmup["run"] = 0
     sv_warmup["run"] = 0
-    assert_same_workload({"cpp_dpi": [dpi_warmup], "pure_sv": [sv_warmup]})
+    dpi_warmup.update(
+        {
+            "binary_sha256": binary_hashes["cpp_dpi"],
+            "sequence_index": 0,
+            "slot": 1,
+            "pair_order": ["cpp_dpi", "pure_sv"],
+            "requested_pair_count": comparison_runs,
+            "measured_pair_count": 0,
+            "warmup": True,
+        }
+    )
+    sv_warmup.update(
+        {
+            "binary_sha256": binary_hashes["pure_sv"],
+            "sequence_index": 0,
+            "slot": 2,
+            "pair_order": ["cpp_dpi", "pure_sv"],
+            "requested_pair_count": comparison_runs,
+            "measured_pair_count": 0,
+            "warmup": True,
+        }
+    )
+    if journal:
+        journal.append({"event": "sample", "label": "cpp_dpi", "sample": dpi_warmup})
+        journal.append({"event": "sample", "label": "pure_sv", "sample": sv_warmup})
+    try:
+        assert_same_workload({"cpp_dpi": [dpi_warmup], "pure_sv": [sv_warmup]})
+    except SystemExit as error:
+        return [], [], {
+            "status": "invalid_environment",
+            "verdict": "invalid_environment",
+            "validity": "invalid",
+            "error": str(error),
+            "requested_pairs": comparison_runs,
+            "measured_pairs": 0,
+            "extra_batch_collected": False,
+            "binary_sha256": binary_hashes,
+            "warmup_samples": {"cpp_dpi": dpi_warmup, "pure_sv": sv_warmup},
+        }
 
     dpi_samples, pure_sv_samples = collect_critical_pairs(
         iters,
         comparison_runs,
         dpi_sample_runner=dpi_sample_runner,
         sv_sample_runner=sv_sample_runner,
+        journal=journal,
+        requested_pairs=comparison_runs,
+        binary_hashes=binary_hashes,
     )
+    try:
+        assert_same_workload({"cpp_dpi": dpi_samples, "pure_sv": pure_sv_samples})
+    except SystemExit as error:
+        return dpi_samples, pure_sv_samples, {
+            "status": "invalid_environment",
+            "verdict": "invalid_environment",
+            "validity": "invalid",
+            "error": str(error),
+            "requested_pairs": comparison_runs,
+            "measured_pairs": len(dpi_samples),
+            "extra_batch_collected": False,
+            "binary_sha256": binary_hashes,
+        }
     guard = check_dpi_vs_pure_sv(
         summarize("cpp_dpi", dpi_samples),
         summarize("pure_sv", pure_sv_samples),
@@ -512,13 +862,31 @@ def run_critical_comparison(
     if extra_batch_collected:
         extra_dpi, extra_sv = collect_critical_pairs(
             iters,
-            comparison_runs,
+            EXTRA_COMPARISON_PAIRS,
             start_run=comparison_runs + 1,
             dpi_sample_runner=dpi_sample_runner,
             sv_sample_runner=sv_sample_runner,
+            journal=journal,
+            requested_pairs=comparison_runs + EXTRA_COMPARISON_PAIRS,
+            binary_hashes=binary_hashes,
         )
         dpi_samples.extend(extra_dpi)
         pure_sv_samples.extend(extra_sv)
+        try:
+            assert_same_workload(
+                {"cpp_dpi": dpi_samples, "pure_sv": pure_sv_samples}
+            )
+        except SystemExit as error:
+            return dpi_samples, pure_sv_samples, {
+                "status": "invalid_environment",
+                "verdict": "invalid_environment",
+                "validity": "invalid",
+                "error": str(error),
+                "requested_pairs": comparison_runs,
+                "measured_pairs": len(dpi_samples),
+                "extra_batch_collected": True,
+                "binary_sha256": binary_hashes,
+            }
         guard = check_dpi_vs_pure_sv(
             summarize("cpp_dpi", dpi_samples),
             summarize("pure_sv", pure_sv_samples),
@@ -528,6 +896,7 @@ def run_critical_comparison(
     guard["requested_pairs"] = comparison_runs
     guard["measured_pairs"] = len(dpi_samples)
     guard["extra_batch_collected"] = extra_batch_collected
+    guard["binary_sha256"] = binary_hashes
     return dpi_samples, pure_sv_samples, guard
 
 
@@ -581,7 +950,7 @@ def _parse_args(argv=None):
     parser.add_argument(
         "--comparison-runs",
         type=int,
-        default=MIN_COMPARISON_PAIRS,
+        default=MIN_CRITICAL_COMPARISON_PAIRS,
         help="number of adjacent tracked DPI/SV pairs in the initial guard batch",
     )
     parser.add_argument("--skip-build", action="store_true")
@@ -590,13 +959,61 @@ def _parse_args(argv=None):
         parser.error("--iters must be greater than zero")
     if args.runs <= 0:
         parser.error("--runs must be greater than zero")
-    if args.comparison_runs < MIN_COMPARISON_PAIRS:
-        parser.error(f"--comparison-runs must be at least {MIN_COMPARISON_PAIRS}")
+    if (
+        args.comparison_runs < MIN_CRITICAL_COMPARISON_PAIRS
+        or args.comparison_runs % 2
+    ):
+        parser.error(
+            "--comparison-runs must be an even count of at least "
+            f"{MIN_CRITICAL_COMPARISON_PAIRS}"
+        )
     return args
+
+
+def _journal_samples(journal):
+    samples = []
+    if journal is None or not journal.path.exists():
+        return samples
+    for line in journal.path.read_text(encoding="utf-8").splitlines():
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("event") == "sample":
+            samples.append(entry)
+    return samples
+
+
+def _failure_markdown(result):
+    guard = result.get("performance_guard", {})
+    lines = [
+        "# Peripheral-suite benchmark diagnostic",
+        "",
+        f"- Status: `{result['status']}`",
+        f"- Verdict: `{result.get('verdict', result['status'])}`",
+        f"- Requested critical pairs: `{result.get('requested_pairs', 0)}`",
+        f"- Measured critical pairs: `{result.get('measured_pairs', 0)}`",
+    ]
+    if "ratio" in guard:
+        lines.append(f"- Paired DPI/SV median: `{guard['ratio']:.3f}x`")
+    if result.get("error"):
+        lines.extend([f"- Error: {result['error']}", ""])
+    lines.append("Raw evidence is retained in the JSON result and JSONL journal.")
+    return "\n".join(lines) + "\n"
+
+
+def persist_diagnostic_result(result, json_path, md_path, markdown=None):
+    atomic_write_json(json_path, result)
+    atomic_write_text(md_path, markdown or _failure_markdown(result))
 
 
 def main(argv=None):
     args = _parse_args(argv)
+
+    RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    json_path = RESULT_DIR / "latest.json"
+    md_path = RESULT_DIR / "latest.md"
+    journal = SampleJournal(RESULT_DIR / "latest.jsonl", truncate=True)
 
     build_commands = [
         ["make", "peripheral-suite-build"],
@@ -617,34 +1034,152 @@ def main(argv=None):
             "--build-only",
         ],
     ]
-    if not args.skip_build:
-        for command in build_commands:
-            run_command(command)
+    try:
+        if not args.skip_build:
+            for command in build_commands:
+                run_command(command)
 
-    cpp_dpi_samples, pure_sv_samples, performance_guard = run_critical_comparison(
-        args.iters, args.comparison_runs
-    )
+        cpp_dpi_samples, pure_sv_samples, performance_guard = run_critical_comparison(
+            args.iters, args.comparison_runs, journal=journal
+        )
+    except (CommandExecutionError, ResultParseError) as error:
+        result = {
+            "status": "command_error",
+            "verdict": "invalid_environment",
+            "error": str(error),
+            "command_failure": {
+                "command": getattr(error, "command", None),
+                "returncode": getattr(error, "returncode", None),
+                "output": error.output,
+            },
+            "requested_pairs": args.comparison_runs,
+            "measured_pairs": len(
+                {
+                    entry["sample"].get("sequence_index")
+                    for entry in _journal_samples(journal)
+                    if not entry["sample"].get("warmup")
+                }
+            ),
+            "samples": _journal_samples(journal),
+            "metadata": collect_metadata(
+                {"iterations": args.iters, "skip_build": args.skip_build}
+            ),
+        }
+        persist_diagnostic_result(result, json_path, md_path)
+        return 1
+
+    if performance_guard["status"] in {"hard_failure", "invalid_environment"}:
+        result = {
+            "status": performance_guard["status"],
+            "verdict": performance_guard["verdict"],
+            "error": performance_guard.get("error"),
+            "iterations": args.iters,
+            "requested_pairs": args.comparison_runs,
+            "measured_pairs": len(cpp_dpi_samples),
+            "cpp_dpi": summarize("cpp_dpi", cpp_dpi_samples),
+            "pure_sv": summarize("pure_sv", pure_sv_samples),
+            "performance_guard": performance_guard,
+            "samples": _journal_samples(journal),
+            "metadata": collect_metadata(
+                {
+                    "iterations": args.iters,
+                    "comparison_runs_requested": args.comparison_runs,
+                    "comparison_runs_measured": len(cpp_dpi_samples),
+                    "skip_build": args.skip_build,
+                }
+            ),
+        }
+        persist_diagnostic_result(result, json_path, md_path)
+        return 1
     if "warning" in performance_guard:
         print(f"WARNING: {performance_guard['warning']}")
 
     # Slow integrations are intentionally outside the adjacency-sensitive guard loop.
-    cpp_vpi_samples = [
-        run_cpp_vpi_sample(run_id, args.iters)
-        for run_id in range(1, args.runs + 1)
-    ]
-    cocotb_samples = [
-        run_cocotb_sample(run_id, args.iters)
-        for run_id in range(1, args.runs + 1)
-    ]
-    assert_same_workload({"cpp_vpi": cpp_vpi_samples, "cocotb": cocotb_samples})
-    assert_same_workload(
-        {
-            "cpp_vpi": [cpp_vpi_samples[0]],
-            "cpp_dpi": [cpp_dpi_samples[0]],
-            "pure_sv": [pure_sv_samples[0]],
-            "cocotb": [cocotb_samples[0]],
+    try:
+        cpp_vpi_samples = []
+        cpp_vpi_hash = binary_sha256(CPP_VPI_BINARY)
+        for run_id in range(1, args.runs + 1):
+            sample = run_cpp_vpi_sample(run_id, args.iters)
+            sample.update(
+                {
+                    "binary_sha256": cpp_vpi_hash,
+                    "sequence_index": run_id,
+                    "slot": 1,
+                    "pair_order": ["cpp_vpi"],
+                    "requested_pair_count": args.runs,
+                    "measured_pair_count": run_id,
+                }
+            )
+            cpp_vpi_samples.append(sample)
+            journal.append({"event": "sample", "label": "cpp_vpi", "sample": sample})
+
+        cocotb_samples = []
+        cocotb_hash = binary_sha256(COCOTB_RUNNER)
+        for run_id in range(1, args.runs + 1):
+            sample = run_cocotb_sample(run_id, args.iters)
+            sample.update(
+                {
+                    "binary_sha256": cocotb_hash,
+                    "sequence_index": run_id,
+                    "slot": 1,
+                    "pair_order": ["cocotb"],
+                    "requested_pair_count": args.runs,
+                    "measured_pair_count": run_id,
+                }
+            )
+            cocotb_samples.append(sample)
+            journal.append({"event": "sample", "label": "cocotb", "sample": sample})
+    except (CommandExecutionError, ResultParseError) as error:
+        result = {
+            "status": "command_error",
+            "verdict": "invalid_environment",
+            "error": str(error),
+            "command_failure": {
+                "command": getattr(error, "command", None),
+                "returncode": getattr(error, "returncode", None),
+                "output": error.output,
+            },
+            "requested_pairs": args.comparison_runs,
+            "measured_pairs": len(cpp_dpi_samples),
+            "cpp_dpi": summarize("cpp_dpi", cpp_dpi_samples),
+            "pure_sv": summarize("pure_sv", pure_sv_samples),
+            "performance_guard": performance_guard,
+            "samples": _journal_samples(journal),
+            "metadata": collect_metadata(
+                {"iterations": args.iters, "skip_build": args.skip_build}
+            ),
         }
-    )
+        persist_diagnostic_result(result, json_path, md_path)
+        return 1
+    try:
+        assert_same_workload({"cpp_vpi": cpp_vpi_samples, "cocotb": cocotb_samples})
+        assert_same_workload(
+            {
+                "cpp_vpi": [cpp_vpi_samples[0]],
+                "cpp_dpi": [cpp_dpi_samples[0]],
+                "pure_sv": [pure_sv_samples[0]],
+                "cocotb": [cocotb_samples[0]],
+            }
+        )
+    except SystemExit as error:
+        result = {
+            "status": "workload_error",
+            "verdict": "invalid_environment",
+            "error": str(error),
+            "requested_pairs": args.comparison_runs,
+            "measured_pairs": len(cpp_dpi_samples),
+            "cpp_vpi": summarize("cpp_vpi", cpp_vpi_samples),
+            "cpp_dpi": summarize("cpp_dpi", cpp_dpi_samples),
+            "pure_sv": summarize("pure_sv", pure_sv_samples),
+            "cocotb": summarize("cocotb", cocotb_samples),
+            "performance_guard": performance_guard,
+            "samples": _journal_samples(journal),
+            "metadata": collect_metadata(
+                {"iterations": args.iters, "skip_build": args.skip_build}
+            ),
+        }
+        persist_diagnostic_result(result, json_path, md_path)
+        return 1
 
     cpp_vpi_summary = summarize("cpp_vpi", cpp_vpi_samples)
     cpp_dpi_summary = summarize("cpp_dpi", cpp_dpi_samples)
@@ -700,13 +1235,24 @@ def main(argv=None):
             "pure_sv": str(PURE_SV_BINARY),
             "cocotb_runner": str(COCOTB_RUNNER),
         },
+        "binary_sha256": {
+            "cpp_vpi": cpp_vpi_hash,
+            "cpp_dpi": performance_guard["binary_sha256"]["cpp_dpi"],
+            "pure_sv": performance_guard["binary_sha256"]["pure_sv"],
+            "cocotb_runner": cocotb_hash,
+        },
     }
     result = {
+        "status": "passed",
+        "verdict": "passed",
         "iterations": args.iters,
         "runs": args.runs,
         "comparison_runs": len(cpp_dpi_samples),
+        "requested_pairs": args.comparison_runs,
+        "measured_pairs": len(cpp_dpi_samples),
         "design": "peripheral_suite: APB timer + APB SPI + APB I2C",
         "cpp_dpi_spawn_mode": "tracked",
+        "binary_sha256": config["binary_sha256"],
         "metadata": collect_metadata(config),
         "cpp_vpi": cpp_vpi_summary,
         "cpp_dpi": cpp_dpi_summary,
@@ -726,13 +1272,9 @@ def main(argv=None):
         },
     }
 
-    RESULT_DIR.mkdir(parents=True, exist_ok=True)
-    json_path = RESULT_DIR / "latest.json"
-    md_path = RESULT_DIR / "latest.md"
     upper_bound = performance_guard["one_sided_95_upper_median_bound"]["bound"]
     interval = performance_guard["two_sided_95_median_ci"]
-    md_path.write_text(
-        "\n".join(
+    markdown = "\n".join(
             [
                 "# Peripheral-suite pure SV vs DPI C++ vs VPI C++ vs cocotb benchmark",
                 "",
@@ -755,6 +1297,12 @@ def main(argv=None):
                 f"- cocotb/C++ DPI process ratio: `{cocotb_over_dpi_process:.2f}x`",
                 f"- cocotb/C++ VPI process ratio: `{cocotb_over_cpp_process:.2f}x`",
                 f"- C++ DPI/pure SV paired process ratio: `{dpi_over_sv_process:.3f}x`",
+                f"- DPI-first paired median: `{performance_guard['dpi_first_paired_median']:.3f}x`",
+                f"- SV-first paired median: `{performance_guard['sv_first_paired_median']:.3f}x`",
+                f"- Independent-median ratio: `{performance_guard['independent_median_ratio']:.3f}x`",
+                "- Independent/paired relative disagreement: "
+                f"`{performance_guard['independent_paired_relative_disagreement']:.2%}`",
+                f"- Order-stratum gap: `{performance_guard['order_stratum_gap']:.2%}`",
                 f"- One-sided 95% upper median bound: `{upper_bound:.3f}x`",
                 f"- Two-sided 95% median CI: `[{interval['lower']:.3f}, {interval['upper']:.3f}]x`",
                 f"- CI direction: `{performance_guard['direction']}`",
@@ -770,8 +1318,7 @@ def main(argv=None):
                 "",
             ]
         )
-    )
-    json_path.write_text(json.dumps(result, indent=2) + "\n")
+    persist_diagnostic_result(result, json_path, md_path, markdown=markdown)
 
     print(md_path.read_text())
     print(f"Wrote {json_path}")

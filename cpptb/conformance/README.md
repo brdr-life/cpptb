@@ -25,7 +25,7 @@ The suite covers:
 - zero, one, and many `clock_cycles()` waits on generated, testbench-driven,
   and DUT-derived clocks;
 - edge-triggered `with_timeout()` edge and timeout outcomes, including both
-  stale loser directions;
+  stale loser directions and a same-timestamp edge/deadline tie;
 - immediate and delayed `wait_until()` predicates with exact evaluation counts
   and timestamps;
 - sticky, reusable `Event` state, FIFO wakeup, and cancelled-waiter cleanup;
@@ -83,9 +83,12 @@ testbench-driven, and DUT-derived clocks.
 
 `with_timeout(edge, duration)` supports edge triggers in Authoring Core v1 and
 returns `TimeoutOutcome::Triggered` or `TimeoutOutcome::TimedOut`. The earlier
-event wins, and the losing registration is invalidated. The suite uses strict,
-non-tied deadlines and does not define a same-timestamp edge/timer tie. General
-`Task` timeout is outside the v1 surface.
+event wins, and the losing registration is invalidated. For a simultaneous
+edge and deadline, the outcome depends on which callback the simulator delivers
+to the host first and is deliberately unspecified. Conformance creates such a
+tie and accepts either outcome, while requiring exactly one completion and no
+later resume from the stale loser; it does not pin simulator process order.
+General `Task` timeout is outside the v1 surface.
 
 `wait_until(signal, predicate, clock)` evaluates once immediately, then once
 after each rising clock edge while the predicate is false. The delayed case
@@ -102,8 +105,12 @@ not resume on a later set.
 vice versa, queued items and waiting consumers preserve FIFO order, and
 multiple delayed producers preserve production order. Cancelling a consumer
 that has been assigned an item transfers availability to the next waiter, so
-the item is neither lost nor delivered to the cancelled process. Bounded
-channel behavior is outside the v1 surface.
+the item is neither lost nor delivered to the cancelled process. Moving a
+`Channel<T>::GetAwaiter` transfers responsibility for its active registration;
+destroying the moved-from awaiter neither abandons that registration nor
+consumes an item. Reentrant `put_nowait()` and cancellation from a resumed
+consumer preserve reserved-item handoff and exactly-once wakeup while external
+wakes are being flushed. Bounded channel behavior is outside the v1 surface.
 
 Destroying an `Event` or `Channel<T>` with an active waiter aborts with a
 diagnostic. The conformance runner checks both lifetime violations in addition
@@ -145,7 +152,7 @@ Run the configured backend:
 make cpptb-conformance-run
 ```
 
-The exact positive result contract is 161 checks, four primary generated-clock
+The exact positive result contract is 165 checks, four primary generated-clock
 cycles, and zero failures. These values and all negative diagnostics are
 declared in `scheduler_conformance.dpi.json`.
 
