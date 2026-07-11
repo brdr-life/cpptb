@@ -1,5 +1,5 @@
 # Feature regression: event
 
-- Status: `passed_inconclusive`
+- Status: `passed`
 - Adapter: `runner`
 - Load settle: `settled`

@@ -1,5 +1,5 @@
 # Feature regression: clock_cycles
 
-- Status: `invalid_environment`
+- Status: `passed_inconclusive`
 - Adapter: `runner`
 - Load settle: `settled`

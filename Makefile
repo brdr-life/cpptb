@@ -46,6 +46,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/cpp_dpi/testbench.cpp
 AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event channel all
 AUTHORING_CORE_KERNEL ?= control
+AUTHORING_CORE_OPT_FAST ?= -O3
 FEATURE ?=
 FEATURE_REGRESSION_RUNNER := python3 benchmarks/run_regression.py
 UV_CACHE_DIR ?= $(BUILD_DIR)/uv-cache
@@ -503,10 +504,11 @@ define AUTHORING_CORE_DPI_template
 $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		$(AUTHORING_CORE_DPI_GENERATED) cpptb/coro_runtime.hpp \
-		cpptb/dpi_runtime.hpp cpptb/test_result.hpp
+		cpptb/dpi_runtime.hpp cpptb/test_result.hpp Makefile
 	mkdir -p $$(dir $$@)
 	verilator --binary --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
+		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
 		-CFLAGS "-I$$(CURDIR) -DAUTHORING_CORE_KERNEL=$(2)" \
 		--Mdir $$(dir $$@) \
 		--top-module dpi_authoring_core \
@@ -535,10 +537,12 @@ authoring-core-dpi-run: $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(AUTHORING_CORE_KER
 		+AUTHORING_CORE_ITERS=$${AUTHORING_CORE_ITERS:-10000}
 
 $(AUTHORING_CORE_SV_OBJ_DIR)/Vauthoring_core_sv_tb: \
-		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_DIR)/pure_sv/authoring_core_sv_tb.sv
+		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_DIR)/pure_sv/authoring_core_sv_tb.sv \
+		Makefile
 	mkdir -p $(AUTHORING_CORE_SV_OBJ_DIR)
 	verilator --binary --timing \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
+		-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)" \
 		--Mdir $(AUTHORING_CORE_SV_OBJ_DIR) \
 		--top-module authoring_core_sv_tb \
 		$(AUTHORING_CORE_RTL) \

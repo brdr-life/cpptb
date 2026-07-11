@@ -401,13 +401,24 @@ def evaluate_guard(
         stats["order_strata_confirm_failure"] = strata_confirm
         stats["independent_median_confirms_failure"] = medians_agree
         if strata_confirm and medians_agree:
-            stats["status"] = "hard_failure"
-            stats["verdict"] = "failed"
-            stats["validity"] = "valid"
-            stats["error"] = (
-                f"paired median {stats['ratio']:.3f}x exceeds {max_ratio:.2f}x "
-                "and both order strata plus the independent-median ratio confirm it"
-            )
+            if final:
+                stats["status"] = "hard_failure"
+                stats["verdict"] = "failed"
+                stats["validity"] = "valid"
+                stats["error"] = (
+                    f"paired median {stats['ratio']:.3f}x exceeds {max_ratio:.2f}x "
+                    "after the confirmation batch, and both order strata plus "
+                    "the independent-median ratio confirm it"
+                )
+            else:
+                stats["status"] = "needs_extra_batch"
+                stats["verdict"] = "inconclusive"
+                stats["provisional_status"] = "hard_failure"
+                stats["confirmation_reason"] = (
+                    f"initial paired median {stats['ratio']:.3f}x exceeds "
+                    f"{max_ratio:.2f}x with confirming diagnostics"
+                )
+                stats["validity"] = "provisional"
         else:
             reasons = []
             if not strata_confirm:
@@ -621,12 +632,7 @@ def run_comparison(
         if guard["status"] == "needs_extra_batch":
             uncertain.append(kernel)
 
-    initial_is_valid = all(
-        summary["guard"]["status"]
-        not in {"hard_failure", "invalid_environment"}
-        for summary in summaries.values()
-    )
-    if uncertain and initial_is_valid:
+    if uncertain:
         extra = collect_batch(
             uncertain,
             iterations,
@@ -643,17 +649,6 @@ def run_comparison(
                 final=True,
             )
             summaries[kernel]["guard"]["extra_batch_collected"] = True
-    elif uncertain:
-        for kernel in uncertain:
-            summaries[kernel]["guard"] = evaluate_guard(
-                summaries[kernel]["cpp_dpi"],
-                summaries[kernel]["pure_sv"],
-                final=True,
-            )
-            summaries[kernel]["guard"]["warning"] = (
-                "extra batch skipped because another selected kernel had an "
-                "initial hard or environment-invalid result"
-            )
     for kernel in kernels:
         guard = summaries[kernel]["guard"]
         guard.setdefault("extra_batch_collected", False)

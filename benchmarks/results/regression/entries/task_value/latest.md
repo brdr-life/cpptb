@@ -1,5 +1,5 @@
 # Feature regression: task_value
 
-- Status: `failed`
+- Status: `passed`
 - Adapter: `runner`
 - Load settle: `settled`
