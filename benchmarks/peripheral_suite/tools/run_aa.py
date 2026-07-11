@@ -18,6 +18,59 @@ DEFAULT_MARKDOWN = benchmark.RESULT_DIR / "aa_latest.md"
 DEFAULT_JOURNAL = benchmark.RESULT_DIR / "aa_latest.jsonl"
 
 
+def _capture_git_state():
+    capture = getattr(benchmark, "capture_git_state", None)
+    if capture:
+        return capture()
+    revision = benchmark._metadata_command(["git", "rev-parse", "HEAD"])
+    status = benchmark._metadata_command(["git", "status", "--porcelain"])
+    return {
+        "commit": revision["output"] if revision["returncode"] == 0 else None,
+        "dirty": status["returncode"] != 0 or bool(status["output"]),
+    }
+
+
+def _pair_boundary_probe(sequence_index, phase, probe_runner=None):
+    if probe_runner:
+        evidence = probe_runner(sequence_index, phase)
+    else:
+        evidence = {
+            "sample_environment": benchmark.sample_environment(),
+            "power_thermal": benchmark.probe_pair_boundary(),
+        }
+    return {
+        "event": "environment_probe",
+        "reference": f"{phase}:{sequence_index}",
+        "phase": phase,
+        "sequence_index": sequence_index,
+        **evidence,
+    }
+
+
+def _environment_validity(probes):
+    assess = getattr(benchmark, "environment_validity", None)
+    if not assess:
+        return {"status": "unknown", "reason": "environment helper unavailable"}
+    samples = [probe.get("sample_environment", {}) for probe in probes]
+    boundaries = [probe.get("power_thermal", {}) for probe in probes]
+    return assess(samples, boundaries)
+
+
+def _journal_probes(journal):
+    if not journal or not journal.path.exists():
+        return []
+    import json
+
+    return [
+        entry
+        for entry in (
+            json.loads(line)
+            for line in journal.path.read_text(encoding="utf-8").splitlines()
+        )
+        if entry.get("event") == "environment_probe"
+    ]
+
+
 def run_aa_sample(run, iters, label):
     sample = benchmark.run_cpp_dpi_sample(run, iters, "tracked")
     sample["label"] = label
@@ -47,6 +100,8 @@ def collect_aa_pairs(
     journal=None,
     requested_pairs=None,
     digest=None,
+    probe_runner=None,
+    probes=None,
 ):
     if pair_count <= 0 or pair_count % 2:
         raise ValueError("A/A pair count must be positive and even")
@@ -57,6 +112,7 @@ def collect_aa_pairs(
     )
     a_samples = []
     b_samples = []
+    probes = probes if probes is not None else []
 
     for sequence_index in range(start_run, start_run + pair_count):
         if sequence_index % 2:
@@ -65,6 +121,11 @@ def collect_aa_pairs(
         else:
             order = ["B", "A"]
             first_label, second_label = order
+
+        probe = _pair_boundary_probe(sequence_index, "measured", probe_runner)
+        probes.append(probe)
+        if journal:
+            journal.append(probe)
 
         first = _annotate(
             sample_runner(sequence_index, iters, first_label),
@@ -75,6 +136,7 @@ def collect_aa_pairs(
             requested_pairs,
             digest,
         )
+        first["environment_probe_reference"] = probe["reference"]
         if journal:
             journal.append({"event": "sample", "label": first_label, "sample": first})
         second = _annotate(
@@ -86,6 +148,7 @@ def collect_aa_pairs(
             requested_pairs,
             digest,
         )
+        second["environment_probe_reference"] = probe["reference"]
         if journal:
             journal.append({"event": "sample", "label": second_label, "sample": second})
 
@@ -197,9 +260,14 @@ def classify_aa(statistics):
     return "inconclusive"
 
 
-def run_aa_comparison(iters, sample_runner=None, journal=None):
+def run_aa_comparison(iters, sample_runner=None, journal=None, probe_runner=None):
     sample_runner = sample_runner or run_aa_sample
     digest = benchmark.binary_sha256(benchmark.CPP_DPI_BINARY)
+    probes = []
+    warmup_probe = _pair_boundary_probe(0, "warmup", probe_runner)
+    probes.append(warmup_probe)
+    if journal:
+        journal.append(warmup_probe)
     warmups = []
     for slot, label in enumerate(("A", "B"), start=1):
         sample = _annotate(
@@ -212,6 +280,7 @@ def run_aa_comparison(iters, sample_runner=None, journal=None):
             digest,
         )
         sample["warmup"] = True
+        sample["environment_probe_reference"] = warmup_probe["reference"]
         warmups.append(sample)
         if journal:
             journal.append({"event": "sample", "label": label, "sample": sample})
@@ -227,6 +296,10 @@ def run_aa_comparison(iters, sample_runner=None, journal=None):
             "measured_pairs": 0,
             "extra_batch_collected": False,
             "binary_sha256": digest,
+            "environment": {
+                "probes": probes,
+                "validity": _environment_validity(probes),
+            },
         }
 
     a_samples, b_samples = collect_aa_pairs(
@@ -236,6 +309,8 @@ def run_aa_comparison(iters, sample_runner=None, journal=None):
         journal=journal,
         requested_pairs=INITIAL_PAIRS,
         digest=digest,
+        probe_runner=probe_runner,
+        probes=probes,
     )
     statistics = aa_statistics(a_samples, b_samples)
     status = classify_aa(statistics)
@@ -249,6 +324,8 @@ def run_aa_comparison(iters, sample_runner=None, journal=None):
             journal=journal,
             requested_pairs=INITIAL_PAIRS + EXTRA_PAIRS,
             digest=digest,
+            probe_runner=probe_runner,
+            probes=probes,
         )
         a_samples.extend(extra_a)
         b_samples.extend(extra_b)
@@ -266,6 +343,10 @@ def run_aa_comparison(iters, sample_runner=None, journal=None):
         "A": benchmark.summarize("A", a_samples),
         "B": benchmark.summarize("B", b_samples),
         "statistics": statistics,
+        "environment": {
+            "probes": probes,
+            "validity": _environment_validity(probes),
+        },
     }
     if status == "invalid_environment":
         result["error"] = statistics.get("error", "invalid A/A samples")
@@ -311,6 +392,7 @@ def _parse_args(argv=None):
 
 def main(argv=None):
     args = _parse_args(argv)
+    start_git_state = _capture_git_state()
     benchmark.RESULT_DIR.mkdir(parents=True, exist_ok=True)
     journal = benchmark.SampleJournal(DEFAULT_JOURNAL, truncate=True)
     try:
@@ -326,6 +408,7 @@ def main(argv=None):
                 "command": getattr(error, "command", None),
                 "returncode": getattr(error, "returncode", None),
                 "output": error.output,
+                "resources": getattr(error, "resources", None),
             },
             "requested_pairs": INITIAL_PAIRS,
             "measured_pairs": len(
@@ -337,6 +420,10 @@ def main(argv=None):
             ),
             "extra_batch_collected": False,
             "samples": samples,
+            "environment": {
+                "probes": _journal_probes(journal),
+                "validity": _environment_validity(_journal_probes(journal)),
+            },
         }
 
     config = {
@@ -350,7 +437,13 @@ def main(argv=None):
         "environment": "identical tracked DPI environment for A and B",
         "skip_build": args.skip_build,
     }
-    result["metadata"] = benchmark.collect_metadata(config)
+    result["metadata"] = benchmark.collect_metadata(
+        config, git_state=start_git_state
+    )
+    result["git_state"] = {
+        "start": start_git_state,
+        "end": _capture_git_state(),
+    }
     benchmark.atomic_write_json(DEFAULT_JSON, result)
     benchmark.atomic_write_text(DEFAULT_MARKDOWN, render_markdown(result))
     print(render_markdown(result), end="")

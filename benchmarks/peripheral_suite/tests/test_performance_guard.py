@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -142,6 +143,148 @@ class PerformanceGuardTests(unittest.TestCase):
         self.assertGreater(result["independent_paired_relative_disagreement"], 0.05)
         self.assertEqual(result["status"], "invalid_environment")
 
+    def test_invalid_environment_vetoes_failure_without_normalizing_ratio(self):
+        invalid = RUNNER.environment_validity(
+            [{"load_average_1m": 9.0, "cpu_count": 8}]
+        )
+        result = RUNNER.check_dpi_vs_pure_sv(
+            self.summary([1.2] * 16, label="cpp_dpi"),
+            self.summary([1.0] * 16, label="pure_sv"),
+            environment=invalid,
+        )
+
+        self.assertAlmostEqual(result["ratio"], 1.2)
+        self.assertEqual(result["status"], "invalid_environment")
+        self.assertNotEqual(result["verdict"], "passed")
+
+
+class EnvironmentValidityTests(unittest.TestCase):
+    def test_load_boundary_is_inclusive(self):
+        at_capacity = RUNNER.environment_validity(
+            [{"load_average_1m": 8.0, "cpu_count": 8}]
+        )
+        over_capacity = RUNNER.environment_validity(
+            [{"load_average_1m": 8.0001, "cpu_count": 8}]
+        )
+        self.assertTrue(at_capacity["valid"])
+        self.assertFalse(over_capacity["valid"])
+
+    def test_missing_power_and_thermal_probes_are_best_effort(self):
+        boundary = {
+            "power": {"available": False, "source": None},
+            "thermal": {"available": False, "status": "unknown"},
+        }
+        result = RUNNER.environment_validity([], [boundary])
+        self.assertTrue(result["valid"])
+        self.assertIn("power probe unavailable", result["warnings"])
+        self.assertIn("thermal probe unavailable", result["warnings"])
+
+    def test_power_change_and_thermal_throttling_are_invalid(self):
+        boundaries = [
+            {
+                "power": {"available": True, "source": "ac"},
+                "thermal": {"available": True, "status": "nominal"},
+            },
+            {
+                "power": {"available": True, "source": "battery"},
+                "thermal": {
+                    "available": True,
+                    "status": "throttled",
+                    "throttling": True,
+                },
+            },
+        ]
+        result = RUNNER.environment_validity([], boundaries)
+        self.assertFalse(result["valid"])
+        self.assertEqual(len(result["reasons"]), 2)
+
+
+class CommandMeasurementTests(unittest.TestCase):
+    def test_child_cpu_and_rss_are_rusage_children_deltas(self):
+        before = SimpleNamespace(ru_utime=1.0, ru_stime=2.0, ru_maxrss=100.0)
+        after = SimpleNamespace(ru_utime=1.025, ru_stime=2.010, ru_maxrss=140.0)
+        completed = SimpleNamespace(returncode=0, stdout="ok")
+        with (
+            mock.patch.object(RUNNER.resource, "getrusage", side_effect=[before, after]) as usage,
+            mock.patch.object(RUNNER.subprocess, "run", return_value=completed),
+            mock.patch.object(RUNNER.time, "perf_counter", side_effect=[10.0, 10.05]),
+            mock.patch.object(
+                RUNNER,
+                "sample_environment",
+                return_value={
+                    "load_average_1m": 1.0,
+                    "load_average_5m": 2.0,
+                    "load_average_15m": 3.0,
+                    "cpu_count": 8,
+                },
+            ),
+            mock.patch.object(RUNNER.platform, "system", return_value="Linux"),
+        ):
+            output, measurement = RUNNER.run_command(
+                ["benchmark"], include_resources=True
+            )
+
+        self.assertEqual(output, "ok")
+        self.assertEqual(
+            usage.call_args_list,
+            [mock.call(RUNNER.resource.RUSAGE_CHILDREN)] * 2,
+        )
+        self.assertAlmostEqual(measurement["process_wall_ms"], 50.0)
+        self.assertAlmostEqual(measurement["child_cpu_user_ms"], 25.0)
+        self.assertAlmostEqual(measurement["child_cpu_system_ms"], 10.0)
+        self.assertAlmostEqual(measurement["child_cpu_total_ms"], 35.0)
+        self.assertEqual(measurement["child_max_rss_kb"], 40.0)
+        self.assertEqual(measurement["cpu_count"], 8)
+
+    def test_legacy_run_command_return_remains_wall_time(self):
+        usage = SimpleNamespace(ru_utime=0.0, ru_stime=0.0, ru_maxrss=0.0)
+        with (
+            mock.patch.object(RUNNER.resource, "getrusage", return_value=usage),
+            mock.patch.object(
+                RUNNER.subprocess,
+                "run",
+                return_value=SimpleNamespace(returncode=0, stdout="ok"),
+            ),
+            mock.patch.object(RUNNER.time, "perf_counter", side_effect=[1.0, 1.1]),
+        ):
+            output, wall_ms = RUNNER.run_command(["benchmark"])
+        self.assertEqual(output, "ok")
+        self.assertIsInstance(wall_ms, float)
+
+    def test_all_shared_sample_creators_include_resource_measurements(self):
+        measurement = {
+            "process_wall_ms": 5.0,
+            "child_cpu_user_ms": 2.0,
+            "child_cpu_system_ms": 1.0,
+            "child_cpu_total_ms": 3.0,
+            "child_max_rss_kb": 40.0,
+            "load_average_1m": 0.5,
+            "load_average_5m": 0.4,
+            "load_average_15m": 0.3,
+            "cpu_count": 8,
+        }
+        outputs = (
+            "CPP_DPI_PERIPHERAL_RESULT wall_ms=4 checks=20 sim_cycles=10 failures=0",
+            "PURE_SV_PERIPHERAL_RESULT checks=20 sim_cycles=10 failures=0",
+            "CPP_VPI_PERIPHERAL_RESULT wall_ms=4 checks=20 sim_cycles=10 failures=0",
+            "COCOTB_PERIPHERAL_RESULT wall_ms=4 checks=20 sim_cycles=10 failures=0",
+        )
+        creators = (
+            lambda: RUNNER.run_cpp_dpi_sample(1, 10),
+            lambda: RUNNER.run_pure_sv_sample(1, 10),
+            lambda: RUNNER.run_cpp_vpi_sample(1, 10),
+            lambda: RUNNER.run_cocotb_sample(1, 10),
+        )
+        for creator, output in zip(creators, outputs):
+            with self.subTest(output=output.split()[0]):
+                with mock.patch.object(
+                    RUNNER, "run_command", return_value=(output, dict(measurement))
+                ) as command:
+                    sample = creator()
+                self.assertTrue(command.call_args.kwargs["include_resources"])
+                self.assertEqual(sample["child_cpu_total_ms"], 3.0)
+                self.assertEqual(sample["load_average_1m"], 0.5)
+
 
 class ConfidenceIntervalTests(unittest.TestCase):
     def test_one_sided_95_bound_uses_twelfth_order_statistic_for_15(self):
@@ -252,7 +395,14 @@ class MetadataTests(unittest.TestCase):
                 {"iterations": 10_000}, argv=["run_benchmark.py", "--skip-build"]
             )
 
-        self.assertEqual(metadata["git"], {"commit": "abc123", "dirty": True})
+        self.assertEqual(
+            metadata["git"],
+            {
+                "commit": "abc123",
+                "dirty": True,
+                "status_porcelain": " M local-change",
+            },
+        )
         self.assertIn("platform", metadata["host"])
         self.assertIn("compiler", metadata["python"])
         self.assertEqual(metadata["compiler"]["executable"], "/bin/c++")
@@ -273,7 +423,9 @@ class MetadataTests(unittest.TestCase):
                 "config",
             },
         )
-        self.assertEqual(set(metadata["git"]), {"commit", "dirty"})
+        self.assertEqual(
+            set(metadata["git"]), {"commit", "dirty", "status_porcelain"}
+        )
         self.assertEqual(
             set(metadata["host"]),
             {"hostname", "platform", "system", "release", "machine", "processor"},
@@ -301,6 +453,26 @@ class MetadataTests(unittest.TestCase):
             metadata["timestamp_utc"].replace("Z", "+00:00")
         )
         self.assertEqual(timestamp.utcoffset(), timedelta(0))
+
+    def test_supplied_starting_git_state_is_preserved_without_requery(self):
+        starting = {
+            "commit": "start123",
+            "dirty": True,
+            "status_porcelain": " M before-run",
+        }
+        with (
+            mock.patch.object(RUNNER, "collect_git_state") as collect_git,
+            mock.patch.object(
+                RUNNER,
+                "_metadata_command",
+                return_value={"command": [], "returncode": 1, "output": ""},
+            ),
+            mock.patch.object(RUNNER.shutil, "which", return_value=None),
+        ):
+            metadata = RUNNER.collect_metadata({}, git_state=starting)
+        collect_git.assert_not_called()
+        self.assertEqual(metadata["git"], starting)
+        self.assertIsNot(metadata["git"], starting)
 
 
 class ArtifactDurabilityTests(unittest.TestCase):
@@ -384,6 +556,92 @@ class ArtifactDurabilityTests(unittest.TestCase):
             self.assertEqual(persisted["status"], status)
             self.assertEqual(len(persisted["cpp_dpi"]["samples"]), 16)
             self.assertEqual(len(persisted["pure_sv"]["samples"]), 16)
+
+
+class GitStartOrderingTests(unittest.TestCase):
+    def test_main_captures_git_before_journal_write_and_reuses_snapshot(self):
+        events = []
+        starting = {
+            "commit": "before-build",
+            "dirty": True,
+            "status_porcelain": " M initial",
+        }
+
+        def collect_git():
+            events.append("git")
+            return starting
+
+        def make_journal(path, truncate=False):
+            events.append("journal")
+            return SimpleNamespace(path=Path(path))
+
+        def collect_metadata(config, argv=None, git_state=None):
+            events.append("metadata")
+            self.assertEqual(git_state, starting)
+            return {"git": dict(git_state)}
+
+        failure = RUNNER.CommandExecutionError(["benchmark"], 1, "failed")
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                mock.patch.object(RUNNER, "RESULT_DIR", Path(directory)),
+                mock.patch.object(RUNNER, "collect_git_state", side_effect=collect_git),
+                mock.patch.object(RUNNER, "SampleJournal", side_effect=make_journal),
+                mock.patch.object(
+                    RUNNER, "run_critical_comparison", side_effect=failure
+                ),
+                mock.patch.object(
+                    RUNNER, "collect_metadata", side_effect=collect_metadata
+                ),
+                mock.patch.object(RUNNER, "persist_diagnostic_result") as persist,
+            ):
+                exit_code = RUNNER.main(["--skip-build"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(events[:2], ["git", "journal"])
+        self.assertEqual(events.count("git"), 1)
+        persist.assert_called_once()
+        self.assertEqual(persist.call_args.args[0]["metadata"]["git"], starting)
+
+    def test_semantic_only_runs_exactly_one_dpi_sv_pair(self):
+        sample = {
+            "run": 1,
+            "process_wall_ms": 1.0,
+            "internal_wall_ms": 0.5,
+            "checks": 20,
+            "sim_cycles": 10,
+            "failures": 0,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            result_dir = Path(directory)
+            with (
+                mock.patch.object(RUNNER, "RESULT_DIR", result_dir),
+                mock.patch.object(RUNNER, "collect_git_state", return_value={}),
+                mock.patch.object(
+                    RUNNER,
+                    "collect_metadata",
+                    return_value={"timestamp_utc": "2026-01-01T00:00:00+00:00"},
+                ),
+                mock.patch.object(
+                    RUNNER, "run_cpp_dpi_sample", return_value=dict(sample)
+                ) as dpi,
+                mock.patch.object(
+                    RUNNER, "run_pure_sv_sample", return_value=dict(sample)
+                ) as sv,
+                mock.patch.object(
+                    RUNNER, "run_critical_comparison", side_effect=AssertionError
+                ),
+            ):
+                exit_code = RUNNER.main(
+                    ["--skip-build", "--semantic-only", "--iters", "100"]
+                )
+
+            result = json.loads((result_dir / "latest.json").read_text())
+
+        self.assertEqual(exit_code, 0)
+        dpi.assert_called_once_with(1, 100)
+        sv.assert_called_once_with(1, 100)
+        self.assertEqual(result["measurement_mode"], "equivalence_only")
+        self.assertTrue(result["semantic"]["exact_match"])
 
 
 class CriticalComparisonTests(unittest.TestCase):
@@ -534,6 +792,8 @@ class CriticalComparisonTests(unittest.TestCase):
         args = RUNNER._parse_args([])
         self.assertEqual(args.iters, 10_000)
         self.assertEqual(args.comparison_runs, 16)
+        self.assertFalse(args.semantic_only)
+        self.assertTrue(RUNNER._parse_args(["--semantic-only"]).semantic_only)
         with self.assertRaises(SystemExit):
             RUNNER._parse_args(["--comparison-runs", "15"])
         with self.assertRaises(SystemExit):

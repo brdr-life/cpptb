@@ -11,6 +11,7 @@ import math
 import os
 import platform
 import re
+import resource
 import shutil
 import socket
 import statistics
@@ -25,6 +26,7 @@ from typing import Callable, Iterable
 BENCH_DIR = Path(__file__).resolve().parent
 REPO = BENCH_DIR.parents[1]
 RESULT_DIR = BENCH_DIR / "results"
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(BENCH_DIR))
 from workload import (  # noqa: E402
     FEATURE_FIELDS,
@@ -43,8 +45,8 @@ EXTRA_PAIRS = 16
 MAX_DPI_OVER_SV_RATIO = 1.10
 MIN_ORDER_STRATUM_FAILURE_RATIO = 1.05
 MAX_INDEPENDENT_PAIRED_DISAGREEMENT = 0.05
+MAX_NORMALIZED_LOAD_1M = 1.0
 CONFIDENCE = 0.95
-RAW_SAMPLE_PATH = RESULT_DIR / "latest.jsonl"
 RESULT_RE = re.compile(r"^AUTHORING_CORE_RESULT\s+(?P<fields>.+)$")
 PERIPHERAL_RESULT_RE = re.compile(
     r"^(?P<name>CPP_DPI_PERIPHERAL_RESULT|PURE_SV_PERIPHERAL_RESULT)\s+(?P<fields>.+)$"
@@ -442,7 +444,10 @@ def evaluate_guard(
     return stats
 
 
-def run_command(command: list[str]) -> tuple[str, float]:
+def run_command(
+    command: list[str], *, include_resource_metrics: bool = False
+) -> tuple[str, float | dict[str, float]]:
+    usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
     started = time.perf_counter()
     completed = subprocess.run(
         command,
@@ -453,12 +458,25 @@ def run_command(command: list[str]) -> tuple[str, float]:
         check=False,
     )
     wall_ms = (time.perf_counter() - started) * 1000.0
+    usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
     if completed.returncode != 0:
         raise RuntimeError(
             f"command failed with exit {completed.returncode}: {' '.join(command)}\n"
             f"{completed.stdout}"
         )
-    return completed.stdout, wall_ms
+    if not include_resource_metrics:
+        return completed.stdout, wall_ms
+    user_cpu_ms = (usage_after.ru_utime - usage_before.ru_utime) * 1000.0
+    system_cpu_ms = (usage_after.ru_stime - usage_before.ru_stime) * 1000.0
+    child_cpu_ms = user_cpu_ms + system_cpu_ms
+    return completed.stdout, {
+        "process_wall_ms": wall_ms,
+        "child_user_cpu_ms": user_cpu_ms,
+        "child_system_cpu_ms": system_cpu_ms,
+        "child_cpu_ms": child_cpu_ms,
+        "child_cpu_utilization": child_cpu_ms / wall_ms if wall_ms else 0.0,
+        "child_max_rss": float(usage_after.ru_maxrss),
+    }
 
 
 def _binary(mode: str, kernel: str) -> Path:
@@ -474,13 +492,16 @@ def run_sample(mode: str, kernel: str, pair: int, iterations: int) -> dict:
     command = [str(binary), f"+AUTHORING_CORE_ITERS={iterations}"]
     if mode == "pure_sv":
         command.append(f"+AUTHORING_CORE_KERNEL={kernel}")
-    output, process_ms = run_command(command)
+    output, process_metrics = run_command(command, include_resource_metrics=True)
+    if not isinstance(process_metrics, dict):
+        # Keep injected runners using the historical (output, wall_ms) shape usable.
+        process_metrics = {"process_wall_ms": float(process_metrics)}
     result = parse_result(output, mode, kernel, iterations)
     validate_contract(result)
     return {
         **result,
         "pair": pair,
-        "process_wall_ms": process_ms,
+        **process_metrics,
         "binary": str(binary),
         "binary_sha256": binary_sha256(binary),
     }
@@ -494,6 +515,8 @@ def collect_batch(
     sample_runner: Callable[[str, str, int, int], dict] = run_sample,
     raw_samples: list[dict] | None = None,
     journal: SampleJournal | None = None,
+    environment_probes: list[dict] | None = None,
+    pair_probe: Callable[[], dict] | None = None,
 ) -> dict[str, dict[str, list[dict]]]:
     raw_samples = raw_samples if raw_samples is not None else []
     collected = {kernel: {"cpp_dpi": [], "pure_sv": []} for kernel in kernels}
@@ -502,6 +525,18 @@ def collect_batch(
         rotation = offset % len(kernels)
         round_kernels = kernels[rotation:] + kernels[:rotation]
         for kernel in round_kernels:
+            boundary_id = f"{kernel}:{pair}"
+            if environment_probes is not None and pair_probe is not None:
+                environment_probes.append(
+                    {
+                        "boundary_id": boundary_id,
+                        "kernel": kernel,
+                        "pair": pair,
+                        "batch": "initial" if start_pair == 1 else "extra",
+                        "phase": "before",
+                        **pair_probe(),
+                    }
+                )
             order = ["cpp_dpi", "pure_sv"] if pair % 2 else ["pure_sv", "cpp_dpi"]
             pair_samples = {}
             for slot, mode in enumerate(order, start=1):
@@ -510,12 +545,24 @@ def collect_batch(
                 sample["slot"] = slot
                 sample["sequence_index"] = len(raw_samples)
                 sample["batch"] = "initial" if start_pair == 1 else "extra"
+                sample["environment_boundary_id"] = boundary_id
                 raw_samples.append(sample)
                 if journal is not None:
                     journal.append(sample)
                 collected[kernel][mode].append(sample)
                 pair_samples[mode] = sample
             assert_equivalent(pair_samples["cpp_dpi"], pair_samples["pure_sv"])
+            if environment_probes is not None and pair_probe is not None:
+                environment_probes.append(
+                    {
+                        "boundary_id": boundary_id,
+                        "kernel": kernel,
+                        "pair": pair,
+                        "batch": "initial" if start_pair == 1 else "extra",
+                        "phase": "after",
+                        **pair_probe(),
+                    }
+                )
     return collected
 
 
@@ -526,6 +573,8 @@ def run_comparison(
     sample_runner: Callable[[str, str, int, int], dict] = run_sample,
     raw_samples: list[dict] | None = None,
     journal: SampleJournal | None = None,
+    environment_probes: list[dict] | None = None,
+    pair_probe: Callable[[], dict] | None = None,
 ) -> tuple[dict[str, dict], list[dict]]:
     if pairs < MIN_PAIRS:
         raise ValueError(f"comparison requires at least {MIN_PAIRS} pairs")
@@ -555,7 +604,8 @@ def run_comparison(
         warmups[kernel] = pair_samples
 
     initial = collect_batch(
-        kernels, iterations, pairs, 1, sample_runner, raw_samples, journal
+        kernels, iterations, pairs, 1, sample_runner, raw_samples, journal,
+        environment_probes, pair_probe
     )
     summaries: dict[str, dict] = {}
     uncertain = []
@@ -582,9 +632,7 @@ def run_comparison(
             iterations,
             EXTRA_PAIRS,
             pairs + 1,
-            sample_runner,
-            raw_samples,
-            journal,
+            sample_runner, raw_samples, journal, environment_probes, pair_probe,
         )
         for kernel in uncertain:
             summaries[kernel]["cpp_dpi"].extend(extra[kernel]["cpp_dpi"])
@@ -595,6 +643,17 @@ def run_comparison(
                 final=True,
             )
             summaries[kernel]["guard"]["extra_batch_collected"] = True
+    elif uncertain:
+        for kernel in uncertain:
+            summaries[kernel]["guard"] = evaluate_guard(
+                summaries[kernel]["cpp_dpi"],
+                summaries[kernel]["pure_sv"],
+                final=True,
+            )
+            summaries[kernel]["guard"]["warning"] = (
+                "extra batch skipped because another selected kernel had an "
+                "initial hard or environment-invalid result"
+            )
     for kernel in kernels:
         guard = summaries[kernel]["guard"]
         guard.setdefault("extra_batch_collected", False)
@@ -643,6 +702,125 @@ def _command_metadata(command: list[str]) -> dict[str, object]:
         return {"command": command, "returncode": None, "output": str(error)}
 
 
+def collect_load_metadata() -> dict[str, object]:
+    cpu_count = os.cpu_count() or 1
+    try:
+        one, five, fifteen = os.getloadavg()
+    except (AttributeError, OSError):
+        one = five = fifteen = None
+    return {
+        "logical_cpu_count": cpu_count,
+        "load_average_1m": one,
+        "load_average_5m": five,
+        "load_average_15m": fifteen,
+        "normalized_load_1m": one / cpu_count if one is not None else None,
+        "normalized_load_5m": five / cpu_count if five is not None else None,
+        "normalized_load_15m": fifteen / cpu_count if fifteen is not None else None,
+    }
+
+
+def collect_environment_probe() -> dict[str, object]:
+    """Capture lightweight load, power, and thermal evidence at a pair boundary."""
+    if platform.system() == "Darwin":
+        power = _command_metadata(["pmset", "-g", "ps"])
+        thermal = _command_metadata(["pmset", "-g", "therm"])
+    else:
+        power = {
+            "command": None,
+            "returncode": None,
+            "output": "power probe unsupported on this platform",
+        }
+        thermal = {
+            "command": None,
+            "returncode": None,
+            "output": "thermal probe unsupported on this platform",
+        }
+    return {
+        "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "monotonic_ns": time.monotonic_ns(),
+        "load": collect_load_metadata(),
+        "power": power,
+        "thermal": thermal,
+    }
+
+
+def assess_environment_validity(probes: list[dict]) -> dict[str, object]:
+    """Classify evidence used only to validate an otherwise hard failure."""
+    reasons: list[str] = []
+    power_sources: set[str] = set()
+    max_load: float | None = None
+    thermal_limits: list[int] = []
+    for probe in probes:
+        load = probe.get("load", {})
+        normalized = load.get("normalized_load_1m") if isinstance(load, dict) else None
+        if normalized is not None:
+            normalized = float(normalized)
+            max_load = normalized if max_load is None else max(max_load, normalized)
+        power = probe.get("power", {})
+        output = str(power.get("output", "")) if isinstance(power, dict) else ""
+        match = re.search(r"Now drawing from ['\"]([^'\"]+)", output)
+        if match:
+            power_sources.add(match.group(1))
+        thermal = probe.get("thermal", {})
+        output = str(thermal.get("output", "")) if isinstance(thermal, dict) else ""
+        thermal_limits.extend(
+            int(value)
+            for value in re.findall(
+                r"(?:CPU_Speed_Limit|CPU_Scheduler_Limit)\s*=\s*(\d+)", output
+            )
+        )
+    if max_load is not None and max_load > MAX_NORMALIZED_LOAD_1M:
+        reasons.append(
+            f"normalized 1-minute load reached {max_load:.3f} "
+            f"(limit {MAX_NORMALIZED_LOAD_1M:.3f})"
+        )
+    if len(power_sources) > 1:
+        reasons.append(
+            f"power source changed during measurement: {sorted(power_sources)}"
+        )
+    if thermal_limits and min(thermal_limits) < 100:
+        reasons.append(f"CPU thermal limit reached {min(thermal_limits)}%")
+    return {
+        "valid": not reasons,
+        "status": "valid" if not reasons else "invalid",
+        "reasons": reasons,
+        "probe_count": len(probes),
+        "maximum_normalized_load_1m": max_load,
+        "observed_power_sources": sorted(power_sources),
+        "minimum_cpu_thermal_limit_percent": min(thermal_limits)
+        if thermal_limits
+        else None,
+    }
+
+
+def apply_environment_validity(
+    summaries: dict[str, dict], validity: dict[str, object]
+) -> None:
+    """Downgrade conclusions that were measured in an invalid environment."""
+    if bool(validity["valid"]):
+        return
+    for summary in summaries.values():
+        guard = summary["guard"]
+        if guard["status"] != "hard_failure":
+            if guard["status"] == "passed":
+                guard["status"] = "passed_inconclusive"
+                guard["verdict"] = "passed_inconclusive"
+            if guard["status"] == "passed_inconclusive":
+                guard["validity"] = "invalid"
+                guard["environment_limits_pass"] = True
+                guard["invalid_environment_reasons"] = list(validity["reasons"])
+                warning = "; ".join(validity["reasons"])
+                existing = guard.get("warning")
+                guard["warning"] = f"{existing}; {warning}" if existing else warning
+            continue
+        guard["status"] = "invalid_environment"
+        guard["verdict"] = "invalid_environment"
+        guard["validity"] = "invalid"
+        guard["environment_blocks_hard_failure"] = True
+        guard["invalid_environment_reasons"] = list(validity["reasons"])
+        guard["error"] = "; ".join(validity["reasons"])
+
+
 def collect_metadata(config: dict[str, object]) -> dict[str, object]:
     git_revision = _command_metadata(["git", "rev-parse", "HEAD"])
     git_status = _command_metadata(["git", "status", "--porcelain"])
@@ -651,7 +829,8 @@ def collect_metadata(config: dict[str, object]) -> dict[str, object]:
     return {
         "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "git": {"commit": git_revision["output"] if git_revision["returncode"] == 0 else None,
-                "dirty": git_status["returncode"] != 0 or bool(git_status["output"])},
+                "dirty": git_status["returncode"] != 0 or bool(git_status["output"]),
+                "porcelain": git_status["output"]},
         "host": {"hostname": socket.gethostname(), "platform": platform.platform(),
                  "machine": platform.machine()},
         "python": {"version": platform.python_version(), "executable": sys.executable},
@@ -659,6 +838,7 @@ def collect_metadata(config: dict[str, object]) -> dict[str, object]:
         "verilator": {**verilator, "executable": shutil.which("verilator")},
         "command": [sys.executable, *sys.argv],
         "config": config,
+        "starting_load": collect_load_metadata(),
     }
 
 
@@ -676,6 +856,19 @@ def collect_binary_metadata(kernels: list[str]) -> dict[str, object]:
 
 
 def _render_markdown(result: dict[str, object]) -> str:
+    if result.get("measurement_mode") == "equivalence_only":
+        semantic = result.get("semantic", {})
+        return "\n".join(
+            [
+                "# Authoring-core C++ DPI vs pure SystemVerilog semantic check",
+                "",
+                f"- Example: `{result['example']}`",
+                f"- Result status: `{result['status']}`",
+                f"- Iterations: `{result['iterations']}`",
+                f"- Exact workload match: `{str(semantic.get('exact_match', False)).lower()}`",
+                "",
+            ]
+        )
     lines = [
         "# Authoring-core C++ DPI vs pure SystemVerilog benchmark",
         "",
@@ -685,6 +878,7 @@ def _render_markdown(result: dict[str, object]) -> str:
         f"- Conditional extra pairs: `{EXTRA_PAIRS}`",
         f"- Absolute hard guard: `C++ DPI / pure SV <= {MAX_DPI_OVER_SV_RATIO:.2f}x`",
         f"- Peripheral preflight: `{result['preflight']['status']}`",
+        f"- Measurement environment: `{result.get('environment', {}).get('validity', {}).get('status', 'not_assessed')}`",
         "",
     ]
     if "error" in result:
@@ -737,20 +931,116 @@ def _render_markdown(result: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def _write_results(result: dict[str, object]) -> None:
-    atomic_write_json(RESULT_DIR / "latest.json", result)
-    atomic_write_text(RESULT_DIR / "latest.md", _render_markdown(result))
+def _write_results(
+    result: dict[str, object], output: Path | dict[str, Path]
+) -> None:
+    if isinstance(output, dict):
+        json_path = output["json"]
+        markdown_path = output["markdown"]
+    else:
+        json_path = output / "latest.json"
+        markdown_path = output / "latest.md"
+    atomic_write_json(json_path, result)
+    atomic_write_text(markdown_path, _render_markdown(result))
+
+
+def _registry_lookup(name: str) -> object:
+    """Import lazily so statistical helpers remain usable without the registry."""
+    from benchmarks import registry
+
+    lookup = getattr(registry, "lookup", None)
+    if lookup is None:
+        lookup = getattr(registry, "get_entry", None)
+    if lookup is None:
+        lookup = getattr(registry, "get_benchmark", None)
+    if not callable(lookup):
+        raise RuntimeError("benchmark registry does not expose lookup")
+    return lookup(name)
+
+
+def _example_field(example: object, *names: str) -> object | None:
+    if isinstance(example, dict):
+        for name in names:
+            if name in example:
+                return example[name]
+        return None
+    for name in names:
+        if hasattr(example, name):
+            return getattr(example, name)
+    return None
+
+
+def resolve_authoring_example(name: str) -> tuple[str, str]:
+    """Resolve one registry name to its canonical result name and kernel."""
+    try:
+        example = _registry_lookup(name)
+    except (KeyError, LookupError) as error:
+        raise ValueError(f"unknown benchmark example: {name}") from error
+    if example is None:
+        raise ValueError(f"unknown benchmark example: {name}")
+
+    kind = _example_field(example, "kind", "type", "suite", "category", "family")
+    kind_value = getattr(kind, "value", kind)
+    if str(kind_value).lower() not in {
+        "authoring",
+        "authoring_feature",
+        "authoring_core",
+        "authoring-core",
+        "feature",
+    }:
+        raise ValueError(f"example {name!r} is not an authoring example")
+    canonical = str(_example_field(example, "name") or name)
+    kernel = str(_example_field(example, "kernel", "authoring_kernel") or canonical)
+    if kernel not in KERNELS:
+        raise ValueError(f"authoring example {canonical!r} has unknown kernel {kernel!r}")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", canonical):
+        raise ValueError(f"example name is not result-path safe: {canonical!r}")
+    return canonical, kernel
+
+
+def resolve_result_dir(example: str, root: Path | None = None) -> Path:
+    """Return an isolated direct child of the result root."""
+    resolved_root = Path(root if root is not None else RESULT_DIR).resolve()
+    candidate = resolved_root / example
+    result_dir = candidate.resolve()
+    if result_dir.parent != resolved_root or result_dir != candidate:
+        raise ValueError(f"example result path escapes result root: {example!r}")
+    return result_dir
+
+
+def resolve_result_paths(example: str, root: Path | None = None) -> dict[str, Path]:
+    """Resolve every per-example output before any one of them is opened."""
+    result_dir = resolve_result_dir(example, root)
+    paths = {
+        "directory": result_dir,
+        "json": result_dir / "latest.json",
+        "markdown": result_dir / "latest.md",
+        "journal": result_dir / "latest.jsonl",
+    }
+    for path in paths.values():
+        if path != result_dir and path.resolve() != path:
+            raise ValueError(f"example result path is a symlink alias: {path}")
+    return paths
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--example", action="append", required=True)
     parser.add_argument("--iters", type=int, default=DEFAULT_ITERATIONS)
     parser.add_argument("--pairs", type=int, default=DEFAULT_PAIRS)
-    parser.add_argument("--kernels", default=",".join(KERNELS))
     parser.add_argument("--preflight-iters", type=int, default=1000)
     parser.add_argument("--skip-build", action="store_true")
-    parser.add_argument("--skip-preflight", action="store_true")
+    parser.add_argument("--with-preflight", action="store_true")
+    parser.add_argument("--semantic-only", action="store_true")
     args = parser.parse_args(argv)
+    if len(args.example) != 1:
+        parser.error("exactly one --example is required")
+    if "," in args.example[0]:
+        parser.error("--example accepts one name, not a comma-separated list")
+    try:
+        args.example, args.kernel = resolve_authoring_example(args.example[0])
+    except ValueError as error:
+        parser.error(str(error))
     if args.iters < MIN_ITERATIONS:
         parser.error(f"--iters must be at least {MIN_ITERATIONS}")
     if args.pairs < MIN_PAIRS:
@@ -759,55 +1049,67 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--pairs must be even")
     if args.preflight_iters <= 0:
         parser.error("--preflight-iters must be greater than zero")
-    args.kernels = args.kernels.split(",")
-    if not args.kernels or len(args.kernels) != len(set(args.kernels)):
-        parser.error("--kernels must be a non-empty unique comma-separated list")
-    unknown = [kernel for kernel in args.kernels if kernel not in KERNELS]
-    if unknown:
-        parser.error(f"unknown kernels: {unknown}")
-    if "control" not in args.kernels:
-        parser.error("--kernels must include control for normalization")
     return args
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    output_paths = resolve_result_paths(args.example)
+    kernels = [args.kernel]
     config = {
+        "example": args.example,
         "iterations": args.iters,
         "initial_pairs": args.pairs,
         "extra_pairs": EXTRA_PAIRS,
-        "kernels": args.kernels,
+        "kernel": args.kernel,
         "skip_build": args.skip_build,
-        "skip_preflight": args.skip_preflight,
+        "with_preflight": args.with_preflight,
+        "semantic_only": args.semantic_only,
         "preflight_iterations": args.preflight_iters,
         "max_absolute_ratio": MAX_DPI_OVER_SV_RATIO,
         "min_order_stratum_failure_ratio": MIN_ORDER_STRATUM_FAILURE_RATIO,
         "max_independent_paired_relative_disagreement": (
             MAX_INDEPENDENT_PAIRED_DISAGREEMENT
         ),
+        "max_normalized_load_1m": MAX_NORMALIZED_LOAD_1M,
     }
     raw_samples: list[dict] = []
     result = {
         "benchmark": "authoring_core_cpp_dpi_vs_pure_sv",
+        "example": args.example,
         "status": "error",
         "iterations": args.iters,
         "pairs": args.pairs,
         "extra_pairs": EXTRA_PAIRS,
-        "selected_kernels": args.kernels,
+        "selected_kernels": kernels,
         "workload": "shared deterministic authoring_core_dut request/response contract",
         "metadata": {"config": config},
+        "environment": {
+            "pair_boundary_probes": [],
+            "validity": {"status": "not_assessed"},
+        },
         "binaries": {},
-        "preflight": {"status": "not_run"},
+        "preflight": {"status": "skipped"},
         "raw_samples": raw_samples,
         "kernels": {},
     }
     try:
-        journal = SampleJournal(RAW_SAMPLE_PATH, truncate=True)
+        # Capture repository/load state before truncating or replacing any result file.
         result["metadata"] = collect_metadata(config)
-        result["binaries"] = collect_binary_metadata(args.kernels)
+        result["metadata"]["captured_before_result_writes"] = True
+        journal = SampleJournal(output_paths["journal"], truncate=True)
+        result["binaries"] = collect_binary_metadata(kernels)
         if not args.skip_build:
-            run_command(["make", "authoring-core-build"])
-            if not args.skip_preflight:
+            dpi_target = str(_binary("cpp_dpi", args.kernel).relative_to(REPO))
+            run_command(
+                [
+                    "make",
+                    "authoring-core-dpi-codegen-check",
+                    dpi_target,
+                    "authoring-core-sv-build",
+                ]
+            )
+            if args.with_preflight:
                 run_command(
                     [
                         "make",
@@ -815,25 +1117,50 @@ def main(argv: list[str] | None = None) -> int:
                         "peripheral-suite-sv-build",
                     ]
                 )
-            result["binaries"] = collect_binary_metadata(args.kernels)
-        result["preflight"] = (
-            {"status": "skipped"}
-            if args.skip_preflight
-            else run_peripheral_preflight(args.preflight_iters)
-        )
+            result["binaries"] = collect_binary_metadata(kernels)
+        if args.with_preflight:
+            result["preflight"] = run_peripheral_preflight(args.preflight_iters)
+        if args.semantic_only:
+            cpp_sample = run_sample("cpp_dpi", args.kernel, 1, args.iters)
+            cpp_sample.update(
+                pair_order=["cpp_dpi", "pure_sv"], slot=1,
+                sequence_index=0, batch="semantic",
+            )
+            journal.append(cpp_sample)
+            sv_sample = run_sample("pure_sv", args.kernel, 1, args.iters)
+            sv_sample.update(
+                pair_order=["cpp_dpi", "pure_sv"], slot=2,
+                sequence_index=1, batch="semantic",
+            )
+            journal.append(sv_sample)
+            assert_equivalent(cpp_sample, sv_sample)
+            raw_samples.extend((cpp_sample, sv_sample))
+            result["measurement_mode"] = "equivalence_only"
+            result["semantic"] = {
+                "exact_match": True,
+                "cpp_dpi": cpp_sample,
+                "pure_sv": sv_sample,
+            }
+            result["status"] = "success"
+            _write_results(result, output_paths)
+            print(_render_markdown(result))
+            return 0
         summaries, _ = run_comparison(
-            args.kernels,
+            kernels,
             args.iters,
             args.pairs,
             raw_samples=raw_samples,
             journal=journal,
+            environment_probes=result["environment"]["pair_boundary_probes"],
+            pair_probe=collect_environment_probe,
         )
         result["kernels"] = summaries
-        control_ratio = float(summaries["control"]["guard"]["ratio"])
-        for kernel in args.kernels:
-            summaries[kernel]["normalized_vs_control"] = (
-                float(summaries[kernel]["guard"]["ratio"]) / control_ratio
-            )
+        validity = assess_environment_validity(
+            result["environment"]["pair_boundary_probes"]
+        )
+        result["environment"]["validity"] = validity
+        apply_environment_validity(summaries, validity)
+        for kernel in kernels:
             warning = summaries[kernel]["guard"].get("warning")
             if warning:
                 print(f"WARNING [{kernel}]: {warning}")
@@ -844,18 +1171,20 @@ def main(argv: list[str] | None = None) -> int:
             result["status"] = "failed"
         elif "invalid_environment" in guard_statuses:
             result["status"] = "invalid_environment"
+        elif "passed_inconclusive" in guard_statuses:
+            result["status"] = "passed_inconclusive"
         else:
             result["status"] = "success"
     except Exception as error:  # Persist all completed evidence before failing.
         result["status"] = "error"
         result["error"] = {"type": type(error).__name__, "message": str(error)}
     try:
-        _write_results(result)
+        _write_results(result, output_paths)
     except Exception as error:
         print(f"ERROR: could not persist benchmark report: {error}", file=sys.stderr)
         return 1
     print(_render_markdown(result))
-    return 0 if result["status"] == "success" else 1
+    return 0 if result["status"] in {"success", "passed_inconclusive"} else 1
 
 
 if __name__ == "__main__":
