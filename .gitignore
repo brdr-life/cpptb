@@ -1,1 +1,8 @@
 build/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+benchmarks/uvm-sim-compare/deps/
+benchmarks/uvm-sim-compare/work/
+benchmarks/uvm-sim-compare/results/*.log

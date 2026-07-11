@@ -1,0 +1,121 @@
+{
+  "schema_version": 1,
+  "module": "scheduler_conformance",
+  "top_module": "dpi_scheduler_conformance",
+  "namespace": "cpptb::conformance",
+  "root_type": "SchedulerConformanceDut",
+  "frontend": "slang",
+  "frontend_options": {
+    "slang": {
+      "standard": "1800-2023"
+    },
+    "verilator_json": {
+      "args": [
+        "-Wno-TIMESCALEMOD",
+        "-Wno-UNUSEDSIGNAL"
+      ]
+    }
+  },
+  "sources": [
+    "scheduler_conformance.sv"
+  ],
+  "clocks": [
+    {
+      "port": "clk_a",
+      "source": "generated",
+      "half_period": "2ns",
+      "primary": true
+    },
+    {
+      "port": "clk_b",
+      "source": "generated",
+      "half_period": "3ns",
+      "phase": "3ns"
+    },
+    {
+      "port": "manual_clk",
+      "source": "testbench"
+    },
+    {
+      "port": "derived_clk",
+      "source": "dut"
+    }
+  ],
+  "run": {
+    "init_function": "cpptb_dpi_init",
+    "step_function": "cpptb_dpi_step",
+    "next_deadline_function": "cpptb_dpi_next_timer_deadline",
+    "iteration_plusarg": "CPPTB_CONFORMANCE_ITERS",
+    "default_iterations": 1,
+    "timeprecision": "1ps"
+  },
+  "aliases": {
+    "clk_a": "clock.a",
+    "clk_b": "clock.b",
+    "manual_clk": "clock.manual",
+    "derived_clk": "clock.derived",
+    "sampled_a": "sample.a",
+    "sampled_b": "sample.b",
+    "sampled_manual": "sample.manual",
+    "sampled_derived": "sample.derived",
+    "count_a": "count.a",
+    "count_b": "count.b",
+    "count_manual": "count.manual",
+    "count_derived": "count.derived"
+  },
+  "type_names": {
+    "": "SchedulerConformanceDut",
+    "clock": "ConformanceClocks",
+    "sample": "ConformanceSamples",
+    "count": "ConformanceCounts"
+  },
+  "outputs": {
+    "cpp_dut": "generated/scheduler_conformance_dut.hpp",
+    "cpp_binding": "generated/scheduler_conformance_binding.hpp",
+    "sv_wrapper": "generated/dpi_scheduler_conformance.sv",
+    "cpp_include": "cpptb/conformance/generated/scheduler_conformance_dut.hpp"
+  },
+  "simulator": "verilator",
+  "simulator_options": {
+    "verilator": {
+      "compile_args": [
+        "--binary",
+        "--timing",
+        "--no-sched-zero-delay",
+        "-Wno-TIMESCALEMOD",
+        "-Wno-WIDTH",
+        "-Wno-UNUSEDSIGNAL"
+      ]
+    }
+  },
+  "conformance": {
+    "expected_iterations": 1,
+    "expected_checks": 161,
+    "expected_sim_cycles": 4,
+    "expected_failures": 0,
+    "negative_cases": [
+      {
+        "iterations": 2,
+        "message": "delay of 1 fs is not representable at 1000 fs simulation precision"
+      },
+      {
+        "iterations": 3,
+        "message": "cannot drive DUT output signal 'comb_sum'"
+      },
+      {
+        "iterations": 4,
+        "message": "delay duration must be greater than zero"
+      },
+      {
+        "iterations": 5,
+        "case": "event_active_waiter",
+        "message": "Event destroyed with active waiters"
+      },
+      {
+        "iterations": 6,
+        "case": "channel_active_waiter",
+        "message": "Channel destroyed with active waiters"
+      }
+    ]
+  }
+}
