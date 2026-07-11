@@ -1,0 +1,39 @@
+#include <cstdint>
+
+#include "cpptb/dpi_runtime.hpp"
+#include "cpptb/examples/dpi_multiclock/framework.hpp"
+#include "cpptb/examples/dpi_multiclock/generated/dual_clock_mailbox_binding.hpp"
+
+namespace cpptb::examples::dpi_multiclock {
+
+struct DpiAdapter {
+    using Dut = DualClockMailboxDut;
+    using Result = TestResult;
+
+    static constexpr uint32_t signal_count = kSignalCount;
+    inline static constexpr auto driven_signal_ids =
+        generated::kDrivenSignalIds;
+    static constexpr const char* result_name = "CPPTB_MULTICLOCK_RESULT";
+
+    template <typename MakeSignal>
+    static Dut bind_dut(MakeSignal make_signal) {
+        return generated::bind_dut(make_signal);
+    }
+
+    static void register_testbench(coro::Testbench& scheduler, Dut dut,
+                                   uint32_t iterations, Result& result) {
+        MulticlockTb tb{scheduler, dut, result, iterations};
+        register_user_testbench(tb);
+    }
+
+    static bool timed_out(coro::SimTime sim_time, uint64_t,
+                          uint32_t iterations) {
+        const uint64_t timeout_ns =
+            1'000u + static_cast<uint64_t>(iterations) * 100u;
+        return sim_time > coro::SimTime{timeout_ns * 1'000'000u};
+    }
+};
+
+}  // namespace cpptb::examples::dpi_multiclock
+
+CPPTB_DEFINE_DPI_RUNTIME(cpptb::examples::dpi_multiclock::DpiAdapter)

@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "module": "authoring_core_dut",
+  "top_module": "dpi_authoring_core",
+  "namespace": "cpptb::benchmarks::authoring_core",
+  "root_type": "AuthoringCoreDut",
+  "frontend": "slang",
+  "frontend_options": {
+    "slang": {
+      "standard": "1800-2023",
+      "args": ["--timescale=1ns/1ps"]
+    },
+    "verilator_json": {
+      "args": ["-Wno-TIMESCALEMOD"]
+    }
+  },
+  "sources": ["../rtl/authoring_core_dut.sv"],
+  "clocks": [
+    {
+      "port": "clk",
+      "source": "generated",
+      "half_period": "1ns",
+      "primary": true
+    }
+  ],
+  "run": {
+    "init_function": "authoring_core_dpi_init",
+    "step_function": "authoring_core_dpi_step",
+    "next_deadline_function": "authoring_core_dpi_next_timer_deadline",
+    "iteration_plusarg": "AUTHORING_CORE_ITERS",
+    "default_iterations": 10000,
+    "timeprecision": "1ps"
+  },
+  "outputs": {
+    "cpp_dut": "generated/authoring_core_dut.hpp",
+    "cpp_binding": "generated/authoring_core_binding.hpp",
+    "sv_wrapper": "generated/dpi_authoring_core.sv",
+    "cpp_include": "benchmarks/authoring_core/cpp_dpi/generated/authoring_core_dut.hpp"
+  }
+}
