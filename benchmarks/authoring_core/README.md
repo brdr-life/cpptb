@@ -94,7 +94,9 @@ any even value of at least 16 and rejects odd counts. The peripheral-suite
 DPI/SV equivalence preflight is disabled by default and can be requested with
 `--with-preflight`; its report field remains present as `skipped` when omitted.
 The runner build step compiles only the selected C++ DPI kernel plus the shared
-pure-SystemVerilog binary.
+pure-SystemVerilog binary. Both binaries use the same
+`AUTHORING_CORE_OPT_FAST=-O3` fast-code setting by default; callers may
+override that Make variable for controlled compiler experiments.
 
 The absolute median of paired `C++ DPI process wall / pure SV process wall` is
 the hard guard. A median at or below `1.10` passes the hard limit. If that median
@@ -103,11 +105,13 @@ passes but its exact distribution-free one-sided 95% upper median bound exceeds
 selected example. A still-wide final bound is reported as
 `passed_inconclusive` with a warning.
 
-A paired median strictly above `1.10` is `failed` only when both order-stratified
-paired medians are strictly above `1.05` and the ratio of independent process
-time medians is within 5%, relative to the paired median. Otherwise the result
-is `invalid_environment`. A valid initial hard failure is final and is never
-diluted by an extra batch. At the run level, `failed` takes precedence over
+A paired median strictly above `1.10` is provisionally confirmed only when
+both order-stratified paired medians are strictly above `1.05` and the ratio
+of independent process-time medians is within 5%, relative to the paired
+median. That provisional crossing collects exactly one additional 16-pair
+confirmation batch. Only the combined result may become `failed`; a crossing
+without confirming diagnostics is `invalid_environment` and does not collect
+more samples. At the run level, `failed` takes precedence over
 `invalid_environment`; either classification returns nonzero. Timings and
 paired ratios are always the raw observations and are never normalized for
 host load, power, temperature, or the control kernel.

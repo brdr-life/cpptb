@@ -1,5 +1,5 @@
 # Feature regression: control
 
-- Status: `passed_inconclusive`
+- Status: `passed`
 - Adapter: `runner`
 - Load settle: `settled`

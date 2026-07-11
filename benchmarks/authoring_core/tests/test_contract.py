@@ -40,6 +40,15 @@ class ContractTests(unittest.TestCase):
             "$(eval $(call AUTHORING_CORE_DPI_template,task_timeout,8))",
             makefile,
         )
+        self.assertIn("AUTHORING_CORE_OPT_FAST ?= -O3", makefile)
+        self.assertEqual(
+            makefile.count('-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)"'),
+            1,
+        )
+        self.assertEqual(
+            makefile.count('-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)"'),
+            1,
+        )
 
     def test_boundary_counts_one_iteration(self):
         control = workload.expected_counts("control", 1)
