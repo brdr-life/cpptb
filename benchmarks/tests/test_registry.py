@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+from unittest import mock
+
+
+REPO = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO))
+
+from benchmarks import registry
+from benchmarks.authoring_core.workload import KERNELS
+
+
+EXPECTED_NAMES = (*KERNELS, "dpi_multiclock", "peripheral_suite")
+
+
+class RegistryTests(unittest.TestCase):
+    def test_names_are_unique_and_ordered(self) -> None:
+        names = tuple(entry.name for entry in registry.BENCHMARKS)
+        self.assertEqual(names, EXPECTED_NAMES)
+        self.assertEqual(len(names), len(set(names)))
+
+    def test_entries_have_complete_metadata_and_known_policies(self) -> None:
+        policies = set(registry.GatePolicy)
+        for entry in registry.BENCHMARKS:
+            with self.subTest(entry=entry.name):
+                self.assertTrue(entry.label)
+                self.assertTrue(entry.build_targets)
+                self.assertTrue(entry.binaries)
+                self.assertTrue(entry.runner.commands)
+                self.assertGreater(entry.default_iterations, 0)
+                self.assertIn(entry.gate_policy, policies)
+                self.assertEqual(
+                    entry.binary_paths, tuple(binary.path for binary in entry.binaries)
+                )
+
+        self.assertEqual(
+            registry.get_benchmark("dpi_multiclock").gate_policy,
+            registry.GatePolicy.EQUIVALENCE_ONLY,
+        )
+        self.assertEqual(
+            registry.get_benchmark("peripheral_suite").gate_policy,
+            registry.GatePolicy.DIAGNOSTIC,
+        )
+        self.assertEqual(
+            registry.get_benchmark("peripheral_suite").runner.semantic_build_targets,
+            ("peripheral-suite-dpi-build", "peripheral-suite-sv-build"),
+        )
+        self.assertTrue(
+            all(
+                entry.gate_policy is registry.GatePolicy.HARD_1_10
+                for entry in registry.list_benchmarks(
+                    category=registry.Category.AUTHORING_FEATURE
+                )
+            )
+        )
+
+    def test_lookup_and_filtered_listing(self) -> None:
+        control = registry.get_benchmark("control")
+        self.assertIs(control, registry.BENCHMARKS[0])
+        self.assertEqual(
+            tuple(
+                entry.name
+                for entry in registry.list_benchmarks(category="integration")
+            ),
+            ("dpi_multiclock", "peripheral_suite"),
+        )
+        self.assertEqual(
+            tuple(
+                entry.name
+                for entry in registry.list_benchmarks(gate_policy="equivalence_only")
+            ),
+            ("dpi_multiclock",),
+        )
+        with self.assertRaises(KeyError):
+            registry.get_benchmark("missing")
+
+    def test_authoring_build_targets_select_one_dpi_binary(self) -> None:
+        for entry in registry.list_benchmarks(
+            category=registry.Category.AUTHORING_FEATURE
+        ):
+            with self.subTest(entry=entry.name):
+                self.assertEqual(entry.build_targets[0], entry.binaries[0].path)
+                self.assertEqual(entry.build_targets[1], "authoring-core-sv-build")
+
+    def test_repository_contract_is_consistent(self) -> None:
+        self.assertEqual(registry.consistency_errors(), ())
+        self.assertIsNone(registry.check_consistency())
+
+    def test_mismatch_detection_covers_all_sources(self) -> None:
+        makefile = registry.DEFAULT_MAKEFILE.read_text()
+        errors = registry.consistency_errors(
+            workload_kernels=(*KERNELS[:-1], "different"),
+            makefile_text=makefile.replace(
+                "AUTHORING_CORE_KERNELS := control",
+                "AUTHORING_CORE_KERNELS := changed",
+            ).replace(
+                "AUTHORING_CORE_DPI_template,control,0",
+                "AUTHORING_CORE_DPI_template,control,99",
+            ),
+        )
+        self.assertEqual(len(errors), 3)
+        self.assertIn("workload.KERNELS", errors[0])
+        self.assertIn("AUTHORING_CORE_KERNELS", errors[1])
+        self.assertIn("template IDs", errors[2])
+        with self.assertRaises(registry.RegistryConsistencyError):
+            registry.check_consistency(
+                workload_kernels=("control",), makefile_text=makefile
+            )
+
+    def test_import_does_not_execute_subprocess(self) -> None:
+        with mock.patch.object(subprocess, "run", side_effect=AssertionError), mock.patch.object(
+            subprocess, "check_output", side_effect=AssertionError
+        ), mock.patch.object(subprocess, "Popen", side_effect=AssertionError):
+            sys.modules.pop("benchmarks.registry", None)
+            __import__("benchmarks.registry")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -15,6 +15,59 @@ SPEC.loader.exec_module(RUNTIME_AB)
 
 
 class RuntimeABTests(unittest.TestCase):
+    def setUp(self):
+        self._sample_environment = mock.patch.object(
+            RUNTIME_AB.benchmark,
+            "sample_environment",
+            return_value={
+                "load_average_1m": 1.0,
+                "load_average_5m": 1.0,
+                "load_average_15m": 1.0,
+                "cpu_count": 8,
+            },
+        )
+        self._pair_boundary = mock.patch.object(
+            RUNTIME_AB.benchmark,
+            "probe_pair_boundary",
+            return_value={
+                "power": {"available": True, "source": "ac"},
+                "thermal": {"available": True, "status": "nominal"},
+            },
+        )
+        self._sample_environment.start()
+        self._pair_boundary.start()
+        self.addCleanup(self._sample_environment.stop)
+        self.addCleanup(self._pair_boundary.stop)
+
+    def test_real_probe_schema_reaches_shared_validity_helper(self):
+        sample_environment = {
+            "load_average_1m": 20.0,
+            "load_average_5m": 1.0,
+            "load_average_15m": 0.5,
+            "cpu_count": 8,
+        }
+        boundary = {
+            "power": {"available": True, "source": "ac"},
+            "thermal": {"available": True, "status": "nominal"},
+        }
+        with (
+            mock.patch.object(
+                RUNTIME_AB.benchmark,
+                "sample_environment",
+                return_value=sample_environment,
+            ),
+            mock.patch.object(
+                RUNTIME_AB.benchmark,
+                "probe_pair_boundary",
+                return_value=boundary,
+            ),
+        ):
+            probe = RUNTIME_AB._pair_boundary_probe(1, "measured")
+            validity = RUNTIME_AB._environment_validity([probe])
+
+        self.assertEqual(validity["validity"], "invalid")
+        self.assertIn("load average", validity["reasons"][0])
+
     @staticmethod
     def runner(ratio_for_run, mutate=None):
         calls = []
@@ -51,6 +104,7 @@ class RuntimeABTests(unittest.TestCase):
             "measured_pairs": 20,
             "metadata": {
                 "timestamp_utc": now.isoformat(),
+                "git": {"commit": "commit-a"},
                 "config": {"iterations": 10_000},
             },
         }
@@ -103,7 +157,7 @@ class RuntimeABTests(unittest.TestCase):
             path = Path(directory) / "aa.json"
             self.write_artifact(path, self.aa_artifact(now))
             preflight = RUNTIME_AB.validate_aa_preflight(
-                path, 10_000, "b" * 64, now=now
+                path, 10_000, "b" * 64, now=now, current_git_commit="commit-a"
             )
 
         self.assertEqual(preflight["artifact_path"], str(path))
@@ -114,6 +168,23 @@ class RuntimeABTests(unittest.TestCase):
         self.assertEqual(preflight["artifact_measured_pairs"], 20)
         self.assertEqual(len(preflight["artifact_sha256"]), 64)
         self.assertEqual(preflight["artifact_age_seconds"], 0.0)
+        self.assertEqual(preflight["artifact_git_commit"], "commit-a")
+
+    def test_aa_preflight_rejects_git_commit_mismatch(self):
+        now = datetime.datetime(2026, 7, 11, 17, 0, tzinfo=datetime.timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "aa.json"
+            self.write_artifact(path, self.aa_artifact(now))
+            with self.assertRaisesRegex(
+                RUNTIME_AB.AAPreflightError, "current start commit"
+            ):
+                RUNTIME_AB.validate_aa_preflight(
+                    path,
+                    10_000,
+                    "b" * 64,
+                    now=now,
+                    current_git_commit="commit-b",
+                )
 
     def test_exact_thirty_minute_aa_age_is_accepted(self):
         now = datetime.datetime(2026, 7, 11, 17, 0, tzinfo=datetime.timezone.utc)
@@ -211,6 +282,11 @@ class RuntimeABTests(unittest.TestCase):
             ]
             evidence = {"build_provenance": {"binary_sha256": "a" * 64}}
             with (
+                mock.patch.object(
+                    RUNTIME_AB,
+                    "_capture_git_state",
+                    return_value={"commit": "commit-a", "dirty": False},
+                ),
                 mock.patch.object(RUNTIME_AB, "load_source_evidence", return_value=evidence),
                 mock.patch.object(
                     RUNTIME_AB,
@@ -221,7 +297,10 @@ class RuntimeABTests(unittest.TestCase):
                 mock.patch.object(
                     RUNTIME_AB.benchmark,
                     "collect_metadata",
-                    side_effect=lambda config: {"config": config},
+                    side_effect=lambda config, **kwargs: {
+                        "config": config,
+                        "git": kwargs["git_state"],
+                    },
                 ),
                 mock.patch.object(RUNTIME_AB, "persist_result") as persist,
             ):
@@ -238,6 +317,7 @@ class RuntimeABTests(unittest.TestCase):
             persisted["metadata"]["config"]["aa_preflight"],
             persisted["aa_preflight"],
         )
+        self.assertEqual(persisted["metadata"]["git"]["commit"], "commit-a")
 
     def test_main_samples_after_valid_preflight_and_records_it(self):
         now = datetime.datetime.now(datetime.timezone.utc)
@@ -266,6 +346,11 @@ class RuntimeABTests(unittest.TestCase):
                 "extra_batch_collected": False,
             }
             with (
+                mock.patch.object(
+                    RUNTIME_AB,
+                    "_capture_git_state",
+                    return_value={"commit": "commit-a", "dirty": False},
+                ),
                 mock.patch.object(RUNTIME_AB, "load_source_evidence", return_value=evidence),
                 mock.patch.object(
                     RUNTIME_AB,
@@ -280,7 +365,10 @@ class RuntimeABTests(unittest.TestCase):
                 mock.patch.object(
                     RUNTIME_AB.benchmark,
                     "collect_metadata",
-                    side_effect=lambda config: {"config": config},
+                    side_effect=lambda config, **kwargs: {
+                        "config": config,
+                        "git": kwargs["git_state"],
+                    },
                 ),
                 mock.patch.object(RUNTIME_AB, "persist_result") as persist,
                 mock.patch.object(RUNTIME_AB, "render_markdown", return_value="ok\n"),
@@ -296,6 +384,7 @@ class RuntimeABTests(unittest.TestCase):
             persisted["metadata"]["config"]["aa_preflight"],
             persisted["aa_preflight"],
         )
+        self.assertEqual(persisted["metadata"]["git"]["commit"], "commit-a")
 
     def test_workload_check_covers_counts_cycles_failures_and_identity(self):
         mutations = {
@@ -327,6 +416,22 @@ class RuntimeABTests(unittest.TestCase):
         )
         self.assertGreater(result["statistics"]["old_first_paired_median"], 1.05)
         self.assertGreater(result["statistics"]["new_first_paired_median"], 1.05)
+
+    def test_invalid_environment_prevents_confirmed_regression(self):
+        sample, _ = self.runner(lambda run: 1.10)
+        invalid = {"status": "invalid", "reasons": ["thermal pressure"]}
+        with mock.patch.object(
+            RUNTIME_AB.benchmark,
+            "environment_validity",
+            return_value=invalid,
+            create=True,
+        ):
+            result = RUNTIME_AB.run_runtime_comparison(
+                10_000, sample_runner=sample, binary_hashes=self.hashes()
+            )
+        self.assertEqual(result["status"], "invalid_environment")
+        self.assertEqual(result["environment"]["validity"], invalid)
+        self.assertEqual(result["measured_pairs"], 16)
 
     def test_no_material_regression(self):
         sample, _ = self.runner(lambda run: 1.03)
@@ -423,13 +528,24 @@ class RuntimeABTests(unittest.TestCase):
                 json.loads(line)
                 for line in journal.path.read_text(encoding="utf-8").splitlines()
             ]
-            self.assertEqual(len(entries), 34)
-            self.assertTrue(all(entry["event"] == "sample" for entry in entries))
+            self.assertEqual(len(entries), 34 + 17)
+            samples = [entry for entry in entries if entry["event"] == "sample"]
+            probes = [
+                entry for entry in entries if entry["event"] == "environment_probe"
+            ]
+            self.assertEqual(len(samples), 34)
+            self.assertEqual(len(probes), 17)
+            for index, entry in enumerate(entries):
+                if entry["event"] == "environment_probe":
+                    self.assertEqual(
+                        [item["event"] for item in entries[index + 1 : index + 3]],
+                        ["sample", "sample"],
+                    )
             self.assertTrue(
                 all(
                     entry["sample"]["binary_sha256"]
                     == self.hashes()[entry["label"]]
-                    for entry in entries
+                    for entry in samples
                 )
             )
             persisted = json.loads(json_path.read_text(encoding="utf-8"))

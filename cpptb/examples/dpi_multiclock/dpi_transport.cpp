@@ -13,7 +13,7 @@ struct DpiAdapter {
     static constexpr uint32_t signal_count = kSignalCount;
     inline static constexpr auto driven_signal_ids =
         generated::kDrivenSignalIds;
-    static constexpr const char* result_name = "CPPTB_MULTICLOCK_RESULT";
+    static constexpr const char* result_name = "CPP_DPI_MULTICLOCK_RESULT";
 
     template <typename MakeSignal>
     static Dut bind_dut(MakeSignal make_signal) {

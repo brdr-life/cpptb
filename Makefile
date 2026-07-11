@@ -44,8 +44,10 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout wait_until event channel all
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event channel all
 AUTHORING_CORE_KERNEL ?= control
+FEATURE ?=
+FEATURE_REGRESSION_RUNNER := python3 benchmarks/run_regression.py
 UV_CACHE_DIR ?= $(BUILD_DIR)/uv-cache
 CODEGEN_PYTHON := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen python
 CPPTB_CODEGEN_SOURCES := \
@@ -95,7 +97,7 @@ SDKROOT := $(shell xcrun --show-sdk-path)
 LIBCXX_INC := $(SDKROOT)/usr/include/c++/v1
 CXX ?= clang++
 
-.PHONY: all run vpi-run cpp-vpi-run cpp-coro-runtime-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpp-dpi-multiclock-codegen cpp-dpi-multiclock-codegen-check cpp-dpi-multiclock-build cpp-dpi-multiclock-run cpp-dpi-multiclock-sv-build cpp-dpi-multiclock-sv-run peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run peripheral-suite-runtime-old-diagnostic-build authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark clean
+.PHONY: all run vpi-run cpp-vpi-run cpp-coro-runtime-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpp-dpi-multiclock-codegen cpp-dpi-multiclock-codegen-check cpp-dpi-multiclock-build cpp-dpi-multiclock-run cpp-dpi-multiclock-sv-build cpp-dpi-multiclock-sv-run peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run peripheral-suite-runtime-old-diagnostic-build authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 all: $(BUILD_DIR)/counter_driver
 
@@ -522,6 +524,7 @@ $(eval $(call AUTHORING_CORE_DPI_template,wait_until,4))
 $(eval $(call AUTHORING_CORE_DPI_template,event,5))
 $(eval $(call AUTHORING_CORE_DPI_template,channel,6))
 $(eval $(call AUTHORING_CORE_DPI_template,all,7))
+$(eval $(call AUTHORING_CORE_DPI_template,task_timeout,8))
 
 AUTHORING_CORE_DPI_BINARIES := $(foreach kernel,$(AUTHORING_CORE_KERNELS),$(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(kernel)/Vdpi_authoring_core)
 
@@ -550,8 +553,26 @@ authoring-core-sv-run: $(AUTHORING_CORE_SV_OBJ_DIR)/Vauthoring_core_sv_tb
 
 authoring-core-build: authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-sv-build
 
-authoring-core-benchmark: authoring-core-build peripheral-suite-dpi-build peripheral-suite-sv-build
-	python3 $(AUTHORING_CORE_DIR)/run_benchmark.py --skip-build
+authoring-core-benchmark: authoring-core-build
+	python3 $(AUTHORING_CORE_DIR)/run_benchmark.py \
+		--example $(AUTHORING_CORE_KERNEL) --skip-build
+
+feature-list:
+	$(FEATURE_REGRESSION_RUNNER) list
+
+feature-test:
+	@test -n "$(FEATURE)" || { echo "FEATURE is required" >&2; exit 2; }
+	$(FEATURE_REGRESSION_RUNNER) semantic-check "$(FEATURE)"
+
+feature-benchmark:
+	@test -n "$(FEATURE)" || { echo "FEATURE is required" >&2; exit 2; }
+	$(FEATURE_REGRESSION_RUNNER) benchmark "$(FEATURE)"
+
+feature-regression:
+	$(FEATURE_REGRESSION_RUNNER) regression
+
+registry-check:
+	$(FEATURE_REGRESSION_RUNNER) registry-check
 
 clean:
 	rm -rf $(BUILD_DIR)

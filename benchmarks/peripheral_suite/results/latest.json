@@ -1,24 +1,32 @@
 {
   "status": "hard_failure",
   "verdict": "failed",
-  "error": "paired tracked C++ DPI/pure SV process ratio exceeded 1.10x: median ratio = 1.100x",
+  "error": "paired tracked C++ DPI/pure SV process ratio exceeded 1.10x: median ratio = 1.145x",
   "iterations": 10000,
   "requested_pairs": 16,
   "measured_pairs": 16,
   "cpp_dpi": {
     "label": "cpp_dpi",
     "runs": 16,
-    "process_wall_ms_median": 1444.2689165007323,
+    "process_wall_ms_median": 1559.713458409533,
     "samples": [
       {
         "run": 1,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1300.469,
-        "process_wall_ms": 1305.8802909217775,
+        "internal_wall_ms": 1579.35,
+        "process_wall_ms": 1584.4088750891387,
+        "child_cpu_user_ms": 1487.183,
+        "child_cpu_system_ms": 34.50399999999999,
+        "child_cpu_total_ms": 1521.687,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.8427734375,
+        "load_average_5m": 6.75244140625,
+        "load_average_15m": 7.9970703125,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 1,
         "slot": 1,
         "pair_order": [
@@ -26,17 +34,63 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 0
+        "measured_pair_count": 0,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:00.696078+00:00",
+            "load_average_1m": 7.8291015625,
+            "load_average_5m": 6.7314453125,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:03.727202+00:00",
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 2,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1494.514,
-        "process_wall_ms": 1500.5450416356325,
+        "internal_wall_ms": 1564.117,
+        "process_wall_ms": 1570.8535420708358,
+        "child_cpu_user_ms": 1485.3869999999993,
+        "child_cpu_system_ms": 36.58800000000001,
+        "child_cpu_total_ms": 1521.9749999999992,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.8427734375,
+        "load_average_5m": 6.75244140625,
+        "load_average_15m": 7.9970703125,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 2,
         "slot": 2,
         "pair_order": [
@@ -44,17 +98,63 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 2
+        "measured_pair_count": 2,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:03.748332+00:00",
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:06.687472+00:00",
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 3,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1547.037,
-        "process_wall_ms": 1554.3311247602105,
+        "internal_wall_ms": 1511.183,
+        "process_wall_ms": 1516.988624818623,
+        "child_cpu_user_ms": 1423.3080000000004,
+        "child_cpu_system_ms": 35.75199999999998,
+        "child_cpu_total_ms": 1459.0600000000004,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.37451171875,
+        "load_average_5m": 6.67333984375,
+        "load_average_15m": 7.9619140625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 3,
         "slot": 1,
         "pair_order": [
@@ -62,17 +162,63 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 2
+        "measured_pair_count": 2,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:06.714809+00:00",
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:09.668922+00:00",
+            "load_average_1m": 7.37451171875,
+            "load_average_5m": 6.67333984375,
+            "load_average_15m": 7.9619140625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 4,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1412.149,
-        "process_wall_ms": 1419.696417171508,
+        "internal_wall_ms": 1539.163,
+        "process_wall_ms": 1545.3098746947944,
+        "child_cpu_user_ms": 1474.8380000000002,
+        "child_cpu_system_ms": 32.564999999999955,
+        "child_cpu_total_ms": 1507.4030000000002,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.10400390625,
+        "load_average_5m": 6.62890625,
+        "load_average_15m": 7.9384765625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 4,
         "slot": 2,
         "pair_order": [
@@ -80,17 +226,63 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 4
+        "measured_pair_count": 4,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:09.689874+00:00",
+            "load_average_1m": 7.37451171875,
+            "load_average_5m": 6.67333984375,
+            "load_average_15m": 7.9619140625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:12.597111+00:00",
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "load_average_15m": 7.9384765625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 5,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1422.945,
-        "process_wall_ms": 1427.9311667196453,
+        "internal_wall_ms": 1566.733,
+        "process_wall_ms": 1572.413541842252,
+        "child_cpu_user_ms": 1466.9939999999997,
+        "child_cpu_system_ms": 34.974000000000004,
+        "child_cpu_total_ms": 1501.9679999999996,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.10400390625,
+        "load_average_5m": 6.62890625,
+        "load_average_15m": 7.9384765625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 5,
         "slot": 1,
         "pair_order": [
@@ -98,17 +290,63 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 4
+        "measured_pair_count": 4,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:12.619431+00:00",
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "load_average_15m": 7.9384765625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:15.599174+00:00",
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "load_average_15m": 7.9384765625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 6,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1378.308,
-        "process_wall_ms": 1383.7939579971135,
+        "internal_wall_ms": 1543.319,
+        "process_wall_ms": 1548.57337474823,
+        "child_cpu_user_ms": 1466.9999999999986,
+        "child_cpu_system_ms": 33.85100000000002,
+        "child_cpu_total_ms": 1500.8509999999987,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.41552734375,
+        "load_average_5m": 6.701171875,
+        "load_average_15m": 7.9560546875,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 6,
         "slot": 2,
         "pair_order": [
@@ -116,17 +354,63 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 6
+        "measured_pair_count": 6,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:15.621022+00:00",
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "load_average_15m": 7.9384765625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:18.510591+00:00",
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "load_average_15m": 7.9560546875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 7,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1401.469,
-        "process_wall_ms": 1407.8210829757154,
+        "internal_wall_ms": 1510.581,
+        "process_wall_ms": 1516.234208829701,
+        "child_cpu_user_ms": 1467.8940000000011,
+        "child_cpu_system_ms": 23.29799999999993,
+        "child_cpu_total_ms": 1491.1920000000011,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.41552734375,
+        "load_average_5m": 6.701171875,
+        "load_average_15m": 7.9560546875,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 7,
         "slot": 1,
         "pair_order": [
@@ -134,17 +418,63 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 6
+        "measured_pair_count": 6,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:18.533405+00:00",
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "load_average_15m": 7.9560546875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:21.375237+00:00",
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "load_average_15m": 7.9560546875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 8,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1439.975,
-        "process_wall_ms": 1445.9097920916975,
+        "internal_wall_ms": 1465.929,
+        "process_wall_ms": 1472.2004998475313,
+        "child_cpu_user_ms": 1429.7289999999982,
+        "child_cpu_system_ms": 15.353000000000062,
+        "child_cpu_total_ms": 1445.0819999999983,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.3017578125,
+        "load_average_5m": 6.689453125,
+        "load_average_15m": 7.9443359375,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 8,
         "slot": 2,
         "pair_order": [
@@ -152,17 +482,63 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 8
+        "measured_pair_count": 8,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:21.397357+00:00",
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "load_average_15m": 7.9560546875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:24.253873+00:00",
+            "load_average_1m": 7.3017578125,
+            "load_average_5m": 6.689453125,
+            "load_average_15m": 7.9443359375,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 9,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1390.691,
-        "process_wall_ms": 1395.973791833967,
+        "internal_wall_ms": 1620.221,
+        "process_wall_ms": 1626.683209091425,
+        "child_cpu_user_ms": 1500.9230000000002,
+        "child_cpu_system_ms": 49.83800000000005,
+        "child_cpu_total_ms": 1550.7610000000002,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.3017578125,
+        "load_average_5m": 6.689453125,
+        "load_average_15m": 7.9443359375,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 9,
         "slot": 1,
         "pair_order": [
@@ -170,17 +546,63 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 8
+        "measured_pair_count": 8,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:24.275684+00:00",
+            "load_average_1m": 7.3017578125,
+            "load_average_5m": 6.689453125,
+            "load_average_15m": 7.9443359375,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:27.204191+00:00",
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "load_average_15m": 7.9267578125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 10,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1451.491,
-        "process_wall_ms": 1457.4073334224522,
+        "internal_wall_ms": 1504.485,
+        "process_wall_ms": 1512.9083753563464,
+        "child_cpu_user_ms": 1450.7499999999993,
+        "child_cpu_system_ms": 23.101999999999954,
+        "child_cpu_total_ms": 1473.8519999999992,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.1171875,
+        "load_average_5m": 6.6611328125,
+        "load_average_15m": 7.9267578125,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 10,
         "slot": 2,
         "pair_order": [
@@ -188,17 +610,63 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 10
+        "measured_pair_count": 10,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:27.226700+00:00",
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "load_average_15m": 7.9267578125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:30.207230+00:00",
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "load_average_15m": 7.9267578125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 11,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1452.439,
-        "process_wall_ms": 1458.3046669140458,
+        "internal_wall_ms": 1639.992,
+        "process_wall_ms": 1645.932916086167,
+        "child_cpu_user_ms": 1523.2689999999955,
+        "child_cpu_system_ms": 43.39700000000002,
+        "child_cpu_total_ms": 1566.6659999999954,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.1171875,
+        "load_average_5m": 6.6611328125,
+        "load_average_15m": 7.9267578125,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 11,
         "slot": 1,
         "pair_order": [
@@ -206,17 +674,63 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 10
+        "measured_pair_count": 10,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:30.229315+00:00",
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "load_average_15m": 7.9267578125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:33.178121+00:00",
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "load_average_15m": 7.9326171875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 12,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1532.893,
-        "process_wall_ms": 1541.7205840349197,
+        "internal_wall_ms": 1481.262,
+        "process_wall_ms": 1488.4914588183165,
+        "child_cpu_user_ms": 1436.0980000000013,
+        "child_cpu_system_ms": 20.85999999999999,
+        "child_cpu_total_ms": 1456.9580000000012,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.267578125,
+        "load_average_5m": 6.69970703125,
+        "load_average_15m": 7.9326171875,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 12,
         "slot": 2,
         "pair_order": [
@@ -224,17 +738,63 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 12
+        "measured_pair_count": 12,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:33.198775+00:00",
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "load_average_15m": 7.9326171875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:36.161767+00:00",
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "load_average_15m": 7.9326171875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 13,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1397.169,
-        "process_wall_ms": 1402.2640832699835,
+        "internal_wall_ms": 1588.632,
+        "process_wall_ms": 1593.7451249919832,
+        "child_cpu_user_ms": 1469.8020000000015,
+        "child_cpu_system_ms": 49.56900000000009,
+        "child_cpu_total_ms": 1519.3710000000017,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.0859375,
+        "load_average_5m": 6.67138671875,
+        "load_average_15m": 7.9150390625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 13,
         "slot": 1,
         "pair_order": [
@@ -242,17 +802,63 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 12
+        "measured_pair_count": 12,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:36.181647+00:00",
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "load_average_15m": 7.9326171875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:39.120861+00:00",
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "load_average_15m": 7.9150390625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 14,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1436.335,
-        "process_wall_ms": 1442.6280409097672,
+        "internal_wall_ms": 1535.391,
+        "process_wall_ms": 1542.1290416270494,
+        "child_cpu_user_ms": 1470.1109999999958,
+        "child_cpu_system_ms": 33.46199999999988,
+        "child_cpu_total_ms": 1503.5729999999958,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.0859375,
+        "load_average_5m": 6.67138671875,
+        "load_average_15m": 7.9150390625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 14,
         "slot": 2,
         "pair_order": [
@@ -260,17 +866,63 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 14
+        "measured_pair_count": 14,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:39.139839+00:00",
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "load_average_15m": 7.9150390625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:42.100729+00:00",
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "load_average_15m": 7.9150390625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 15,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1805.418,
-        "process_wall_ms": 1810.55699987337,
+        "internal_wall_ms": 1659.6,
+        "process_wall_ms": 1664.35670806095,
+        "child_cpu_user_ms": 1497.0710000000054,
+        "child_cpu_system_ms": 54.30899999999994,
+        "child_cpu_total_ms": 1551.3800000000053,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 6.67822265625,
+        "load_average_5m": 6.59375,
+        "load_average_15m": 7.88037109375,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 15,
         "slot": 1,
         "pair_order": [
@@ -278,17 +930,63 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 14
+        "measured_pair_count": 14,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:42.120033+00:00",
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "load_average_15m": 7.9150390625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:45.447058+00:00",
+            "load_average_1m": 6.67822265625,
+            "load_average_5m": 6.59375,
+            "load_average_15m": 7.88037109375,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 16,
         "spawn_mode": "tracked",
-        "internal_wall_ms": 1683.906,
-        "process_wall_ms": 1690.1162499561906,
+        "internal_wall_ms": 1626.535,
+        "process_wall_ms": 1633.9107500389218,
+        "child_cpu_user_ms": 1555.0620000000067,
+        "child_cpu_system_ms": 28.46900000000008,
+        "child_cpu_total_ms": 1583.5310000000068,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 6.62353515625,
+        "load_average_5m": 6.58349609375,
+        "load_average_15m": 7.869140625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "sequence_index": 16,
         "slot": 2,
         "pair_order": [
@@ -296,19 +994,69 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 16
+        "measured_pair_count": 16,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:45.466637+00:00",
+            "load_average_1m": 6.67822265625,
+            "load_average_5m": 6.59375,
+            "load_average_15m": 7.88037109375,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:48.526658+00:00",
+            "load_average_1m": 6.62353515625,
+            "load_average_5m": 6.58349609375,
+            "load_average_15m": 7.869140625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       }
     ],
-    "internal_wall_ms_median": 1438.155
+    "internal_wall_ms_median": 1553.7179999999998,
+    "child_cpu_user_ms_median": 1469.9564999999986,
+    "child_cpu_system_ms_median": 34.17750000000001,
+    "child_cpu_total_ms_median": 1505.487999999998,
+    "child_max_rss_kb_median": 0.0
   },
   "pure_sv": {
     "label": "pure_sv",
     "runs": 16,
-    "process_wall_ms_median": 1308.15533362329,
+    "process_wall_ms_median": 1371.8935835640877,
     "samples": [
       {
         "run": 1,
-        "process_wall_ms": 1482.0926249958575,
+        "process_wall_ms": 1425.7536251097918,
+        "child_cpu_user_ms": 1364.9969999999998,
+        "child_cpu_system_ms": 28.965000000000003,
+        "child_cpu_total_ms": 1393.9619999999998,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.8427734375,
+        "load_average_5m": 6.75244140625,
+        "load_average_15m": 7.9970703125,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -320,11 +1068,57 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 1
+        "measured_pair_count": 1,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:00.696078+00:00",
+            "load_average_1m": 7.8291015625,
+            "load_average_5m": 6.7314453125,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:03.727202+00:00",
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 2,
-        "process_wall_ms": 1361.2376246601343,
+        "process_wall_ms": 1348.272167146206,
+        "child_cpu_user_ms": 1277.233,
+        "child_cpu_system_ms": 28.12099999999998,
+        "child_cpu_total_ms": 1305.3539999999998,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.8427734375,
+        "load_average_5m": 6.75244140625,
+        "load_average_15m": 7.9970703125,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -336,11 +1130,57 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 1
+        "measured_pair_count": 1,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:03.748332+00:00",
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:06.687472+00:00",
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 3,
-        "process_wall_ms": 1231.3666245900095,
+        "process_wall_ms": 1413.7995829805732,
+        "child_cpu_user_ms": 1351.5390000000007,
+        "child_cpu_system_ms": 29.72600000000003,
+        "child_cpu_total_ms": 1381.2650000000008,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.37451171875,
+        "load_average_5m": 6.67333984375,
+        "load_average_15m": 7.9619140625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -352,11 +1192,57 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 3
+        "measured_pair_count": 3,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:06.714809+00:00",
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "load_average_15m": 7.9970703125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:09.668922+00:00",
+            "load_average_1m": 7.37451171875,
+            "load_average_5m": 6.67333984375,
+            "load_average_15m": 7.9619140625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 4,
-        "process_wall_ms": 1235.2250418625772,
+        "process_wall_ms": 1338.4391660802066,
+        "child_cpu_user_ms": 1269.9960000000008,
+        "child_cpu_system_ms": 22.79000000000003,
+        "child_cpu_total_ms": 1292.7860000000007,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.37451171875,
+        "load_average_5m": 6.67333984375,
+        "load_average_15m": 7.9619140625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -368,11 +1254,57 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 3
+        "measured_pair_count": 3,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:09.689874+00:00",
+            "load_average_1m": 7.37451171875,
+            "load_average_5m": 6.67333984375,
+            "load_average_15m": 7.9619140625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:12.597111+00:00",
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "load_average_15m": 7.9384765625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 5,
-        "process_wall_ms": 1180.5585422553122,
+        "process_wall_ms": 1383.6878342553973,
+        "child_cpu_user_ms": 1344.3439999999996,
+        "child_cpu_system_ms": 15.71,
+        "child_cpu_total_ms": 1360.0539999999996,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.10400390625,
+        "load_average_5m": 6.62890625,
+        "load_average_15m": 7.9384765625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -384,11 +1316,57 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 5
+        "measured_pair_count": 5,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:12.619431+00:00",
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "load_average_15m": 7.9384765625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:15.599174+00:00",
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "load_average_15m": 7.9384765625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 6,
-        "process_wall_ms": 1309.2388329096138,
+        "process_wall_ms": 1317.2630001790822,
+        "child_cpu_user_ms": 1287.5880000000031,
+        "child_cpu_system_ms": 16.959000000000003,
+        "child_cpu_total_ms": 1304.5470000000032,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.10400390625,
+        "load_average_5m": 6.62890625,
+        "load_average_15m": 7.9384765625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -400,11 +1378,57 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 5
+        "measured_pair_count": 5,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:15.621022+00:00",
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "load_average_15m": 7.9384765625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:18.510591+00:00",
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "load_average_15m": 7.9560546875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 7,
-        "process_wall_ms": 1281.6277090460062,
+        "process_wall_ms": 1301.71904200688,
+        "child_cpu_user_ms": 1262.4509999999987,
+        "child_cpu_system_ms": 20.491000000000035,
+        "child_cpu_total_ms": 1282.9419999999986,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.41552734375,
+        "load_average_5m": 6.701171875,
+        "load_average_15m": 7.9560546875,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -416,11 +1440,57 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 7
+        "measured_pair_count": 7,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:18.533405+00:00",
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "load_average_15m": 7.9560546875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:21.375237+00:00",
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "load_average_15m": 7.9560546875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 8,
-        "process_wall_ms": 1240.8111658878624,
+        "process_wall_ms": 1360.0993328727782,
+        "child_cpu_user_ms": 1297.7640000000008,
+        "child_cpu_system_ms": 25.163999999999966,
+        "child_cpu_total_ms": 1322.9280000000008,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.3017578125,
+        "load_average_5m": 6.689453125,
+        "load_average_15m": 7.9443359375,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -432,11 +1502,57 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 7
+        "measured_pair_count": 7,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:21.397357+00:00",
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "load_average_15m": 7.9560546875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:24.253873+00:00",
+            "load_average_1m": 7.3017578125,
+            "load_average_5m": 6.689453125,
+            "load_average_15m": 7.9443359375,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 9,
-        "process_wall_ms": 1287.4978329055011,
+        "process_wall_ms": 1278.7249172106385,
+        "child_cpu_user_ms": 1249.061000000001,
+        "child_cpu_system_ms": 15.549999999999953,
+        "child_cpu_total_ms": 1264.611000000001,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.1171875,
+        "load_average_5m": 6.6611328125,
+        "load_average_15m": 7.9267578125,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -448,11 +1564,57 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 9
+        "measured_pair_count": 9,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:24.275684+00:00",
+            "load_average_1m": 7.3017578125,
+            "load_average_5m": 6.689453125,
+            "load_average_15m": 7.9443359375,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:27.204191+00:00",
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "load_average_15m": 7.9267578125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 10,
-        "process_wall_ms": 1356.3214582391083,
+        "process_wall_ms": 1444.54141613096,
+        "child_cpu_user_ms": 1353.3860000000004,
+        "child_cpu_system_ms": 37.726999999999954,
+        "child_cpu_total_ms": 1391.1130000000003,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.1171875,
+        "load_average_5m": 6.6611328125,
+        "load_average_15m": 7.9267578125,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -464,11 +1626,57 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 9
+        "measured_pair_count": 9,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:27.226700+00:00",
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "load_average_15m": 7.9267578125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:30.207230+00:00",
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "load_average_15m": 7.9267578125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 11,
-        "process_wall_ms": 1307.0718343369663,
+        "process_wall_ms": 1281.7999157123268,
+        "child_cpu_user_ms": 1261.810000000004,
+        "child_cpu_system_ms": 8.61500000000004,
+        "child_cpu_total_ms": 1270.425000000004,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.267578125,
+        "load_average_5m": 6.69970703125,
+        "load_average_15m": 7.9326171875,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -480,11 +1688,57 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 11
+        "measured_pair_count": 11,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:30.229315+00:00",
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "load_average_15m": 7.9267578125,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:33.178121+00:00",
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "load_average_15m": 7.9326171875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 12,
-        "process_wall_ms": 1499.3903748691082,
+        "process_wall_ms": 1453.6912920884788,
+        "child_cpu_user_ms": 1346.3610000000017,
+        "child_cpu_system_ms": 46.96899999999993,
+        "child_cpu_total_ms": 1393.3300000000015,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.267578125,
+        "load_average_5m": 6.69970703125,
+        "load_average_15m": 7.9326171875,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -496,11 +1750,57 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 11
+        "measured_pair_count": 11,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:33.198775+00:00",
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "load_average_15m": 7.9326171875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:36.161767+00:00",
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "load_average_15m": 7.9326171875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 13,
-        "process_wall_ms": 1288.5496658273041,
+        "process_wall_ms": 1325.9972082450986,
+        "child_cpu_user_ms": 1286.6989999999987,
+        "child_cpu_system_ms": 19.66099999999993,
+        "child_cpu_total_ms": 1306.3599999999985,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.0859375,
+        "load_average_5m": 6.67138671875,
+        "load_average_15m": 7.9150390625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -512,11 +1812,57 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 13
+        "measured_pair_count": 13,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:36.181647+00:00",
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "load_average_15m": 7.9326171875,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:39.120861+00:00",
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "load_average_15m": 7.9150390625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 14,
-        "process_wall_ms": 1352.6156670413911,
+        "process_wall_ms": 1399.252749979496,
+        "child_cpu_user_ms": 1309.3690000000038,
+        "child_cpu_system_ms": 32.7900000000001,
+        "child_cpu_total_ms": 1342.159000000004,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 7.0859375,
+        "load_average_5m": 6.67138671875,
+        "load_average_15m": 7.9150390625,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -528,11 +1874,57 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 13
+        "measured_pair_count": 13,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:39.139839+00:00",
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "load_average_15m": 7.9150390625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:42.100729+00:00",
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "load_average_15m": 7.9150390625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 15,
-        "process_wall_ms": 1368.6394579708576,
+        "process_wall_ms": 1643.8416251912713,
+        "child_cpu_user_ms": 1500.637999999995,
+        "child_cpu_system_ms": 49.83300000000001,
+        "child_cpu_total_ms": 1550.470999999995,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 6.67822265625,
+        "load_average_5m": 6.59375,
+        "load_average_15m": 7.88037109375,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -544,11 +1936,57 @@
           "pure_sv"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 15
+        "measured_pair_count": 15,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:42.120033+00:00",
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "load_average_15m": 7.9150390625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:45.447058+00:00",
+            "load_average_1m": 6.67822265625,
+            "load_average_5m": 6.59375,
+            "load_average_15m": 7.88037109375,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       },
       {
         "run": 16,
-        "process_wall_ms": 1335.8539170585573,
+        "process_wall_ms": 1407.8190419822931,
+        "child_cpu_user_ms": 1322.419999999994,
+        "child_cpu_system_ms": 28.93699999999999,
+        "child_cpu_total_ms": 1351.3569999999938,
+        "child_max_rss_kb": 0.0,
+        "load_average_1m": 6.67822265625,
+        "load_average_5m": 6.59375,
+        "load_average_15m": 7.88037109375,
+        "cpu_count": 8,
         "checks": 4608792,
         "sim_cycles": 552514,
         "failures": 0,
@@ -560,44 +1998,86 @@
           "cpp_dpi"
         ],
         "requested_pair_count": 16,
-        "measured_pair_count": 15
+        "measured_pair_count": 15,
+        "pair_environment": {
+          "before": {
+            "timestamp_utc": "2026-07-11T19:59:45.466637+00:00",
+            "load_average_1m": 6.67822265625,
+            "load_average_5m": 6.59375,
+            "load_average_15m": 7.88037109375,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          },
+          "after": {
+            "timestamp_utc": "2026-07-11T19:59:48.526658+00:00",
+            "load_average_1m": 6.62353515625,
+            "load_average_5m": 6.58349609375,
+            "load_average_15m": 7.869140625,
+            "cpu_count": 8,
+            "power": {
+              "available": true,
+              "source": "ac",
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+            },
+            "thermal": {
+              "available": true,
+              "status": "nominal",
+              "throttling": false,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+            }
+          }
+        }
       }
-    ]
+    ],
+    "child_cpu_user_ms_median": 1303.5665000000022,
+    "child_cpu_system_ms_median": 26.642499999999973,
+    "child_cpu_total_ms_median": 1332.5435000000025,
+    "child_max_rss_kb_median": 0.0
   },
   "performance_guard": {
     "status": "hard_failure",
     "metric": "median(cpp_dpi_process_wall / pure_sv_process_wall by run)",
-    "ratio": 1.1004010783815454,
-    "overhead_percent": 10.040107838154544,
+    "ratio": 1.145477214161359,
+    "overhead_percent": 14.547721416135895,
     "paired_ratios": [
-      0.8811057209905673,
-      1.1023387940884162,
-      1.2622813496165157,
-      1.149342321485621,
-      1.209538634138175,
-      1.056945396984453,
-      1.0984633626746745,
-      1.1652939881928583,
-      1.0842533137967834,
-      1.0745294373758432,
-      1.1157035356467573,
-      1.0282316132444873,
-      1.088249929714327,
-      1.0665468958120692,
-      1.3228882079417017,
-      1.265195414239373
+      1.1112781669884442,
+      1.1650863826669007,
+      1.0729870365504754,
+      1.1545611588910951,
+      1.1363932694316226,
+      1.1755992345778339,
+      1.1647937534140236,
+      1.082421308698075,
+      1.2721134836723205,
+      1.0473277944556962,
+      1.2840794385381769,
+      1.023939172587215,
+      1.2019219309678921,
+      1.1021089947113893,
+      1.012479963127404,
+      1.160597137355294
     ],
     "one_sided_95_upper_median_bound": {
       "confidence": 0.95,
-      "bound": 1.1652939881928583,
+      "bound": 1.1650863826669007,
       "order_statistic": 12,
       "coverage": 0.9615936279296875,
       "method": "exact binomial order-statistic bound"
     },
     "two_sided_95_median_ci": {
       "confidence": 0.95,
-      "lower": 1.0665468958120692,
-      "upper": 1.209538634138175,
+      "lower": 1.0729870365504754,
+      "upper": 1.1755992345778339,
       "lower_order_statistic": 4,
       "upper_order_statistic": 13,
       "coverage": 0.978729248046875,
@@ -605,43 +2085,49 @@
     },
     "direction": "cpp_dpi_slower",
     "max_ratio": 1.1,
-    "cpp_dpi_process_wall_ms": 1444.2689165007323,
-    "pure_sv_process_wall_ms": 1308.15533362329,
-    "dpi_first_paired_median": 1.107083449160716,
-    "sv_first_paired_median": 1.0884341157321296,
-    "independent_median_ratio": 1.1040500156051338,
-    "independent_paired_relative_disagreement": 0.0033160065863941128,
-    "order_stratum_gap": 0.0169477600440156,
+    "cpp_dpi_process_wall_ms": 1559.713458409533,
+    "pure_sv_process_wall_ms": 1371.8935835640877,
+    "dpi_first_paired_median": 1.150593511422823,
+    "sv_first_paired_median": 1.1283350768012421,
+    "independent_median_ratio": 1.1369055713180767,
+    "independent_paired_relative_disagreement": 0.007483032169747563,
+    "order_stratum_gap": 0.01943158217937749,
     "order_strata": {
       "cpp_dpi_first": [
-        0.8811057209905673,
-        1.2622813496165157,
-        1.209538634138175,
-        1.0984633626746745,
-        1.0842533137967834,
-        1.1157035356467573,
-        1.088249929714327,
-        1.3228882079417017
+        1.1112781669884442,
+        1.0729870365504754,
+        1.1363932694316226,
+        1.1647937534140236,
+        1.2721134836723205,
+        1.2840794385381769,
+        1.2019219309678921,
+        1.012479963127404
       ],
       "pure_sv_first": [
-        1.1023387940884162,
-        1.149342321485621,
-        1.056945396984453,
-        1.1652939881928583,
-        1.0745294373758432,
-        1.0282316132444873,
-        1.0665468958120692,
-        1.265195414239373
+        1.1650863826669007,
+        1.1545611588910951,
+        1.1755992345778339,
+        1.082421308698075,
+        1.0473277944556962,
+        1.023939172587215,
+        1.1021089947113893,
+        1.160597137355294
       ]
+    },
+    "environment": {
+      "valid": true,
+      "validity": "valid",
+      "reasons": [],
+      "warnings": []
     },
     "verdict": "failed",
     "validity": "valid",
-    "error": "paired tracked C++ DPI/pure SV process ratio exceeded 1.10x: median ratio = 1.100x",
+    "error": "paired tracked C++ DPI/pure SV process ratio exceeded 1.10x: median ratio = 1.145x",
     "requested_pairs": 16,
     "measured_pairs": 16,
     "extra_batch_collected": false,
     "binary_sha256": {
-      "cpp_dpi": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+      "cpp_dpi": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
       "pure_sv": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0"
     }
   },
@@ -650,16 +2136,24 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 37.599999999999994,
+        "child_cpu_total_ms": 1563.3990000000001,
+        "child_cpu_user_ms": 1525.7990000000002,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1332.659,
+        "internal_wall_ms": 1638.901,
+        "load_average_15m": 7.9970703125,
+        "load_average_1m": 7.8291015625,
+        "load_average_5m": 6.7314453125,
         "measured_pair_count": 0,
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1341.436208691448,
+        "process_wall_ms": 1643.7357501126826,
         "requested_pair_count": 16,
         "run": 0,
         "sequence_index": 0,
@@ -675,13 +2169,21 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 13.531,
+        "child_cpu_total_ms": 1369.245,
+        "child_cpu_user_ms": 1355.714,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9970703125,
+        "load_average_1m": 7.8291015625,
+        "load_average_5m": 6.7314453125,
         "measured_pair_count": 0,
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1178.0402497388422,
+        "process_wall_ms": 1396.6114171780646,
         "requested_pair_count": 16,
         "run": 0,
         "sequence_index": 0,
@@ -694,16 +2196,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 34.50399999999999,
+        "child_cpu_total_ms": 1521.687,
+        "child_cpu_user_ms": 1487.183,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1300.469,
+        "internal_wall_ms": 1579.35,
+        "load_average_15m": 7.9970703125,
+        "load_average_1m": 7.8427734375,
+        "load_average_5m": 6.75244140625,
         "measured_pair_count": 0,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:03.727202+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8291015625,
+            "load_average_5m": 6.7314453125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:00.696078+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1305.8802909217775,
+        "process_wall_ms": 1584.4088750891387,
         "requested_pair_count": 16,
         "run": 1,
         "sequence_index": 1,
@@ -718,13 +2266,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 28.965000000000003,
+        "child_cpu_total_ms": 1393.9619999999998,
+        "child_cpu_user_ms": 1364.9969999999998,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9970703125,
+        "load_average_1m": 7.8427734375,
+        "load_average_5m": 6.75244140625,
         "measured_pair_count": 1,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:03.727202+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8291015625,
+            "load_average_5m": 6.7314453125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:00.696078+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1482.0926249958575,
+        "process_wall_ms": 1425.7536251097918,
         "requested_pair_count": 16,
         "run": 1,
         "sequence_index": 1,
@@ -738,13 +2332,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 28.12099999999998,
+        "child_cpu_total_ms": 1305.3539999999998,
+        "child_cpu_user_ms": 1277.233,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9970703125,
+        "load_average_1m": 7.8427734375,
+        "load_average_5m": 6.75244140625,
         "measured_pair_count": 1,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:06.687472+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:03.748332+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1361.2376246601343,
+        "process_wall_ms": 1348.272167146206,
         "requested_pair_count": 16,
         "run": 2,
         "sequence_index": 2,
@@ -756,16 +2396,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 36.58800000000001,
+        "child_cpu_total_ms": 1521.9749999999992,
+        "child_cpu_user_ms": 1485.3869999999993,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1494.514,
+        "internal_wall_ms": 1564.117,
+        "load_average_15m": 7.9970703125,
+        "load_average_1m": 7.8427734375,
+        "load_average_5m": 6.75244140625,
         "measured_pair_count": 2,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:06.687472+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:03.748332+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1500.5450416356325,
+        "process_wall_ms": 1570.8535420708358,
         "requested_pair_count": 16,
         "run": 2,
         "sequence_index": 2,
@@ -778,16 +2464,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 35.75199999999998,
+        "child_cpu_total_ms": 1459.0600000000004,
+        "child_cpu_user_ms": 1423.3080000000004,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1547.037,
+        "internal_wall_ms": 1511.183,
+        "load_average_15m": 7.9619140625,
+        "load_average_1m": 7.37451171875,
+        "load_average_5m": 6.67333984375,
         "measured_pair_count": 2,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9619140625,
+            "load_average_1m": 7.37451171875,
+            "load_average_5m": 6.67333984375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:09.668922+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:06.714809+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1554.3311247602105,
+        "process_wall_ms": 1516.988624818623,
         "requested_pair_count": 16,
         "run": 3,
         "sequence_index": 3,
@@ -802,13 +2534,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 29.72600000000003,
+        "child_cpu_total_ms": 1381.2650000000008,
+        "child_cpu_user_ms": 1351.5390000000007,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9619140625,
+        "load_average_1m": 7.37451171875,
+        "load_average_5m": 6.67333984375,
         "measured_pair_count": 3,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9619140625,
+            "load_average_1m": 7.37451171875,
+            "load_average_5m": 6.67333984375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:09.668922+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9970703125,
+            "load_average_1m": 7.8427734375,
+            "load_average_5m": 6.75244140625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:06.714809+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1231.3666245900095,
+        "process_wall_ms": 1413.7995829805732,
         "requested_pair_count": 16,
         "run": 3,
         "sequence_index": 3,
@@ -822,13 +2600,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 22.79000000000003,
+        "child_cpu_total_ms": 1292.7860000000007,
+        "child_cpu_user_ms": 1269.9960000000008,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9619140625,
+        "load_average_1m": 7.37451171875,
+        "load_average_5m": 6.67333984375,
         "measured_pair_count": 3,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9384765625,
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:12.597111+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9619140625,
+            "load_average_1m": 7.37451171875,
+            "load_average_5m": 6.67333984375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:09.689874+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1235.2250418625772,
+        "process_wall_ms": 1338.4391660802066,
         "requested_pair_count": 16,
         "run": 4,
         "sequence_index": 4,
@@ -840,16 +2664,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 32.564999999999955,
+        "child_cpu_total_ms": 1507.4030000000002,
+        "child_cpu_user_ms": 1474.8380000000002,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1412.149,
+        "internal_wall_ms": 1539.163,
+        "load_average_15m": 7.9384765625,
+        "load_average_1m": 7.10400390625,
+        "load_average_5m": 6.62890625,
         "measured_pair_count": 4,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9384765625,
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:12.597111+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9619140625,
+            "load_average_1m": 7.37451171875,
+            "load_average_5m": 6.67333984375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:09.689874+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1419.696417171508,
+        "process_wall_ms": 1545.3098746947944,
         "requested_pair_count": 16,
         "run": 4,
         "sequence_index": 4,
@@ -862,16 +2732,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 34.974000000000004,
+        "child_cpu_total_ms": 1501.9679999999996,
+        "child_cpu_user_ms": 1466.9939999999997,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1422.945,
+        "internal_wall_ms": 1566.733,
+        "load_average_15m": 7.9384765625,
+        "load_average_1m": 7.10400390625,
+        "load_average_5m": 6.62890625,
         "measured_pair_count": 4,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9384765625,
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:15.599174+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9384765625,
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:12.619431+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1427.9311667196453,
+        "process_wall_ms": 1572.413541842252,
         "requested_pair_count": 16,
         "run": 5,
         "sequence_index": 5,
@@ -886,13 +2802,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 15.71,
+        "child_cpu_total_ms": 1360.0539999999996,
+        "child_cpu_user_ms": 1344.3439999999996,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9384765625,
+        "load_average_1m": 7.10400390625,
+        "load_average_5m": 6.62890625,
         "measured_pair_count": 5,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9384765625,
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:15.599174+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9384765625,
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:12.619431+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1180.5585422553122,
+        "process_wall_ms": 1383.6878342553973,
         "requested_pair_count": 16,
         "run": 5,
         "sequence_index": 5,
@@ -906,13 +2868,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 16.959000000000003,
+        "child_cpu_total_ms": 1304.5470000000032,
+        "child_cpu_user_ms": 1287.5880000000031,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9384765625,
+        "load_average_1m": 7.10400390625,
+        "load_average_5m": 6.62890625,
         "measured_pair_count": 5,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9560546875,
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:18.510591+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9384765625,
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:15.621022+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1309.2388329096138,
+        "process_wall_ms": 1317.2630001790822,
         "requested_pair_count": 16,
         "run": 6,
         "sequence_index": 6,
@@ -924,16 +2932,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 33.85100000000002,
+        "child_cpu_total_ms": 1500.8509999999987,
+        "child_cpu_user_ms": 1466.9999999999986,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1378.308,
+        "internal_wall_ms": 1543.319,
+        "load_average_15m": 7.9560546875,
+        "load_average_1m": 7.41552734375,
+        "load_average_5m": 6.701171875,
         "measured_pair_count": 6,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9560546875,
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:18.510591+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9384765625,
+            "load_average_1m": 7.10400390625,
+            "load_average_5m": 6.62890625,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:15.621022+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1383.7939579971135,
+        "process_wall_ms": 1548.57337474823,
         "requested_pair_count": 16,
         "run": 6,
         "sequence_index": 6,
@@ -946,16 +3000,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 23.29799999999993,
+        "child_cpu_total_ms": 1491.1920000000011,
+        "child_cpu_user_ms": 1467.8940000000011,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1401.469,
+        "internal_wall_ms": 1510.581,
+        "load_average_15m": 7.9560546875,
+        "load_average_1m": 7.41552734375,
+        "load_average_5m": 6.701171875,
         "measured_pair_count": 6,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9560546875,
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:21.375237+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9560546875,
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:18.533405+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1407.8210829757154,
+        "process_wall_ms": 1516.234208829701,
         "requested_pair_count": 16,
         "run": 7,
         "sequence_index": 7,
@@ -970,13 +3070,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 20.491000000000035,
+        "child_cpu_total_ms": 1282.9419999999986,
+        "child_cpu_user_ms": 1262.4509999999987,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9560546875,
+        "load_average_1m": 7.41552734375,
+        "load_average_5m": 6.701171875,
         "measured_pair_count": 7,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9560546875,
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:21.375237+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9560546875,
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:18.533405+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1281.6277090460062,
+        "process_wall_ms": 1301.71904200688,
         "requested_pair_count": 16,
         "run": 7,
         "sequence_index": 7,
@@ -990,13 +3136,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 25.163999999999966,
+        "child_cpu_total_ms": 1322.9280000000008,
+        "child_cpu_user_ms": 1297.7640000000008,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9443359375,
+        "load_average_1m": 7.3017578125,
+        "load_average_5m": 6.689453125,
         "measured_pair_count": 7,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9443359375,
+            "load_average_1m": 7.3017578125,
+            "load_average_5m": 6.689453125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:24.253873+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9560546875,
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:21.397357+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1240.8111658878624,
+        "process_wall_ms": 1360.0993328727782,
         "requested_pair_count": 16,
         "run": 8,
         "sequence_index": 8,
@@ -1008,16 +3200,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 15.353000000000062,
+        "child_cpu_total_ms": 1445.0819999999983,
+        "child_cpu_user_ms": 1429.7289999999982,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1439.975,
+        "internal_wall_ms": 1465.929,
+        "load_average_15m": 7.9443359375,
+        "load_average_1m": 7.3017578125,
+        "load_average_5m": 6.689453125,
         "measured_pair_count": 8,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9443359375,
+            "load_average_1m": 7.3017578125,
+            "load_average_5m": 6.689453125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:24.253873+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9560546875,
+            "load_average_1m": 7.41552734375,
+            "load_average_5m": 6.701171875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:21.397357+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1445.9097920916975,
+        "process_wall_ms": 1472.2004998475313,
         "requested_pair_count": 16,
         "run": 8,
         "sequence_index": 8,
@@ -1030,16 +3268,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 49.83800000000005,
+        "child_cpu_total_ms": 1550.7610000000002,
+        "child_cpu_user_ms": 1500.9230000000002,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1390.691,
+        "internal_wall_ms": 1620.221,
+        "load_average_15m": 7.9443359375,
+        "load_average_1m": 7.3017578125,
+        "load_average_5m": 6.689453125,
         "measured_pair_count": 8,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9267578125,
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:27.204191+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9443359375,
+            "load_average_1m": 7.3017578125,
+            "load_average_5m": 6.689453125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:24.275684+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1395.973791833967,
+        "process_wall_ms": 1626.683209091425,
         "requested_pair_count": 16,
         "run": 9,
         "sequence_index": 9,
@@ -1054,13 +3338,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 15.549999999999953,
+        "child_cpu_total_ms": 1264.611000000001,
+        "child_cpu_user_ms": 1249.061000000001,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9267578125,
+        "load_average_1m": 7.1171875,
+        "load_average_5m": 6.6611328125,
         "measured_pair_count": 9,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9267578125,
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:27.204191+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9443359375,
+            "load_average_1m": 7.3017578125,
+            "load_average_5m": 6.689453125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:24.275684+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1287.4978329055011,
+        "process_wall_ms": 1278.7249172106385,
         "requested_pair_count": 16,
         "run": 9,
         "sequence_index": 9,
@@ -1074,13 +3404,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 37.726999999999954,
+        "child_cpu_total_ms": 1391.1130000000003,
+        "child_cpu_user_ms": 1353.3860000000004,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9267578125,
+        "load_average_1m": 7.1171875,
+        "load_average_5m": 6.6611328125,
         "measured_pair_count": 9,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9267578125,
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:30.207230+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9267578125,
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:27.226700+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1356.3214582391083,
+        "process_wall_ms": 1444.54141613096,
         "requested_pair_count": 16,
         "run": 10,
         "sequence_index": 10,
@@ -1092,16 +3468,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 23.101999999999954,
+        "child_cpu_total_ms": 1473.8519999999992,
+        "child_cpu_user_ms": 1450.7499999999993,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1451.491,
+        "internal_wall_ms": 1504.485,
+        "load_average_15m": 7.9267578125,
+        "load_average_1m": 7.1171875,
+        "load_average_5m": 6.6611328125,
         "measured_pair_count": 10,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9267578125,
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:30.207230+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9267578125,
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:27.226700+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1457.4073334224522,
+        "process_wall_ms": 1512.9083753563464,
         "requested_pair_count": 16,
         "run": 10,
         "sequence_index": 10,
@@ -1114,16 +3536,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 43.39700000000002,
+        "child_cpu_total_ms": 1566.6659999999954,
+        "child_cpu_user_ms": 1523.2689999999955,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1452.439,
+        "internal_wall_ms": 1639.992,
+        "load_average_15m": 7.9267578125,
+        "load_average_1m": 7.1171875,
+        "load_average_5m": 6.6611328125,
         "measured_pair_count": 10,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9326171875,
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:33.178121+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9267578125,
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:30.229315+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1458.3046669140458,
+        "process_wall_ms": 1645.932916086167,
         "requested_pair_count": 16,
         "run": 11,
         "sequence_index": 11,
@@ -1138,13 +3606,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 8.61500000000004,
+        "child_cpu_total_ms": 1270.425000000004,
+        "child_cpu_user_ms": 1261.810000000004,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9326171875,
+        "load_average_1m": 7.267578125,
+        "load_average_5m": 6.69970703125,
         "measured_pair_count": 11,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9326171875,
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:33.178121+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9267578125,
+            "load_average_1m": 7.1171875,
+            "load_average_5m": 6.6611328125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:30.229315+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1307.0718343369663,
+        "process_wall_ms": 1281.7999157123268,
         "requested_pair_count": 16,
         "run": 11,
         "sequence_index": 11,
@@ -1158,13 +3672,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 46.96899999999993,
+        "child_cpu_total_ms": 1393.3300000000015,
+        "child_cpu_user_ms": 1346.3610000000017,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9326171875,
+        "load_average_1m": 7.267578125,
+        "load_average_5m": 6.69970703125,
         "measured_pair_count": 11,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9326171875,
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:36.161767+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9326171875,
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:33.198775+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1499.3903748691082,
+        "process_wall_ms": 1453.6912920884788,
         "requested_pair_count": 16,
         "run": 12,
         "sequence_index": 12,
@@ -1176,16 +3736,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 20.85999999999999,
+        "child_cpu_total_ms": 1456.9580000000012,
+        "child_cpu_user_ms": 1436.0980000000013,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1532.893,
+        "internal_wall_ms": 1481.262,
+        "load_average_15m": 7.9326171875,
+        "load_average_1m": 7.267578125,
+        "load_average_5m": 6.69970703125,
         "measured_pair_count": 12,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9326171875,
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:36.161767+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9326171875,
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:33.198775+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1541.7205840349197,
+        "process_wall_ms": 1488.4914588183165,
         "requested_pair_count": 16,
         "run": 12,
         "sequence_index": 12,
@@ -1198,16 +3804,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 49.56900000000009,
+        "child_cpu_total_ms": 1519.3710000000017,
+        "child_cpu_user_ms": 1469.8020000000015,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1397.169,
+        "internal_wall_ms": 1588.632,
+        "load_average_15m": 7.9150390625,
+        "load_average_1m": 7.0859375,
+        "load_average_5m": 6.67138671875,
         "measured_pair_count": 12,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9150390625,
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:39.120861+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9326171875,
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:36.181647+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1402.2640832699835,
+        "process_wall_ms": 1593.7451249919832,
         "requested_pair_count": 16,
         "run": 13,
         "sequence_index": 13,
@@ -1222,13 +3874,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 19.66099999999993,
+        "child_cpu_total_ms": 1306.3599999999985,
+        "child_cpu_user_ms": 1286.6989999999987,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9150390625,
+        "load_average_1m": 7.0859375,
+        "load_average_5m": 6.67138671875,
         "measured_pair_count": 13,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9150390625,
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:39.120861+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9326171875,
+            "load_average_1m": 7.267578125,
+            "load_average_5m": 6.69970703125,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:36.181647+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1288.5496658273041,
+        "process_wall_ms": 1325.9972082450986,
         "requested_pair_count": 16,
         "run": 13,
         "sequence_index": 13,
@@ -1242,13 +3940,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 32.7900000000001,
+        "child_cpu_total_ms": 1342.159000000004,
+        "child_cpu_user_ms": 1309.3690000000038,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.9150390625,
+        "load_average_1m": 7.0859375,
+        "load_average_5m": 6.67138671875,
         "measured_pair_count": 13,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9150390625,
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:42.100729+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9150390625,
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:39.139839+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1352.6156670413911,
+        "process_wall_ms": 1399.252749979496,
         "requested_pair_count": 16,
         "run": 14,
         "sequence_index": 14,
@@ -1260,16 +4004,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 33.46199999999988,
+        "child_cpu_total_ms": 1503.5729999999958,
+        "child_cpu_user_ms": 1470.1109999999958,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1436.335,
+        "internal_wall_ms": 1535.391,
+        "load_average_15m": 7.9150390625,
+        "load_average_1m": 7.0859375,
+        "load_average_5m": 6.67138671875,
         "measured_pair_count": 14,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9150390625,
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:42.100729+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9150390625,
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:39.139839+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1442.6280409097672,
+        "process_wall_ms": 1542.1290416270494,
         "requested_pair_count": 16,
         "run": 14,
         "sequence_index": 14,
@@ -1282,16 +4072,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 54.30899999999994,
+        "child_cpu_total_ms": 1551.3800000000053,
+        "child_cpu_user_ms": 1497.0710000000054,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1805.418,
+        "internal_wall_ms": 1659.6,
+        "load_average_15m": 7.88037109375,
+        "load_average_1m": 6.67822265625,
+        "load_average_5m": 6.59375,
         "measured_pair_count": 14,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.88037109375,
+            "load_average_1m": 6.67822265625,
+            "load_average_5m": 6.59375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:45.447058+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9150390625,
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:42.120033+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1810.55699987337,
+        "process_wall_ms": 1664.35670806095,
         "requested_pair_count": 16,
         "run": 15,
         "sequence_index": 15,
@@ -1306,13 +4142,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 49.83300000000001,
+        "child_cpu_total_ms": 1550.470999999995,
+        "child_cpu_user_ms": 1500.637999999995,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.88037109375,
+        "load_average_1m": 6.67822265625,
+        "load_average_5m": 6.59375,
         "measured_pair_count": 15,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.88037109375,
+            "load_average_1m": 6.67822265625,
+            "load_average_5m": 6.59375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:45.447058+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.9150390625,
+            "load_average_1m": 7.0859375,
+            "load_average_5m": 6.67138671875,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:42.120033+00:00"
+          }
+        },
         "pair_order": [
           "cpp_dpi",
           "pure_sv"
         ],
-        "process_wall_ms": 1368.6394579708576,
+        "process_wall_ms": 1643.8416251912713,
         "requested_pair_count": 16,
         "run": 15,
         "sequence_index": 15,
@@ -1326,13 +4208,59 @@
       "sample": {
         "binary_sha256": "fc3ef8327685c8c1d3b5309af91bfc6d9ec692cb02222aeb48b978ae12c727c0",
         "checks": 4608792,
+        "child_cpu_system_ms": 28.93699999999999,
+        "child_cpu_total_ms": 1351.3569999999938,
+        "child_cpu_user_ms": 1322.419999999994,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
+        "load_average_15m": 7.88037109375,
+        "load_average_1m": 6.67822265625,
+        "load_average_5m": 6.59375,
         "measured_pair_count": 15,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.869140625,
+            "load_average_1m": 6.62353515625,
+            "load_average_5m": 6.58349609375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:48.526658+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.88037109375,
+            "load_average_1m": 6.67822265625,
+            "load_average_5m": 6.59375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:45.466637+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1335.8539170585573,
+        "process_wall_ms": 1407.8190419822931,
         "requested_pair_count": 16,
         "run": 16,
         "sequence_index": 16,
@@ -1344,16 +4272,62 @@
       "event": "sample",
       "label": "cpp_dpi",
       "sample": {
-        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "binary_sha256": "0053fb2170a1b98462e484a8d3606d00c2ac0a7245db767d7deac36539271871",
         "checks": 4608792,
+        "child_cpu_system_ms": 28.46900000000008,
+        "child_cpu_total_ms": 1583.5310000000068,
+        "child_cpu_user_ms": 1555.0620000000067,
+        "child_max_rss_kb": 0.0,
+        "cpu_count": 8,
         "failures": 0,
-        "internal_wall_ms": 1683.906,
+        "internal_wall_ms": 1626.535,
+        "load_average_15m": 7.869140625,
+        "load_average_1m": 6.62353515625,
+        "load_average_5m": 6.58349609375,
         "measured_pair_count": 16,
+        "pair_environment": {
+          "after": {
+            "cpu_count": 8,
+            "load_average_15m": 7.869140625,
+            "load_average_1m": 6.62353515625,
+            "load_average_5m": 6.58349609375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:48.526658+00:00"
+          },
+          "before": {
+            "cpu_count": 8,
+            "load_average_15m": 7.88037109375,
+            "load_average_1m": 6.67822265625,
+            "load_average_5m": 6.59375,
+            "power": {
+              "available": true,
+              "raw": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true",
+              "source": "ac"
+            },
+            "thermal": {
+              "available": true,
+              "raw": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+              "status": "nominal",
+              "throttling": false
+            },
+            "timestamp_utc": "2026-07-11T19:59:45.466637+00:00"
+          }
+        },
         "pair_order": [
           "pure_sv",
           "cpp_dpi"
         ],
-        "process_wall_ms": 1690.1162499561906,
+        "process_wall_ms": 1633.9107500389218,
         "requested_pair_count": 16,
         "run": 16,
         "sequence_index": 16,
@@ -1364,10 +4338,11 @@
     }
   ],
   "metadata": {
-    "timestamp_utc": "2026-07-11T16:30:15.099089+00:00",
+    "timestamp_utc": "2026-07-11T19:59:48.726056+00:00",
     "git": {
-      "commit": "8e1ddab1759c3ec2c167a9dcee27ac49ebcdc543",
-      "dirty": true
+      "commit": "cba09292dfcbee61e629f39bbdb39f92adbc8cbc",
+      "dirty": true,
+      "status_porcelain": "M Makefile\n M benchmarks/authoring_core/README.md\n M benchmarks/authoring_core/cpp_dpi/framework/authoring_core.hpp\n M benchmarks/authoring_core/cpp_dpi/testbench.cpp\n M benchmarks/authoring_core/pure_sv/authoring_core_sv_tb.sv\n D benchmarks/authoring_core/results/latest.json\n D benchmarks/authoring_core/results/latest.md\n M benchmarks/authoring_core/run_benchmark.py\n M benchmarks/authoring_core/tests/test_contract.py\n M benchmarks/authoring_core/tests/test_runner.py\n M benchmarks/authoring_core/workload.py\n M benchmarks/peripheral_suite/results/latest.json\n M benchmarks/peripheral_suite/results/latest.jsonl\n M benchmarks/peripheral_suite/results/latest.md\n M benchmarks/peripheral_suite/run_benchmark.py\n M benchmarks/peripheral_suite/tests/test_aa.py\n M benchmarks/peripheral_suite/tests/test_performance_guard.py\n M benchmarks/peripheral_suite/tests/test_runtime_ab.py\n M benchmarks/peripheral_suite/tools/run_aa.py\n M benchmarks/peripheral_suite/tools/run_runtime_ab.py\n M cpptb/README.md\n M cpptb/conformance/README.md\n M cpptb/conformance/scheduler_conformance.dpi.json\n M cpptb/conformance/testbench.cpp\n M cpptb/coro_runtime.hpp\n M cpptb/examples/dpi_multiclock/README.md\n M cpptb/examples/dpi_multiclock/dpi_transport.cpp\n M cpptb/tests/coro_runtime_test.cpp\n?? benchmarks/README.md\n?? benchmarks/authoring_core/results/all/\n?? benchmarks/authoring_core/results/channel/\n?? benchmarks/authoring_core/results/clock_cycles/\n?? benchmarks/authoring_core/results/control/\n?? benchmarks/authoring_core/results/event/\n?? benchmarks/authoring_core/results/task_timeout/\n?? benchmarks/authoring_core/results/task_value/\n?? benchmarks/authoring_core/results/timeout/\n?? benchmarks/authoring_core/results/wait_until/\n?? benchmarks/registry.py\n?? benchmarks/results/\n?? benchmarks/run_regression.py\n?? benchmarks/tests/"
     },
     "host": {
       "hostname": "bike-trainer.local",
@@ -1409,10 +4384,6 @@
       "benchmarks/peripheral_suite/run_benchmark.py",
       "--iters",
       "10000",
-      "--comparison-runs",
-      "16",
-      "--runs",
-      "3",
       "--skip-build"
     ],
     "config": {

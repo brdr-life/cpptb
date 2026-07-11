@@ -7,6 +7,7 @@ import math
 import os
 import platform
 import re
+import resource
 import shlex
 import shutil
 import socket
@@ -127,7 +128,36 @@ def binary_sha256(path):
         return None
 
 
-def run_command(command, env=None):
+def _child_usage_delta(before, after):
+    user_ms = max(0.0, (after.ru_utime - before.ru_utime) * 1000.0)
+    system_ms = max(0.0, (after.ru_stime - before.ru_stime) * 1000.0)
+    rss_delta = max(0.0, after.ru_maxrss - before.ru_maxrss)
+    if platform.system() == "Darwin":
+        rss_delta /= 1024.0
+    return {
+        "child_cpu_user_ms": user_ms,
+        "child_cpu_system_ms": system_ms,
+        "child_cpu_total_ms": user_ms + system_ms,
+        "child_max_rss_kb": rss_delta,
+    }
+
+
+def sample_environment():
+    """Collect cheap scheduler context without changing the measured value."""
+    try:
+        load_1m, load_5m, load_15m = os.getloadavg()
+    except (AttributeError, OSError):
+        load_1m = load_5m = load_15m = None
+    return {
+        "load_average_1m": load_1m,
+        "load_average_5m": load_5m,
+        "load_average_15m": load_15m,
+        "cpu_count": os.cpu_count(),
+    }
+
+
+def run_command(command, env=None, include_resources=False):
+    usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
     start = time.perf_counter()
     try:
         completed = subprocess.run(
@@ -142,10 +172,144 @@ def run_command(command, env=None):
     except OSError as error:
         raise CommandExecutionError(command, None, str(error)) from error
     wall_ms = (time.perf_counter() - start) * 1000.0
+    usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
     if completed.returncode != 0:
         print(completed.stdout)
         raise CommandExecutionError(command, completed.returncode, completed.stdout)
-    return completed.stdout, wall_ms
+    if not include_resources:
+        return completed.stdout, wall_ms
+    measurement = {
+        "process_wall_ms": wall_ms,
+        **_child_usage_delta(usage_before, usage_after),
+        **sample_environment(),
+    }
+    return completed.stdout, measurement
+
+
+def _read_text(path):
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def probe_power_state():
+    """Best-effort power-source snapshot; unavailable probes are evidence too."""
+    supplies = Path("/sys/class/power_supply")
+    if supplies.is_dir():
+        sources = {}
+        try:
+            paths = sorted(supplies.iterdir())
+        except OSError:
+            paths = []
+        for path in paths:
+            source_type = _read_text(path / "type")
+            if source_type in {"Mains", "USB", "USB_C"}:
+                sources[path.name] = _read_text(path / "online")
+        if sources:
+            return {"available": True, "source": sources}
+    if platform.system() == "Darwin":
+        result = _metadata_command(["pmset", "-g", "batt"])
+        if result["returncode"] == 0:
+            source = "ac" if "AC Power" in result["output"] else "battery"
+            return {"available": True, "source": source, "raw": result["output"]}
+    return {"available": False, "source": None}
+
+
+def probe_thermal_state():
+    """Best-effort thermal snapshot that never aborts a benchmark."""
+    temperatures = []
+    thermal_root = Path("/sys/class/thermal")
+    if thermal_root.is_dir():
+        try:
+            zones = sorted(thermal_root.glob("thermal_zone*/temp"))
+        except OSError:
+            zones = []
+        for path in zones:
+            value = _read_text(path)
+            try:
+                temperatures.append(float(value) / 1000.0)
+            except (TypeError, ValueError):
+                continue
+        if temperatures:
+            return {
+                "available": True,
+                "status": "unknown",
+                "max_temperature_c": max(temperatures),
+            }
+    if platform.system() == "Darwin":
+        result = _metadata_command(["pmset", "-g", "therm"])
+        if result["returncode"] == 0:
+            limits = [
+                int(match.group(1))
+                for name in ("CPU_Speed_Limit", "CPU_Scheduler_Limit")
+                if (match := re.search(rf"{name}\s*=\s*(\d+)", result["output"]))
+            ]
+            throttling = any(limit < 100 for limit in limits)
+            return {
+                "available": True,
+                "status": "throttled" if throttling else "nominal",
+                "throttling": throttling,
+                "raw": result["output"],
+            }
+    return {"available": False, "status": "unknown"}
+
+
+def probe_pair_boundary():
+    return {
+        "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        **sample_environment(),
+        "power": probe_power_state(),
+        "thermal": probe_thermal_state(),
+    }
+
+
+def environment_validity(samples, pair_boundaries=None):
+    """Purely classify captured environment evidence; never alter timings."""
+    samples = list(samples or [])
+    boundaries = list(pair_boundaries or [])
+    reasons = []
+    warnings = []
+
+    loads = []
+    for sample in samples:
+        load = sample.get("load_average_1m")
+        cpu_count = sample.get("cpu_count")
+        if isinstance(load, (int, float)) and isinstance(cpu_count, int) and cpu_count > 0:
+            loads.append((float(load), cpu_count))
+    if any(load > cpu_count for load, cpu_count in loads):
+        reasons.append("one-minute load average exceeded logical CPU capacity")
+    if samples and not loads:
+        warnings.append("load-average or CPU-count probe unavailable")
+
+    power_sources = []
+    thermal_available = False
+    for boundary in boundaries:
+        power = boundary.get("power") or {}
+        if power.get("available") and power.get("source") is not None:
+            power_sources.append(power["source"])
+        thermal = boundary.get("thermal") or {}
+        if thermal.get("available"):
+            thermal_available = True
+        if thermal.get("throttling") or thermal.get("status") in {
+            "serious",
+            "critical",
+            "throttled",
+        }:
+            reasons.append("thermal throttling or pressure was observed")
+    if power_sources and any(source != power_sources[0] for source in power_sources[1:]):
+        reasons.append("power source changed during the critical comparison")
+    if boundaries and not power_sources:
+        warnings.append("power probe unavailable")
+    if boundaries and not thermal_available:
+        warnings.append("thermal probe unavailable")
+
+    return {
+        "valid": not reasons,
+        "validity": "valid" if not reasons else "invalid",
+        "reasons": list(dict.fromkeys(reasons)),
+        "warnings": list(dict.fromkeys(warnings)),
+    }
 
 
 def _metadata_command(command):
@@ -167,9 +331,18 @@ def _metadata_command(command):
     }
 
 
-def collect_metadata(config, argv=None):
+def collect_git_state():
     git_revision = _metadata_command(["git", "rev-parse", "HEAD"])
     git_status = _metadata_command(["git", "status", "--porcelain"])
+    return {
+        "commit": git_revision["output"] if git_revision["returncode"] == 0 else None,
+        "dirty": git_status["returncode"] != 0 or bool(git_status["output"]),
+        "status_porcelain": git_status["output"],
+    }
+
+
+def collect_metadata(config, argv=None, git_state=None):
+    git_state = dict(git_state if git_state is not None else collect_git_state())
 
     compiler_command = shlex.split(os.environ.get("CXX", "c++")) or ["c++"]
     compiler = _metadata_command([*compiler_command, "--version"])
@@ -193,10 +366,7 @@ def collect_metadata(config, argv=None):
 
     return {
         "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "git": {
-            "commit": git_revision["output"] if git_revision["returncode"] == 0 else None,
-            "dirty": git_status["returncode"] != 0 or bool(git_status["output"]),
-        },
+        "git": git_state,
         "host": {
             "hostname": socket.gethostname(),
             "platform": platform.platform(),
@@ -259,6 +429,16 @@ def summarize(label, samples):
         summary["internal_wall_ms_median"] = median(
             [sample["internal_wall_ms"] for sample in samples]
         )
+    for field in (
+        "child_cpu_user_ms",
+        "child_cpu_system_ms",
+        "child_cpu_total_ms",
+        "child_max_rss_kb",
+    ):
+        if samples and all(field in sample for sample in samples):
+            summary[f"{field}_median"] = median(
+                [float(sample[field]) for sample in samples]
+            )
     return summary
 
 
@@ -474,6 +654,7 @@ def check_dpi_vs_pure_sv(
     pure_sv_summary,
     max_ratio=None,
     final=True,
+    environment=None,
 ):
     if max_ratio is None:
         max_ratio = MAX_DPI_OVER_SV_PROCESS_RATIO
@@ -591,6 +772,13 @@ def check_dpi_vs_pure_sv(
             "order_strata": order_strata,
         }
     )
+    if environment is None:
+        environment = environment_validity(
+            [*cpp_dpi_summary.get("samples", []), *pure_sv_summary.get("samples", [])]
+        )
+    else:
+        environment = dict(environment)
+    result["environment"] = environment
 
     if result["ratio"] > max_ratio:
         valid_failure = (
@@ -598,7 +786,7 @@ def check_dpi_vs_pure_sv(
             and sv_first_median > MIN_ORDER_STRATUM_FAILURE_RATIO
             and relative_disagreement <= MAX_INDEPENDENT_PAIRED_DISAGREEMENT
         )
-        if valid_failure:
+        if valid_failure and environment.get("valid", False):
             result.update(
                 {
                     "status": "hard_failure",
@@ -617,11 +805,23 @@ def check_dpi_vs_pure_sv(
                     "verdict": "invalid_environment",
                     "validity": "invalid",
                     "error": (
-                        "guard threshold was crossed, but order strata or independent "
-                        "medians do not validate the measurement environment"
+                        "guard threshold was crossed, but statistical checks or captured "
+                        "environment evidence do not validate a hard failure"
                     ),
                 }
             )
+        return result
+
+    if not environment.get("valid", False):
+        result.update(
+            {
+                "status": "invalid_environment",
+                "verdict": "invalid_environment",
+                "validity": "invalid",
+                "error": "captured environment evidence is invalid: "
+                + "; ".join(environment.get("reasons", [])),
+            }
+        )
         return result
 
     upper_bound = result["one_sided_95_upper_median_bound"]["bound"]
@@ -653,16 +853,17 @@ def _dpi_environment(spawn_mode):
 
 
 def run_cpp_dpi_sample(run, iters, spawn_mode="tracked"):
-    output, process_ms = run_command(
+    output, measurement = run_command(
         [str(CPP_DPI_BINARY), f"+PERIPHERAL_SUITE_ITERS={iters}"],
         env=_dpi_environment(spawn_mode),
+        include_resources=True,
     )
     result = parse_result(output, "CPP_DPI_PERIPHERAL_RESULT")
     return {
         "run": run,
         "spawn_mode": spawn_mode,
         "internal_wall_ms": float(result["wall_ms"]),
-        "process_wall_ms": process_ms,
+        **measurement,
         "checks": int(result["checks"]),
         "sim_cycles": int(result["sim_cycles"]),
         "failures": int(result["failures"]),
@@ -670,13 +871,14 @@ def run_cpp_dpi_sample(run, iters, spawn_mode="tracked"):
 
 
 def run_pure_sv_sample(run, iters):
-    output, process_ms = run_command(
-        [str(PURE_SV_BINARY), f"+PERIPHERAL_SUITE_ITERS={iters}"]
+    output, measurement = run_command(
+        [str(PURE_SV_BINARY), f"+PERIPHERAL_SUITE_ITERS={iters}"],
+        include_resources=True,
     )
     result = parse_result(output, "PURE_SV_PERIPHERAL_RESULT")
     return {
         "run": run,
-        "process_wall_ms": process_ms,
+        **measurement,
         "checks": int(result["checks"]),
         "sim_cycles": int(result["sim_cycles"]),
         "failures": int(result["failures"]),
@@ -705,6 +907,7 @@ def collect_critical_pairs(
 
     for offset in range(pair_count):
         run_id = start_run + offset
+        boundary_before = probe_pair_boundary()
         if run_id % 2:
             dpi = dpi_sample_runner(run_id, iters, "tracked")
             dpi.update(
@@ -717,8 +920,6 @@ def collect_critical_pairs(
                     "measured_pair_count": run_id - 1,
                 }
             )
-            if journal:
-                journal.append({"event": "sample", "label": "cpp_dpi", "sample": dpi})
             pure_sv = sv_sample_runner(run_id, iters)
             order = ["cpp_dpi", "pure_sv"]
             pure_sv.update(
@@ -731,8 +932,6 @@ def collect_critical_pairs(
                     "measured_pair_count": run_id,
                 }
             )
-            if journal:
-                journal.append({"event": "sample", "label": "pure_sv", "sample": pure_sv})
         else:
             pure_sv = sv_sample_runner(run_id, iters)
             pure_sv.update(
@@ -745,8 +944,6 @@ def collect_critical_pairs(
                     "measured_pair_count": run_id - 1,
                 }
             )
-            if journal:
-                journal.append({"event": "sample", "label": "pure_sv", "sample": pure_sv})
             dpi = dpi_sample_runner(run_id, iters, "tracked")
             order = ["pure_sv", "cpp_dpi"]
             dpi.update(
@@ -759,8 +956,20 @@ def collect_critical_pairs(
                     "measured_pair_count": run_id,
                 }
             )
-            if journal:
-                journal.append({"event": "sample", "label": "cpp_dpi", "sample": dpi})
+        pair_environment = {
+            "before": boundary_before,
+            "after": probe_pair_boundary(),
+        }
+        dpi["pair_environment"] = pair_environment
+        pure_sv["pair_environment"] = pair_environment
+        if journal:
+            ordered = (
+                (("cpp_dpi", dpi), ("pure_sv", pure_sv))
+                if dpi["slot"] == 1
+                else (("pure_sv", pure_sv), ("cpp_dpi", dpi))
+            )
+            for label, sample in ordered:
+                journal.append({"event": "sample", "label": label, "sample": sample})
         dpi_samples.append(dpi)
         pure_sv_samples.append(pure_sv)
 
@@ -857,6 +1066,14 @@ def run_critical_comparison(
         summarize("cpp_dpi", dpi_samples),
         summarize("pure_sv", pure_sv_samples),
         final=False,
+        environment=environment_validity(
+            [*dpi_samples, *pure_sv_samples],
+            [
+                boundary
+                for sample in dpi_samples
+                for boundary in sample["pair_environment"].values()
+            ],
+        ),
     )
     extra_batch_collected = guard["status"] == "needs_extra_batch"
     if extra_batch_collected:
@@ -891,6 +1108,14 @@ def run_critical_comparison(
             summarize("cpp_dpi", dpi_samples),
             summarize("pure_sv", pure_sv_samples),
             final=True,
+            environment=environment_validity(
+                [*dpi_samples, *pure_sv_samples],
+                [
+                    boundary
+                    for sample in dpi_samples
+                    for boundary in sample["pair_environment"].values()
+                ],
+            ),
         )
 
     guard["requested_pairs"] = comparison_runs
@@ -903,12 +1128,14 @@ def run_critical_comparison(
 def run_cpp_vpi_sample(run, iters):
     env = os.environ.copy()
     env["PERIPHERAL_SUITE_ITERS"] = str(iters)
-    output, process_ms = run_command([str(CPP_VPI_BINARY)], env=env)
+    output, measurement = run_command(
+        [str(CPP_VPI_BINARY)], env=env, include_resources=True
+    )
     result = parse_result(output, "CPP_VPI_PERIPHERAL_RESULT")
     return {
         "run": run,
         "internal_wall_ms": float(result["wall_ms"]),
-        "process_wall_ms": process_ms,
+        **measurement,
         "checks": int(result["checks"]),
         "sim_cycles": int(result["sim_cycles"]),
         "failures": int(result["failures"]),
@@ -916,7 +1143,7 @@ def run_cpp_vpi_sample(run, iters):
 
 
 def run_cocotb_sample(run, iters):
-    output, process_ms = run_command(
+    output, measurement = run_command(
         [
             "uv",
             "run",
@@ -930,13 +1157,14 @@ def run_cocotb_sample(run, iters):
             "--iters",
             str(iters),
             "--no-build",
-        ]
+        ],
+        include_resources=True,
     )
     result = parse_result(output, "COCOTB_PERIPHERAL_RESULT")
     return {
         "run": run,
         "internal_wall_ms": float(result["wall_ms"]),
-        "process_wall_ms": process_ms,
+        **measurement,
         "checks": int(result["checks"]),
         "sim_cycles": int(result.get("sim_cycles", 0)),
         "failures": int(result["failures"]),
@@ -954,6 +1182,7 @@ def _parse_args(argv=None):
         help="number of adjacent tracked DPI/SV pairs in the initial guard batch",
     )
     parser.add_argument("--skip-build", action="store_true")
+    parser.add_argument("--semantic-only", action="store_true")
     args = parser.parse_args(argv)
     if args.iters <= 0:
         parser.error("--iters must be greater than zero")
@@ -1009,16 +1238,23 @@ def persist_diagnostic_result(result, json_path, md_path, markdown=None):
 
 def main(argv=None):
     args = _parse_args(argv)
+    starting_git_state = collect_git_state()
+
+    def metadata(config):
+        return collect_metadata(config, git_state=starting_git_state)
 
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     json_path = RESULT_DIR / "latest.json"
     md_path = RESULT_DIR / "latest.md"
     journal = SampleJournal(RESULT_DIR / "latest.jsonl", truncate=True)
 
-    build_commands = [
-        ["make", "peripheral-suite-build"],
+    semantic_build_commands = [
         ["make", "peripheral-suite-sv-build"],
         ["make", "peripheral-suite-dpi-build"],
+    ]
+    build_commands = [
+        ["make", "peripheral-suite-build"],
+        *semantic_build_commands,
         [
             "uv",
             "run",
@@ -1034,6 +1270,54 @@ def main(argv=None):
             "--build-only",
         ],
     ]
+    if args.semantic_only:
+        try:
+            if not args.skip_build:
+                for command in semantic_build_commands:
+                    run_command(command)
+            cpp_dpi = run_cpp_dpi_sample(1, args.iters)
+            pure_sv = run_pure_sv_sample(1, args.iters)
+            assert_same_workload({"cpp_dpi": [cpp_dpi], "pure_sv": [pure_sv]})
+            journal.append({"event": "sample", "label": "cpp_dpi", "sample": cpp_dpi})
+            journal.append({"event": "sample", "label": "pure_sv", "sample": pure_sv})
+            result = {
+                "status": "success",
+                "verdict": "passed",
+                "measurement_mode": "equivalence_only",
+                "iterations": args.iters,
+                "semantic": {
+                    "exact_match": True,
+                    "fields": ["checks", "sim_cycles", "failures"],
+                    "cpp_dpi": cpp_dpi,
+                    "pure_sv": pure_sv,
+                },
+                "metadata": metadata(
+                    {
+                        "iterations": args.iters,
+                        "skip_build": args.skip_build,
+                        "semantic_only": True,
+                    }
+                ),
+            }
+            persist_diagnostic_result(result, json_path, md_path)
+            return 0
+        except (CommandExecutionError, ResultParseError, SystemExit) as error:
+            result = {
+                "status": "workload_error" if isinstance(error, SystemExit) else "command_error",
+                "verdict": "failed",
+                "measurement_mode": "equivalence_only",
+                "error": str(error),
+                "iterations": args.iters,
+                "metadata": metadata(
+                    {
+                        "iterations": args.iters,
+                        "skip_build": args.skip_build,
+                        "semantic_only": True,
+                    }
+                ),
+            }
+            persist_diagnostic_result(result, json_path, md_path)
+            return 1
     try:
         if not args.skip_build:
             for command in build_commands:
@@ -1061,7 +1345,7 @@ def main(argv=None):
                 }
             ),
             "samples": _journal_samples(journal),
-            "metadata": collect_metadata(
+            "metadata": metadata(
                 {"iterations": args.iters, "skip_build": args.skip_build}
             ),
         }
@@ -1080,7 +1364,7 @@ def main(argv=None):
             "pure_sv": summarize("pure_sv", pure_sv_samples),
             "performance_guard": performance_guard,
             "samples": _journal_samples(journal),
-            "metadata": collect_metadata(
+            "metadata": metadata(
                 {
                     "iterations": args.iters,
                     "comparison_runs_requested": args.comparison_runs,
@@ -1145,7 +1429,7 @@ def main(argv=None):
             "pure_sv": summarize("pure_sv", pure_sv_samples),
             "performance_guard": performance_guard,
             "samples": _journal_samples(journal),
-            "metadata": collect_metadata(
+            "metadata": metadata(
                 {"iterations": args.iters, "skip_build": args.skip_build}
             ),
         }
@@ -1174,7 +1458,7 @@ def main(argv=None):
             "cocotb": summarize("cocotb", cocotb_samples),
             "performance_guard": performance_guard,
             "samples": _journal_samples(journal),
-            "metadata": collect_metadata(
+            "metadata": metadata(
                 {"iterations": args.iters, "skip_build": args.skip_build}
             ),
         }
@@ -1253,7 +1537,7 @@ def main(argv=None):
         "design": "peripheral_suite: APB timer + APB SPI + APB I2C",
         "cpp_dpi_spawn_mode": "tracked",
         "binary_sha256": config["binary_sha256"],
-        "metadata": collect_metadata(config),
+        "metadata": metadata(config),
         "cpp_vpi": cpp_vpi_summary,
         "cpp_dpi": cpp_dpi_summary,
         "pure_sv": pure_sv_summary,

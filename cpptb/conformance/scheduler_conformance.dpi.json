@@ -90,8 +90,8 @@
   },
   "conformance": {
     "expected_iterations": 1,
-    "expected_checks": 165,
-    "expected_sim_cycles": 4,
+    "expected_checks": 210,
+    "expected_sim_cycles": 8,
     "expected_failures": 0,
     "negative_cases": [
       {
@@ -115,6 +115,26 @@
         "iterations": 6,
         "case": "channel_active_waiter",
         "message": "Channel destroyed with active waiters"
+      },
+      {
+        "iterations": 7,
+        "case": "invalid_task_timeout",
+        "message": "with_timeout received an invalid task"
+      },
+      {
+        "iterations": 8,
+        "case": "invalid_timeout_value",
+        "message": "timed-out task has no value"
+      },
+      {
+        "iterations": 9,
+        "case": "zero_task_timeout",
+        "message": "delay duration must be greater than zero"
+      },
+      {
+        "iterations": 10,
+        "case": "subprecision_task_timeout",
+        "message": "delay of 1 fs is not representable at 1000 fs simulation precision"
       }
     ]
   }
