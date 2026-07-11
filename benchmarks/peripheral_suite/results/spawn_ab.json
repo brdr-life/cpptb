@@ -1,0 +1,534 @@
+{
+  "benchmark": "cpp_dpi_tracked_vs_detached_spawn",
+  "iterations": 10000,
+  "runs": 15,
+  "metadata": {
+    "timestamp_utc": "2026-07-11T11:19:30.213111+00:00",
+    "git": {
+      "commit": "9d0cc907cb9ed128d086a52c267dd4815146647f",
+      "dirty": true
+    },
+    "host": {
+      "hostname": "bike-trainer.local",
+      "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+      "system": "Darwin",
+      "release": "25.5.0",
+      "machine": "arm64",
+      "processor": "arm"
+    },
+    "python": {
+      "version": "3.14.6",
+      "implementation": "CPython",
+      "compiler": "Clang 21.0.0 (clang-2100.0.123.102)",
+      "executable": "/opt/homebrew/opt/python@3.14/bin/python3.14"
+    },
+    "compiler": {
+      "command": [
+        "c++",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.5.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+      "executable": "/usr/bin/c++",
+      "environment": {}
+    },
+    "verilator": {
+      "command": [
+        "verilator",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "Verilator 5.050 2026-07-01 rev vUNKNOWN-built20260701",
+      "executable": "/opt/homebrew/bin/verilator",
+      "root": "/opt/homebrew/Cellar/verilator/5.050/share/verilator",
+      "environment": {}
+    },
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "/Users/amann/Documents/mojo-hdl-sim/benchmarks/peripheral_suite/tools/run_spawn_ab.py",
+      "--iters",
+      "10000",
+      "--runs",
+      "15",
+      "--skip-build"
+    ],
+    "config": {
+      "iterations": 10000,
+      "runs": 15,
+      "warmup_runs_per_mode": 1,
+      "pair_order": "tracked-first on odd runs, detached-first on even runs",
+      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/peripheral_suite/cpp_dpi_obj/Vdpi_peripheral_suite",
+      "detached_environment": {
+        "CPPTB_BENCH_DETACHED_SPAWN": "1"
+      },
+      "build_command": [
+        "make",
+        "peripheral-suite-dpi-build"
+      ]
+    }
+  },
+  "tracked": {
+    "label": "tracked",
+    "runs": 15,
+    "process_wall_ms_median": 1251.4271247200668,
+    "samples": [
+      {
+        "run": 1,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1224.285,
+        "process_wall_ms": 1229.0337919257581,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 2,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1192.775,
+        "process_wall_ms": 1197.1227093599737,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 3,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1272.167,
+        "process_wall_ms": 1277.3512080311775,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 4,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1257.401,
+        "process_wall_ms": 1261.8700000457466,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 5,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1222.267,
+        "process_wall_ms": 1226.7007920891047,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 6,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1324.838,
+        "process_wall_ms": 1329.6877089887857,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 7,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1251.222,
+        "process_wall_ms": 1256.0471249744296,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 8,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1221.891,
+        "process_wall_ms": 1226.3152077794075,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 9,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1243.156,
+        "process_wall_ms": 1247.5628331303596,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 10,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1231.967,
+        "process_wall_ms": 1236.5540000610054,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 11,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1246.647,
+        "process_wall_ms": 1251.4271247200668,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 12,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1259.274,
+        "process_wall_ms": 1263.814500067383,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 13,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1278.089,
+        "process_wall_ms": 1283.018082845956,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 14,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1241.455,
+        "process_wall_ms": 1245.981500018388,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 15,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1257.601,
+        "process_wall_ms": 1262.5009161420166,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      }
+    ],
+    "internal_wall_ms_median": 1246.647
+  },
+  "detached": {
+    "label": "detached",
+    "runs": 15,
+    "process_wall_ms_median": 1262.8716663457453,
+    "samples": [
+      {
+        "run": 1,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1283.316,
+        "process_wall_ms": 1288.0455842241645,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 2,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1237.966,
+        "process_wall_ms": 1242.79920803383,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 3,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1304.218,
+        "process_wall_ms": 1309.0159995481372,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 4,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1296.36,
+        "process_wall_ms": 1300.9714582003653,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 5,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1320.135,
+        "process_wall_ms": 1324.813417159021,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 6,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1224.631,
+        "process_wall_ms": 1229.395458009094,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 7,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1268.573,
+        "process_wall_ms": 1273.422417230904,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 8,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1267.369,
+        "process_wall_ms": 1271.802291739732,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 9,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1244.462,
+        "process_wall_ms": 1249.22841694206,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 10,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1257.766,
+        "process_wall_ms": 1262.3874172568321,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 11,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1256.447,
+        "process_wall_ms": 1261.2542919814587,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 12,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1242.953,
+        "process_wall_ms": 1247.5935840047896,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 13,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1210.536,
+        "process_wall_ms": 1215.2021247893572,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      },
+      {
+        "run": 14,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1260.635,
+        "process_wall_ms": 1265.818249899894,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "detached",
+          "tracked"
+        ]
+      },
+      {
+        "run": 15,
+        "spawn_mode": "detached",
+        "internal_wall_ms": 1258.052,
+        "process_wall_ms": 1262.8716663457453,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "pair_order": [
+          "tracked",
+          "detached"
+        ]
+      }
+    ],
+    "internal_wall_ms_median": 1258.052
+  },
+  "comparison": {
+    "metric": "median(detached_process_wall / tracked_process_wall by run)",
+    "ratio": 1.0159205813900232,
+    "overhead_percent": 1.592058139002317,
+    "paired_ratios": [
+      1.0480147842037293,
+      1.0381552353127415,
+      1.0247894168165117,
+      1.0309869147798119,
+      1.0799808932240338,
+      0.9245745822107636,
+      1.0138333123901129,
+      1.0370924894935387,
+      1.0013350700802148,
+      1.0208914590018328,
+      1.007852768305298,
+      0.9871651131857336,
+      0.9471434121129677,
+      1.0159205813900232,
+      1.0002936633146071
+    ],
+    "one_sided_95_upper_median_bound": {
+      "confidence": 0.95,
+      "bound": 1.0370924894935387,
+      "order_statistic": 12,
+      "coverage": 0.982421875,
+      "method": "exact binomial order-statistic bound"
+    },
+    "two_sided_95_median_ci": {
+      "confidence": 0.95,
+      "lower": 1.0002936633146071,
+      "upper": 1.0370924894935387,
+      "lower_order_statistic": 4,
+      "upper_order_statistic": 12,
+      "coverage": 0.96484375,
+      "method": "exact central binomial order-statistic interval"
+    },
+    "direction": "detached_slower",
+    "uncertainty": {
+      "one_sided_95_upper_median_bound": {
+        "confidence": 0.95,
+        "bound": 1.0370924894935387,
+        "order_statistic": 12,
+        "coverage": 0.982421875,
+        "method": "exact binomial order-statistic bound"
+      },
+      "two_sided_95_median_ci": {
+        "confidence": 0.95,
+        "lower": 1.0002936633146071,
+        "upper": 1.0370924894935387,
+        "lower_order_statistic": 4,
+        "upper_order_statistic": 12,
+        "coverage": 0.96484375,
+        "method": "exact central binomial order-statistic interval"
+      },
+      "direction": "detached_slower"
+    }
+  }
+}

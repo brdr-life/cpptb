@@ -1,0 +1,1915 @@
+{
+  "stamp": "20260705T174727Z",
+  "repeats": 3,
+  "timeout_s": 180,
+  "tools": {
+    "verilator": "Verilator 5.050 2026-07-01 rev vUNKNOWN-built20260701",
+    "xezim": "xezim version 0.6.0"
+  },
+  "revisions": {
+    "xezim": "af73fdbe971a4087a96554aacc4b0bab39df4843",
+    "xezim-core": "abd461e196773d210ef76e2fb512b7c71b6d9bc4",
+    "GettingVerilatorStartedWithUVM": "181978306d6bd296a815b12cddfd8c9942ddc0f8",
+    "uvm-core": "78c06547a2a0a29b3dc9dcafae62b75b2ff61544"
+  },
+  "runs": [
+    {
+      "name": "xezim_uvm-main_data0_probe",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/uvm-core/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/uvm-core/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=data0_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:27.495057+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 3.021159708034247,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_uvm-main_data0_probe.log",
+      "summary": {
+        "fatal_messages": [
+          "UVM_FATAL @ 0: reporter [SEQ_NOT_DONE] Sequence uvm_test_top.env.penv_in.agent.sequencer.seq already started"
+        ],
+        "error_messages": [],
+        "packet_counts": [],
+        "xezim_phase_s": {
+          "compilation": 0.24980000000000002,
+          "simulation": 2.6703,
+          "total": 2.9200999999999997
+        },
+        "sim_finish_time": 0
+      }
+    },
+    {
+      "name": "xezim_2017_data0_test_r1",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=data0_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:30.517557+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.750151500105858,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_data0_test_r1.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          77,
+          77
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1733,
+          "simulation": 2.4935,
+          "total": 2.6668000000000003
+        },
+        "sim_finish_time": 1565
+      }
+    },
+    {
+      "name": "xezim_2017_data0_test_r2",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=data0_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:33.268466+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.726209375075996,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_data0_test_r2.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          77,
+          77
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1695,
+          "simulation": 2.4867,
+          "total": 2.6561999999999997
+        },
+        "sim_finish_time": 1575
+      }
+    },
+    {
+      "name": "xezim_2017_data0_test_r3",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=data0_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:35.995435+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.738728625001386,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_data0_test_r3.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          76,
+          76
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1829,
+          "simulation": 2.4833000000000003,
+          "total": 2.6662
+        },
+        "sim_finish_time": 1545
+      }
+    },
+    {
+      "name": "xezim_2017_data1_test_r1",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=data1_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:38.734959+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.731223957845941,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_data1_test_r1.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          77,
+          77
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1795,
+          "simulation": 2.4789,
+          "total": 2.6585
+        },
+        "sim_finish_time": 1565
+      }
+    },
+    {
+      "name": "xezim_2017_data1_test_r2",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=data1_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:41.467179+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 3.1481229159981012,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_data1_test_r2.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          77,
+          77
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1718,
+          "simulation": 2.8735999999999997,
+          "total": 3.0454
+        },
+        "sim_finish_time": 1575
+      }
+    },
+    {
+      "name": "xezim_2017_data1_test_r3",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=data1_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:44.617622+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.7612207089550793,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_data1_test_r3.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          76,
+          76
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1752,
+          "simulation": 2.5078,
+          "total": 2.683
+        },
+        "sim_finish_time": 1555
+      }
+    },
+    {
+      "name": "xezim_2017_random_test_r1",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=random_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:47.379611+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.6652524590026587,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_random_test_r1.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          73,
+          73
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.18,
+          "simulation": 2.4177,
+          "total": 2.5976
+        },
+        "sim_finish_time": 1500
+      }
+    },
+    {
+      "name": "xezim_2017_random_test_r2",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=random_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:50.045591+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.6715027089230716,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_random_test_r2.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          73,
+          73
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1759,
+          "simulation": 2.4227,
+          "total": 2.5986
+        },
+        "sim_finish_time": 1500
+      }
+    },
+    {
+      "name": "xezim_2017_random_test_r3",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=random_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:52.718017+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.686885582981631,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_random_test_r3.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          73,
+          73
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1701,
+          "simulation": 2.4485,
+          "total": 2.6186
+        },
+        "sim_finish_time": 1500
+      }
+    },
+    {
+      "name": "xezim_2017_many_random_test_r1",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=many_random_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:55.405923+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.705862500006333,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_many_random_test_r1.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          73,
+          73
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.171,
+          "simulation": 2.464,
+          "total": 2.6349
+        },
+        "sim_finish_time": 1500
+      }
+    },
+    {
+      "name": "xezim_2017_many_random_test_r2",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=many_random_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:47:58.112552+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.7490842919796705,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_many_random_test_r2.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          73,
+          73
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1762,
+          "simulation": 2.5023,
+          "total": 2.6785
+        },
+        "sim_finish_time": 1500
+      }
+    },
+    {
+      "name": "xezim_2017_many_random_test_r3",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/xezim/target/release/xezim",
+        "--simulate",
+        "-s",
+        "top",
+        "-I",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "-I",
+        "rtl",
+        "-I",
+        "sv",
+        "-I",
+        "tb",
+        "-D",
+        "UVM_REPORT_DISABLE_FILE_LINE",
+        "-D",
+        "UVM_NO_DPI",
+        "-D",
+        "SVA_ON",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src/uvm_pkg.sv",
+        "sv/pipe_pkg.sv",
+        "sv/pipe_if.sv",
+        "rtl/pipe.v",
+        "tb/top.sv",
+        "+UVM_TESTNAME=many_random_test"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM",
+      "started": "2026-07-05T17:48:00.862359+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 2.7460362499114126,
+      "log": "benchmarks/uvm-sim-compare/results/xezim_2017_many_random_test_r3.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          73,
+          73
+        ],
+        "xezim_phase_s": {
+          "compilation": 0.1765,
+          "simulation": 2.4995,
+          "total": 2.6761
+        },
+        "sim_finish_time": 1500
+      }
+    },
+    {
+      "name": "verilator_clean",
+      "cmd": [
+        "make",
+        "UVM_HOME=/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "clean"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:48:03.609196+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.026671542087569833,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_clean.log",
+      "summary": {
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": []
+      }
+    },
+    {
+      "name": "verilator_build",
+      "cmd": [
+        "make",
+        "UVM_HOME=/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/1800.2-2017-1.0/src",
+        "obj_dir/Vuvm_pkg"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:48:03.636307+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 83.20789733389392,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_build.log",
+      "summary": {
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [],
+        "verilator_report_build_wall_s": 83.075,
+        "verilator_report_alloc_mb": 325.812
+      }
+    },
+    {
+      "name": "verilator_2017_data0_test_r1",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=data0_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data0_test_r1.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:26.859198+00:00",
+      "returncode": -11,
+      "timeout": false,
+      "wall_s": 0.6206461251713336,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_data0_test_r1.log",
+      "summary": {
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": []
+      }
+    },
+    {
+      "name": "verilator_2017_data0_test_r2",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=data0_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data0_test_r2.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:27.480241+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.26060250005684793,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_data0_test_r2.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          76,
+          76
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.141,
+        "verilator_report_speed": 10.982,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_data0_test_r3",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=data0_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data0_test_r3.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:27.741590+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.2574860421009362,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_data0_test_r3.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          76,
+          76
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.121,
+        "verilator_report_speed": 12.77,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_data1_test_r1",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=data1_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r1.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:27.999907+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.26146966707892716,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_data1_test_r1.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          76,
+          76
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.134,
+        "verilator_report_speed": 11.496,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_data1_test_r2",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=data1_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r2.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:28.262420+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.24769999994896352,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_data1_test_r2.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          76,
+          76
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.12,
+        "verilator_report_speed": 12.907,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_data1_test_r3",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=data1_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r3.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:28.510895+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.2589220420923084,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_data1_test_r3.log",
+      "summary": {
+        "uvm_error_count": 0,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [
+          76,
+          76
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.136,
+        "verilator_report_speed": 11.398,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_random_test_r1",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=random_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r1.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:28.770489+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.24238541699014604,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_random_test_r1.log",
+      "summary": {
+        "uvm_error_count": 148,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 545: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 545: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 565: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 565: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 585: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 585: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 605: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 605: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 625: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 625: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 645: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 645: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 665: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 665: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 685: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 685: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 705: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 705: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 725: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 725: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 745: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 745: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 765: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 765: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 785: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 785: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 805: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 805: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 825: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 825: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 845: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 845: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 865: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 865: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 885: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 885: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 905: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 905: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 925: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 925: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 945: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 945: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 965: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 965: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 985: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 985: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1005: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1005: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1025: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1025: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1045: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1045: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1065: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1065: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1085: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1085: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8"
+        ],
+        "packet_counts": [
+          75,
+          75
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.12,
+        "verilator_report_speed": 12.796,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_random_test_r2",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=random_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r2.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:29.013935+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.25161883304826915,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_random_test_r2.log",
+      "summary": {
+        "uvm_error_count": 148,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 545: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 545: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 565: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 565: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 585: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 585: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 605: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 605: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 625: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 625: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 645: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 645: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 665: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 665: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 685: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 685: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 705: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 705: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 725: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 725: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 745: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 745: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 765: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 765: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 785: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 785: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 805: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 805: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 825: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 825: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 845: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 845: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 865: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 865: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 885: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 885: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 905: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 905: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 925: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 925: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 945: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 945: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 965: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 965: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 985: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 985: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1005: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1005: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1025: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1025: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1045: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1045: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1065: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1065: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1085: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1085: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8"
+        ],
+        "packet_counts": [
+          75,
+          75
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.128,
+        "verilator_report_speed": 12.027,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_random_test_r3",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=random_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r3.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:29.266534+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.23828320880420506,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_random_test_r3.log",
+      "summary": {
+        "uvm_error_count": 148,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 545: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 545: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 565: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 565: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 585: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 585: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 605: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 605: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 625: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 625: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 645: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 645: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 665: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 665: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 685: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 685: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 705: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 705: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 725: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 725: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 745: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 745: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 765: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 765: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 785: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 785: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 805: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 805: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 825: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 825: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 845: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 845: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 865: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 865: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 885: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 885: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 905: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 905: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 925: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 925: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 945: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 945: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 965: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 965: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 985: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 985: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1005: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1005: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1025: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1025: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1045: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1045: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1065: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1065: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1085: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1085: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1125: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1145: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1185: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1205: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1225: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1285: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1325: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1345: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1365: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1405: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1425: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1445: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1465: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1485: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1505: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 1525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 1525: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8"
+        ],
+        "packet_counts": [
+          75,
+          75
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.122,
+        "verilator_report_speed": 12.591,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_many_random_test_r1",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=many_random_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r1.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:29.505683+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.2699899161234498,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_many_random_test_r1.log",
+      "summary": {
+        "uvm_error_count": 16,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data c1a0 does not match expected 483c",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data aa4e does not match expected b8e8",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data b214 does not match expected c1a0",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 4215 does not match expected aa4e",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data fdc7 does not match expected 24b5",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d022 does not match expected dce8",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data fdc7 does not match expected 24b5",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d022 does not match expected dce8",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 6181 does not match expected 3534",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 244f does not match expected 2c67",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d17f does not match expected a27f",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 313c does not match expected 893"
+        ],
+        "packet_counts": [
+          92,
+          92
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.155,
+        "verilator_report_speed": 12.133,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_many_random_test_r2",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=many_random_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r2.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:29.776448+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.2705860410351306,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_many_random_test_r2.log",
+      "summary": {
+        "uvm_error_count": 16,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data c1a0 does not match expected 483c",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data aa4e does not match expected b8e8",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data b214 does not match expected c1a0",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 4215 does not match expected aa4e",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data fdc7 does not match expected 24b5",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d022 does not match expected dce8",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data fdc7 does not match expected 24b5",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d022 does not match expected dce8",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 6181 does not match expected 3534",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 244f does not match expected 2c67",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d17f does not match expected a27f",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 313c does not match expected 893"
+        ],
+        "packet_counts": [
+          92,
+          92
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.154,
+        "verilator_report_speed": 12.175,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_2017_many_random_test_r3",
+      "cmd": [
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/obj_dir/Vuvm_pkg",
+        "+UVM_TESTNAME=many_random_test",
+        "+verilator+coverage+file+/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r3.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:30.047753+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.2890848331153393,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_2017_many_random_test_r3.log",
+      "summary": {
+        "uvm_error_count": 16,
+        "uvm_fatal_count": 0,
+        "fatal_messages": [],
+        "error_messages": [
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 65: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected 483c",
+          "UVM_ERROR @ 85: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 0 does not match expected b8e8",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data c1a0 does not match expected 483c",
+          "UVM_ERROR @ 105: uvm_test_top.env.sb [pipe_scoreboard] Actual output data aa4e does not match expected b8e8",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data b214 does not match expected c1a0",
+          "UVM_ERROR @ 165: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 4215 does not match expected aa4e",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data fdc7 does not match expected 24b5",
+          "UVM_ERROR @ 245: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d022 does not match expected dce8",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data fdc7 does not match expected 24b5",
+          "UVM_ERROR @ 265: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d022 does not match expected dce8",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 6181 does not match expected 3534",
+          "UVM_ERROR @ 305: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 244f does not match expected 2c67",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data d17f does not match expected a27f",
+          "UVM_ERROR @ 385: uvm_test_top.env.sb [pipe_scoreboard] Actual output data 313c does not match expected 893"
+        ],
+        "packet_counts": [
+          92,
+          92
+        ],
+        "verilator_finish_at": "2us",
+        "verilator_report_sim_wall_s": 0.174,
+        "verilator_report_speed": 10.78,
+        "verilator_report_speed_unit": "us/s"
+      }
+    },
+    {
+      "name": "verilator_coverage_annotate",
+      "cmd": [
+        "verilator_coverage",
+        "--annotate",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/annotated_src",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data0_test_r2.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data0_test_r3.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r1.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r2.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r3.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r1.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r2.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r3.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r1.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r2.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r3.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:30.338061+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.7663631250616163,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_coverage_annotate.log",
+      "summary": {
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": [],
+        "coverage": {
+          "line": {
+            "pct": 27.5,
+            "covered": 2714,
+            "total": 9865
+          },
+          "toggle": {
+            "pct": 96.2,
+            "covered": 331,
+            "total": 344
+          },
+          "branch": {
+            "pct": 12.8,
+            "covered": 1789,
+            "total": 14024
+          },
+          "expr": {
+            "pct": 10.3,
+            "covered": 349,
+            "total": 3404
+          },
+          "fsm_state": {
+            "pct": 0.0,
+            "covered": 0,
+            "total": 0
+          },
+          "fsm_arc": {
+            "pct": 0.0,
+            "covered": 0,
+            "total": 0
+          }
+        }
+      }
+    },
+    {
+      "name": "verilator_coverage_rank",
+      "cmd": [
+        "verilator_coverage",
+        "--rank",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data0_test_r2.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data0_test_r3.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r1.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r2.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/data1_test_r3.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r1.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r2.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/many_random_test_r3.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r1.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r2.cov",
+        "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim/logs/coverage/random_test_r3.cov"
+      ],
+      "cwd": "/Users/amann/Documents/mojo-hdl-sim/benchmarks/uvm-sim-compare/deps/GettingVerilatorStartedWithUVM/sim",
+      "started": "2026-07-05T17:49:31.104895+00:00",
+      "returncode": 0,
+      "timeout": false,
+      "wall_s": 0.2695538750849664,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_coverage_rank.log",
+      "summary": {
+        "fatal_messages": [],
+        "error_messages": [],
+        "packet_counts": []
+      }
+    }
+  ],
+  "aggregates": {
+    "xezim_2017": {
+      "data0_test": {
+        "runs": 3,
+        "passes": 3,
+        "mean_wall_s": 2.7383631667277464,
+        "wall_s": [
+          2.750151500105858,
+          2.726209375075996,
+          2.738728625001386
+        ],
+        "packet_counts": [
+          [
+            77,
+            77
+          ],
+          [
+            77,
+            77
+          ],
+          [
+            76,
+            76
+          ]
+        ],
+        "sim_finish_times": [
+          1565,
+          1575,
+          1545
+        ],
+        "mean_xezim_total_phase_s": 2.663066666666667,
+        "mean_xezim_compile_phase_s": 0.17523333333333335,
+        "mean_xezim_sim_phase_s": 2.487833333333333
+      },
+      "data1_test": {
+        "runs": 3,
+        "passes": 3,
+        "mean_wall_s": 2.8801891942663738,
+        "wall_s": [
+          2.731223957845941,
+          3.1481229159981012,
+          2.7612207089550793
+        ],
+        "packet_counts": [
+          [
+            77,
+            77
+          ],
+          [
+            77,
+            77
+          ],
+          [
+            76,
+            76
+          ]
+        ],
+        "sim_finish_times": [
+          1565,
+          1575,
+          1555
+        ],
+        "mean_xezim_total_phase_s": 2.7956333333333334,
+        "mean_xezim_compile_phase_s": 0.1755,
+        "mean_xezim_sim_phase_s": 2.6201
+      },
+      "random_test": {
+        "runs": 3,
+        "passes": 3,
+        "mean_wall_s": 2.6745469169691205,
+        "wall_s": [
+          2.6652524590026587,
+          2.6715027089230716,
+          2.686885582981631
+        ],
+        "packet_counts": [
+          [
+            73,
+            73
+          ],
+          [
+            73,
+            73
+          ],
+          [
+            73,
+            73
+          ]
+        ],
+        "sim_finish_times": [
+          1500,
+          1500,
+          1500
+        ],
+        "mean_xezim_total_phase_s": 2.6049333333333333,
+        "mean_xezim_compile_phase_s": 0.17533333333333334,
+        "mean_xezim_sim_phase_s": 2.4296333333333333
+      },
+      "many_random_test": {
+        "runs": 3,
+        "passes": 3,
+        "mean_wall_s": 2.7336610139658055,
+        "wall_s": [
+          2.705862500006333,
+          2.7490842919796705,
+          2.7460362499114126
+        ],
+        "packet_counts": [
+          [
+            73,
+            73
+          ],
+          [
+            73,
+            73
+          ],
+          [
+            73,
+            73
+          ]
+        ],
+        "sim_finish_times": [
+          1500,
+          1500,
+          1500
+        ],
+        "mean_xezim_total_phase_s": 2.6631666666666667,
+        "mean_xezim_compile_phase_s": 0.17456666666666668,
+        "mean_xezim_sim_phase_s": 2.4886
+      }
+    },
+    "verilator_2017": {
+      "data0_test": {
+        "runs": 3,
+        "passes": 2,
+        "mean_wall_s": 0.37957822244303924,
+        "wall_s": [
+          0.6206461251713336,
+          0.26060250005684793,
+          0.2574860421009362
+        ],
+        "packet_counts": [
+          [],
+          [
+            76,
+            76
+          ],
+          [
+            76,
+            76
+          ]
+        ],
+        "sim_finish_times": [],
+        "mean_verilator_report_sim_wall_s": 0.131
+      },
+      "data1_test": {
+        "runs": 3,
+        "passes": 3,
+        "mean_wall_s": 0.25603056970673305,
+        "wall_s": [
+          0.26146966707892716,
+          0.24769999994896352,
+          0.2589220420923084
+        ],
+        "packet_counts": [
+          [
+            76,
+            76
+          ],
+          [
+            76,
+            76
+          ],
+          [
+            76,
+            76
+          ]
+        ],
+        "sim_finish_times": [],
+        "mean_verilator_report_sim_wall_s": 0.13
+      },
+      "random_test": {
+        "runs": 3,
+        "passes": 0,
+        "mean_wall_s": 0.24409581961420676,
+        "wall_s": [
+          0.24238541699014604,
+          0.25161883304826915,
+          0.23828320880420506
+        ],
+        "packet_counts": [
+          [
+            75,
+            75
+          ],
+          [
+            75,
+            75
+          ],
+          [
+            75,
+            75
+          ]
+        ],
+        "sim_finish_times": [],
+        "mean_verilator_report_sim_wall_s": 0.12333333333333334
+      },
+      "many_random_test": {
+        "runs": 3,
+        "passes": 0,
+        "mean_wall_s": 0.27655359675797325,
+        "wall_s": [
+          0.2699899161234498,
+          0.2705860410351306,
+          0.2890848331153393
+        ],
+        "packet_counts": [
+          [
+            92,
+            92
+          ],
+          [
+            92,
+            92
+          ],
+          [
+            92,
+            92
+          ]
+        ],
+        "sim_finish_times": [],
+        "mean_verilator_report_sim_wall_s": 0.161
+      }
+    },
+    "verilator_build": {
+      "pass": true,
+      "wall_s": 83.20789733389392,
+      "reported_wall_s": 83.075,
+      "reported_alloc_mb": 325.812,
+      "log": "benchmarks/uvm-sim-compare/results/verilator_build.log"
+    },
+    "xezim_uvm_main_probe": {
+      "pass": false,
+      "wall_s": 3.021159708034247,
+      "fatal_messages": [
+        "UVM_FATAL @ 0: reporter [SEQ_NOT_DONE] Sequence uvm_test_top.env.penv_in.agent.sequencer.seq already started"
+      ],
+      "log": "benchmarks/uvm-sim-compare/results/xezim_uvm-main_data0_probe.log"
+    },
+    "verilator_coverage": {
+      "line": {
+        "pct": 27.5,
+        "covered": 2714,
+        "total": 9865
+      },
+      "toggle": {
+        "pct": 96.2,
+        "covered": 331,
+        "total": 344
+      },
+      "branch": {
+        "pct": 12.8,
+        "covered": 1789,
+        "total": 14024
+      },
+      "expr": {
+        "pct": 10.3,
+        "covered": 349,
+        "total": 3404
+      },
+      "fsm_state": {
+        "pct": 0.0,
+        "covered": 0,
+        "total": 0
+      },
+      "fsm_arc": {
+        "pct": 0.0,
+        "covered": 0,
+        "total": 0
+      }
+    }
+  }
+}
