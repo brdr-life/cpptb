@@ -177,8 +177,10 @@ second-slot/first-slot median, order-stratum gap, and half-split drift.
 The result passes when the CI contains `1.0`, the paired median is in
 `[0.98, 1.02]`, and both strata are in `[0.97, 1.03]`. It fails when the CI
 excludes `1.0`, either stratum is outside `[0.95, 1.05]`, or the relative
-stratum gap exceeds 5%. An otherwise inconclusive result collects exactly one
-additional balanced 20-pair batch and classifies all 40 pairs. Results are
+stratum gap exceeds 5%, the second-slot/first-slot median is outside
+`[0.95, 1.05]`, or half-split drift exceeds 5%. Exact 5% boundaries are
+accepted. An otherwise inconclusive result collects exactly one additional
+balanced 20-pair batch and classifies all 40 pairs. Results are
 written atomically to `results/aa_latest.json` and `results/aa_latest.md`, with
 incremental samples in `results/aa_latest.jsonl`.
 
@@ -207,6 +209,16 @@ make peripheral-suite-runtime-old-diagnostic-build
 python3 benchmarks/peripheral_suite/tools/run_runtime_ab.py \
   --iters 10000 --skip-build
 ```
+
+Run two consecutive passing A/A diagnostics immediately before old/new A/B.
+The runtime tool machine-checks `results/aa_latest.json` (or `--aa-artifact`)
+before any warmup or sample: it must be a passing A/A result for the selected
+current binary and iteration count, contain at least 20 measured pairs, and
+have a parseable timestamp no more than 30 minutes old. A missing, malformed,
+stale, or mismatched artifact halts the run and is persisted as an invalid
+environment. After old/new A/B, run one trailing A/A diagnostic. Any failure
+or inconclusive result in the two leading A/A runs, old/new A/B, or trailing
+A/A run invalidates the performance conclusion and halts the sequence.
 
 The runner performs one warmup per binary followed by 16 adjacent old/new
 pairs, alternating the first slot exactly. It compares checks, simulation

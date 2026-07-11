@@ -176,21 +176,24 @@ def classify_aa(statistics):
     b_first = statistics["b_first_paired_median"]
     interval = statistics["two_sided_95_median_ci"]
     ci_contains_one = interval["lower"] <= 1.0 <= interval["upper"]
+    slot_median = statistics["second_slot_over_first_slot_median"]
+    half_split_drift = statistics["half_split_drift"]
 
-    if (
-        ci_contains_one
-        and 0.98 <= ratio <= 1.02
-        and 0.97 <= a_first <= 1.03
-        and 0.97 <= b_first <= 1.03
-    ):
-        return "passed"
     if (
         not ci_contains_one
         or not 0.95 <= a_first <= 1.05
         or not 0.95 <= b_first <= 1.05
         or statistics["order_stratum_gap"] > 0.05
+        or not 0.95 <= slot_median <= 1.05
+        or half_split_drift > 0.05
     ):
         return "failed"
+    if (
+        0.98 <= ratio <= 1.02
+        and 0.97 <= a_first <= 1.03
+        and 0.97 <= b_first <= 1.03
+    ):
+        return "passed"
     return "inconclusive"
 
 
