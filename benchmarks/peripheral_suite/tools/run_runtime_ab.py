@@ -2,6 +2,8 @@
 """Isolated reconstructed-old versus current-runtime C++ DPI diagnostic."""
 
 import argparse
+import datetime
+import hashlib
 import json
 import math
 import sys
@@ -29,10 +31,86 @@ BUILD_PROVENANCE = SNAPSHOT_ROOT / "build_provenance.json"
 DEFAULT_JSON = benchmark.RESULT_DIR / "runtime_ab_latest.json"
 DEFAULT_MARKDOWN = benchmark.RESULT_DIR / "runtime_ab_latest.md"
 DEFAULT_JOURNAL = benchmark.RESULT_DIR / "runtime_ab_latest.jsonl"
+DEFAULT_AA_ARTIFACT = benchmark.RESULT_DIR / "aa_latest.json"
+AA_MAX_AGE = datetime.timedelta(minutes=30)
+
+
+class AAPreflightError(RuntimeError):
+    def __init__(self, message, preflight):
+        super().__init__(message)
+        self.preflight = preflight
 
 
 def _sha256(path):
     return benchmark.binary_sha256(path)
+
+
+def validate_aa_preflight(path, iters, new_binary_sha256, now=None):
+    path = Path(path)
+    preflight = {
+        "artifact_path": str(path),
+        "artifact_sha256": None,
+        "artifact_timestamp_utc": None,
+        "artifact_status": None,
+        "maximum_age_seconds": int(AA_MAX_AGE.total_seconds()),
+    }
+
+    def reject(message):
+        raise AAPreflightError(f"A/A preflight rejected: {message}", preflight)
+
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        reject(f"cannot read {path}: {error}")
+    preflight["artifact_sha256"] = hashlib.sha256(raw).hexdigest()
+    try:
+        artifact = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        reject(f"malformed JSON in {path}: {error}")
+    if not isinstance(artifact, dict):
+        reject("artifact root must be a JSON object")
+
+    preflight["artifact_status"] = artifact.get("status")
+    preflight["artifact_binary_sha256"] = artifact.get("binary_sha256")
+    preflight["artifact_measured_pairs"] = artifact.get("measured_pairs")
+    metadata = artifact.get("metadata")
+    config = metadata.get("config") if isinstance(metadata, dict) else None
+    timestamp_text = metadata.get("timestamp_utc") if isinstance(metadata, dict) else None
+    artifact_iters = config.get("iterations") if isinstance(config, dict) else None
+    preflight["artifact_iterations"] = artifact_iters
+    preflight["artifact_timestamp_utc"] = timestamp_text
+
+    if artifact.get("status") != "passed":
+        reject("artifact status is not passed")
+    if artifact.get("binary_sha256") != new_binary_sha256:
+        reject("artifact binary SHA256 does not match the current binary")
+    if isinstance(artifact_iters, bool) or artifact_iters != iters:
+        reject("artifact iterations do not match requested runtime A/B iterations")
+    measured_pairs = artifact.get("measured_pairs")
+    if isinstance(measured_pairs, bool) or not isinstance(measured_pairs, int):
+        reject("artifact measured_pairs must be an integer")
+    if measured_pairs < 20:
+        reject("artifact measured_pairs is less than 20")
+    if not isinstance(timestamp_text, str):
+        reject("artifact metadata timestamp is missing or malformed")
+    try:
+        timestamp = datetime.datetime.fromisoformat(timestamp_text.replace("Z", "+00:00"))
+    except ValueError:
+        reject("artifact metadata timestamp is malformed")
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        reject("artifact metadata timestamp must include a UTC offset")
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("preflight current time must include a UTC offset")
+    age = now.astimezone(datetime.timezone.utc) - timestamp.astimezone(
+        datetime.timezone.utc
+    )
+    preflight["artifact_age_seconds"] = age.total_seconds()
+    if age < datetime.timedelta(0):
+        reject("artifact timestamp is in the future")
+    if age > AA_MAX_AGE:
+        reject("artifact is older than 30 minutes")
+    return preflight
 
 
 def load_source_evidence():
@@ -429,6 +507,7 @@ def _parse_args(argv=None):
     parser.add_argument("--json", type=Path, default=DEFAULT_JSON)
     parser.add_argument("--markdown", type=Path, default=DEFAULT_MARKDOWN)
     parser.add_argument("--journal", type=Path, default=DEFAULT_JOURNAL)
+    parser.add_argument("--aa-artifact", type=Path, default=DEFAULT_AA_ARTIFACT)
     args = parser.parse_args(argv)
     if args.iters <= 0:
         parser.error("--iters must be greater than zero")
@@ -440,6 +519,7 @@ def main(argv=None):
     journal = benchmark.SampleJournal(args.journal, truncate=True)
     evidence = None
     binary_hashes = None
+    aa_preflight = {"artifact_path": str(args.aa_artifact)}
     try:
         if not args.skip_build:
             benchmark.run_command(
@@ -448,11 +528,14 @@ def main(argv=None):
         for label, path in (("old", args.old_binary), ("new", args.new_binary)):
             if not path.is_file():
                 raise RuntimeError(f"{label} binary does not exist: {path}")
-        evidence = load_source_evidence()
         binary_hashes = {
             "old": _sha256(args.old_binary),
             "new": _sha256(args.new_binary),
         }
+        aa_preflight = validate_aa_preflight(
+            args.aa_artifact, args.iters, binary_hashes["new"]
+        )
+        evidence = load_source_evidence()
         expected_old_hash = evidence["build_provenance"]["binary_sha256"]
         if binary_hashes["old"] != expected_old_hash:
             raise RuntimeError(
@@ -485,6 +568,8 @@ def main(argv=None):
         RuntimeError,
         ValueError,
     ) as error:
+        if isinstance(error, AAPreflightError):
+            aa_preflight = error.preflight
         result = {
             "benchmark": "reconstructed_old_vs_current_cpp_dpi_runtime",
             "status": "invalid_environment",
@@ -500,6 +585,7 @@ def main(argv=None):
             "extra_batch_collected": False,
             "samples": benchmark._journal_samples(journal),
             "binary_sha256": binary_hashes,
+            "aa_preflight": aa_preflight,
         }
         if isinstance(error, benchmark.CommandExecutionError):
             result["command_failure"] = {
@@ -510,6 +596,7 @@ def main(argv=None):
 
     if evidence:
         result.update(evidence)
+    result["aa_preflight"] = aa_preflight
     config = {
         "iterations": args.iters,
         "initial_pairs": INITIAL_PAIRS,
@@ -528,6 +615,7 @@ def main(argv=None):
         },
         "binary_sha256": binary_hashes,
         "skip_build": args.skip_build,
+        "aa_preflight": aa_preflight,
     }
     result["metadata"] = benchmark.collect_metadata(config)
     persist_result(result, args.json, args.markdown)

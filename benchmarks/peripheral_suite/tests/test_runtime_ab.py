@@ -1,8 +1,10 @@
+import datetime
 import importlib.util
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 REPO = Path(__file__).resolve().parents[3]
@@ -41,6 +43,30 @@ class RuntimeABTests(unittest.TestCase):
     def hashes():
         return {"old": "a" * 64, "new": "b" * 64}
 
+    @staticmethod
+    def aa_artifact(now, **overrides):
+        artifact = {
+            "status": "passed",
+            "binary_sha256": "b" * 64,
+            "measured_pairs": 20,
+            "metadata": {
+                "timestamp_utc": now.isoformat(),
+                "config": {"iterations": 10_000},
+            },
+        }
+        for key, value in overrides.items():
+            if key == "iterations":
+                artifact["metadata"]["config"]["iterations"] = value
+            elif key == "timestamp_utc":
+                artifact["metadata"]["timestamp_utc"] = value
+            else:
+                artifact[key] = value
+        return artifact
+
+    @staticmethod
+    def write_artifact(path, artifact):
+        path.write_text(json.dumps(artifact), encoding="utf-8")
+
     def test_exact_balanced_adjacent_ordering(self):
         sample, calls = self.runner(lambda run: 1.0)
         result = RUNTIME_AB.run_runtime_comparison(
@@ -69,6 +95,206 @@ class RuntimeABTests(unittest.TestCase):
         self.assertEqual(
             sum(item["pair_order"] == ["new", "old"] for item in old_samples),
             8,
+        )
+
+    def test_valid_aa_preflight_records_artifact_evidence(self):
+        now = datetime.datetime(2026, 7, 11, 17, 0, tzinfo=datetime.timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "aa.json"
+            self.write_artifact(path, self.aa_artifact(now))
+            preflight = RUNTIME_AB.validate_aa_preflight(
+                path, 10_000, "b" * 64, now=now
+            )
+
+        self.assertEqual(preflight["artifact_path"], str(path))
+        self.assertEqual(preflight["artifact_status"], "passed")
+        self.assertEqual(preflight["artifact_timestamp_utc"], now.isoformat())
+        self.assertEqual(preflight["artifact_binary_sha256"], "b" * 64)
+        self.assertEqual(preflight["artifact_iterations"], 10_000)
+        self.assertEqual(preflight["artifact_measured_pairs"], 20)
+        self.assertEqual(len(preflight["artifact_sha256"]), 64)
+        self.assertEqual(preflight["artifact_age_seconds"], 0.0)
+
+    def test_exact_thirty_minute_aa_age_is_accepted(self):
+        now = datetime.datetime(2026, 7, 11, 17, 0, tzinfo=datetime.timezone.utc)
+        timestamp = now - datetime.timedelta(minutes=30)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "aa.json"
+            self.write_artifact(path, self.aa_artifact(timestamp))
+            preflight = RUNTIME_AB.validate_aa_preflight(
+                path, 10_000, "b" * 64, now=now
+            )
+        self.assertEqual(preflight["artifact_age_seconds"], 1800.0)
+
+    def test_aa_preflight_rejects_mismatch_stale_and_malformed_cases(self):
+        now = datetime.datetime(2026, 7, 11, 17, 0, tzinfo=datetime.timezone.utc)
+        cases = {
+            "status": (self.aa_artifact(now, status="failed"), "status"),
+            "binary": (
+                self.aa_artifact(now, binary_sha256="c" * 64),
+                "binary SHA256",
+            ),
+            "iterations": (self.aa_artifact(now, iterations=9_999), "iterations"),
+            "pairs": (self.aa_artifact(now, measured_pairs=19), "measured_pairs"),
+            "timestamp": (
+                self.aa_artifact(now, timestamp_utc="not-a-timestamp"),
+                "timestamp is malformed",
+            ),
+            "naive timestamp": (
+                self.aa_artifact(now, timestamp_utc="2026-07-11T17:00:00"),
+                "UTC offset",
+            ),
+            "stale": (
+                self.aa_artifact(now - datetime.timedelta(minutes=30, microseconds=1)),
+                "older than 30 minutes",
+            ),
+            "future": (
+                self.aa_artifact(now + datetime.timedelta(microseconds=1)),
+                "in the future",
+            ),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "aa.json"
+            for name, (artifact, message) in cases.items():
+                with self.subTest(name=name):
+                    self.write_artifact(path, artifact)
+                    with self.assertRaisesRegex(RUNTIME_AB.AAPreflightError, message):
+                        RUNTIME_AB.validate_aa_preflight(
+                            path, 10_000, "b" * 64, now=now
+                        )
+
+    def test_aa_preflight_rejects_missing_and_malformed_json(self):
+        now = datetime.datetime(2026, 7, 11, 17, 0, tzinfo=datetime.timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "aa.json"
+            with self.assertRaisesRegex(RUNTIME_AB.AAPreflightError, "cannot read"):
+                RUNTIME_AB.validate_aa_preflight(
+                    path, 10_000, "b" * 64, now=now
+                )
+            path.write_text("{broken", encoding="utf-8")
+            with self.assertRaisesRegex(RUNTIME_AB.AAPreflightError, "malformed JSON"):
+                RUNTIME_AB.validate_aa_preflight(
+                    path, 10_000, "b" * 64, now=now
+                )
+
+    def test_cli_aa_artifact_default_and_override(self):
+        self.assertEqual(
+            RUNTIME_AB._parse_args([]).aa_artifact,
+            RUNTIME_AB.DEFAULT_AA_ARTIFACT,
+        )
+        self.assertEqual(
+            RUNTIME_AB._parse_args(["--aa-artifact", "custom-aa.json"]).aa_artifact,
+            Path("custom-aa.json"),
+        )
+
+    def test_main_persists_preflight_refusal_without_sampling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            old_binary = directory / "old"
+            new_binary = directory / "new"
+            old_binary.touch()
+            new_binary.touch()
+            aa_path = directory / "aa.json"
+            aa_path.write_text("{broken", encoding="utf-8")
+            result_path = directory / "result.json"
+            markdown_path = directory / "result.md"
+            journal_path = directory / "result.jsonl"
+            argv = [
+                "--skip-build",
+                "--old-binary", str(old_binary),
+                "--new-binary", str(new_binary),
+                "--aa-artifact", str(aa_path),
+                "--json", str(result_path),
+                "--markdown", str(markdown_path),
+                "--journal", str(journal_path),
+                "--iters", "10000",
+            ]
+            evidence = {"build_provenance": {"binary_sha256": "a" * 64}}
+            with (
+                mock.patch.object(RUNTIME_AB, "load_source_evidence", return_value=evidence),
+                mock.patch.object(
+                    RUNTIME_AB,
+                    "_sha256",
+                    side_effect=lambda path: "a" * 64 if path == old_binary else "b" * 64,
+                ),
+                mock.patch.object(RUNTIME_AB, "run_runtime_comparison") as comparison,
+                mock.patch.object(
+                    RUNTIME_AB.benchmark,
+                    "collect_metadata",
+                    side_effect=lambda config: {"config": config},
+                ),
+                mock.patch.object(RUNTIME_AB, "persist_result") as persist,
+            ):
+                exit_code = RUNTIME_AB.main(argv)
+
+        self.assertEqual(exit_code, 1)
+        comparison.assert_not_called()
+        persisted = persist.call_args.args[0]
+        self.assertEqual(persisted["status"], "invalid_environment")
+        self.assertEqual(persisted["measured_pairs"], 0)
+        self.assertEqual(persisted["aa_preflight"]["artifact_path"], str(aa_path))
+        self.assertIsNotNone(persisted["aa_preflight"]["artifact_sha256"])
+        self.assertEqual(
+            persisted["metadata"]["config"]["aa_preflight"],
+            persisted["aa_preflight"],
+        )
+
+    def test_main_samples_after_valid_preflight_and_records_it(self):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            old_binary = directory / "old"
+            new_binary = directory / "new"
+            old_binary.touch()
+            new_binary.touch()
+            aa_path = directory / "aa.json"
+            self.write_artifact(aa_path, self.aa_artifact(now))
+            argv = [
+                "--skip-build",
+                "--old-binary", str(old_binary),
+                "--new-binary", str(new_binary),
+                "--aa-artifact", str(aa_path),
+                "--json", str(directory / "result.json"),
+                "--markdown", str(directory / "result.md"),
+                "--journal", str(directory / "result.jsonl"),
+                "--iters", "10000",
+            ]
+            evidence = {"build_provenance": {"binary_sha256": "a" * 64}}
+            comparison_result = {
+                "status": "no_material_regression",
+                "measured_pairs": 16,
+                "extra_batch_collected": False,
+            }
+            with (
+                mock.patch.object(RUNTIME_AB, "load_source_evidence", return_value=evidence),
+                mock.patch.object(
+                    RUNTIME_AB,
+                    "_sha256",
+                    side_effect=lambda path: "a" * 64 if path == old_binary else "b" * 64,
+                ),
+                mock.patch.object(
+                    RUNTIME_AB,
+                    "run_runtime_comparison",
+                    return_value=comparison_result,
+                ) as comparison,
+                mock.patch.object(
+                    RUNTIME_AB.benchmark,
+                    "collect_metadata",
+                    side_effect=lambda config: {"config": config},
+                ),
+                mock.patch.object(RUNTIME_AB, "persist_result") as persist,
+                mock.patch.object(RUNTIME_AB, "render_markdown", return_value="ok\n"),
+            ):
+                exit_code = RUNTIME_AB.main(argv)
+
+        self.assertEqual(exit_code, 0)
+        comparison.assert_called_once()
+        persisted = persist.call_args.args[0]
+        self.assertEqual(persisted["aa_preflight"]["artifact_status"], "passed")
+        self.assertEqual(persisted["aa_preflight"]["artifact_path"], str(aa_path))
+        self.assertEqual(
+            persisted["metadata"]["config"]["aa_preflight"],
+            persisted["aa_preflight"],
         )
 
     def test_workload_check_covers_counts_cycles_failures_and_identity(self):
