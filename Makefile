@@ -25,6 +25,8 @@ PERIPHERAL_SUITE_BUILD_DIR := $(BUILD_DIR)/benchmarks/peripheral_suite
 PERIPHERAL_SUITE_VPI_OBJ_DIR := $(PERIPHERAL_SUITE_BUILD_DIR)/cpp_vpi_obj
 PERIPHERAL_SUITE_SV_OBJ_DIR := $(PERIPHERAL_SUITE_BUILD_DIR)/pure_sv_obj
 PERIPHERAL_SUITE_DPI_OBJ_DIR := $(PERIPHERAL_SUITE_BUILD_DIR)/cpp_dpi_obj
+PERIPHERAL_SUITE_RUNTIME_OLD_ROOT := benchmarks/diagnostics/runtime_old
+PERIPHERAL_SUITE_RUNTIME_OLD_OBJ_DIR := $(BUILD_DIR)/diagnostics/runtime_old_obj
 PERIPHERAL_SUITE_DPI_MANIFEST := benchmarks/peripheral_suite/cpp_dpi/peripheral_suite.dpi.json
 PERIPHERAL_SUITE_DPI_GENERATOR := cpptb/codegen/generate_dpi_bindings.py
 AUTHORING_CORE_DIR := benchmarks/authoring_core
@@ -93,7 +95,7 @@ SDKROOT := $(shell xcrun --show-sdk-path)
 LIBCXX_INC := $(SDKROOT)/usr/include/c++/v1
 CXX ?= clang++
 
-.PHONY: all run vpi-run cpp-vpi-run cpp-coro-runtime-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpp-dpi-multiclock-codegen cpp-dpi-multiclock-codegen-check cpp-dpi-multiclock-build cpp-dpi-multiclock-run cpp-dpi-multiclock-sv-build cpp-dpi-multiclock-sv-run peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark clean
+.PHONY: all run vpi-run cpp-vpi-run cpp-coro-runtime-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpp-dpi-multiclock-codegen cpp-dpi-multiclock-codegen-check cpp-dpi-multiclock-build cpp-dpi-multiclock-run cpp-dpi-multiclock-sv-build cpp-dpi-multiclock-sv-run peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run peripheral-suite-runtime-old-diagnostic-build authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark clean
 
 all: $(BUILD_DIR)/counter_driver
 
@@ -446,6 +448,37 @@ peripheral-suite-dpi-build: $(PERIPHERAL_SUITE_DPI_OBJ_DIR)/Vdpi_peripheral_suit
 
 peripheral-suite-dpi-run: $(PERIPHERAL_SUITE_DPI_OBJ_DIR)/Vdpi_peripheral_suite
 	$(PERIPHERAL_SUITE_DPI_OBJ_DIR)/Vdpi_peripheral_suite +PERIPHERAL_SUITE_ITERS=$${PERIPHERAL_SUITE_ITERS:-1000}
+
+$(PERIPHERAL_SUITE_RUNTIME_OLD_OBJ_DIR)/Vdpi_peripheral_suite: $(PERIPHERAL_SUITE_CORE_RTL) \
+		benchmarks/peripheral_suite/cpp_dpi/framework/dpi_transport.cpp \
+		benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_bench.cpp \
+		benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_bench.hpp \
+		$(PERIPHERAL_SUITE_RUNTIME_OLD_ROOT)/benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite.hpp \
+		$(PERIPHERAL_SUITE_RUNTIME_OLD_ROOT)/benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_fixture.cpp \
+		$(PERIPHERAL_SUITE_RUNTIME_OLD_ROOT)/benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_fixture.hpp \
+		$(PERIPHERAL_SUITE_RUNTIME_OLD_ROOT)/benchmarks/peripheral_suite/cpp_dpi/testbench.cpp \
+		$(PERIPHERAL_SUITE_RUNTIME_OLD_ROOT)/cpptb/coro_runtime.hpp \
+		cpptb/dpi_runtime.hpp cpptb/test_result.hpp
+	@test -f benchmarks/peripheral_suite/cpp_dpi/generated/dpi_peripheral_suite.sv
+	@test -f benchmarks/peripheral_suite/cpp_dpi/generated/peripheral_suite_dut.hpp
+	@test -f benchmarks/peripheral_suite/cpp_dpi/generated/peripheral_suite_binding.hpp
+	mkdir -p $(PERIPHERAL_SUITE_RUNTIME_OLD_OBJ_DIR)
+	verilator --binary --timing \
+		--no-sched-zero-delay \
+		-Wno-MULTIDRIVEN -Wno-TIMESCALEMOD -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND \
+		-Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
+		-Ibenchmarks/peripheral_suite/rtl \
+		-CFLAGS -I$(CURDIR)/$(PERIPHERAL_SUITE_RUNTIME_OLD_ROOT) \
+		-CFLAGS -I$(CURDIR) \
+		--Mdir $(PERIPHERAL_SUITE_RUNTIME_OLD_OBJ_DIR) \
+		--top-module dpi_peripheral_suite \
+		$(PERIPHERAL_SUITE_DPI_RTL) \
+		benchmarks/peripheral_suite/cpp_dpi/framework/dpi_transport.cpp \
+		benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_bench.cpp \
+		$(PERIPHERAL_SUITE_RUNTIME_OLD_ROOT)/benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_fixture.cpp \
+		$(PERIPHERAL_SUITE_RUNTIME_OLD_ROOT)/benchmarks/peripheral_suite/cpp_dpi/testbench.cpp
+
+peripheral-suite-runtime-old-diagnostic-build: $(PERIPHERAL_SUITE_RUNTIME_OLD_OBJ_DIR)/Vdpi_peripheral_suite
 
 $(AUTHORING_CORE_DPI_CODEGEN_STAMP): $(CPPTB_CODEGEN_SOURCES) \
 		$(AUTHORING_CORE_DPI_MANIFEST) $(AUTHORING_CORE_RTL)
