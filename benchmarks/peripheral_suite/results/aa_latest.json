@@ -1,0 +1,941 @@
+{
+  "status": "passed",
+  "requested_pairs": 20,
+  "measured_pairs": 20,
+  "extra_batch_collected": false,
+  "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/peripheral_suite/cpp_dpi_obj/Vdpi_peripheral_suite",
+  "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+  "warmup_samples": [
+    {
+      "run": 0,
+      "spawn_mode": "tracked",
+      "internal_wall_ms": 1620.021,
+      "process_wall_ms": 1626.4144578017294,
+      "checks": 4608792,
+      "sim_cycles": 552514,
+      "failures": 0,
+      "label": "A",
+      "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+      "sequence_index": 0,
+      "slot": 1,
+      "pair_order": [
+        "A",
+        "B"
+      ],
+      "requested_pair_count": 20,
+      "measured_pair_count": 0,
+      "warmup": true
+    },
+    {
+      "run": 0,
+      "spawn_mode": "tracked",
+      "internal_wall_ms": 1875.936,
+      "process_wall_ms": 1883.0790421925485,
+      "checks": 4608792,
+      "sim_cycles": 552514,
+      "failures": 0,
+      "label": "B",
+      "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+      "sequence_index": 0,
+      "slot": 2,
+      "pair_order": [
+        "A",
+        "B"
+      ],
+      "requested_pair_count": 20,
+      "measured_pair_count": 0,
+      "warmup": true
+    }
+  ],
+  "A": {
+    "label": "A",
+    "runs": 20,
+    "process_wall_ms_median": 1395.0982296373695,
+    "samples": [
+      {
+        "run": 1,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1704.335,
+        "process_wall_ms": 1709.439625032246,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 1,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 0
+      },
+      {
+        "run": 2,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1712.326,
+        "process_wall_ms": 1720.67187493667,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 2,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 2
+      },
+      {
+        "run": 3,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1696.195,
+        "process_wall_ms": 1703.3504582941532,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 3,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 2
+      },
+      {
+        "run": 4,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1331.245,
+        "process_wall_ms": 1335.7702498324215,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 4,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 4
+      },
+      {
+        "run": 5,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1419.615,
+        "process_wall_ms": 1424.4094998575747,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 5,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 4
+      },
+      {
+        "run": 6,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1406.941,
+        "process_wall_ms": 1412.1067919768393,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 6,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 6
+      },
+      {
+        "run": 7,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1563.408,
+        "process_wall_ms": 1568.3528329245746,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 7,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 6
+      },
+      {
+        "run": 8,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1354.753,
+        "process_wall_ms": 1359.9941250868142,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 8,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 8
+      },
+      {
+        "run": 9,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1361.741,
+        "process_wall_ms": 1367.1150831505656,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 9,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 8
+      },
+      {
+        "run": 10,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1417.488,
+        "process_wall_ms": 1423.1142909266055,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 10,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 10
+      },
+      {
+        "run": 11,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1354.764,
+        "process_wall_ms": 1359.5557920634747,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 11,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 10
+      },
+      {
+        "run": 12,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1399.054,
+        "process_wall_ms": 1405.2007091231644,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 12,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 12
+      },
+      {
+        "run": 13,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1365.69,
+        "process_wall_ms": 1372.8668340481818,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 13,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 12
+      },
+      {
+        "run": 14,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1371.048,
+        "process_wall_ms": 1376.2497920542955,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 14,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 14
+      },
+      {
+        "run": 15,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1418.012,
+        "process_wall_ms": 1423.0099166743457,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 15,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 14
+      },
+      {
+        "run": 16,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1379.417,
+        "process_wall_ms": 1384.9957501515746,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 16,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 16
+      },
+      {
+        "run": 17,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1339.586,
+        "process_wall_ms": 1344.277708325535,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 17,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 16
+      },
+      {
+        "run": 18,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1367.107,
+        "process_wall_ms": 1372.5007912144065,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 18,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 18
+      },
+      {
+        "run": 19,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1317.649,
+        "process_wall_ms": 1322.425584308803,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 19,
+        "slot": 1,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 18
+      },
+      {
+        "run": 20,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1403.671,
+        "process_wall_ms": 1409.545499831438,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "A",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 20,
+        "slot": 2,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 20
+      }
+    ],
+    "internal_wall_ms_median": 1389.2355
+  },
+  "B": {
+    "label": "B",
+    "runs": 20,
+    "process_wall_ms_median": 1374.1806873586029,
+    "samples": [
+      {
+        "run": 1,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1722.619,
+        "process_wall_ms": 1729.04233308509,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 1,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 1
+      },
+      {
+        "run": 2,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1808.218,
+        "process_wall_ms": 1814.988958183676,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 2,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 1
+      },
+      {
+        "run": 3,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1316.131,
+        "process_wall_ms": 1321.6157499700785,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 3,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 3
+      },
+      {
+        "run": 4,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1420.009,
+        "process_wall_ms": 1424.8694172129035,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 4,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 3
+      },
+      {
+        "run": 5,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1327.73,
+        "process_wall_ms": 1333.8164580054581,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 5,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 5
+      },
+      {
+        "run": 6,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1344.17,
+        "process_wall_ms": 1349.4904162362218,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 6,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 5
+      },
+      {
+        "run": 7,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1403.15,
+        "process_wall_ms": 1408.7233748286963,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 7,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 7
+      },
+      {
+        "run": 8,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1453.821,
+        "process_wall_ms": 1459.0386669151485,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 8,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 7
+      },
+      {
+        "run": 9,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1393.21,
+        "process_wall_ms": 1398.0152499862015,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 9,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 9
+      },
+      {
+        "run": 10,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1339.173,
+        "process_wall_ms": 1345.1615418307483,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 10,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 9
+      },
+      {
+        "run": 11,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1365.022,
+        "process_wall_ms": 1369.8864160105586,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 11,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 11
+      },
+      {
+        "run": 12,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1292.359,
+        "process_wall_ms": 1297.2085839137435,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 12,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 11
+      },
+      {
+        "run": 13,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1373.227,
+        "process_wall_ms": 1378.4749587066472,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 13,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 13
+      },
+      {
+        "run": 14,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1400.662,
+        "process_wall_ms": 1405.8727910742164,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 14,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 13
+      },
+      {
+        "run": 15,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1768.439,
+        "process_wall_ms": 1773.7380000762641,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 15,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 15
+      },
+      {
+        "run": 16,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1339.922,
+        "process_wall_ms": 1344.9779590591788,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 16,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 15
+      },
+      {
+        "run": 17,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1325.672,
+        "process_wall_ms": 1331.468583084643,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 17,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 17
+      },
+      {
+        "run": 18,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1391.571,
+        "process_wall_ms": 1397.136999759823,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 18,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 17
+      },
+      {
+        "run": 19,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1348.721,
+        "process_wall_ms": 1354.485958814621,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 19,
+        "slot": 2,
+        "pair_order": [
+          "A",
+          "B"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 19
+      },
+      {
+        "run": 20,
+        "spawn_mode": "tracked",
+        "internal_wall_ms": 1294.329,
+        "process_wall_ms": 1299.174833111465,
+        "checks": 4608792,
+        "sim_cycles": 552514,
+        "failures": 0,
+        "label": "B",
+        "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+        "sequence_index": 20,
+        "slot": 1,
+        "pair_order": [
+          "B",
+          "A"
+        ],
+        "requested_pair_count": 20,
+        "measured_pair_count": 19
+      }
+    ],
+    "internal_wall_ms_median": 1369.1245
+  },
+  "statistics": {
+    "status": "ok",
+    "metric": "median(B_process_wall / A_process_wall by run)",
+    "ratio": 1.0058417511970799,
+    "overhead_percent": 0.5841751197079859,
+    "paired_ratios": [
+      1.011467329858154,
+      1.0548141017592196,
+      0.775891856860526,
+      1.0667024642835548,
+      0.936399580414779,
+      0.9556574785303883,
+      0.8982184016601605,
+      1.0728271835894967,
+      1.0226024620871166,
+      0.9452238308666683,
+      1.0075985288778804,
+      0.9231482559692079,
+      1.0040849735162796,
+      1.0215244348743575,
+      1.2464691772644774,
+      0.9711061993598058,
+      0.9904713697463245,
+      1.0179498683739323,
+      1.0242436133164914,
+      0.9216976913954379
+    ],
+    "one_sided_95_upper_median_bound": {
+      "confidence": 0.95,
+      "bound": 1.0226024620871166,
+      "order_statistic": 15,
+      "coverage": 0.9793052673339844,
+      "method": "exact binomial order-statistic bound"
+    },
+    "two_sided_95_median_ci": {
+      "confidence": 0.95,
+      "lower": 0.9452238308666683,
+      "upper": 1.0226024620871166,
+      "lower_order_statistic": 6,
+      "upper_order_statistic": 15,
+      "coverage": 0.9586105346679688,
+      "method": "exact central binomial order-statistic interval"
+    },
+    "direction": "inconclusive",
+    "a_first_paired_median": 1.0058417511970799,
+    "b_first_paired_median": 0.994528033866869,
+    "second_slot_over_first_slot_median": 1.0058417511970799,
+    "first_half_paired_median": 0.9835624041942712,
+    "second_half_paired_median": 1.0058417511970799,
+    "half_split_drift": 0.022651686265966697,
+    "order_stratum_gap": 0.011248009258659266
+  },
+  "metadata": {
+    "timestamp_utc": "2026-07-11T16:29:18.090311+00:00",
+    "git": {
+      "commit": "8e1ddab1759c3ec2c167a9dcee27ac49ebcdc543",
+      "dirty": true
+    },
+    "host": {
+      "hostname": "bike-trainer.local",
+      "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+      "system": "Darwin",
+      "release": "25.5.0",
+      "machine": "arm64",
+      "processor": "arm"
+    },
+    "python": {
+      "version": "3.14.6",
+      "implementation": "CPython",
+      "compiler": "Clang 21.0.0 (clang-2100.0.123.102)",
+      "executable": "/opt/homebrew/opt/python@3.14/bin/python3.14"
+    },
+    "compiler": {
+      "command": [
+        "c++",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.5.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+      "executable": "/usr/bin/c++",
+      "environment": {}
+    },
+    "verilator": {
+      "command": [
+        "verilator",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "Verilator 5.050 2026-07-01 rev vUNKNOWN-built20260701",
+      "executable": "/opt/homebrew/bin/verilator",
+      "root": "/opt/homebrew/Cellar/verilator/5.050/share/verilator",
+      "environment": {}
+    },
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "benchmarks/peripheral_suite/tools/run_aa.py",
+      "--iters",
+      "10000",
+      "--skip-build"
+    ],
+    "config": {
+      "iterations": 10000,
+      "initial_pairs": 20,
+      "extra_pairs": 20,
+      "warmups_per_label": 1,
+      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/peripheral_suite/cpp_dpi_obj/Vdpi_peripheral_suite",
+      "binary_sha256": "0ec96dd9061246694360a5987128366b9684fe4f129b8a72c3b0be29acb48518",
+      "argv": [
+        "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/peripheral_suite/cpp_dpi_obj/Vdpi_peripheral_suite",
+        "+PERIPHERAL_SUITE_ITERS=10000"
+      ],
+      "environment": "identical tracked DPI environment for A and B",
+      "skip_build": true
+    }
+  }
+}
