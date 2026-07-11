@@ -26,6 +26,9 @@ The suite covers:
   and DUT-derived clocks;
 - edge-triggered `with_timeout()` edge and timeout outcomes, including both
   stale loser directions and a same-timestamp edge/deadline tie;
+- arbitrary `Task<T>` and `Task<void>` timeouts, move-only non-default values,
+  same-deadline task completion, recursive loser cancellation, and wait
+  cleanup;
 - immediate and delayed `wait_until()` predicates with exact evaluation counts
   and timestamps;
 - sticky, reusable `Event` state, FIFO wakeup, and cancelled-waiter cleanup;
@@ -88,7 +91,17 @@ edge and deadline, the outcome depends on which callback the simulator delivers
 to the host first and is deliberately unspecified. Conformance creates such a
 tie and accepts either outcome, while requiring exactly one completion and no
 later resume from the stale loser; it does not pin simulator process order.
-General `Task` timeout is outside the v1 surface.
+
+`with_timeout(task, duration)` returns `TimeoutResult<T>`. A completed result
+supports optional-style state and value access; `TimeoutResult<void>` carries
+the same completion/timeout state without value storage. The optional-backed
+typed result supports move-only, non-default-constructible values. A timed-out
+task is recursively cancelled and reclaimed at the normal scheduler boundary,
+including nested task frames and `Process`, `Event`, or `Channel` waits. Task
+completion wins a same-timestamp race when its result exists by the time the
+parent resumes. A stale loser cannot resume later, and invalid tasks, invalid
+value access, zero durations, and sub-precision durations abort with explicit
+diagnostics.
 
 `wait_until(signal, predicate, clock)` evaluates once immediately, then once
 after each rising clock edge while the predicate is false. The delayed case
@@ -114,7 +127,8 @@ wakes are being flushed. Bounded channel behavior is outside the v1 surface.
 
 Destroying an `Event` or `Channel<T>` with an active waiter aborts with a
 diagnostic. The conformance runner checks both lifetime violations in addition
-to the existing sub-precision delay, output-write, and zero-delay failures.
+to sub-precision delay, output-write, zero-delay, and task-timeout negative
+cases.
 
 ## Process contract
 
@@ -152,7 +166,7 @@ Run the configured backend:
 make cpptb-conformance-run
 ```
 
-The exact positive result contract is 165 checks, four primary generated-clock
+The exact positive result contract is 210 checks, eight primary generated-clock
 cycles, and zero failures. These values and all negative diagnostics are
 declared in `scheduler_conformance.dpi.json`.
 

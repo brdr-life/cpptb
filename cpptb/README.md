@@ -86,8 +86,13 @@ The coroutine scheduler also supports:
   A count of zero completes immediately without suspending.
 - `co_await with_timeout(RisingEdge{signal}, 100_ns)` to race a rising,
   falling, or either-edge trigger against a `SimTime` delay. It returns
-  `TimeoutOutcome::Triggered` or `TimeoutOutcome::TimedOut`. Racing an
-  arbitrary `Task<T>` against a timeout is not supported yet.
+  `TimeoutOutcome::Triggered` or `TimeoutOutcome::TimedOut`.
+- `co_await with_timeout(operation(), 100_ns)` to race any `Task<T>` against
+  a deadline. It returns `TimeoutResult<T>`; `has_value()`, `triggered()`, and
+  boolean conversion report completion, `timed_out()` reports timeout, and
+  `value()`, `operator*`, and `operator->` access a completed value. The
+  `Task<void>` specialization provides the same state queries and a checked
+  no-op `value()` for completed operations.
 - `co_await wait_until(signal, predicate, clock)` to evaluate the predicate
   immediately and, while it is false, poll it after each rising edge of
   `clock`. The predicate receives the signal's `uint32_t` value.
@@ -110,6 +115,16 @@ wait queue is empty. Scheduler destruction and process cancellation invalidate
 their registrations, which are removed during cleanup.
 Unused `Event` and `Channel` objects do not register scheduler waits. This is a
 lifetime property of the API, not a benchmark claim about hot-path cost.
+
+`TimeoutResult<T>` stores its result in an `optional`, so `T` need only be
+move-constructible and does not need a default constructor. Calling `value()`
+after a timeout aborts with a diagnostic. A timed-out task is recursively
+cancelled, including nested tasks and waits on `Process`, `Event`, or
+`Channel`; its frames are destroyed at the existing scheduler cleanup
+boundary. If task completion and the deadline share a timestamp, completion
+wins when the task's result is present as the parent resumes. Zero and
+sub-precision timeout durations are rejected under the same rules as
+`Delay`.
 
 These pieces compose into ordinary driver, monitor, and scoreboard code:
 
@@ -243,9 +258,8 @@ directionally faster.
 
 The coroutine runtime currently targets the Verilator-hosted VPI and DPI paths
 in this repository. Signal values use `uint32_t`; four-state X/Z handling and
-signals wider than 32 bits are not part of this API. Bounded channels and
-timeouts around arbitrary tasks are also deferred. No compatibility claim is
-made for additional simulator backends.
+signals wider than 32 bits are not part of this API. Bounded channels remain
+deferred. No compatibility claim is made for additional simulator backends.
 
 The Authoring Core sources currently present under
 `benchmarks/authoring_core/` exercise typed tasks, cycle waits, edge timeouts,

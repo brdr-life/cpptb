@@ -25,6 +25,8 @@ module authoring_core_sv_tb;
   longint unsigned clock_cycles_count;
   longint unsigned timeout_count;
   longint unsigned timeout_hits;
+  longint unsigned task_timeout_count;
+  longint unsigned task_timeout_hits;
   longint unsigned wait_until_count;
   longint unsigned event_set_count;
   longint unsigned event_wait_count;
@@ -109,6 +111,49 @@ module authoring_core_sv_tb;
     check32(timed_out, iteration[0], "timeout outcome");
   endtask
 
+  task automatic delayed_task_value(input int unsigned iteration,
+                                    input bit slow,
+                                    output logic [31:0] value);
+    if (slow) #3ns;
+    else #500ps;
+    value = stimulus(iteration);
+  endtask
+
+  task automatic task_timeout_feature(input int unsigned iteration,
+                                      input logic [31:0] fallback,
+                                      output logic [31:0] value);
+    bit completed;
+    bit timed_out;
+    logic [31:0] completed_value;
+    task_timeout_count++;
+    completed = 1'b0;
+    timed_out = 1'b0;
+    completed_value = fallback;
+    if (iteration[0]) begin
+      fork : task_timeout_odd
+        begin
+          delayed_task_value(iteration, 1'b1, completed_value);
+          completed = 1'b1;
+        end
+        begin #500ps; timed_out = 1'b1; end
+      join_any
+      disable task_timeout_odd;
+    end else begin
+      fork : task_timeout_even
+        begin
+          delayed_task_value(iteration, 1'b0, completed_value);
+          completed = 1'b1;
+        end
+        begin #3ns; timed_out = 1'b1; end
+      join_any
+      disable task_timeout_even;
+    end
+    if (timed_out) task_timeout_hits++;
+    check32((timed_out == iteration[0]) &&
+            (completed == !iteration[0]), 1, "task timeout outcome");
+    value = completed ? completed_value : fallback;
+  endtask
+
   task automatic wait_until_feature();
     wait_until_count++;
     while (!req_ready) @(posedge clk);
@@ -165,6 +210,15 @@ module authoring_core_sv_tb;
     end
   endtask
 
+  task automatic run_task_timeout();
+    logic [31:0] payload;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      payload = stimulus(i);
+      task_timeout_feature(i, payload, payload);
+      transact(i, payload, 1'b0);
+    end
+  endtask
+
   task automatic run_wait_until();
     for (int unsigned i = 0; i < iterations; i++) begin
       wait_until_feature();
@@ -198,6 +252,7 @@ module authoring_core_sv_tb;
       clock_cycles_count++;
       repeat (1) @(posedge clk);
       timeout_feature(i);
+      task_timeout_feature(i, payload, payload);
       wait_until_feature();
       event_feature();
       channel_feature(payload, received);
@@ -224,6 +279,8 @@ module authoring_core_sv_tb;
     clock_cycles_count = 0;
     timeout_count = 0;
     timeout_hits = 0;
+    task_timeout_count = 0;
+    task_timeout_hits = 0;
     wait_until_count = 0;
     event_set_count = 0;
     event_wait_count = 0;
@@ -240,6 +297,7 @@ module authoring_core_sv_tb;
       "task_value": run_task_value();
       "clock_cycles": run_clock_cycles();
       "timeout": run_timeout();
+      "task_timeout": run_task_timeout();
       "wait_until": run_wait_until();
       "event": run_event();
       "channel": run_channel();
@@ -253,10 +311,11 @@ module authoring_core_sv_tb;
     end
     check32(request_count, iterations, "request count");
     check32(response_count, iterations, "response count");
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d channel_send=%0d channel_receive=%0d",
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d channel_send=%0d channel_receive=%0d",
              kernel, iterations, transactions, checks, sim_cycles, checksum,
              failures, task_value_count, clock_cycles_count, timeout_count,
-             timeout_hits, wait_until_count, event_set_count, event_wait_count,
+             timeout_hits, task_timeout_count, task_timeout_hits,
+             wait_until_count, event_set_count, event_wait_count,
              channel_send_count, channel_receive_count);
     $finish;
   end

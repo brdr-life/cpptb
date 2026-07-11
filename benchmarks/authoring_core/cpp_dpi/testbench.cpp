@@ -46,6 +46,11 @@ Task<uint32_t> authored_value(uint32_t iteration) {
     co_return stimulus(iteration);
 }
 
+Task<uint32_t> delayed_authored_value(uint32_t iteration, SimTime delay) {
+    co_await Delay{delay};
+    co_return stimulus(iteration);
+}
+
 Task<void> wait_ready_raw(Context& context) {
     while (context.dut.req_ready.get() == 0) {
         co_await RisingEdge{context.dut.clk};
@@ -88,6 +93,22 @@ Task<bool> timeout_probe(Context& context, uint32_t iteration) {
     co_return timed_out;
 }
 
+Task<uint32_t> task_timeout_probe(Context& context, uint32_t iteration,
+                                  uint32_t fallback) {
+    ++context.result.features.task_timeouts;
+    const bool expect_timeout = (iteration & 1u) != 0;
+    const auto outcome = co_await with_timeout(
+        delayed_authored_value(iteration, expect_timeout ? 3_ns : 500_ps),
+        expect_timeout ? 500_ps : 3_ns);
+    const bool valid_outcome =
+        expect_timeout ? outcome.timed_out() : outcome.triggered();
+    if (outcome.timed_out()) {
+        ++context.result.features.task_timeout_hits;
+    }
+    check(context, "task timeout outcome", valid_outcome, 1);
+    co_return outcome.triggered() ? outcome.value() : fallback;
+}
+
 Task<void> event_roundtrip(Context& context, Event& event) {
     ++context.result.features.event_set;
     event.set();
@@ -120,6 +141,7 @@ void report(Context& context) {
         "AUTHORING_CORE_RESULT mode=cpp_dpi kernel=%s iterations=%u "
         "transactions=%llu checks=%llu sim_cycles=%llu checksum=%u failures=%u "
         "task_value=%llu clock_cycles=%llu timeouts=%llu timeout_hits=%llu "
+        "task_timeouts=%llu task_timeout_hits=%llu "
         "wait_until=%llu event_set=%llu event_wait=%llu channel_send=%llu "
         "channel_receive=%llu wall_ms=%.3f\n",
         kernel_name(), context.iterations,
@@ -131,6 +153,8 @@ void report(Context& context) {
         static_cast<unsigned long long>(feature.clock_cycles),
         static_cast<unsigned long long>(feature.timeouts),
         static_cast<unsigned long long>(feature.timeout_hits),
+        static_cast<unsigned long long>(feature.task_timeouts),
+        static_cast<unsigned long long>(feature.task_timeout_hits),
         static_cast<unsigned long long>(feature.wait_until),
         static_cast<unsigned long long>(feature.event_set),
         static_cast<unsigned long long>(feature.event_wait),
@@ -171,6 +195,11 @@ Task<void> run(Context context) {
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TIMEOUT || \
     AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ALL
         static_cast<void>(co_await timeout_probe(context, iteration));
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TASK_TIMEOUT || \
+    AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ALL
+        payload = co_await task_timeout_probe(context, iteration, payload);
 #endif
 
         bool ready_already = false;

@@ -360,6 +360,124 @@ Task<void> collect_timeout(Trigger trigger, SimTime timeout, uint32_t& outcome,
     ++resumes;
 }
 
+struct TimeoutProbe {
+    uint32_t resumes = 0;
+    uint32_t frame_destructions = 0;
+};
+
+struct NonDefaultMoveOnly {
+    explicit NonDefaultMoveOnly(uint32_t value) : value(value) {}
+    NonDefaultMoveOnly(const NonDefaultMoveOnly&) = delete;
+    NonDefaultMoveOnly& operator=(const NonDefaultMoveOnly&) = delete;
+    NonDefaultMoveOnly(NonDefaultMoveOnly&&) noexcept = default;
+    NonDefaultMoveOnly& operator=(NonDefaultMoveOnly&&) noexcept = default;
+
+    uint32_t value;
+};
+
+Task<uint32_t> timed_value(SimTime delay, uint32_t value,
+                           TimeoutProbe& probe) {
+    DestructionCounter counter{&probe.frame_destructions};
+    co_await Delay{delay};
+    ++probe.resumes;
+    co_return value;
+}
+
+Task<void> timed_void(SimTime delay, TimeoutProbe& probe) {
+    DestructionCounter counter{&probe.frame_destructions};
+    co_await Delay{delay};
+    ++probe.resumes;
+}
+
+Task<NonDefaultMoveOnly> timed_move_only(TimeoutProbe& probe) {
+    DestructionCounter counter{&probe.frame_destructions};
+    co_return NonDefaultMoveOnly{91};
+}
+
+Task<uint32_t> timed_nested_leaf(SimTime delay, TimeoutProbe& probe) {
+    DestructionCounter counter{&probe.frame_destructions};
+    co_await Delay{delay};
+    ++probe.resumes;
+    co_return 17;
+}
+
+Task<uint32_t> timed_nested_parent(SimTime delay, TimeoutProbe& parent,
+                                   TimeoutProbe& leaf) {
+    DestructionCounter counter{&parent.frame_destructions};
+    co_return co_await timed_nested_leaf(delay, leaf);
+}
+
+Task<uint32_t> timed_event_value(Event& event, TimeoutProbe& probe) {
+    DestructionCounter counter{&probe.frame_destructions};
+    co_await event;
+    ++probe.resumes;
+    co_return 23;
+}
+
+Task<uint32_t> timed_channel_value(Channel<uint32_t>& channel,
+                                   TimeoutProbe& probe) {
+    DestructionCounter counter{&probe.frame_destructions};
+    const uint32_t value = co_await channel.get();
+    ++probe.resumes;
+    co_return value;
+}
+
+Task<uint32_t> timed_process_value(Process process, TimeoutProbe& probe) {
+    DestructionCounter counter{&probe.frame_destructions};
+    co_await process;
+    ++probe.resumes;
+    co_return 29;
+}
+
+Task<void> collect_timed_value(Task<uint32_t> task, SimTime timeout,
+                               uint32_t& completed, uint32_t& timed_out,
+                               uint32_t& value, uint32_t& continuations) {
+    auto result = co_await with_timeout(std::move(task), timeout);
+    completed = result.completed() ? 1 : 0;
+    timed_out = result.timed_out() ? 1 : 0;
+    if (result) value = result.value();
+    ++continuations;
+}
+
+Task<void> collect_timed_void(Task<void> task, SimTime timeout,
+                              uint32_t& completed, uint32_t& timed_out,
+                              uint32_t& continuations) {
+    auto result = co_await with_timeout(std::move(task), timeout);
+    completed = result.has_value() ? 1 : 0;
+    timed_out = result.timed_out() ? 1 : 0;
+    if (result) result.value();
+    ++continuations;
+}
+
+Task<void> collect_timed_move_only(TimeoutProbe& probe, uint32_t& value,
+                                   uint32_t& continuations) {
+    auto result = co_await with_timeout(timed_move_only(probe), 1_ns);
+    if (result) value = std::move(result).value().value;
+    ++continuations;
+}
+
+Task<void> invalid_timed_task() {
+    static_cast<void>(co_await with_timeout(Task<uint32_t>{}, 1_ns));
+}
+
+Task<void> invalid_timed_value_access() {
+    TimeoutProbe probe;
+    auto result = co_await with_timeout(timed_value(2_ns, 1, probe), 1_ns);
+    static_cast<void>(result.value());
+}
+
+Task<void> zero_task_timeout() {
+    TimeoutProbe probe;
+    static_cast<void>(
+        co_await with_timeout(timed_value(1_ns, 1, probe), 0_ns));
+}
+
+Task<void> subprecision_task_timeout() {
+    TimeoutProbe probe;
+    static_cast<void>(
+        co_await with_timeout(timed_value(1_ps, 1, probe), 1_fs));
+}
+
 struct SignalValues {
     std::array<uint32_t, 4> values{};
 };
@@ -508,6 +626,27 @@ void trigger_subprecision_delay_wait() {
     tb.spawn_detached(subprecision_delay_wait());
 }
 
+void trigger_invalid_timed_task() {
+    Testbench tb;
+    tb.spawn_detached(invalid_timed_task());
+}
+
+void trigger_invalid_timed_value_access() {
+    Testbench tb;
+    tb.spawn_detached(invalid_timed_value_access());
+    tb.set_time(1);
+}
+
+void trigger_zero_task_timeout() {
+    Testbench tb;
+    tb.spawn_detached(zero_task_timeout());
+}
+
+void trigger_subprecision_task_timeout() {
+    Testbench tb{1_ps};
+    tb.spawn_detached(subprecision_task_timeout());
+}
+
 bool expect(const char* label, uint32_t actual, uint32_t expected) {
     if (actual == expected) return true;
     std::fprintf(stderr, "%s: got %u expected %u\n", label, actual, expected);
@@ -573,6 +712,8 @@ int main() {
                   "hot coroutine state must remain compact");
     static_assert(sizeof(TaskPromise<void>) == sizeof(TaskPromiseBase),
                   "Task<void> must not carry typed result storage");
+    static_assert(!std::default_initializable<NonDefaultMoveOnly>);
+    static_assert(std::move_constructible<NonDefaultMoveOnly>);
     static_assert(1_fs == SimTime{1});
     static_assert(1_ps == SimTime{1'000});
     static_assert(1_ns == SimTime{1'000'000});
@@ -706,6 +847,281 @@ int main() {
                          tb.has_falling_edge_waiters() ? 1 : 0, 0);
         passed &= expect("with_timeout tie time-then-edge done",
                          tb.done() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        TimeoutProbe value_probe;
+        TimeoutProbe void_probe;
+        TimeoutProbe move_probe;
+        uint32_t value_completed = 0;
+        uint32_t value_timed_out = 0;
+        uint32_t value = 0;
+        uint32_t value_continuations = 0;
+        uint32_t void_completed = 0;
+        uint32_t void_timed_out = 0;
+        uint32_t void_continuations = 0;
+        uint32_t move_value = 0;
+        uint32_t move_continuations = 0;
+
+        tb.spawn_detached(collect_timed_value(
+            timed_value(2_ns, 42, value_probe), 5_ns, value_completed,
+            value_timed_out, value, value_continuations));
+        tb.spawn_detached(collect_timed_void(
+            timed_void(1_ns, void_probe), 5_ns, void_completed,
+            void_timed_out, void_continuations));
+        tb.spawn_detached(collect_timed_move_only(
+            move_probe, move_value, move_continuations));
+        tb.set_time(1);
+        tb.set_time(2);
+        tb.set_time(5);
+
+        passed &= expect("Task<T> timeout completion state", value_completed,
+                         1);
+        passed &= expect("Task<T> timeout not timed out", value_timed_out, 0);
+        passed &= expect("Task<T> timeout value", value, 42);
+        passed &= expect("Task<T> timeout continuation exactly once",
+                         value_continuations, 1);
+        passed &= expect("Task<T> timeout child frame exactly once",
+                         value_probe.frame_destructions, 1);
+        passed &= expect("Task<void> timeout completion state", void_completed,
+                         1);
+        passed &= expect("Task<void> timeout not timed out", void_timed_out, 0);
+        passed &= expect("Task<void> timeout continuation exactly once",
+                         void_continuations, 1);
+        passed &= expect("Task<void> timeout frame exactly once",
+                         void_probe.frame_destructions, 1);
+        passed &= expect("Task timeout move-only non-default value", move_value,
+                         91);
+        passed &= expect("Task timeout move-only continuation exactly once",
+                         move_continuations, 1);
+        passed &= expect("Task timeout move-only frame exactly once",
+                         move_probe.frame_destructions, 1);
+        passed &= expect("completed Task timeout stale deadlines inactive",
+                         tb.done() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        TimeoutProbe probe;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 0;
+        uint32_t continuations = 0;
+        tb.spawn_detached(collect_timed_value(
+            timed_value(5_ns, 55, probe), 5_ns, completed, timed_out, value,
+            continuations));
+        tb.set_time(5);
+        tb.set_time(10);
+
+        passed &= expect("Task timeout same-deadline task wins", completed, 1);
+        passed &= expect("Task timeout same-deadline carries value", value, 55);
+        passed &= expect("Task timeout same-deadline not timed out", timed_out,
+                         0);
+        passed &= expect("Task timeout same-deadline resumes exactly once",
+                         continuations, 1);
+        passed &= expect("Task timeout same-deadline frame exactly once",
+                         probe.frame_destructions, 1);
+        passed &= expect("Task timeout same-deadline stale timer inactive",
+                         tb.done() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        TimeoutProbe probe;
+        TimeoutProbe void_probe;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 7;
+        uint32_t continuations = 0;
+        uint32_t void_completed = 1;
+        uint32_t void_timed_out = 0;
+        uint32_t void_continuations = 0;
+        tb.spawn_detached(collect_timed_value(
+            timed_value(10_ns, 99, probe), 3_ns, completed, timed_out, value,
+            continuations));
+        tb.spawn_detached(collect_timed_void(
+            timed_void(10_ns, void_probe), 3_ns, void_completed,
+            void_timed_out, void_continuations));
+        tb.set_time(3);
+        tb.set_time(10);
+
+        passed &= expect("Task<T> timeout loser has no value", completed, 0);
+        passed &= expect("Task<T> timeout state", timed_out, 1);
+        passed &= expect("Task<T> timeout leaves destination unchanged", value,
+                         7);
+        passed &= expect("Task<T> timeout parent resumes exactly once",
+                         continuations, 1);
+        passed &= expect("Task<T> timeout suppresses loser resume",
+                         probe.resumes, 0);
+        passed &= expect("Task<T> timeout destroys loser frame exactly once",
+                         probe.frame_destructions, 1);
+        passed &= expect("Task<T> timeout stale child deadline inactive",
+                         tb.done() ? 1 : 0, 1);
+        passed &= expect("Task<void> timeout has no completion value",
+                         void_completed, 0);
+        passed &= expect("Task<void> timeout state", void_timed_out, 1);
+        passed &= expect("Task<void> timeout parent resumes exactly once",
+                         void_continuations, 1);
+        passed &= expect("Task<void> timeout suppresses loser resume",
+                         void_probe.resumes, 0);
+        passed &= expect("Task<void> timeout destroys loser frame once",
+                         void_probe.frame_destructions, 1);
+    }
+
+    {
+        Testbench tb;
+        TimeoutProbe parent_probe;
+        TimeoutProbe leaf_probe;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 0;
+        uint32_t continuations = 0;
+        tb.spawn_detached(collect_timed_value(
+            timed_nested_parent(20_ns, parent_probe, leaf_probe), 2_ns,
+            completed, timed_out, value, continuations));
+        tb.set_time(2);
+        tb.set_time(20);
+
+        passed &= expect("nested Task timeout reports timeout", timed_out, 1);
+        passed &= expect("nested Task timeout parent destroyed once",
+                         parent_probe.frame_destructions, 1);
+        passed &= expect("nested Task timeout leaf destroyed once",
+                         leaf_probe.frame_destructions, 1);
+        passed &= expect("nested Task timeout leaf never resumes",
+                         leaf_probe.resumes, 0);
+        passed &= expect("nested Task timeout continuation exactly once",
+                         continuations, 1);
+    }
+
+    {
+        Testbench tb;
+        Event event;
+        TimeoutProbe event_probe;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 0;
+        uint32_t continuations = 0;
+        tb.spawn_detached(collect_timed_value(
+            timed_event_value(event, event_probe), 2_ns, completed, timed_out,
+            value, continuations));
+        tb.set_time(2);
+        event.set();
+
+        passed &= expect("Event task timeout reports timeout", timed_out, 1);
+        passed &= expect("Event task timeout removes waiter",
+                         event_probe.resumes, 0);
+        passed &= expect("Event task timeout destroys frame once",
+                         event_probe.frame_destructions, 1);
+        passed &= expect("Event task timeout resumes parent once",
+                         continuations, 1);
+    }
+
+    {
+        Testbench tb;
+        Channel<uint32_t> channel;
+        TimeoutProbe channel_probe;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 0;
+        uint32_t continuations = 0;
+        std::vector<uint32_t> survivor_values;
+        tb.spawn_detached(collect_timed_value(
+            timed_channel_value(channel, channel_probe), 2_ns, completed,
+            timed_out, value, continuations));
+        tb.set_time(2);
+        channel.put_nowait(44);
+        tb.spawn_detached(channel_get(channel, survivor_values));
+
+        passed &= expect("Channel task timeout reports timeout", timed_out, 1);
+        passed &= expect("Channel task timeout removes consumer",
+                         channel_probe.resumes, 0);
+        passed &= expect("Channel task timeout destroys frame once",
+                         channel_probe.frame_destructions, 1);
+        passed &= expect("Channel task timeout survivor receives one item",
+                         static_cast<uint32_t>(survivor_values.size()), 1);
+        passed &= expect("Channel task timeout preserves queued item",
+                         survivor_values.empty() ? 0 : survivor_values[0], 44);
+        passed &= expect("Channel task timeout drains cleanly",
+                         channel.empty() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        uint32_t target_resumes = 0;
+        TimeoutProbe waiter_probe;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 0;
+        uint32_t continuations = 0;
+        const auto target = tb.spawn(delayed_increment(target_resumes, 10_ns));
+        tb.spawn_detached(collect_timed_value(
+            timed_process_value(target, waiter_probe), 2_ns, completed,
+            timed_out, value, continuations));
+        tb.set_time(2);
+        tb.set_time(10);
+
+        passed &= expect("Process wait Task timeout reports timeout",
+                         timed_out, 1);
+        passed &= expect("Process wait target completes normally",
+                         target.done() && !target.cancelled() ? 1 : 0, 1);
+        passed &= expect("Process wait timeout removes stale waiter",
+                         waiter_probe.resumes, 0);
+        passed &= expect("Process wait timeout destroys frame once",
+                         waiter_probe.frame_destructions, 1);
+        passed &= expect("Process wait timeout resumes parent once",
+                         continuations, 1);
+    }
+
+    {
+        Testbench tb;
+        TimeoutProbe probe;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 0;
+        uint32_t continuations = 0;
+        const auto process = tb.spawn(collect_timed_value(
+            timed_value(20_ns, 99, probe), 50_ns, completed, timed_out, value,
+            continuations));
+        process.cancel();
+        tb.set_time(50);
+
+        passed &= expect("Process cancellation during Task timeout done",
+                         process.done() ? 1 : 0, 1);
+        passed &= expect("Process cancellation during Task timeout status",
+                         process.cancelled() ? 1 : 0, 1);
+        passed &= expect("Process cancellation suppresses timeout continuation",
+                         continuations, 0);
+        passed &= expect("Process cancellation destroys timed child once",
+                         probe.frame_destructions, 1);
+        passed &= expect("Process cancellation suppresses timed child resume",
+                         probe.resumes, 0);
+    }
+
+    {
+        Event event;
+        TimeoutProbe probe;
+        Process retained;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 0;
+        uint32_t continuations = 0;
+        {
+            Testbench tb;
+            retained = tb.spawn(collect_timed_value(
+                timed_event_value(event, probe), 50_ns, completed, timed_out,
+                value, continuations));
+        }
+        event.set();
+
+        passed &= expect("scheduler shutdown cancels Task timeout process",
+                         retained.cancelled() ? 1 : 0, 1);
+        passed &= expect("scheduler shutdown suppresses timeout continuation",
+                         continuations, 0);
+        passed &= expect("scheduler shutdown destroys timed child once",
+                         probe.frame_destructions, 1);
+        passed &= expect("scheduler shutdown cleans Event timed waiter",
+                         probe.resumes, 0);
     }
 
     {
@@ -1380,6 +1796,18 @@ int main() {
                            "delay duration must be greater than zero");
     passed &= expect_abort(
         "subprecision Delay abort", trigger_subprecision_delay_wait,
+        "delay of 1 fs is not representable at 1000 fs simulation precision");
+    passed &= expect_abort("invalid timed Task abort",
+                           trigger_invalid_timed_task,
+                           "with_timeout received an invalid task");
+    passed &= expect_abort("timed-out Task value access abort",
+                           trigger_invalid_timed_value_access,
+                           "timed-out task has no value");
+    passed &= expect_abort("zero Task timeout abort",
+                           trigger_zero_task_timeout,
+                           "delay duration must be greater than zero");
+    passed &= expect_abort(
+        "subprecision Task timeout abort", trigger_subprecision_task_timeout,
         "delay of 1 fs is not representable at 1000 fs simulation precision");
     passed &= expect_abort("typed Task exception abort",
                            trigger_typed_task_exception,

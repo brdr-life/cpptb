@@ -634,6 +634,232 @@ Task<void> with_timeout_tie_contract(ConformanceTb tb) {
                  1);
 }
 
+struct TaskTimeoutProbe {
+    uint32_t resumes = 0;
+    uint32_t frame_destructions = 0;
+};
+
+Task<uint32_t> timeout_value(SimTime delay, uint32_t value,
+                             TaskTimeoutProbe& probe) {
+    FrameCounter counter{&probe.frame_destructions};
+    co_await Delay{delay};
+    ++probe.resumes;
+    co_return value;
+}
+
+Task<void> timeout_void(SimTime delay, TaskTimeoutProbe& probe) {
+    FrameCounter counter{&probe.frame_destructions};
+    co_await Delay{delay};
+    ++probe.resumes;
+}
+
+Task<uint32_t> timeout_nested_leaf(SimTime delay, TaskTimeoutProbe& probe) {
+    FrameCounter counter{&probe.frame_destructions};
+    co_await Delay{delay};
+    ++probe.resumes;
+    co_return 0x17;
+}
+
+Task<uint32_t> timeout_nested_parent(SimTime delay, TaskTimeoutProbe& parent,
+                                     TaskTimeoutProbe& leaf) {
+    FrameCounter counter{&parent.frame_destructions};
+    co_return co_await timeout_nested_leaf(delay, leaf);
+}
+
+Task<uint32_t> timeout_event_value(Event& event, TaskTimeoutProbe& probe) {
+    FrameCounter counter{&probe.frame_destructions};
+    co_await event;
+    ++probe.resumes;
+    co_return 0x23;
+}
+
+Task<uint32_t> timeout_channel_value(Channel<uint32_t>& channel,
+                                     TaskTimeoutProbe& probe) {
+    FrameCounter counter{&probe.frame_destructions};
+    const uint32_t value = co_await channel.get();
+    ++probe.resumes;
+    co_return value;
+}
+
+Task<void> timeout_process_target(uint32_t& resumes) {
+    co_await Delay{10_ns};
+    ++resumes;
+}
+
+Task<uint32_t> timeout_process_value(coro::Process process,
+                                     TaskTimeoutProbe& probe) {
+    FrameCounter counter{&probe.frame_destructions};
+    co_await process;
+    ++probe.resumes;
+    co_return 0x29;
+}
+
+Task<void> cancellable_timeout_process(TaskTimeoutProbe& probe,
+                                       uint32_t& continuations) {
+    static_cast<void>(
+        co_await with_timeout(timeout_value(20_ns, 1, probe), 30_ns));
+    ++continuations;
+}
+
+Task<void> task_with_timeout_contract(ConformanceTb tb) {
+    TaskTimeoutProbe value_probe;
+    auto value = co_await with_timeout(timeout_value(1_ps, 0x42, value_probe),
+                                       3_ps);
+    tb.expect_true("Task<T> timeout completion has value", value.has_value());
+    tb.expect_true("Task<T> timeout completion is not timeout",
+                   !value.timed_out());
+    tb.expect_eq("Task<T> timeout completed value", value.value(), 0x42);
+    tb.expect_eq("Task<T> timeout completed child resumes once",
+                 value_probe.resumes, 1);
+    tb.expect_eq("Task<T> timeout completed frame reclaimed promptly",
+                 value_probe.frame_destructions, 1);
+
+    TaskTimeoutProbe void_probe;
+    auto void_result =
+        co_await with_timeout(timeout_void(1_ps, void_probe), 3_ps);
+    tb.expect_true("Task<void> timeout completion state",
+                   void_result.completed());
+    void_result.value();
+    tb.expect_eq("Task<void> timeout child resumes once", void_probe.resumes,
+                 1);
+    tb.expect_eq("Task<void> timeout frame reclaimed promptly",
+                 void_probe.frame_destructions, 1);
+
+    TaskTimeoutProbe void_timeout_probe;
+    auto void_timeout = co_await with_timeout(
+        timeout_void(10_ns, void_timeout_probe), 2_ps);
+    tb.expect_true("Task<void> timeout state", void_timeout.timed_out());
+    tb.expect_eq("Task<void> timeout loser never resumes",
+                 void_timeout_probe.resumes, 0);
+    tb.expect_eq("Task<void> timeout loser waits for cleanup boundary",
+                 void_timeout_probe.frame_destructions, 0);
+    co_await Delay{1_ps};
+    tb.expect_eq("Task<void> timeout loser destroyed once",
+                 void_timeout_probe.frame_destructions, 1);
+
+    TaskTimeoutProbe move_probe;
+    uint32_t move_result_destructions = 0;
+    {
+        auto move_result = co_await with_timeout(
+            typed_move_only_value(move_probe.frame_destructions,
+                                  move_result_destructions),
+            3_ps);
+        tb.expect_true("Task timeout move-only result completes",
+                       move_result.has_value());
+        tb.expect_eq("Task timeout move-only non-default value",
+                     move_result->value, 0x55);
+        tb.expect_eq("Task timeout move-only frame reclaimed promptly",
+                     move_probe.frame_destructions, 1);
+        tb.expect_eq("Task timeout moved result remains alive",
+                     move_result_destructions, 0);
+    }
+    tb.expect_eq("Task timeout moved result destroyed exactly once",
+                 move_result_destructions, 1);
+
+    TaskTimeoutProbe tie_probe;
+    auto tie = co_await with_timeout(timeout_value(2_ps, 0x55, tie_probe),
+                                     2_ps);
+    tb.expect_true("Task timeout same-deadline completed task wins",
+                   tie.has_value());
+    tb.expect_eq("Task timeout same-deadline value", tie.value(), 0x55);
+    tb.expect_eq("Task timeout same-deadline resumes child once",
+                 tie_probe.resumes, 1);
+    tb.expect_eq("Task timeout same-deadline destroys frame once",
+                 tie_probe.frame_destructions, 1);
+
+    TaskTimeoutProbe parent_probe;
+    TaskTimeoutProbe leaf_probe;
+    auto nested = co_await with_timeout(
+        timeout_nested_parent(20_ns, parent_probe, leaf_probe), 2_ps);
+    tb.expect_true("nested Task timeout reports timeout", nested.timed_out());
+    tb.expect_eq("Task timeout loser destruction waits for boundary",
+                 parent_probe.frame_destructions, 0);
+    co_await Delay{1_ps};
+    tb.expect_eq("nested Task timeout parent destroyed once",
+                 parent_probe.frame_destructions, 1);
+    tb.expect_eq("nested Task timeout leaf destroyed once",
+                 leaf_probe.frame_destructions, 1);
+    tb.expect_eq("nested Task timeout leaf never resumes", leaf_probe.resumes,
+                 0);
+
+    Event event;
+    TaskTimeoutProbe event_probe;
+    auto event_result = co_await with_timeout(
+        timeout_event_value(event, event_probe), 2_ps);
+    tb.expect_true("Event Task timeout reports timeout",
+                   event_result.timed_out());
+    co_await Delay{1_ps};
+    event.set();
+    tb.expect_eq("Event Task timeout removes stale waiter",
+                 event_probe.resumes, 0);
+    tb.expect_eq("Event Task timeout destroys frame once",
+                 event_probe.frame_destructions, 1);
+
+    Channel<uint32_t> channel;
+    TaskTimeoutProbe channel_probe;
+    auto channel_result = co_await with_timeout(
+        timeout_channel_value(channel, channel_probe), 2_ps);
+    tb.expect_true("Channel Task timeout reports timeout",
+                   channel_result.timed_out());
+    co_await Delay{1_ps};
+    channel.put_nowait(0x66);
+    tb.expect_eq("Channel Task timeout preserves item",
+                 co_await channel.get(), 0x66);
+    tb.expect_eq("Channel Task timeout removes stale consumer",
+                 channel_probe.resumes, 0);
+    tb.expect_eq("Channel Task timeout destroys frame once",
+                 channel_probe.frame_destructions, 1);
+
+    uint32_t process_target_resumes = 0;
+    const auto process_target = tb.spawn(
+        timeout_process_target(process_target_resumes));
+    TaskTimeoutProbe process_wait_probe;
+    auto process_wait_result = co_await with_timeout(
+        timeout_process_value(process_target, process_wait_probe), 2_ps);
+    tb.expect_true("Process wait Task timeout reports timeout",
+                   process_wait_result.timed_out());
+    co_await Delay{1_ps};
+    tb.expect_eq("Process wait Task timeout destroys waiter once",
+                 process_wait_probe.frame_destructions, 1);
+    tb.expect_eq("Process wait Task timeout waiter never resumes",
+                 process_wait_probe.resumes, 0);
+
+    TaskTimeoutProbe process_probe;
+    uint32_t process_continuations = 0;
+    const auto process = tb.spawn(
+        cancellable_timeout_process(process_probe, process_continuations));
+    co_await Delay{1_ps};
+    process.cancel();
+    tb.expect_true("Process Task timeout cancellation is cooperative",
+                   !process.done());
+    co_await Delay{1_ps};
+    tb.expect_true("Process Task timeout cancellation completes",
+                   process.cancelled());
+    tb.expect_eq("Process Task timeout continuation suppressed",
+                 process_continuations, 0);
+    tb.expect_eq("Process Task timeout child destroyed once",
+                 process_probe.frame_destructions, 1);
+    tb.expect_eq("Process Task timeout child never resumes",
+                 process_probe.resumes, 0);
+
+    co_await Delay{30_ns};
+    tb.expect_eq("Task timeout stale losers never resume",
+                 leaf_probe.resumes + event_probe.resumes +
+                     channel_probe.resumes + process_wait_probe.resumes +
+                     process_probe.resumes,
+                 0);
+    tb.expect_true("Process wait timeout target completes normally",
+                   process_target.done() && !process_target.cancelled());
+    tb.expect_eq("Process wait timeout target resumes once",
+                 process_target_resumes, 1);
+    tb.expect_eq("Task timeout loser frames remain exactly once",
+                 parent_probe.frame_destructions + leaf_probe.frame_destructions +
+                     event_probe.frame_destructions +
+                     channel_probe.frame_destructions +
+                     process_probe.frame_destructions,
+                 5);
+}
+
 struct PredicateProbe {
     std::array<uint64_t, 4> times{};
     std::array<uint32_t, 4> values{};
@@ -874,6 +1100,29 @@ Task<void> zero_delay_violation(ConformanceTb) {
     co_await Delay{0_ns};
 }
 
+Task<void> invalid_task_timeout_violation(ConformanceTb) {
+    static_cast<void>(co_await with_timeout(Task<uint32_t>{}, 1_ps));
+}
+
+Task<void> invalid_timeout_value_violation(ConformanceTb) {
+    TaskTimeoutProbe probe;
+    auto result =
+        co_await with_timeout(timeout_value(2_ps, 1, probe), 1_ps);
+    static_cast<void>(result.value());
+}
+
+Task<void> zero_task_timeout_violation(ConformanceTb) {
+    TaskTimeoutProbe probe;
+    static_cast<void>(
+        co_await with_timeout(timeout_value(1_ps, 1, probe), 0_ps));
+}
+
+Task<void> subprecision_task_timeout_violation(ConformanceTb) {
+    TaskTimeoutProbe probe;
+    static_cast<void>(
+        co_await with_timeout(timeout_value(1_ps, 1, probe), 1_fs));
+}
+
 }  // namespace
 
 void register_user_testbench(ConformanceTb& tb) {
@@ -886,6 +1135,22 @@ void register_user_testbench(ConformanceTb& tb) {
         }
         if (selected == "channel_active_waiter") {
             tb.sequence(channel_active_waiter_violation);
+            return;
+        }
+        if (selected == "invalid_task_timeout") {
+            tb.sequence(invalid_task_timeout_violation);
+            return;
+        }
+        if (selected == "invalid_timeout_value") {
+            tb.sequence(invalid_timeout_value_violation);
+            return;
+        }
+        if (selected == "zero_task_timeout") {
+            tb.sequence(zero_task_timeout_violation);
+            return;
+        }
+        if (selected == "subprecision_task_timeout") {
+            tb.sequence(subprecision_task_timeout_violation);
             return;
         }
     }
@@ -911,6 +1176,7 @@ void register_user_testbench(ConformanceTb& tb) {
     tb.sequence(clock_cycles_contract);
     tb.sequence(with_timeout_contract);
     tb.sequence(with_timeout_tie_contract);
+    tb.sequence(task_with_timeout_contract);
     tb.sequence(wait_until_contract);
     tb.sequence(event_contract);
     tb.sequence(channel_contract);

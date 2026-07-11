@@ -10,6 +10,7 @@ KERNELS = (
     "task_value",
     "clock_cycles",
     "timeout",
+    "task_timeout",
     "wait_until",
     "event",
     "channel",
@@ -21,6 +22,8 @@ FEATURE_FIELDS = (
     "clock_cycles",
     "timeouts",
     "timeout_hits",
+    "task_timeouts",
+    "task_timeout_hits",
     "wait_until",
     "event_set",
     "event_wait",
@@ -50,6 +53,8 @@ class ExpectedCounts:
     clock_cycles: int = 0
     timeouts: int = 0
     timeout_hits: int = 0
+    task_timeouts: int = 0
+    task_timeout_hits: int = 0
     wait_until: int = 0
     event_set: int = 0
     event_wait: int = 0
@@ -80,6 +85,11 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
     if timeouts:
         feature_checks += iterations
 
+    task_timeouts = iterations if enabled or kernel == "task_timeout" else 0
+    task_timeout_hits = iterations // 2 if task_timeouts else 0
+    if task_timeouts:
+        feature_checks += iterations
+
     wait_until = iterations if enabled or kernel == "wait_until" else 0
     if wait_until:
         feature_checks += iterations
@@ -102,6 +112,8 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
         clock_cycles=clock_cycles,
         timeouts=timeouts,
         timeout_hits=timeout_hits,
+        task_timeouts=task_timeouts,
+        task_timeout_hits=task_timeout_hits,
         wait_until=wait_until,
         event_set=event_set,
         event_wait=event_wait,

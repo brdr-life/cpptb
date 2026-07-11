@@ -18,6 +18,10 @@ import run_benchmark as runner  # noqa: E402
 import workload  # noqa: E402
 
 
+def registry_example(name="control", kernel=None, kind="authoring"):
+    return {"name": name, "kind": kind, "kernel": kernel or name}
+
+
 def sample(
     mode,
     pair,
@@ -332,17 +336,173 @@ class ComparisonTests(unittest.TestCase):
             self.assertFalse(summaries["control"]["guard"]["extra_batch_collected"])
             self.assertEqual(len(raw), 34)
 
+    def test_uncertain_kernel_is_finalized_when_a_peer_blocks_extra_sampling(self):
+        calls = []
+        fake = self.fake_runner(lambda _kernel, _pair: 1.0, calls)
+        with mock.patch.object(
+            runner,
+            "evaluate_guard",
+            side_effect=[
+                {"status": "hard_failure"},
+                {"status": "needs_extra_batch"},
+                {"status": "passed_inconclusive"},
+            ],
+        ):
+            summaries, _ = runner.run_comparison(
+                ["control", "event"], 1, 16, sample_runner=fake
+            )
+
+        self.assertEqual(summaries["control"]["guard"]["status"], "hard_failure")
+        self.assertEqual(
+            summaries["event"]["guard"]["status"], "passed_inconclusive"
+        )
+        self.assertIn("extra batch skipped", summaries["event"]["guard"]["warning"])
+
     def test_odd_pair_counts_are_rejected_before_sampling(self):
         called = mock.Mock()
         with self.assertRaisesRegex(ValueError, "even"):
             runner.run_comparison(["control"], 1, 17, sample_runner=called)
         called.assert_not_called()
+        with mock.patch.object(
+            runner, "_registry_lookup", return_value=registry_example()
+        ):
+            with self.assertRaises(SystemExit):
+                runner._parse_args(["--example", "control", "--pairs", "17"])
+            self.assertEqual(
+                runner._parse_args(["--example", "control"]).pairs, 16
+            )
+
+    def test_cli_requires_exactly_one_authoring_example(self):
         with self.assertRaises(SystemExit):
-            runner._parse_args(["--pairs", "17"])
-        self.assertEqual(runner._parse_args([]).pairs, 16)
+            runner._parse_args([])
+        with mock.patch.object(
+            runner, "_registry_lookup", return_value=registry_example()
+        ):
+            with self.assertRaises(SystemExit):
+                runner._parse_args(
+                    ["--example", "control", "--example", "timeout"]
+                )
+            with self.assertRaises(SystemExit):
+                runner._parse_args(["--example", "control,timeout"])
+            args = runner._parse_args(["--example", "control"])
+        self.assertEqual((args.example, args.kernel), ("control", "control"))
+
+    def test_direct_script_import_path_contains_repository_root(self):
+        self.assertIn(str(runner.REPO), sys.path)
+
+    def test_cli_rejects_unknown_and_integration_examples(self):
+        with mock.patch.object(runner, "_registry_lookup", return_value=None):
+            with self.assertRaises(SystemExit):
+                runner._parse_args(["--example", "missing"])
+        with mock.patch.object(
+            runner,
+            "_registry_lookup",
+            return_value=registry_example("integration", kind="integration"),
+        ):
+            with self.assertRaises(SystemExit):
+                runner._parse_args(["--example", "integration"])
+
+    def test_preflight_is_opt_in(self):
+        with mock.patch.object(
+            runner, "_registry_lookup", return_value=registry_example()
+        ):
+            self.assertFalse(
+                runner._parse_args(["--example", "control"]).with_preflight
+            )
+            self.assertTrue(
+                runner._parse_args(
+                    ["--example", "control", "--with-preflight"]
+                ).with_preflight
+            )
+
+    def test_pair_boundary_probes_wrap_every_measured_pair(self):
+        calls = []
+        probes = []
+        probe_number = 0
+
+        def probe():
+            nonlocal probe_number
+            probe_number += 1
+            return {"probe_number": probe_number}
+
+        runner.collect_batch(
+            ["task_timeout"],
+            1,
+            2,
+            1,
+            self.fake_runner(lambda _kernel, _pair: 1.0, calls),
+            environment_probes=probes,
+            pair_probe=probe,
+        )
+        self.assertEqual(
+            [(entry["pair"], entry["phase"]) for entry in probes],
+            [(1, "before"), (1, "after"), (2, "before"), (2, "after")],
+        )
+        self.assertEqual({entry["boundary_id"] for entry in probes},
+                         {"task_timeout:1", "task_timeout:2"})
+
+
+class EnvironmentTests(unittest.TestCase):
+    def test_environment_evidence_vetoes_failures_and_qualifies_passes(self):
+        invalid = {"valid": False, "reasons": ["thermal throttling"]}
+        hard = {"guard": {"status": "hard_failure", "verdict": "failed",
+                           "validity": "valid", "ratio": 1.2}}
+        passed = {"guard": {"status": "passed", "verdict": "passed",
+                             "validity": "valid", "ratio": 1.0}}
+        summaries = {"task_timeout": hard, "control": passed}
+        runner.apply_environment_validity(summaries, invalid)
+        self.assertEqual(hard["guard"]["status"], "invalid_environment")
+        self.assertTrue(hard["guard"]["environment_blocks_hard_failure"])
+        self.assertEqual(passed["guard"]["status"], "passed_inconclusive")
+        self.assertTrue(passed["guard"]["environment_limits_pass"])
+        self.assertEqual(passed["guard"]["invalid_environment_reasons"],
+                         ["thermal throttling"])
+        self.assertEqual(passed["guard"]["ratio"], 1.0)
+
+    def test_validity_detects_load_power_transition_and_thermal_limit(self):
+        probes = [
+            {
+                "load": {"normalized_load_1m": 0.5},
+                "power": {"output": "Now drawing from 'AC Power'"},
+                "thermal": {"output": "CPU_Speed_Limit = 100"},
+            },
+            {
+                "load": {"normalized_load_1m": 1.25},
+                "power": {"output": "Now drawing from 'Battery Power'"},
+                "thermal": {"output": "CPU_Scheduler_Limit = 80"},
+            },
+        ]
+        validity = runner.assess_environment_validity(probes)
+        self.assertFalse(validity["valid"])
+        self.assertEqual(validity["maximum_normalized_load_1m"], 1.25)
+        self.assertEqual(validity["minimum_cpu_thermal_limit_percent"], 80)
+        self.assertEqual(len(validity["reasons"]), 3)
+
+    def test_load_metadata_is_normalized_by_logical_cpu_count(self):
+        with (
+            mock.patch.object(runner.os, "cpu_count", return_value=4),
+            mock.patch.object(runner.os, "getloadavg", return_value=(2.0, 1.0, 0.5)),
+        ):
+            load = runner.collect_load_metadata()
+        self.assertEqual(load["normalized_load_1m"], 0.5)
+        self.assertEqual(load["normalized_load_15m"], 0.125)
 
 
 class DurabilityTests(unittest.TestCase):
+    def test_run_command_reports_child_cpu_resource_deltas(self):
+        output, metrics = runner.run_command(
+            [sys.executable, "-c", "sum(range(10000)); print('done')"],
+            include_resource_metrics=True,
+        )
+        self.assertIn("done", output)
+        self.assertGreater(metrics["process_wall_ms"], 0)
+        self.assertGreaterEqual(metrics["child_user_cpu_ms"], 0)
+        self.assertGreaterEqual(metrics["child_system_cpu_ms"], 0)
+        self.assertAlmostEqual(
+            metrics["child_cpu_ms"],
+            metrics["child_user_cpu_ms"] + metrics["child_system_cpu_ms"],
+        )
+
     def test_journal_appends_json_lines_and_fsyncs_each_sample(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "samples.jsonl"
@@ -426,7 +586,7 @@ class DurabilityTests(unittest.TestCase):
                     mock.patch.object(runner, "RESULT_DIR", result_dir),
                     mock.patch.object(runner.os, "replace", side_effect=replace),
                 ):
-                    runner._write_results(result)
+                    runner._write_results(result, result_dir)
                 self.assertEqual(len(calls), 2)
                 self.assertEqual(json.loads((result_dir / "latest.json").read_text())["status"], status)
                 self.assertIn(f"`{status}`", (result_dir / "latest.md").read_text())
@@ -463,7 +623,11 @@ class DurabilityTests(unittest.TestCase):
             metadata = {"timestamp_utc": "now", "config": {}}
             with (
                 mock.patch.object(runner, "RESULT_DIR", result_dir),
-                mock.patch.object(runner, "RAW_SAMPLE_PATH", raw_path),
+                mock.patch.object(
+                    runner,
+                    "_registry_lookup",
+                    return_value=registry_example(),
+                ),
                 mock.patch.object(runner, "collect_metadata", return_value=metadata),
                 mock.patch.object(runner, "collect_binary_metadata", return_value={}),
                 mock.patch.object(runner, "run_comparison", side_effect=fail_comparison),
@@ -472,12 +636,13 @@ class DurabilityTests(unittest.TestCase):
                     returncode = runner.main(
                         [
                             "--skip-build",
-                            "--skip-preflight",
-                            "--kernels",
+                            "--example",
                             "control",
                         ]
                     )
-            persisted = json.loads((result_dir / "latest.json").read_text())
+            example_dir = result_dir / "control"
+            persisted = json.loads((example_dir / "latest.json").read_text())
+            raw_path = example_dir / "latest.jsonl"
             journaled = [json.loads(line) for line in raw_path.read_text().splitlines()]
 
         self.assertEqual(returncode, 1)
@@ -485,6 +650,177 @@ class DurabilityTests(unittest.TestCase):
         self.assertEqual(persisted["metadata"], metadata)
         self.assertEqual(persisted["raw_samples"], journaled)
         self.assertEqual(persisted["error"]["message"], "measurement stopped")
+
+    def test_main_captures_start_state_before_opening_sample_journal(self):
+        order = []
+
+        class TrackingJournal:
+            def __init__(self, *_args, **_kwargs):
+                order.append("journal")
+
+            def append(self, _entry):
+                pass
+
+        def metadata(_config):
+            order.append("metadata")
+            return {"config": {}}
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_paths = {
+                "directory": Path(directory) / "control",
+                "json": Path(directory) / "control" / "latest.json",
+                "markdown": Path(directory) / "control" / "latest.md",
+                "journal": Path(directory) / "control" / "latest.jsonl",
+            }
+
+            def resolve(_example):
+                order.append("paths")
+                return output_paths
+
+            with (
+                mock.patch.object(runner, "RESULT_DIR", Path(directory)),
+                mock.patch.object(
+                    runner,
+                    "_registry_lookup",
+                    return_value=registry_example(),
+                ),
+                mock.patch.object(
+                    runner, "resolve_result_paths", side_effect=resolve
+                ),
+                mock.patch.object(runner, "SampleJournal", TrackingJournal),
+                mock.patch.object(runner, "collect_metadata", side_effect=metadata),
+                mock.patch.object(runner, "collect_binary_metadata", return_value={}),
+                mock.patch.object(
+                    runner, "run_comparison", side_effect=RuntimeError("stop")
+                ),
+                redirect_stdout(io.StringIO()),
+            ):
+                runner.main(
+                    ["--skip-build", "--example", "control"]
+                )
+        self.assertEqual(order[:3], ["paths", "metadata", "journal"])
+
+    def test_main_writes_only_the_selected_example_directory(self):
+        cpp, sv = paired_samples([1.0] * 16)
+        guard = runner.evaluate_guard(cpp, sv, final=True)
+        guard["extra_batch_collected"] = False
+        summary = {
+            "control": {"cpp_dpi": cpp, "pure_sv": sv, "guard": guard}
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            result_root = Path(directory)
+            other = result_root / "other-example"
+            other.mkdir()
+            sentinels = {}
+            for filename in ("latest.json", "latest.md", "latest.jsonl"):
+                path = other / filename
+                path.write_text(f"untouched {filename}\n", encoding="utf-8")
+                sentinels[path] = path.read_bytes()
+            comparison = mock.Mock(return_value=(summary, []))
+            with (
+                mock.patch.object(runner, "RESULT_DIR", result_root),
+                mock.patch.object(
+                    runner,
+                    "_registry_lookup",
+                    return_value=registry_example("selected-example", "control"),
+                ),
+                mock.patch.object(
+                    runner, "collect_metadata", return_value={"config": {}}
+                ),
+                mock.patch.object(runner, "collect_binary_metadata", return_value={}),
+                mock.patch.object(runner, "run_comparison", comparison),
+                mock.patch.object(runner, "run_peripheral_preflight") as preflight,
+                redirect_stdout(io.StringIO()),
+            ):
+                returncode = runner.main(
+                    ["--skip-build", "--example", "selected-example"]
+                )
+            selected = result_root / "selected-example"
+            self.assertEqual(returncode, 0)
+            self.assertEqual(comparison.call_args.args[:3], (["control"], 100_000, 16))
+            preflight.assert_not_called()
+            self.assertTrue((selected / "latest.json").is_file())
+            self.assertTrue((selected / "latest.md").is_file())
+            self.assertTrue((selected / "latest.jsonl").is_file())
+            self.assertEqual(
+                json.loads((selected / "latest.json").read_text())["example"],
+                "selected-example",
+            )
+            for path, contents in sentinels.items():
+                self.assertEqual(path.read_bytes(), contents)
+
+    def test_semantic_only_runs_one_exact_pair_without_guard(self):
+        calls = []
+
+        def semantic_sample(mode, kernel, pair, iterations):
+            calls.append((mode, kernel, pair, iterations))
+            return sample(mode, pair, 1.0, kernel=kernel, iterations=iterations)
+
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                mock.patch.object(runner, "RESULT_DIR", Path(directory)),
+                mock.patch.object(
+                    runner, "_registry_lookup", return_value=registry_example()
+                ),
+                mock.patch.object(runner, "collect_metadata", return_value={}),
+                mock.patch.object(runner, "collect_binary_metadata", return_value={}),
+                mock.patch.object(runner, "run_sample", side_effect=semantic_sample),
+                mock.patch.object(runner, "run_comparison") as comparison,
+                redirect_stdout(io.StringIO()),
+            ):
+                returncode = runner.main(
+                    ["--skip-build", "--example", "control", "--semantic-only"]
+                )
+            result = json.loads(
+                (Path(directory) / "control" / "latest.json").read_text()
+            )
+
+        self.assertEqual(returncode, 0)
+        self.assertEqual(
+            calls,
+            [
+                ("cpp_dpi", "control", 1, 100_000),
+                ("pure_sv", "control", 1, 100_000),
+            ],
+        )
+        comparison.assert_not_called()
+        self.assertEqual(result["measurement_mode"], "equivalence_only")
+        self.assertTrue(result["semantic"]["exact_match"])
+        self.assertEqual(len(result["raw_samples"]), 2)
+
+    def test_invalid_selection_does_not_create_or_truncate_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result_root = Path(directory)
+            sentinel = result_root / "existing" / "latest.jsonl"
+            sentinel.parent.mkdir()
+            sentinel.write_text("existing evidence\n", encoding="utf-8")
+            with (
+                mock.patch.object(runner, "RESULT_DIR", result_root),
+                mock.patch.object(
+                    runner,
+                    "_registry_lookup",
+                    return_value=registry_example("suite", kind="integration"),
+                ),
+                self.assertRaises(SystemExit),
+            ):
+                runner.main(["--example", "suite"])
+            self.assertEqual(sentinel.read_text(), "existing evidence\n")
+            self.assertEqual(list(result_root.iterdir()), [sentinel.parent])
+
+    def test_result_resolution_rejects_cross_example_symlink_aliases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result_root = Path(directory)
+            other = result_root / "other"
+            other.mkdir()
+            (result_root / "selected").symlink_to(other, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "escapes result root"):
+                runner.resolve_result_paths("selected", result_root)
+
+            selected = result_root / "plain"
+            selected.mkdir()
+            (selected / "latest.jsonl").symlink_to(other / "latest.jsonl")
+            with self.assertRaisesRegex(ValueError, "symlink alias"):
+                runner.resolve_result_paths("plain", result_root)
 
     def test_main_maps_guard_verdicts_to_exit_statuses(self):
         cases = (
@@ -512,7 +848,9 @@ class DurabilityTests(unittest.TestCase):
                 with (
                     mock.patch.object(runner, "RESULT_DIR", result_dir),
                     mock.patch.object(
-                        runner, "RAW_SAMPLE_PATH", result_dir / "latest.jsonl"
+                        runner,
+                        "_registry_lookup",
+                        return_value=registry_example(),
                     ),
                     mock.patch.object(
                         runner,
@@ -530,12 +868,13 @@ class DurabilityTests(unittest.TestCase):
                     returncode = runner.main(
                         [
                             "--skip-build",
-                            "--skip-preflight",
-                            "--kernels",
+                            "--example",
                             "control",
                         ]
                     )
-                persisted = json.loads((result_dir / "latest.json").read_text())
+                persisted = json.loads(
+                    (result_dir / "control" / "latest.json").read_text()
+                )
             self.assertEqual(returncode, expected_returncode)
             self.assertEqual(persisted["status"], expected_status)
 

@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -11,6 +13,30 @@ SPEC.loader.exec_module(AA)
 
 
 class AATests(unittest.TestCase):
+    def setUp(self):
+        self._sample_environment = mock.patch.object(
+            AA.benchmark,
+            "sample_environment",
+            return_value={
+                "load_average_1m": 1.0,
+                "load_average_5m": 1.0,
+                "load_average_15m": 1.0,
+                "cpu_count": 8,
+            },
+        )
+        self._pair_boundary = mock.patch.object(
+            AA.benchmark,
+            "probe_pair_boundary",
+            return_value={
+                "power": {"available": True, "source": "ac"},
+                "thermal": {"available": True, "status": "nominal"},
+            },
+        )
+        self._sample_environment.start()
+        self._pair_boundary.start()
+        self.addCleanup(self._sample_environment.stop)
+        self.addCleanup(self._pair_boundary.stop)
+
     @staticmethod
     def runner(ratio_for_run):
         calls = []
@@ -137,6 +163,99 @@ class AATests(unittest.TestCase):
         self.assertTrue(
             all(item["binary_sha256"] == digest for item in result["B"]["samples"])
         )
+
+    def test_environment_probes_are_journaled_only_before_pairs(self):
+        sample, _ = self.runner(lambda run: 1.0)
+        with tempfile.TemporaryDirectory() as directory:
+            journal = AA.benchmark.SampleJournal(
+                Path(directory) / "aa.jsonl", truncate=True
+            )
+            result = AA.run_aa_comparison(
+                10_000,
+                sample_runner=sample,
+                journal=journal,
+                probe_runner=lambda run, phase: {"load": run, "phase_seen": phase},
+            )
+            entries = [
+                json.loads(line)
+                for line in journal.path.read_text(encoding="utf-8").splitlines()
+            ]
+
+        self.assertEqual(len(result["environment"]["probes"]), 21)
+        self.assertEqual(len(entries), 21 + 42)
+        for index, entry in enumerate(entries):
+            if entry["event"] != "environment_probe":
+                continue
+            first, second = entries[index + 1 : index + 3]
+            self.assertEqual([first["event"], second["event"]], ["sample", "sample"])
+            self.assertEqual(
+                first["sample"]["environment_probe_reference"], entry["reference"]
+            )
+            self.assertEqual(
+                second["sample"]["environment_probe_reference"], entry["reference"]
+            )
+
+    def test_real_probe_schema_reaches_shared_validity_helper(self):
+        sample_environment = {
+            "load_average_1m": 2.0,
+            "load_average_5m": 1.0,
+            "load_average_15m": 0.5,
+            "cpu_count": 8,
+        }
+        boundary = {
+            "power": {"available": True, "source": "ac"},
+            "thermal": {"available": True, "status": "nominal"},
+        }
+        with (
+            mock.patch.object(
+                AA.benchmark, "sample_environment", return_value=sample_environment
+            ),
+            mock.patch.object(
+                AA.benchmark, "probe_pair_boundary", return_value=boundary
+            ),
+        ):
+            probe = AA._pair_boundary_probe(1, "measured")
+            validity = AA._environment_validity([probe])
+
+        self.assertEqual(probe["sample_environment"], sample_environment)
+        self.assertEqual(probe["power_thermal"], boundary)
+        self.assertEqual(validity["validity"], "valid")
+
+    def test_bad_environment_does_not_change_aa_bands(self):
+        sample, _ = self.runner(lambda run: 1.0)
+        invalid = {"status": "invalid", "reasons": ["high load"]}
+        with mock.patch.object(
+            AA.benchmark, "environment_validity", return_value=invalid, create=True
+        ):
+            result = AA.run_aa_comparison(10_000, sample_runner=sample)
+        self.assertEqual(result["status"], "passed")
+        self.assertEqual(result["environment"]["validity"], invalid)
+
+    def test_main_threads_pre_write_git_snapshot_into_metadata(self):
+        start = {"commit": "clean-start", "dirty": False}
+        journal = mock.Mock()
+        collect_metadata = mock.Mock(
+            side_effect=lambda config, **kwargs: {
+                "config": config,
+                "git": kwargs["git_state"],
+            }
+        )
+        with (
+            mock.patch.object(AA, "_capture_git_state", side_effect=[start, start]),
+            mock.patch.object(AA.benchmark, "SampleJournal", return_value=journal),
+            mock.patch.object(
+                AA,
+                "run_aa_comparison",
+                return_value={"status": "passed"},
+            ),
+            mock.patch.object(AA.benchmark, "collect_metadata", collect_metadata),
+            mock.patch.object(AA.benchmark, "atomic_write_json"),
+            mock.patch.object(AA.benchmark, "atomic_write_text"),
+            mock.patch.object(AA, "render_markdown", return_value="ok\n"),
+        ):
+            self.assertEqual(AA.main(["--skip-build"]), 0)
+
+        self.assertEqual(collect_metadata.call_args.kwargs["git_state"], start)
 
     @staticmethod
     def passing_statistics():

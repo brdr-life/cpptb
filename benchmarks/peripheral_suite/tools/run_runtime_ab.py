@@ -45,7 +45,70 @@ def _sha256(path):
     return benchmark.binary_sha256(path)
 
 
-def validate_aa_preflight(path, iters, new_binary_sha256, now=None):
+def _capture_git_state():
+    capture = getattr(benchmark, "capture_git_state", None)
+    if capture:
+        return capture()
+    revision = benchmark._metadata_command(["git", "rev-parse", "HEAD"])
+    status = benchmark._metadata_command(["git", "status", "--porcelain"])
+    return {
+        "commit": revision["output"] if revision["returncode"] == 0 else None,
+        "dirty": status["returncode"] != 0 or bool(status["output"]),
+    }
+
+
+def _pair_boundary_probe(run_id, phase, probe_runner=None):
+    if probe_runner:
+        evidence = probe_runner(run_id, phase)
+    else:
+        evidence = {
+            "sample_environment": benchmark.sample_environment(),
+            "power_thermal": benchmark.probe_pair_boundary(),
+        }
+    return {
+        "event": "environment_probe",
+        "reference": f"{phase}:{run_id}",
+        "phase": phase,
+        "sequence_index": run_id,
+        **evidence,
+    }
+
+
+def _environment_validity(probes):
+    assess = getattr(benchmark, "environment_validity", None)
+    if not assess:
+        return {"status": "unknown", "reason": "environment helper unavailable"}
+    samples = [probe.get("sample_environment", {}) for probe in probes]
+    boundaries = [probe.get("power_thermal", {}) for probe in probes]
+    return assess(samples, boundaries)
+
+
+def _environment_is_invalid(validity):
+    if isinstance(validity, str):
+        return validity in {"invalid", "invalid_environment"}
+    if not isinstance(validity, dict):
+        return False
+    return validity.get("status") in {"invalid", "invalid_environment"} or validity.get(
+        "valid"
+    ) is False
+
+
+def _journal_probes(journal):
+    if not journal or not journal.path.exists():
+        return []
+    return [
+        entry
+        for entry in (
+            json.loads(line)
+            for line in journal.path.read_text(encoding="utf-8").splitlines()
+        )
+        if entry.get("event") == "environment_probe"
+    ]
+
+
+def validate_aa_preflight(
+    path, iters, new_binary_sha256, now=None, current_git_commit=None
+):
     path = Path(path)
     preflight = {
         "artifact_path": str(path),
@@ -53,6 +116,7 @@ def validate_aa_preflight(path, iters, new_binary_sha256, now=None):
         "artifact_timestamp_utc": None,
         "artifact_status": None,
         "maximum_age_seconds": int(AA_MAX_AGE.total_seconds()),
+        "current_git_commit": current_git_commit,
     }
 
     def reject(message):
@@ -74,6 +138,16 @@ def validate_aa_preflight(path, iters, new_binary_sha256, now=None):
     preflight["artifact_binary_sha256"] = artifact.get("binary_sha256")
     preflight["artifact_measured_pairs"] = artifact.get("measured_pairs")
     metadata = artifact.get("metadata")
+    git_state = artifact.get("git_state")
+    artifact_start = git_state.get("start") if isinstance(git_state, dict) else None
+    artifact_git_commit = (
+        artifact_start.get("commit") if isinstance(artifact_start, dict) else None
+    )
+    if artifact_git_commit is None and isinstance(metadata, dict):
+        metadata_git = metadata.get("git")
+        if isinstance(metadata_git, dict):
+            artifact_git_commit = metadata_git.get("commit")
+    preflight["artifact_git_commit"] = artifact_git_commit
     config = metadata.get("config") if isinstance(metadata, dict) else None
     timestamp_text = metadata.get("timestamp_utc") if isinstance(metadata, dict) else None
     artifact_iters = config.get("iterations") if isinstance(config, dict) else None
@@ -84,6 +158,8 @@ def validate_aa_preflight(path, iters, new_binary_sha256, now=None):
         reject("artifact status is not passed")
     if artifact.get("binary_sha256") != new_binary_sha256:
         reject("artifact binary SHA256 does not match the current binary")
+    if current_git_commit is not None and artifact_git_commit != current_git_commit:
+        reject("artifact git commit does not match the current start commit")
     if isinstance(artifact_iters, bool) or artifact_iters != iters:
         reject("artifact iterations do not match requested runtime A/B iterations")
     measured_pairs = artifact.get("measured_pairs")
@@ -156,9 +232,11 @@ def run_runtime_sample(run, iters, label, binary=None):
         raise ValueError(f"unknown runtime label: {label}")
     binary = Path(binary or (OLD_BINARY if label == "old" else NEW_BINARY))
     command = runtime_command(binary, iters)
-    output, process_ms = benchmark.run_command(
+    command_result = benchmark.run_command(
         command, env=benchmark._dpi_environment("tracked")
     )
+    output, process_ms = command_result[:2]
+    resources = command_result[2] if len(command_result) > 2 else None
     fields = benchmark.parse_result(output, RESULT_IDENTITY)
     return {
         "run": run,
@@ -171,6 +249,7 @@ def run_runtime_sample(run, iters, label, binary=None):
         "checks": int(fields["checks"]),
         "sim_cycles": int(fields["sim_cycles"]),
         "failures": int(fields["failures"]),
+        "resources": resources,
     }
 
 
@@ -217,6 +296,8 @@ def collect_pairs(
     sample_runner=None,
     journal=None,
     binary_hashes=None,
+    probe_runner=None,
+    probes=None,
 ):
     if pair_count <= 0 or pair_count % 2:
         raise ValueError("runtime A/B pair count must be positive and even")
@@ -226,8 +307,13 @@ def collect_pairs(
         "new": _sha256(NEW_BINARY),
     }
     samples = {"old": [], "new": []}
+    probes = probes if probes is not None else []
     for run_id in range(start_run, start_run + pair_count):
         order = ["old", "new"] if run_id % 2 else ["new", "old"]
+        probe = _pair_boundary_probe(run_id, "measured", probe_runner)
+        probes.append(probe)
+        if journal:
+            journal.append(probe)
         pair = {}
         for slot, label in enumerate(order, start=1):
             sample = _annotate(
@@ -238,6 +324,7 @@ def collect_pairs(
                 order,
                 binary_hashes[label],
             )
+            sample["environment_probe_reference"] = probe["reference"]
             pair[label] = sample
             if journal:
                 journal.append({"event": "sample", "label": label, "sample": sample})
@@ -387,12 +474,18 @@ def run_runtime_comparison(
     sample_runner=None,
     journal=None,
     binary_hashes=None,
+    probe_runner=None,
 ):
     sample_runner = sample_runner or run_runtime_sample
     binary_hashes = binary_hashes or {
         "old": _sha256(OLD_BINARY),
         "new": _sha256(NEW_BINARY),
     }
+    probes = []
+    warmup_probe = _pair_boundary_probe(0, "warmup", probe_runner)
+    probes.append(warmup_probe)
+    if journal:
+        journal.append(warmup_probe)
     warmups = []
     warmup_order = ["old", "new"]
     for slot, label in enumerate(warmup_order, start=1):
@@ -405,6 +498,7 @@ def run_runtime_comparison(
             binary_hashes[label],
             warmup=True,
         )
+        sample["environment_probe_reference"] = warmup_probe["reference"]
         warmups.append(sample)
         if journal:
             journal.append({"event": "sample", "label": label, "sample": sample})
@@ -419,6 +513,10 @@ def run_runtime_comparison(
             "extra_batch_collected": False,
             "warmup_samples": warmups,
             "binary_sha256": binary_hashes,
+            "environment": {
+                "probes": probes,
+                "validity": _environment_validity(probes),
+            },
         }
 
     old_samples, new_samples = collect_pairs(
@@ -427,6 +525,8 @@ def run_runtime_comparison(
         sample_runner=sample_runner,
         journal=journal,
         binary_hashes=binary_hashes,
+        probe_runner=probe_runner,
+        probes=probes,
     )
     statistics = runtime_statistics(old_samples, new_samples)
     status = classify_runtime(statistics)
@@ -439,11 +539,19 @@ def run_runtime_comparison(
             sample_runner=sample_runner,
             journal=journal,
             binary_hashes=binary_hashes,
+            probe_runner=probe_runner,
+            probes=probes,
         )
         old_samples.extend(extra_old)
         new_samples.extend(extra_new)
         statistics = runtime_statistics(old_samples, new_samples)
         status = classify_runtime(statistics)
+
+    validity = _environment_validity(probes)
+    if status == "regression_confirmed" and _environment_is_invalid(validity):
+        status = "invalid_environment"
+        statistics = dict(statistics)
+        statistics["error"] = "regression evidence was collected in an invalid environment"
 
     result = {
         "benchmark": "reconstructed_old_vs_current_cpp_dpi_runtime",
@@ -457,6 +565,7 @@ def run_runtime_comparison(
         "old": benchmark.summarize("old", old_samples),
         "new": benchmark.summarize("new", new_samples),
         "statistics": statistics,
+        "environment": {"probes": probes, "validity": validity},
     }
     if status == "invalid_environment":
         result["error"] = statistics.get("error", "invalid runtime A/B environment")
@@ -516,6 +625,7 @@ def _parse_args(argv=None):
 
 def main(argv=None):
     args = _parse_args(argv)
+    start_git_state = _capture_git_state()
     journal = benchmark.SampleJournal(args.journal, truncate=True)
     evidence = None
     binary_hashes = None
@@ -533,7 +643,10 @@ def main(argv=None):
             "new": _sha256(args.new_binary),
         }
         aa_preflight = validate_aa_preflight(
-            args.aa_artifact, args.iters, binary_hashes["new"]
+            args.aa_artifact,
+            args.iters,
+            binary_hashes["new"],
+            current_git_commit=start_git_state.get("commit"),
         )
         evidence = load_source_evidence()
         expected_old_hash = evidence["build_provenance"]["binary_sha256"]
@@ -586,12 +699,17 @@ def main(argv=None):
             "samples": benchmark._journal_samples(journal),
             "binary_sha256": binary_hashes,
             "aa_preflight": aa_preflight,
+            "environment": {
+                "probes": _journal_probes(journal),
+                "validity": _environment_validity(_journal_probes(journal)),
+            },
         }
         if isinstance(error, benchmark.CommandExecutionError):
             result["command_failure"] = {
                 "command": error.command,
                 "returncode": error.returncode,
                 "output": error.output,
+                "resources": getattr(error, "resources", None),
             }
 
     if evidence:
@@ -617,7 +735,13 @@ def main(argv=None):
         "skip_build": args.skip_build,
         "aa_preflight": aa_preflight,
     }
-    result["metadata"] = benchmark.collect_metadata(config)
+    result["metadata"] = benchmark.collect_metadata(
+        config, git_state=start_git_state
+    )
+    result["git_state"] = {
+        "start": start_git_state,
+        "end": _capture_git_state(),
+    }
     persist_result(result, args.json, args.markdown)
     print(render_markdown(result), end="")
     return 0 if result["status"] == "no_material_regression" else 1

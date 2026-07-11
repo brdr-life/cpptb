@@ -541,6 +541,31 @@ class Scheduler {
         }
     }
 
+    template <typename T>
+    void start_timeout(std::coroutine_handle<> parent,
+                       TaskPromiseBase& parent_promise,
+                       std::coroutine_handle<TaskPromise<T>> child,
+                       SimTime timeout) {
+        validate_delay(timeout);
+        auto& parent_state = state_for(parent, parent_promise);
+        const uint64_t generation = begin_wait(parent_state);
+
+        auto join_state = std::make_shared<JoinState>();
+        join_state->remaining = 1;
+        join_state->parent_index = parent_promise.state_index;
+        child.promise().scheduler = this;
+        child.promise().continuation = nullptr;
+        child.promise().join_state = std::move(join_state);
+        adopt(child, child.promise());
+        child.resume();
+
+        const WaitRegistration timeout_wait{parent_promise.state_index,
+                                            generation, nullptr, 0};
+        if (registration_valid(timeout_wait)) {
+            register_wait(WaitRequest::delay_for(timeout), timeout_wait);
+        }
+    }
+
     bool park_process(std::coroutine_handle<> handle, TaskPromiseBase& promise,
                       ProcessControl* control) {
         if (!control || control->scheduler != this) {
@@ -664,6 +689,24 @@ class Scheduler {
         free_states_.push_back(state_index);
         promise.scheduler = nullptr;
         handle.destroy();
+    }
+
+    bool awaited_done(std::coroutine_handle<> handle,
+                      const TaskPromiseBase& promise) const {
+        const size_t state_index = promise.state_index;
+        return state_matches(state_index, handle) && states_[state_index].done;
+    }
+
+    void cancel_awaited(std::coroutine_handle<> handle,
+                        TaskPromiseBase& promise) {
+        const size_t state_index = promise.state_index;
+        if (!state_matches(state_index, handle)) {
+            std::fprintf(stderr, "cpptb: timed task is not scheduler-owned\n");
+            std::abort();
+        }
+        if (states_[state_index].done) return;
+        cancel_state(state_index);
+        timer_schedule_changed_ = true;
     }
 
     void resume_edge(uint32_t signal_id, EdgeKind edge) {
@@ -837,22 +880,7 @@ class Scheduler {
                 }
                 break;
             case WaitKind::Delay: {
-                if (request.delay.femtoseconds == 0) {
-                    std::fprintf(stderr,
-                                 "cpptb: delay duration must be greater than zero\n");
-                    std::abort();
-                }
-                if ((request.delay.femtoseconds % femtoseconds_per_tick_) != 0) {
-                    std::fprintf(
-                        stderr,
-                        "cpptb: delay of %llu fs is not representable at "
-                        "%llu fs simulation precision\n",
-                        static_cast<unsigned long long>(
-                            request.delay.femtoseconds),
-                        static_cast<unsigned long long>(
-                            femtoseconds_per_tick_));
-                    std::abort();
-                }
+                validate_delay(request.delay);
                 const uint64_t delay_ticks =
                     request.delay.femtoseconds / femtoseconds_per_tick_;
                 const uint64_t max_time = std::numeric_limits<uint64_t>::max();
@@ -865,6 +893,23 @@ class Scheduler {
                 if (deadline < previous_deadline) timer_schedule_changed_ = true;
                 break;
             }
+        }
+    }
+
+    void validate_delay(SimTime delay) const {
+        if (delay.femtoseconds == 0) {
+            std::fprintf(stderr,
+                         "cpptb: delay duration must be greater than zero\n");
+            std::abort();
+        }
+        if ((delay.femtoseconds % femtoseconds_per_tick_) != 0) {
+            std::fprintf(
+                stderr,
+                "cpptb: delay of %llu fs is not representable at "
+                "%llu fs simulation precision\n",
+                static_cast<unsigned long long>(delay.femtoseconds),
+                static_cast<unsigned long long>(femtoseconds_per_tick_));
+            std::abort();
         }
     }
 
@@ -1325,6 +1370,76 @@ enum class TimeoutOutcome : uint8_t {
     TimedOut,
 };
 
+template <typename T>
+class TimeoutResult {
+   public:
+    TimeoutResult() noexcept = default;
+    explicit TimeoutResult(T value) : value_(std::move(value)) {}
+
+    bool has_value() const noexcept { return value_.has_value(); }
+    bool triggered() const noexcept { return has_value(); }
+    bool completed() const noexcept { return has_value(); }
+    bool timed_out() const noexcept { return !has_value(); }
+    explicit operator bool() const noexcept { return has_value(); }
+
+    T& value() & {
+        require_value();
+        return *value_;
+    }
+
+    const T& value() const& {
+        require_value();
+        return *value_;
+    }
+
+    T&& value() && {
+        require_value();
+        return std::move(*value_);
+    }
+
+    T& operator*() & { return value(); }
+    const T& operator*() const& { return value(); }
+    T&& operator*() && { return std::move(*this).value(); }
+    T* operator->() { return &value(); }
+    const T* operator->() const { return &value(); }
+
+   private:
+    void require_value() const {
+        if (value_) return;
+        std::fprintf(stderr, "cpptb: timed-out task has no value\n");
+        std::abort();
+    }
+
+    std::optional<T> value_;
+};
+
+template <>
+class TimeoutResult<void> {
+   public:
+    TimeoutResult() noexcept = default;
+
+    static TimeoutResult completed_result() noexcept {
+        return TimeoutResult{true};
+    }
+
+    bool has_value() const noexcept { return completed_; }
+    bool triggered() const noexcept { return completed_; }
+    bool completed() const noexcept { return completed_; }
+    bool timed_out() const noexcept { return !completed_; }
+    explicit operator bool() const noexcept { return completed_; }
+
+    void value() const {
+        if (completed_) return;
+        std::fprintf(stderr, "cpptb: timed-out task has no value\n");
+        std::abort();
+    }
+
+   private:
+    explicit TimeoutResult(bool completed) noexcept : completed_(completed) {}
+
+    bool completed_ = false;
+};
+
 template <typename Trigger>
 concept EdgeTrigger =
     std::same_as<std::remove_cvref_t<Trigger>, RisingEdge> ||
@@ -1336,6 +1451,78 @@ Task<TimeoutOutcome> with_timeout(Trigger trigger, SimTime timeout) {
     const size_t winner = co_await First{std::move(trigger), Delay{timeout}};
     co_return winner == 0 ? TimeoutOutcome::Triggered
                           : TimeoutOutcome::TimedOut;
+}
+
+template <typename T>
+struct TaskTimeoutAwaiter {
+    using handle_type = typename Task<T>::handle_type;
+
+    TaskTimeoutAwaiter(Task<T>&& task, SimTime duration)
+        : child(task.release()), timeout(duration) {}
+
+    bool await_ready() const noexcept { return false; }
+
+    template <typename Promise>
+        requires std::derived_from<Promise, TaskPromiseBase>
+    void await_suspend(std::coroutine_handle<Promise> handle) {
+        if (!child) {
+            std::fprintf(stderr,
+                         "cpptb: with_timeout received an invalid task\n");
+            std::abort();
+        }
+
+        auto& promise = static_cast<TaskPromiseBase&>(handle.promise());
+        auto* scheduler = promise.scheduler;
+        if (!scheduler) {
+            std::fprintf(
+                stderr,
+                "cpptb: cannot wait on a timed task without a scheduler\n");
+            std::abort();
+        }
+        scheduler->start_timeout(handle, promise, child, timeout);
+    }
+
+    TimeoutResult<T> await_resume() {
+        if (!child) {
+            std::fprintf(stderr,
+                         "cpptb: with_timeout received an invalid task\n");
+            std::abort();
+        }
+
+        auto& promise = child.promise();
+        auto* scheduler = promise.scheduler;
+        if (!scheduler) {
+            std::fprintf(stderr, "cpptb: timed task lost its scheduler\n");
+            std::abort();
+        }
+
+        if constexpr (std::is_void_v<T>) {
+            if (scheduler->awaited_done(child, promise)) {
+                scheduler->reclaim_awaited(child, promise);
+                child = nullptr;
+                return TimeoutResult<void>::completed_result();
+            }
+        } else {
+            if (promise.result) {
+                T result = std::move(*promise.result);
+                scheduler->reclaim_awaited(child, promise);
+                child = nullptr;
+                return TimeoutResult<T>{std::move(result)};
+            }
+        }
+
+        scheduler->cancel_awaited(child, promise);
+        child = nullptr;
+        return {};
+    }
+
+    handle_type child = nullptr;
+    SimTime timeout;
+};
+
+template <typename T>
+Task<TimeoutResult<T>> with_timeout(Task<T> task, SimTime timeout) {
+    co_return co_await TaskTimeoutAwaiter<T>{std::move(task), timeout};
 }
 
 template <typename Predicate>

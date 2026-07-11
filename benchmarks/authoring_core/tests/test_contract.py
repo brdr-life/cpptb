@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 BENCH_DIR = Path(__file__).resolve().parents[1]
+REPO = BENCH_DIR.parents[1]
 sys.path.insert(0, str(BENCH_DIR))
 
 import run_benchmark as runner  # noqa: E402
@@ -28,6 +29,18 @@ def result_line(kernel="control", iterations=1, **overrides):
 
 
 class ContractTests(unittest.TestCase):
+    def test_makefile_builds_every_authoring_kernel(self):
+        makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+        kernel_line = next(
+            line for line in makefile.splitlines()
+            if line.startswith("AUTHORING_CORE_KERNELS :=")
+        )
+        self.assertEqual(tuple(kernel_line.split(":=", 1)[1].split()), workload.KERNELS)
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,task_timeout,8))",
+            makefile,
+        )
+
     def test_boundary_counts_one_iteration(self):
         control = workload.expected_counts("control", 1)
         self.assertEqual(control.transactions, 1)
@@ -35,11 +48,13 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(control.timeout_hits, 0)
 
         integrated = workload.expected_counts("all", 1)
-        self.assertEqual(integrated.checks, 8)
+        self.assertEqual(integrated.checks, 9)
         self.assertEqual(integrated.task_value, 1)
         self.assertEqual(integrated.clock_cycles, 1)
         self.assertEqual(integrated.timeouts, 1)
         self.assertEqual(integrated.timeout_hits, 0)
+        self.assertEqual(integrated.task_timeouts, 1)
+        self.assertEqual(integrated.task_timeout_hits, 0)
         self.assertEqual(integrated.event_set, 1)
         self.assertEqual(integrated.channel_receive, 1)
 
@@ -47,7 +62,25 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(workload.expected_counts("timeout", 2).timeout_hits, 1)
         self.assertEqual(workload.expected_counts("timeout", 3).timeout_hits, 1)
         self.assertEqual(workload.expected_counts("timeout", 4).timeout_hits, 2)
-        self.assertEqual(workload.expected_counts("all", 3).checks, 20)
+        self.assertEqual(
+            workload.expected_counts("task_timeout", 2).task_timeout_hits, 1
+        )
+        self.assertEqual(
+            workload.expected_counts("task_timeout", 3).task_timeout_hits, 1
+        )
+        self.assertEqual(
+            workload.expected_counts("task_timeout", 4).task_timeout_hits, 2
+        )
+        self.assertEqual(workload.expected_counts("all", 3).checks, 23)
+
+    def test_task_timeout_has_exact_isolated_feature_counts(self):
+        counts = workload.expected_counts("task_timeout", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 12)
+        self.assertEqual(counts.task_timeouts, 5)
+        self.assertEqual(counts.task_timeout_hits, 2)
+        self.assertEqual(counts.timeouts, 0)
+        self.assertEqual(counts.task_value, 0)
 
     def test_expected_checksum_is_stable(self):
         self.assertEqual(workload.expected_checksum(1), 1_407_418_725)
