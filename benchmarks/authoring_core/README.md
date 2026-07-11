@@ -77,22 +77,43 @@ AUTHORING_CORE_ITERS=10000 make authoring-core-sv-run AUTHORING_CORE_KERNEL=even
 make authoring-core-benchmark
 ```
 
-The benchmark runner defaults to 100,000 iterations and 15 adjacent, warmed,
-alternating DPI/SV pairs per kernel. Kernels are visited round-robin with a
-rotating start point. Before feature kernels, it runs one unchanged peripheral
-suite DPI/SV equivalence preflight by default; `--skip-preflight` is available
-for focused development when those binaries are intentionally unavailable.
+The benchmark runner defaults to 100,000 iterations and 16 adjacent, warmed,
+alternating DPI/SV pairs per kernel. `--pairs` accepts any even value of at
+least 16 and rejects odd counts. Kernels are visited round-robin with a rotating
+start point, so every kernel receives equal DPI-first and SV-first strata in a
+deterministic global sequence. Before feature kernels, the runner executes one
+unchanged peripheral-suite DPI/SV equivalence preflight by default;
+`--skip-preflight` is available for focused development when those binaries are
+intentionally unavailable.
 
 The absolute median of paired `C++ DPI process wall / pure SV process wall` is
-the hard guard. Any value strictly greater than `1.10` aborts immediately once
-that kernel's initial batch is complete. If the median passes but its exact
-distribution-free one-sided 95% upper median bound exceeds `1.10`, the runner
-collects exactly one additional 15-pair batch. A still-wide bound is reported
-as a warning. Normalization versus `control` is diagnostic only.
+the hard guard. A median at or below `1.10` passes the hard limit. If that median
+passes but its exact distribution-free one-sided 95% upper median bound exceeds
+`1.10`, the runner collects exactly one additional 16-pair batch for the
+affected kernels. A still-wide final bound is reported as
+`passed_inconclusive` with a warning.
 
-Raw samples, global execution order, pair order, exact confidence bounds,
-environment/tool metadata, preflight data, and per-kernel summaries are written
-to `results/latest.json`; the compact report is `results/latest.md`.
+A paired median strictly above `1.10` is `failed` only when both order-stratified
+paired medians are strictly above `1.05` and the ratio of independent process
+time medians is within 5%, relative to the paired median. Otherwise the result
+is `invalid_environment`. A valid initial hard failure is final and is never
+diluted by an extra batch. At the run level, `failed` takes precedence over
+`invalid_environment`; either classification returns nonzero. Normalization
+versus `control` remains diagnostic only.
+
+Every sample records its binary path and SHA256, one-based slot within the pair,
+zero-based global sequence index, pair order, and warmup/initial/extra batch.
+Each completed sample, including warmups, is appended immediately to
+`results/latest.jsonl`, then flushed and `fsync`ed. The JSON report also
+stores those raw samples, binary metadata, order-stratified and independent-
+median diagnostics, exact confidence bounds, environment/tool metadata,
+preflight data, and per-kernel summaries.
+
+Success, hard failure, invalid-environment, and operational-error runs all write
+`results/latest.json` and `results/latest.md` before returning. Each file is
+flushed and `fsync`ed through a temporary file in `results/`, then installed
+atomically with `os.replace`. Thus completed samples and metadata remain
+available after a nonzero exit, including failures partway through a pair.
 
 ## Direct tests
 
@@ -101,6 +122,8 @@ python3 -m unittest discover -s benchmarks/authoring_core/tests -v
 ```
 
 The tests cover strict result parsing, workload formulas at boundary iteration
-values, cross-mode mismatches, invalid and nonfinite timing samples, adjacent
-alternating pair order, exact confidence bounds, the extra-batch policy, and
-the strict `> 1.10` hard-failure boundary.
+values, cross-mode mismatches, invalid and nonfinite timing samples, balanced
+interleaving, slots and sequence indices, exact confidence bounds, every guard
+classification and boundary, odd-pair rejection, the fixed extra-batch policy,
+binary hashes, per-sample journaling, atomic writes, and evidence preservation
+after an injected mid-pair error.

@@ -615,6 +615,25 @@ Task<void> with_timeout_contract(ConformanceTb tb) {
     tb.expect_eq("with_timeout losers never resume operation", resumptions, 2);
 }
 
+Task<void> with_timeout_tie_contract(ConformanceTb tb) {
+    uint32_t completions = 0;
+    const auto outcome =
+        co_await with_timeout(FallingEdge{tb.dut.clock.a}, 4_ns);
+    ++completions;
+
+    const bool valid_outcome = outcome == TimeoutOutcome::Triggered ||
+                               outcome == TimeoutOutcome::TimedOut;
+    tb.expect_true("with_timeout simultaneous tie has a valid outcome",
+                   valid_outcome);
+    tb.expect_time("with_timeout simultaneous tie timestamp", tb.now(), 4_ns);
+
+    co_await Delay{4_ns};
+    tb.expect_time("with_timeout simultaneous stale loser stays inactive",
+                   tb.now(), 8_ns);
+    tb.expect_eq("with_timeout simultaneous tie completes once", completions,
+                 1);
+}
+
 struct PredicateProbe {
     std::array<uint64_t, 4> times{};
     std::array<uint32_t, 4> values{};
@@ -891,6 +910,7 @@ void register_user_testbench(ConformanceTb& tb) {
     tb.sequence(typed_cancellation_contract);
     tb.sequence(clock_cycles_contract);
     tb.sequence(with_timeout_contract);
+    tb.sequence(with_timeout_tie_contract);
     tb.sequence(wait_until_contract);
     tb.sequence(event_contract);
     tb.sequence(channel_contract);
