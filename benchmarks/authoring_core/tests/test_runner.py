@@ -211,6 +211,11 @@ class GuardDecisionTests(unittest.TestCase):
         }
         with mock.patch.object(runner, "paired_ratio_statistics", return_value=base):
             result = runner.evaluate_guard([{}] * 16, [{}] * 16)
+        self.assertEqual(result["status"], "needs_extra_batch")
+        self.assertEqual(result["provisional_status"], "hard_failure")
+
+        with mock.patch.object(runner, "paired_ratio_statistics", return_value=base):
+            result = runner.evaluate_guard([{}] * 32, [{}] * 32, final=True)
         self.assertEqual(result["status"], "hard_failure")
 
         at_stratum_boundary = {
@@ -319,31 +324,40 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(summaries["control"]["guard"]["status"], "hard_failure")
         self.assertEqual(len(raw), 66)
 
-    def test_initial_failure_or_invalid_environment_never_collects_extra(self):
-        for ratio_for_pair, expected in (
-            (lambda _kernel, _pair: 1.2, "hard_failure"),
-            (
-                lambda _kernel, pair: 1.0 if pair % 2 else 1.3,
-                "invalid_environment",
-            ),
-        ):
-            calls = []
-            fake = self.fake_runner(ratio_for_pair, calls)
-            summaries, raw = runner.run_comparison(
-                ["control"], 1, 16, sample_runner=fake
-            )
-            self.assertEqual(summaries["control"]["guard"]["status"], expected)
-            self.assertFalse(summaries["control"]["guard"]["extra_batch_collected"])
-            self.assertEqual(len(raw), 34)
+    def test_initial_confirmed_failure_collects_confirmation_batch(self):
+        calls = []
+        fake = self.fake_runner(lambda _kernel, _pair: 1.2, calls)
+        summaries, raw = runner.run_comparison(
+            ["control"], 1, 16, sample_runner=fake
+        )
+        guard = summaries["control"]["guard"]
+        self.assertEqual(guard["status"], "hard_failure")
+        self.assertTrue(guard["extra_batch_collected"])
+        self.assertEqual(guard["measured_pairs"], 32)
+        self.assertEqual(len(raw), 66)
 
-    def test_uncertain_kernel_is_finalized_when_a_peer_blocks_extra_sampling(self):
+    def test_initial_invalid_environment_does_not_collect_extra(self):
+        calls = []
+        fake = self.fake_runner(
+            lambda _kernel, pair: 1.0 if pair % 2 else 1.3,
+            calls,
+        )
+        summaries, raw = runner.run_comparison(
+            ["control"], 1, 16, sample_runner=fake
+        )
+        guard = summaries["control"]["guard"]
+        self.assertEqual(guard["status"], "invalid_environment")
+        self.assertFalse(guard["extra_batch_collected"])
+        self.assertEqual(len(raw), 34)
+
+    def test_uncertain_kernel_collects_extra_even_when_peer_is_invalid(self):
         calls = []
         fake = self.fake_runner(lambda _kernel, _pair: 1.0, calls)
         with mock.patch.object(
             runner,
             "evaluate_guard",
             side_effect=[
-                {"status": "hard_failure"},
+                {"status": "invalid_environment"},
                 {"status": "needs_extra_batch"},
                 {"status": "passed_inconclusive"},
             ],
@@ -352,11 +366,13 @@ class ComparisonTests(unittest.TestCase):
                 ["control", "event"], 1, 16, sample_runner=fake
             )
 
-        self.assertEqual(summaries["control"]["guard"]["status"], "hard_failure")
+        self.assertEqual(
+            summaries["control"]["guard"]["status"], "invalid_environment"
+        )
         self.assertEqual(
             summaries["event"]["guard"]["status"], "passed_inconclusive"
         )
-        self.assertIn("extra batch skipped", summaries["event"]["guard"]["warning"])
+        self.assertTrue(summaries["event"]["guard"]["extra_batch_collected"])
 
     def test_odd_pair_counts_are_rejected_before_sampling(self):
         called = mock.Mock()
