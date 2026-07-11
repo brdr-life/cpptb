@@ -86,6 +86,28 @@ class AATests(unittest.TestCase):
         self.assertEqual(result["status"], "failed")
         self.assertGreater(result["statistics"]["order_stratum_gap"], 0.05)
 
+    def test_slot_effect_five_percent_boundary_is_inclusive(self):
+        statistics = self.passing_statistics()
+        statistics["second_slot_over_first_slot_median"] = 1.05
+        self.assertEqual(AA.classify_aa(statistics), "passed")
+
+        statistics["second_slot_over_first_slot_median"] = 1.050001
+        self.assertEqual(AA.classify_aa(statistics), "failed")
+
+        statistics["second_slot_over_first_slot_median"] = 0.95
+        self.assertEqual(AA.classify_aa(statistics), "passed")
+
+        statistics["second_slot_over_first_slot_median"] = 0.949999
+        self.assertEqual(AA.classify_aa(statistics), "failed")
+
+    def test_half_split_drift_five_percent_boundary_is_inclusive(self):
+        statistics = self.passing_statistics()
+        statistics["half_split_drift"] = 0.05
+        self.assertEqual(AA.classify_aa(statistics), "passed")
+
+        statistics["half_split_drift"] = 0.050001
+        self.assertEqual(AA.classify_aa(statistics), "failed")
+
     def test_inconclusive_collects_exactly_one_extra_batch_then_passes(self):
         sample, calls = self.runner(lambda run: 1.0 if run <= 9 or run > 20 else 1.04)
         result = AA.run_aa_comparison(10_000, sample_runner=sample)
@@ -115,6 +137,19 @@ class AATests(unittest.TestCase):
         self.assertTrue(
             all(item["binary_sha256"] == digest for item in result["B"]["samples"])
         )
+
+    @staticmethod
+    def passing_statistics():
+        return {
+            "status": "ok",
+            "ratio": 1.0,
+            "a_first_paired_median": 1.0,
+            "b_first_paired_median": 1.0,
+            "second_slot_over_first_slot_median": 1.0,
+            "half_split_drift": 0.0,
+            "order_stratum_gap": 0.0,
+            "two_sided_95_median_ci": {"lower": 0.99, "upper": 1.01},
+        }
 
 
 if __name__ == "__main__":
