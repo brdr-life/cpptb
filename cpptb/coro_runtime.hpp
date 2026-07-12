@@ -1123,20 +1123,23 @@ class Scheduler {
                counts[static_cast<size_t>(EdgeKind::Any)] != 0;
     }
 
-    void set_edge_interest_publication(uint32_t signal_id, bool enabled) {
-        if (edge_interest(signal_id) != kEdgeInterestNone ||
-            (signal_id < edge_interest_change_pending_.size() &&
-             edge_interest_change_pending_[signal_id])) {
+    void configure_static_edge_source(uint32_t signal_id) {
+        if (wait_registered_) {
             std::fprintf(stderr,
-                         "cpptb: edge interest publication must be configured "
-                         "before registering waits for signal %u\n",
+                         "cpptb: static edge source %u must be configured "
+                         "before registering any waits\n",
                          signal_id);
             std::abort();
         }
-        if (signal_id >= edge_interest_publication_enabled_.size()) {
-            edge_interest_publication_enabled_.resize(signal_id + 1, true);
+        if (signal_id >= static_edge_sources_.size()) {
+            static_edge_sources_.resize(signal_id + 1, false);
         }
-        edge_interest_publication_enabled_[signal_id] = enabled;
+        static_edge_sources_[signal_id] = true;
+    }
+
+    bool is_static_edge_source(uint32_t signal_id) const {
+        return signal_id < static_edge_sources_.size() &&
+               static_edge_sources_[signal_id];
     }
 
     uint64_t edge_interest_generation() const {
@@ -1260,10 +1263,6 @@ class Scheduler {
     void record_edge_interest_change(uint32_t signal_id, uint8_t previous) {
         const uint8_t current = edge_interest(signal_id);
         if (current == previous) return;
-        if (signal_id < edge_interest_publication_enabled_.size() &&
-            !edge_interest_publication_enabled_[signal_id]) {
-            return;
-        }
         ++edge_interest_generation_;
         if (!edge_interest_change_pending_[signal_id]) {
             edge_interest_change_pending_[signal_id] = true;
@@ -1273,11 +1272,11 @@ class Scheduler {
 
     void add_edge_interest(size_t state_index, size_t queue_index) {
         const uint32_t signal_id = static_cast<uint32_t>(queue_index / 3);
+        if (is_static_edge_source(signal_id)) return;
         const size_t edge_index = queue_index % 3;
         if (signal_id >= edge_interest_counts_.size()) {
             edge_interest_counts_.resize(signal_id + 1);
             edge_interest_change_pending_.resize(signal_id + 1, false);
-            edge_interest_publication_enabled_.resize(signal_id + 1, true);
         }
         if (state_index >= edge_wait_indices_by_state_.size()) {
             edge_wait_indices_by_state_.resize(state_index + 1);
@@ -1330,6 +1329,7 @@ class Scheduler {
     }
 
     void register_wait(WaitRequest request, WaitRegistration registration) {
+        wait_registered_ = true;
         switch (request.kind) {
             case WaitKind::Edge:
                 {
@@ -1549,7 +1549,7 @@ class Scheduler {
     std::vector<std::vector<size_t>> edge_wait_indices_by_state_;
     std::vector<std::array<uint32_t, 3>> edge_interest_counts_;
     std::vector<bool> edge_interest_change_pending_;
-    std::vector<bool> edge_interest_publication_enabled_;
+    std::vector<bool> static_edge_sources_;
     std::deque<uint32_t> edge_interest_changes_;
     std::priority_queue<TimerRegistration, std::vector<TimerRegistration>,
                         TimerRegistrationLater>
@@ -1568,6 +1568,7 @@ class Scheduler {
     bool draining_ = false;
     bool reclaiming_ = false;
     bool shutting_down_ = false;
+    bool wait_registered_ = false;
     std::shared_ptr<SchedulerLifetime> lifetime_ =
         std::make_shared<SchedulerLifetime>();
 };
@@ -2343,8 +2344,12 @@ class Testbench {
         return scheduler_.has_edge_interest(signal_id, edge);
     }
 
-    void set_edge_interest_publication(uint32_t signal_id, bool enabled) {
-        scheduler_.set_edge_interest_publication(signal_id, enabled);
+    void configure_static_edge_source(uint32_t signal_id) {
+        scheduler_.configure_static_edge_source(signal_id);
+    }
+
+    bool is_static_edge_source(uint32_t signal_id) const {
+        return scheduler_.is_static_edge_source(signal_id);
     }
 
     uint64_t edge_interest_generation() const {
