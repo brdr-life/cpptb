@@ -224,6 +224,11 @@ stale by `First`, cancellation, or completion are removed without resuming the
 coroutine; this cleanup includes edge queues and falling-edge interest counts,
 not only the timer heap.
 
+Generated clocks are configured as static edge sources before the first wait is
+registered. Their edges are delivered unconditionally, so waits on those IDs do
+not contribute dynamic edge-interest masks or publications; waiter lifecycle,
+cancellation, `First`, and falling-edge summaries are otherwise unchanged.
+
 Zero-duration delays and delays that cannot be represented at the configured
 simulation precision abort with a diagnostic. Awaiting a default-constructed,
 expired, or otherwise invalid `Process` also aborts instead of silently
