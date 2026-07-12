@@ -295,6 +295,13 @@ Task<void> cancellable_edge_wait(Signal signal) {
     co_await First{FallingEdge{signal}, Edge{signal}, Delay{100_ns}};
 }
 
+Task<void> wait_for_static_first(Signal clock, Signal observer,
+                                 uint32_t& winner) {
+    winner = static_cast<uint32_t>(
+        co_await First{RisingEdge{clock}, FallingEdge{clock}, Edge{observer},
+                       Delay{5_ns}});
+}
+
 Task<void> cancellation_racer(Process* target) {
     co_await Delay{4_ns};
     target->cancel();
@@ -753,6 +760,13 @@ void trigger_zero_delay_wait() {
 void trigger_subprecision_delay_wait() {
     Testbench tb{1_ps};
     tb.spawn_detached(subprecision_delay_wait());
+}
+
+void trigger_late_static_edge_source_configuration() {
+    Testbench tb;
+    uint32_t value = 0;
+    tb.spawn_detached(delayed_increment(value));
+    tb.configure_static_edge_source(37);
 }
 
 void trigger_invalid_timed_task() {
@@ -2062,39 +2076,117 @@ int main() {
     {
         Testbench tb;
         Results results;
-        const Signal clock{nullptr, 32, "publication_suppressed_clock"};
-        tb.set_edge_interest_publication(clock.id, false);
+        const Signal clock{nullptr, 32, "static_clock"};
+        const Signal observer{nullptr, 33, "tracked_observer"};
+        tb.configure_static_edge_source(clock.id);
         const auto initial_generation = tb.edge_interest_generation();
 
+        passed &= expect("configured static edge source",
+                         tb.is_static_edge_source(clock.id), 1);
+        passed &= expect("observer remains dynamically tracked",
+                         tb.is_static_edge_source(observer.id), 0);
         const auto edge_process = tb.spawn(wait_for_edges(clock, results));
-        passed &= expect("suppressed clock retains rising interest",
-                         tb.edge_interest(clock.id), kEdgeInterestRising);
-        passed &= expect("suppressed clock publishes no rising change",
+        passed &= expect("static clock reports no rising interest",
+                         tb.edge_interest(clock.id), kEdgeInterestNone);
+        passed &= expect("static clock publishes no rising change",
                          tb.consume_edge_interest_change().has_value(), 0);
-        passed &= expect("suppressed clock generation remains stable",
+        passed &= expect("static clock generation remains stable",
                          tb.edge_interest_generation(), initial_generation);
 
         tb.notify_edge(clock.id, EdgeKind::Rising);
-        passed &= expect("suppressed clock rising edge resumes", results.rising,
+        passed &= expect("static clock rising edge resumes", results.rising,
                          1);
-        passed &= expect("suppressed clock retains falling interest",
-                         tb.edge_interest(clock.id), kEdgeInterestFalling);
-        passed &= expect("suppressed clock retains falling summary",
+        passed &= expect("static clock reports no falling interest",
+                         tb.edge_interest(clock.id), kEdgeInterestNone);
+        passed &= expect("static clock retains falling waiter summary",
                          tb.has_falling_edge_waiters() ? 1 : 0, 1);
-        passed &= expect("suppressed clock publishes no falling change",
+        passed &= expect("static clock publishes no falling change",
                          tb.consume_edge_interest_change().has_value(), 0);
 
         tb.notify_edge(clock.id, EdgeKind::Falling);
-        passed &= expect("suppressed clock waiter completes",
+        passed &= expect("static clock falling edge resumes",
+                         results.falling, 1);
+        passed &= expect("static clock waiter completes",
                          edge_process.done(), 1);
-        passed &= expect("suppressed clock clears interest",
+        passed &= expect("static clock remains without interest",
                          tb.edge_interest(clock.id), kEdgeInterestNone);
-        passed &= expect("suppressed clock clears falling summary",
+        passed &= expect("static clock clears falling summary",
                          tb.has_falling_edge_waiters() ? 1 : 0, 0);
-        passed &= expect("suppressed clock publishes no completion change",
+        passed &= expect("static clock publishes no completion change",
                          tb.consume_edge_interest_change().has_value(), 0);
-        passed &= expect("suppressed clock generation stays stable",
+        passed &= expect("static clock generation stays stable",
                          tb.edge_interest_generation(), initial_generation);
+
+        const auto cancelled = tb.spawn(cancellable_edge_wait(clock));
+        passed &= expect("static cancellation registers falling waiters",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 1);
+        cancelled.cancel();
+        passed &= expect("static cancellation completes", cancelled.cancelled(),
+                         1);
+        passed &= expect("static cancellation clears falling waiters",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+        tb.notify_edge(clock.id, EdgeKind::Falling);
+        tb.notify_edge(clock.id, EdgeKind::Any);
+        passed &= expect("cancelled static wait stays cancelled",
+                         cancelled.cancelled(), 1);
+
+        uint32_t first_winner = 99;
+        const auto first_process =
+            tb.spawn(wait_for_static_first(clock, observer, first_winner));
+        passed &= expect("three-edge First tracks observer interest",
+                         tb.edge_interest(observer.id),
+                         kEdgeInterestRising | kEdgeInterestFalling);
+        passed &= expect("three-edge First keeps static interest empty",
+                         tb.edge_interest(clock.id), kEdgeInterestNone);
+        passed &= expect("three-edge First has falling registrations",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 1);
+        auto change = tb.consume_edge_interest_change();
+        passed &= expect("tracked observer publishes active interest",
+                         change.has_value(), 1);
+        passed &= expect("tracked observer change id", change->signal_id,
+                         observer.id);
+        passed &= expect("tracked observer active mask", change->interest,
+                         kEdgeInterestRising | kEdgeInterestFalling);
+
+        tb.notify_edge(clock.id, EdgeKind::Rising);
+        passed &= expect("static edge wins mixed First", first_winner, 0);
+        passed &= expect("mixed First completes on static edge",
+                         first_process.done(), 1);
+        passed &= expect("mixed First clears observer interest",
+                         tb.edge_interest(observer.id), kEdgeInterestNone);
+        passed &= expect("mixed First clears falling registrations",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+        change = tb.consume_edge_interest_change();
+        passed &= expect("tracked observer publishes cleared interest",
+                         change.has_value(), 1);
+        passed &= expect("tracked observer cleared mask", change->interest,
+                         kEdgeInterestNone);
+        passed &= expect("static source adds no publication changes",
+                         tb.consume_edge_interest_change().has_value(), 0);
+
+        uint32_t delay_winner = 99;
+        const auto delay_process =
+            tb.spawn(wait_for_static_first(clock, observer, delay_winner));
+        change = tb.consume_edge_interest_change();
+        passed &= expect("delay race publishes observer interest",
+                         change.has_value(), 1);
+        passed &= expect("delay race observer active mask", change->interest,
+                         kEdgeInterestRising | kEdgeInterestFalling);
+        tb.set_time(5);
+        passed &= expect("Delay wins mixed First", delay_winner, 3);
+        passed &= expect("mixed First completes on Delay", delay_process.done(),
+                         1);
+        passed &= expect("Delay clears observer interest",
+                         tb.edge_interest(observer.id), kEdgeInterestNone);
+        passed &= expect("Delay clears static falling registrations",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+        change = tb.consume_edge_interest_change();
+        passed &= expect("Delay publishes observer interest removal",
+                         change.has_value(), 1);
+        passed &= expect("Delay observer cleared mask", change->interest,
+                         kEdgeInterestNone);
+        passed &= expect("static source still publishes no interest",
+                         tb.consume_edge_interest_change().has_value(), 0);
     }
 
     {
@@ -2185,6 +2277,10 @@ int main() {
     passed &= expect_abort(
         "subprecision Delay abort", trigger_subprecision_delay_wait,
         "delay of 1 fs is not representable at 1000 fs simulation precision");
+    passed &= expect_abort(
+        "late static edge source configuration abort",
+        trigger_late_static_edge_source_configuration,
+        "static edge source 37 must be configured before registering any waits");
     passed &= expect_abort("invalid timed Task abort",
                            trigger_invalid_timed_task,
                            "with_timeout received an invalid task");

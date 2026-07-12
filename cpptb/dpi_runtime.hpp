@@ -112,7 +112,7 @@ class Runtime {
                     std::abort();
                 }
                 configured_clock_[id] = true;
-                scheduler_->set_edge_interest_publication(id, false);
+                scheduler_->configure_static_edge_source(id);
             }
             local_edge_delivery_enabled_ = true;
         } else {
