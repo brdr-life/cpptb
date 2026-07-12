@@ -1,0 +1,278 @@
+{
+  "benchmark": "authoring_core_cpp_dpi_vs_pure_sv",
+  "example": "wide_slice",
+  "status": "success",
+  "iterations": 100000,
+  "pairs": 16,
+  "extra_pairs": 16,
+  "selected_kernels": [
+    "wide_slice"
+  ],
+  "workload": "shared deterministic authoring_core_dut request/response contract",
+  "metadata": {
+    "timestamp_utc": "2026-07-12T03:00:57.070133+00:00",
+    "git": {
+      "commit": "2d6b2e7f6bcec02ebeaa5f45ce1637208944e3f1",
+      "dirty": true,
+      "porcelain": "M Makefile\n M benchmarks/authoring_core/cpp_dpi/framework/authoring_core.hpp\n M benchmarks/authoring_core/cpp_dpi/generated/authoring_core_binding.hpp\n M benchmarks/authoring_core/cpp_dpi/generated/authoring_core_dut.hpp\n M benchmarks/authoring_core/cpp_dpi/generated/dpi_authoring_core.sv\n M benchmarks/authoring_core/cpp_dpi/testbench.cpp\n M benchmarks/authoring_core/pure_sv/authoring_core_sv_tb.sv\n M benchmarks/authoring_core/results/all/latest.json\n M benchmarks/authoring_core/results/all/latest.jsonl\n M benchmarks/authoring_core/results/all/latest.md\n M benchmarks/authoring_core/results/channel/latest.json\n M benchmarks/authoring_core/results/channel/latest.jsonl\n M benchmarks/authoring_core/results/channel/latest.md\n M benchmarks/authoring_core/results/clock_cycles/latest.json\n M benchmarks/authoring_core/results/clock_cycles/latest.jsonl\n M benchmarks/authoring_core/results/clock_cycles/latest.md\n M benchmarks/authoring_core/results/control/latest.json\n M benchmarks/authoring_core/results/control/latest.jsonl\n M benchmarks/authoring_core/results/control/latest.md\n M benchmarks/authoring_core/results/event/latest.json\n M benchmarks/authoring_core/results/event/latest.jsonl\n M benchmarks/authoring_core/results/event/latest.md\n M benchmarks/authoring_core/results/task_timeout/latest.json\n M benchmarks/authoring_core/results/task_timeout/latest.jsonl\n M benchmarks/authoring_core/results/task_timeout/latest.md\n M benchmarks/authoring_core/results/task_value/latest.json\n M benchmarks/authoring_core/results/task_value/latest.jsonl\n M benchmarks/authoring_core/results/task_value/latest.md\n M benchmarks/authoring_core/results/timeout/latest.json\n M benchmarks/authoring_core/results/timeout/latest.jsonl\n M benchmarks/authoring_core/results/timeout/latest.md\n M benchmarks/authoring_core/results/wait_until/latest.json\n M benchmarks/authoring_core/results/wait_until/latest.jsonl\n M benchmarks/authoring_core/results/wait_until/latest.md\n M benchmarks/authoring_core/rtl/authoring_core_dut.sv\n M benchmarks/authoring_core/tests/test_contract.py\n M benchmarks/authoring_core/workload.py\n M benchmarks/diagnostics/runtime_old/build_provenance.json\n M benchmarks/peripheral_suite/tests/test_runtime_ab.py\n M benchmarks/registry.py\n M benchmarks/results/regression/entries/control/latest.json\n M benchmarks/results/regression/latest.json\n M benchmarks/results/regression/latest.md\n M cpptb/codegen/design_ir.py\n M cpptb/codegen/generate_dpi_bindings.py\n M cpptb/codegen/tests/test_frontends.py\n M cpptb/codegen/tests/test_generate_dpi_bindings.py\n M cpptb/conformance/generated/dpi_scheduler_conformance.sv\n M cpptb/conformance/generated/scheduler_conformance_binding.hpp\n M cpptb/conformance/generated/scheduler_conformance_dut.hpp\n M cpptb/conformance/scheduler_conformance.dpi.json\n M cpptb/conformance/scheduler_conformance.sv\n M cpptb/conformance/testbench.cpp\n M cpptb/coro_runtime.hpp\n M cpptb/dpi_runtime.hpp\n M cpptb/tests/coro_runtime_test.cpp\n?? benchmarks/authoring_core/results/fixed_mac/\n?? benchmarks/authoring_core/results/wide64/\n?? benchmarks/authoring_core/results/wide_echo_137/\n?? benchmarks/authoring_core/results/wide_slice/\n?? benchmarks/results/regression/entries/fixed_mac/\n?? benchmarks/results/regression/entries/wide64/\n?? benchmarks/results/regression/entries/wide_echo_137/\n?? benchmarks/results/regression/entries/wide_slice/\n?? cpptb/fixed.hpp\n?? cpptb/packed_bits.hpp\n?? cpptb/tests/packed_value_test.cpp"
+    },
+    "host": {
+      "hostname": "bike-trainer",
+      "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+      "machine": "arm64"
+    },
+    "python": {
+      "version": "3.14.6",
+      "executable": "/opt/homebrew/opt/python@3.14/bin/python3.14"
+    },
+    "compiler": {
+      "command": [
+        "c++",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.5.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+      "executable": "/usr/bin/c++"
+    },
+    "verilator": {
+      "command": [
+        "verilator",
+        "--version"
+      ],
+      "returncode": 0,
+      "output": "Verilator 5.050 2026-07-01 rev vUNKNOWN-built20260701",
+      "executable": "/opt/homebrew/bin/verilator"
+    },
+    "command": [
+      "/opt/homebrew/opt/python@3.14/bin/python3.14",
+      "benchmarks/authoring_core/run_benchmark.py",
+      "--iters",
+      "100000",
+      "--example",
+      "wide_slice",
+      "--skip-build",
+      "--semantic-only"
+    ],
+    "config": {
+      "example": "wide_slice",
+      "iterations": 100000,
+      "initial_pairs": 16,
+      "extra_pairs": 16,
+      "kernel": "wide_slice",
+      "skip_build": true,
+      "with_preflight": false,
+      "semantic_only": true,
+      "preflight_iterations": 1000,
+      "max_absolute_ratio": 1.1,
+      "min_order_stratum_failure_ratio": 1.05,
+      "max_independent_paired_relative_disagreement": 0.05,
+      "max_normalized_load_1m": 1.0
+    },
+    "starting_load": {
+      "logical_cpu_count": 8,
+      "load_average_1m": 4.98095703125,
+      "load_average_5m": 5.2333984375,
+      "load_average_15m": 5.08544921875,
+      "normalized_load_1m": 0.62261962890625,
+      "normalized_load_5m": 0.6541748046875,
+      "normalized_load_15m": 0.63568115234375
+    },
+    "captured_before_result_writes": true
+  },
+  "environment": {
+    "pair_boundary_probes": [],
+    "validity": {
+      "status": "not_assessed"
+    }
+  },
+  "binaries": {
+    "cpp_dpi": {
+      "wide_slice": {
+        "path": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_wide_slice/Vdpi_authoring_core",
+        "sha256": "0ef2120a91243f3d49feee9a23031e6bcbae7b5ba723a31c5228f13affd2b668"
+      }
+    },
+    "pure_sv": {
+      "wide_slice": {
+        "path": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+        "sha256": "28dc78a10b761585b2aecb192251bf147edc9975dd533a1c1ddbcd5a9afe9e49"
+      }
+    }
+  },
+  "preflight": {
+    "status": "skipped"
+  },
+  "raw_samples": [
+    {
+      "mode": "cpp_dpi",
+      "kernel": "wide_slice",
+      "iterations": 100000,
+      "transactions": 100000,
+      "checks": 200002,
+      "sim_cycles": 400005,
+      "checksum": 2854112901,
+      "failures": 0,
+      "task_value": 0,
+      "clock_cycles": 0,
+      "timeouts": 0,
+      "timeout_hits": 0,
+      "task_timeouts": 0,
+      "task_timeout_hits": 0,
+      "wait_until": 0,
+      "event_set": 0,
+      "event_wait": 0,
+      "channel_send": 0,
+      "channel_receive": 0,
+      "wide64": 0,
+      "wide_echo_137": 0,
+      "wide_slice": 100000,
+      "fixed_mac": 0,
+      "wall_ms": 294.914,
+      "pair": 1,
+      "process_wall_ms": 522.3720418289304,
+      "child_user_cpu_ms": 288.834,
+      "child_system_cpu_ms": 7.276999999999998,
+      "child_cpu_ms": 296.111,
+      "child_cpu_utilization": 0.5668584386010694,
+      "child_max_rss": 17678336.0,
+      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_wide_slice/Vdpi_authoring_core",
+      "binary_sha256": "0ef2120a91243f3d49feee9a23031e6bcbae7b5ba723a31c5228f13affd2b668",
+      "pair_order": [
+        "cpp_dpi",
+        "pure_sv"
+      ],
+      "slot": 1,
+      "sequence_index": 0,
+      "batch": "semantic"
+    },
+    {
+      "mode": "pure_sv",
+      "kernel": "wide_slice",
+      "iterations": 100000,
+      "transactions": 100000,
+      "checks": 200002,
+      "sim_cycles": 400005,
+      "checksum": 2854112901,
+      "failures": 0,
+      "task_value": 0,
+      "clock_cycles": 0,
+      "timeouts": 0,
+      "timeout_hits": 0,
+      "task_timeouts": 0,
+      "task_timeout_hits": 0,
+      "wait_until": 0,
+      "event_set": 0,
+      "event_wait": 0,
+      "channel_send": 0,
+      "channel_receive": 0,
+      "wide64": 0,
+      "wide_echo_137": 0,
+      "wide_slice": 100000,
+      "fixed_mac": 0,
+      "pair": 1,
+      "process_wall_ms": 304.64458372443914,
+      "child_user_cpu_ms": 285.72200000000004,
+      "child_system_cpu_ms": 6.688,
+      "child_cpu_ms": 292.41,
+      "child_cpu_utilization": 0.959839812102139,
+      "child_max_rss": 17678336.0,
+      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "binary_sha256": "28dc78a10b761585b2aecb192251bf147edc9975dd533a1c1ddbcd5a9afe9e49",
+      "pair_order": [
+        "cpp_dpi",
+        "pure_sv"
+      ],
+      "slot": 2,
+      "sequence_index": 1,
+      "batch": "semantic"
+    }
+  ],
+  "kernels": {},
+  "measurement_mode": "equivalence_only",
+  "semantic": {
+    "exact_match": true,
+    "cpp_dpi": {
+      "mode": "cpp_dpi",
+      "kernel": "wide_slice",
+      "iterations": 100000,
+      "transactions": 100000,
+      "checks": 200002,
+      "sim_cycles": 400005,
+      "checksum": 2854112901,
+      "failures": 0,
+      "task_value": 0,
+      "clock_cycles": 0,
+      "timeouts": 0,
+      "timeout_hits": 0,
+      "task_timeouts": 0,
+      "task_timeout_hits": 0,
+      "wait_until": 0,
+      "event_set": 0,
+      "event_wait": 0,
+      "channel_send": 0,
+      "channel_receive": 0,
+      "wide64": 0,
+      "wide_echo_137": 0,
+      "wide_slice": 100000,
+      "fixed_mac": 0,
+      "wall_ms": 294.914,
+      "pair": 1,
+      "process_wall_ms": 522.3720418289304,
+      "child_user_cpu_ms": 288.834,
+      "child_system_cpu_ms": 7.276999999999998,
+      "child_cpu_ms": 296.111,
+      "child_cpu_utilization": 0.5668584386010694,
+      "child_max_rss": 17678336.0,
+      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_wide_slice/Vdpi_authoring_core",
+      "binary_sha256": "0ef2120a91243f3d49feee9a23031e6bcbae7b5ba723a31c5228f13affd2b668",
+      "pair_order": [
+        "cpp_dpi",
+        "pure_sv"
+      ],
+      "slot": 1,
+      "sequence_index": 0,
+      "batch": "semantic"
+    },
+    "pure_sv": {
+      "mode": "pure_sv",
+      "kernel": "wide_slice",
+      "iterations": 100000,
+      "transactions": 100000,
+      "checks": 200002,
+      "sim_cycles": 400005,
+      "checksum": 2854112901,
+      "failures": 0,
+      "task_value": 0,
+      "clock_cycles": 0,
+      "timeouts": 0,
+      "timeout_hits": 0,
+      "task_timeouts": 0,
+      "task_timeout_hits": 0,
+      "wait_until": 0,
+      "event_set": 0,
+      "event_wait": 0,
+      "channel_send": 0,
+      "channel_receive": 0,
+      "wide64": 0,
+      "wide_echo_137": 0,
+      "wide_slice": 100000,
+      "fixed_mac": 0,
+      "pair": 1,
+      "process_wall_ms": 304.64458372443914,
+      "child_user_cpu_ms": 285.72200000000004,
+      "child_system_cpu_ms": 6.688,
+      "child_cpu_ms": 292.41,
+      "child_cpu_utilization": 0.959839812102139,
+      "child_max_rss": 17678336.0,
+      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "binary_sha256": "28dc78a10b761585b2aecb192251bf147edc9975dd533a1c1ddbcd5a9afe9e49",
+      "pair_order": [
+        "cpp_dpi",
+        "pure_sv"
+      ],
+      "slot": 2,
+      "sequence_index": 1,
+      "batch": "semantic"
+    }
+  }
+}

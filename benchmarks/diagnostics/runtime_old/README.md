@@ -31,9 +31,19 @@ make peripheral-suite-runtime-old-diagnostic-build
 python3 benchmarks/diagnostics/runtime_old/record_build.py
 ```
 
+After a shared current-tree build input changes, run both commands and update
+the reviewed `binary_sha256` expectation in
+`benchmarks/peripheral_suite/tests/test_runtime_ab.py`. Never update an input
+hash without rebuilding the binary it describes.
+
 The build uses current RTL, generated DPI wrapper, `dpi_runtime.hpp`, transport,
 and benchmark sequence implementation. Its include search puts this snapshot
 root before the repository root, selecting the old runtime and old fixture API.
 `build_provenance.json` records the exact Verilator argument vector, compiler
 and Verilator versions, input hashes, and resulting binary SHA-256 for the
 documented reconstruction build.
+
+The runtime A/B report verifies that immutable record and reports any current
+framework input hashes that have diverged from it. Current-source divergence is
+expected as the framework evolves and does not invalidate the archived binary;
+the recorded binary hash remains the identity check for the old side.

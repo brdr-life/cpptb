@@ -69,6 +69,65 @@ The locked `pyslang` dependency is installed by `uv` on first use. A command
 line `--frontend slang|verilator_json` override is also available for focused
 debugging and migration checks.
 
+## Internal probes
+
+The optional `internals` manifest list exposes elaborated variables, nets, and
+one-dimensional fixed memories below `dut.internal`. Read-only entries provide
+`get()`; `read_write` variables also provide `deposit(value)`. An independent
+`force` capability adds immediate `force(value)` and `release()` primitives:
+
+```json
+"internals": [
+  {"path": "cycle_count", "access": "read"},
+  {"path": "memory", "access": "read_write", "force": true},
+  {"path": "resolved_status", "access": "read", "force": true}
+]
+```
+
+Values up to 32 and 64 bits cross DPI as native unsigned values. Wider packed
+values use `svBitVecVal` words and `Bits<W>`. A deposit performs an immediate
+SystemVerilog blocking assignment and never advances time. A same-callback
+`get()` therefore observes the deposited value. The testbench still explicitly
+awaits `Delay` or another trigger when downstream RTL must evaluate before
+observation.
+
+Internal probes currently use two-state transport: X/Z information is not
+preserved. A probe deposit that races a DUT nonblocking assignment to the same
+variable in the same time slot also has the usual SystemVerilog indeterminate
+ordering and is outside the supported deterministic contract.
+
+Verilator reports `BLKANDNBLK` when RTL also writes a deposited variable with a
+nonblocking assignment. Such designs must compile with `-Wno-BLKANDNBLK`; the
+testbench must avoid depositing in the same time slot as the RTL write. An
+NBA-scheduled backdoor operation is intentionally not part of `deposit()`.
+
+A testbench uses scalar and memory probes directly and chooses every scheduling
+boundary explicitly:
+
+```cpp
+check(dut.internal.status.get(), expected_status);
+dut.internal.pending_data.deposit(0x1234'5678u);
+dut.internal.memory.at(address).deposit(expected);
+
+// Immediate readback observes the deposited values in the same callback.
+check(dut.internal.pending_data.get(), 0x1234'5678u);
+
+// Delay only when dependent RTL needs time to evaluate.
+co_await Delay{1_ps};
+check(dut.read_data.get(), expected);
+```
+
+Read-only probes expose only `get()`, and `.at(index)` enforces the elaborated
+SystemVerilog memory range.
+
+Force and release call direct generated DPI exports and never schedule a delay
+or evaluation phase. The generated wrapper keeps force RHS values in
+module-lifetime shadow storage. Fixed memory force uses constant-index dispatch
+and is capped at 1024 generated elements. A released variable retains its
+forced value until RTL assigns it again; a released net returns to its resolved
+drivers, following SystemVerilog semantics. The testbench explicitly awaits an
+edge or `Delay` before checking dependent logic.
+
 ## Manifest hierarchy
 
 Unmatched ports remain at the DUT root. A path rule strips a port prefix and
@@ -145,6 +204,13 @@ when a `First` explicitly waits on simultaneous domains, its winner follows
 the simulator's process ordering and should not be used to infer hardware
 priority.
 
+Non-clock one-bit DUT outputs can opt into the same trigger API through
+`"edge_observers": ["rsp_valid"]`. Generated SV processes remain attached to
+those signals, but cross-language callbacks occur only while the C++ scheduler
+has a matching rising, falling, or change waiter. Testbench-driven scalar
+inputs deliver their changed values directly in the runtime. Unsupported waits
+fail explicitly instead of silently hanging.
+
 The generator rejects ambiguous configurations: duplicate clock ports,
 multiple primary clocks, generated/testbench clocks on DUT outputs, DUT clocks
 on inputs, and timing fields on clocks not produced by the wrapper.
@@ -152,8 +218,10 @@ on inputs, and timing fields on clocks not produced by the wrapper.
 The generated binding is consumed by the reusable runtime in
 `cpptb/dpi_runtime.hpp`. A new design provides a thin adapter connecting the
 generated DUT binding to its test-registration function and timeout policy.
-Open-array transport, scheduler dispatch, optimization flags, timing, and the
-standard result line remain shared framework code.
+Compact directional open-array transport, scheduler dispatch, optimization
+flags, timing, and the standard result line remain shared framework code. The
+generated scheduler step carries observed words only; a separate output pull
+copies driven words after initialization or a reported output change.
 
 The generated wrapper transports simulation time in its configured
 `timeprecision` and passes that precision to the C++ runtime. This gives
@@ -163,10 +231,20 @@ in `cpptb/conformance`.
 
 ## Current boundary
 
-The `DesignIR` already records frontend-independent port type, signedness, and
-state metadata. The current transport supports input and output scalar or
-packed integral ports up to 32 bits and arbitrary mixes of generated,
-testbench-driven, and DUT-generated clocks. Transport validation intentionally
-rejects wider ports, unpacked arrays, interfaces, `inout` ports, and four-state
-value propagation. Those can now be added below the frontend boundary without
-changing RTL elaboration or the testbench API.
+The `DesignIR` records frontend-independent packed width, signedness, state
+metadata, and fixed unpacked ranges. The transport supports scalar and packed
+integral input/output ports plus any fixed number of unpacked dimensions. C++
+preserves declared bounds and exposes elements as
+`dut.port.at(i).at(j).get()` and `.set(value)`. Flattening keeps the last
+dimension contiguous and orders every dimension by increasing numeric index,
+so ascending, descending, and nonzero ranges retain
+their SystemVerilog element identity.
+
+Ports wider than 32 bits and wide array elements must be two-state `bit` and
+use `uint64_t` through 64 bits or `Bits<W>` above 64 bits. Four-state X/Z value
+propagation, multidimensional or dynamic arrays, interfaces, and `inout` ports
+remain explicit validation errors. Generated, testbench-driven, and
+DUT-generated clocks may be mixed independently of those data-port shapes.
+Signedness is retained in the elaborated contract but values cross the current
+C++ API as raw bits; scalar `.get()` returns a zero-extended `uint32_t`, so a
+testbench that needs a signed numeric interpretation must sign-extend it.

@@ -11,8 +11,18 @@ struct DpiAdapter {
     using Result = ConformanceResult;
 
     static constexpr uint32_t signal_count = kSignalCount;
-    inline static constexpr auto driven_signal_ids =
-        generated::kDrivenSignalIds;
+    static constexpr bool compact_input_transport =
+        generated::kCompactInputTransport;
+    inline static constexpr auto driven_signal_spans =
+        generated::kDrivenSignalSpans;
+    inline static constexpr auto observed_signal_word_ids =
+        generated::kObservedSignalWordIds;
+    inline static constexpr auto driven_signal_word_ids =
+        generated::kDrivenSignalWordIds;
+    inline static constexpr auto clock_signal_ids =
+        generated::kClockSignalIds;
+    inline static constexpr auto edge_observer_signal_ids =
+        generated::kEdgeObserverSignalIds;
     static constexpr const char* result_name = "CPPTB_CONFORMANCE_RESULT";
 
     template <typename MakeSignal>
