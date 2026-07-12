@@ -861,12 +861,27 @@ class Scheduler {
                                                 generation, winner, winner_index});
     }
 
+    void park_edge(std::coroutine_handle<> handle, TaskPromiseBase& promise,
+                   uint32_t signal_id, EdgeKind edge) {
+        auto& state = state_for(handle, promise);
+        const uint64_t generation = begin_wait(state);
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        ++single_edge_park_counts_[static_cast<size_t>(edge)];
+#endif
+        register_edge_wait(
+            signal_id, edge,
+            WaitRegistration{promise.state_index, generation, nullptr, 0});
+    }
+
     template <size_t TriggerCount>
     void park_first(std::coroutine_handle<> handle, TaskPromiseBase& promise,
                     const std::array<WaitRequest, TriggerCount>& requests,
                     size_t* winner) {
         auto& state = state_for(handle, promise);
         const uint64_t generation = begin_wait(state);
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        ++compound_wait_parks_;
+#endif
         const size_t state_index = promise.state_index;
         for (size_t index = 0; index < TriggerCount; ++index) {
             register_wait(
@@ -1178,6 +1193,14 @@ class Scheduler {
 
     bool all_done() const { return active_coroutines_ == 0; }
 
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+    uint64_t single_edge_park_count(EdgeKind edge) const {
+        return single_edge_park_counts_[static_cast<size_t>(edge)];
+    }
+
+    uint64_t compound_wait_park_count() const { return compound_wait_parks_; }
+#endif
+
    private:
     void resume_completion_waiters(ProcessControl& process) {
         for (const auto& registration : process.completion_waiters) {
@@ -1328,27 +1351,29 @@ class Scheduler {
         }
     }
 
+    void register_edge_wait(uint32_t signal_id, EdgeKind edge,
+                            WaitRegistration registration) {
+        const size_t queue_index = edge_queue_index(signal_id, edge);
+        if (queue_index >= edge_waiters_.size()) {
+            edge_waiters_.resize(queue_index + 1);
+        }
+        edge_waiters_[queue_index].push_back(registration);
+        ++edge_queue_entries_;
+        auto& state = states_[registration.state_index];
+        add_edge_interest(registration.state_index, queue_index);
+        ++state.edge_wait_count;
+        if (edge == EdgeKind::Falling || edge == EdgeKind::Any) {
+            ++falling_edge_registrations_;
+            ++state.falling_edge_wait_count;
+        }
+    }
+
     void register_wait(WaitRequest request, WaitRegistration registration) {
         wait_registered_ = true;
         switch (request.kind) {
             case WaitKind::Edge:
-                {
-                    const size_t queue_index =
-                        edge_queue_index(request.signal_id, request.edge);
-                    if (queue_index >= edge_waiters_.size()) {
-                        edge_waiters_.resize(queue_index + 1);
-                    }
-                    edge_waiters_[queue_index].push_back(registration);
-                    ++edge_queue_entries_;
-                    auto& state = states_[registration.state_index];
-                    add_edge_interest(registration.state_index, queue_index);
-                    ++state.edge_wait_count;
-                    if (request.edge == EdgeKind::Falling ||
-                        request.edge == EdgeKind::Any) {
-                        ++falling_edge_registrations_;
-                        ++state.falling_edge_wait_count;
-                    }
-                }
+                register_edge_wait(request.signal_id, request.edge,
+                                   registration);
                 break;
             case WaitKind::Delay: {
                 validate_delay(request.delay);
@@ -1564,6 +1589,10 @@ class Scheduler {
     size_t stale_edge_registrations_ = 0;
     uint64_t edge_interest_generation_ = 0;
     uint64_t femtoseconds_per_tick_ = 1'000'000u;
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+    std::array<uint64_t, 3> single_edge_park_counts_{};
+    uint64_t compound_wait_parks_ = 0;
+#endif
     bool timer_schedule_changed_ = false;
     bool draining_ = false;
     bool reclaiming_ = false;
@@ -1736,6 +1765,41 @@ struct BasicTriggerAwaiter {
             std::abort();
         }
         scheduler->park(handle, promise, wait_request(trigger));
+    }
+
+    void await_resume() const noexcept {}
+};
+
+constexpr EdgeKind basic_trigger_edge_kind(RisingEdge) {
+    return EdgeKind::Rising;
+}
+
+constexpr EdgeKind basic_trigger_edge_kind(FallingEdge) {
+    return EdgeKind::Falling;
+}
+
+constexpr EdgeKind basic_trigger_edge_kind(Edge) { return EdgeKind::Any; }
+
+template <typename Trigger>
+    requires(std::same_as<Trigger, RisingEdge> ||
+             std::same_as<Trigger, FallingEdge> ||
+             std::same_as<Trigger, Edge>)
+struct BasicTriggerAwaiter<Trigger> {
+    Trigger trigger;
+
+    bool await_ready() const noexcept { return false; }
+
+    template <typename Promise>
+        requires std::derived_from<Promise, TaskPromiseBase>
+    void await_suspend(std::coroutine_handle<Promise> handle) const {
+        auto& promise = static_cast<TaskPromiseBase&>(handle.promise());
+        auto* scheduler = promise.scheduler;
+        if (!scheduler) {
+            std::fprintf(stderr, "cpptb: cannot wait without a scheduler\n");
+            std::abort();
+        }
+        scheduler->park_edge(handle, promise, trigger.signal.id,
+                             basic_trigger_edge_kind(trigger));
     }
 
     void await_resume() const noexcept {}
@@ -2371,6 +2435,16 @@ class Testbench {
     uint64_t next_timer_deadline() { return scheduler_.next_timer_deadline(); }
 
     bool done() const { return scheduler_.all_done(); }
+
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+    uint64_t single_edge_park_count(EdgeKind edge) const {
+        return scheduler_.single_edge_park_count(edge);
+    }
+
+    uint64_t compound_wait_park_count() const {
+        return scheduler_.compound_wait_park_count();
+    }
+#endif
 
     SimTime now() const { return scheduler_.now_time(); }
 

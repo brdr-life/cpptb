@@ -164,6 +164,34 @@ Task<void> wait_for_change(Signal signal, Results& results) {
     ++results.changed;
 }
 
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+Task<void> fast_path_rearm(Signal signal, uint32_t& stage) {
+    co_await RisingEdge{signal};
+    stage = 1;
+    co_await FallingEdge{signal};
+    stage = 2;
+}
+
+Task<void> fast_path_any(Signal signal, uint32_t& wakes) {
+    co_await Edge{signal};
+    ++wakes;
+}
+
+Task<void> fast_path_cancelled_falling(Signal signal, uint32_t& wakes) {
+    co_await FallingEdge{signal};
+    ++wakes;
+}
+
+Task<void> generic_first_path(Signal signal, uint32_t& winner) {
+    winner = static_cast<uint32_t>(
+        co_await First{RisingEdge{signal}, Delay{10_ns}});
+}
+
+Task<void> generic_timeout_path(Signal signal, TimeoutOutcome& outcome) {
+    outcome = co_await with_timeout(RisingEdge{signal}, 2_ns);
+}
+#endif
+
 Task<void> wait_for_delay(Testbench& tb, Results& results) {
     co_await Delay{7_ns};
     if (tb.now() == 7_ns) ++results.delayed;
@@ -1648,6 +1676,91 @@ int main() {
         passed &= expect("join", results.joined, 12);
         passed &= expect("done", tb.done() ? 1 : 0, 1);
     }
+
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+    {
+        Testbench tb;
+        const Signal rearm_signal{nullptr, 40, "fast_rearm"};
+        const Signal any_signal{nullptr, 41, "fast_any"};
+        const Signal cancelled_signal{nullptr, 42, "fast_cancel"};
+        const Signal compound_signal{nullptr, 43, "generic_compound"};
+        uint32_t rearm_stage = 0;
+        uint32_t any_wakes = 0;
+        uint32_t cancelled_wakes = 0;
+        uint32_t first_winner = 99;
+        TimeoutOutcome timeout_outcome = TimeoutOutcome::Triggered;
+
+        const auto rearmed = tb.spawn(fast_path_rearm(rearm_signal,
+                                                     rearm_stage));
+        const auto any = tb.spawn(fast_path_any(any_signal, any_wakes));
+        const auto cancelled = tb.spawn(
+            fast_path_cancelled_falling(cancelled_signal, cancelled_wakes));
+
+        passed &= expect("RisingEdge selects single-edge fast path",
+                         tb.single_edge_park_count(EdgeKind::Rising), 1);
+        passed &= expect("FallingEdge selects single-edge fast path",
+                         tb.single_edge_park_count(EdgeKind::Falling), 1);
+        passed &= expect("Edge selects single-edge fast path",
+                         tb.single_edge_park_count(EdgeKind::Any), 1);
+        passed &= expect("single-edge waits avoid compound path",
+                         tb.compound_wait_park_count(), 0);
+        passed &= expect("FallingEdge fast path updates accounting",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 1);
+
+        cancelled.cancel();
+        passed &= expect("fast-path cancellation completes process",
+                         cancelled.cancelled() ? 1 : 0, 1);
+        passed &= expect("fast-path cancellation prevents wake",
+                         cancelled_wakes, 0);
+        passed &= expect("cancelled fast FallingEdge clears accounting",
+                         tb.has_edge_interest(cancelled_signal.id,
+                                              EdgeKind::Falling),
+                         0);
+
+        tb.notify_edge(any_signal.id, EdgeKind::Rising);
+        passed &= expect("Any fast path wakes", any_wakes, 1);
+        passed &= expect("Any fast path completes coroutine",
+                         any.done() ? 1 : 0, 1);
+
+        tb.notify_edge(rearm_signal.id, EdgeKind::Rising);
+        passed &= expect("fast path wakes before rearm", rearm_stage, 1);
+        passed &= expect("rearmed FallingEdge uses fast path",
+                         tb.single_edge_park_count(EdgeKind::Falling), 2);
+        passed &= expect("rearmed fast path updates falling accounting",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 1);
+        tb.notify_edge(rearm_signal.id, EdgeKind::Falling);
+        passed &= expect("rearmed fast path wakes again", rearm_stage, 2);
+        passed &= expect("rearmed fast path completes coroutine",
+                         rearmed.done() ? 1 : 0, 1);
+        passed &= expect("completed fast path clears falling accounting",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+
+        const auto first =
+            tb.spawn(generic_first_path(compound_signal, first_winner));
+        passed &= expect("First remains on generic compound path",
+                         tb.compound_wait_park_count(), 1);
+        passed &= expect("First edge does not use single-edge fast path",
+                         tb.single_edge_park_count(EdgeKind::Rising), 1);
+        tb.notify_edge(compound_signal.id, EdgeKind::Rising);
+        passed &= expect("generic First still wakes", first_winner, 0);
+        passed &= expect("generic First completes", first.done() ? 1 : 0, 1);
+
+        const auto timed =
+            tb.spawn(generic_timeout_path(compound_signal, timeout_outcome));
+        passed &= expect("edge timeout remains on generic compound path",
+                         tb.compound_wait_park_count(), 2);
+        passed &= expect("edge timeout avoids single-edge fast path",
+                         tb.single_edge_park_count(EdgeKind::Rising), 1);
+        tb.set_time(2);
+        passed &= expect("generic edge timeout still times out",
+                         timeout_outcome == TimeoutOutcome::TimedOut ? 1 : 0,
+                         1);
+        passed &= expect("generic edge timeout completes",
+                         timed.done() ? 1 : 0, 1);
+        passed &= expect("fast-path diagnostics test drains scheduler",
+                         tb.done() ? 1 : 0, 1);
+    }
+#endif
 
     {
         Testbench tb{1_fs};
