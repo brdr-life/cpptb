@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "recorded_at_utc": "2026-07-11T16:45:22.566242+00:00",
-  "git_commit": "dcc198199e4ba37b563fb9333cc36daa9d61db6e",
+  "recorded_at_utc": "2026-07-12T18:15:54.854433+00:00",
+  "git_commit": "2d6b2e7f6bcec02ebeaa5f45ce1637208944e3f1",
   "build_command": [
     "make",
     "peripheral-suite-runtime-old-diagnostic-build"
@@ -506,16 +506,16 @@
   },
   "verilator_version": "Verilator 5.050 2026-07-01 rev vUNKNOWN-built20260701",
   "binary": "build/diagnostics/runtime_old_obj/Vdpi_peripheral_suite",
-  "binary_size_bytes": 498312,
-  "binary_sha256": "48589eac3978a7bc890f59dcb48110072d38080f42f47070e4c6816b18d336b5",
+  "binary_size_bytes": 498744,
+  "binary_sha256": "be1d12329edea134999264eb04ca2f9cf276435d89116237f88d4367c9bf6f5b",
   "input_sha256": {
     "benchmarks/diagnostics/runtime_old/benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_fixture.cpp": "9ff126a8410c9eb2464abad4d5c4190e06c07a86ebab6325c1b89938f170948b",
     "benchmarks/diagnostics/runtime_old/benchmarks/peripheral_suite/cpp_dpi/testbench.cpp": "abe5164b0021afc54a4462271f325c3ef4e0fc2edab5da1f5f93e10b3c530f93",
     "benchmarks/diagnostics/runtime_old/provenance.json": "45ecf754696005e3b823a2e7d73c244271dc2372a89b080620e3ad4ebf5d5b8a",
-    "benchmarks/peripheral_suite/cpp_dpi/framework/dpi_transport.cpp": "514db90aa44ed247271e83a019bf048d1afdb028504f524b5b4e53ba52208e50",
+    "benchmarks/peripheral_suite/cpp_dpi/framework/dpi_transport.cpp": "ff0221cd2f1a419a7557b7343585521baa87d6ccf592d5d1fc6a5d76fe8fda93",
     "benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_bench.cpp": "c51cc11d07961fd6d9bc026da8901038822827b8b52f6a0e3de9988f29be8c03",
-    "benchmarks/peripheral_suite/cpp_dpi/generated/dpi_peripheral_suite.sv": "0d65b55bbf19379765f41c580817c09a93ca43f7d0076557aca7e7b8f9fed229",
-    "benchmarks/peripheral_suite/cpp_dpi/generated/peripheral_suite_binding.hpp": "8bc0f2da6ba56d2e43ad7d2838e453016a4e028ff3947312d26a75c9d5907e20",
+    "benchmarks/peripheral_suite/cpp_dpi/generated/dpi_peripheral_suite.sv": "08e4c1b561b68f791e804b98a9e318b0e95216752790203f1936957b4d721aae",
+    "benchmarks/peripheral_suite/cpp_dpi/generated/peripheral_suite_binding.hpp": "736a10c926d617910549d5ec8639eaf6cac3dd17db950be174f31071b6e2da2b",
     "benchmarks/peripheral_suite/cpp_dpi/generated/peripheral_suite_dut.hpp": "7ffc3dc3b7f8d17692a7ac2ce9312f3da6c0cccf12c1136b5bb670a61a684dfd",
     "benchmarks/peripheral_suite/rtl/apb_i2c_peakrdl.sv": "fc8e20db6b5b2cd324ff476898839f4794b30a38ac87c2c7bb21d4bf24876626",
     "benchmarks/peripheral_suite/rtl/apb_i2c_regs_core.sv": "bdaaf7e19cc275edcbc2adc6691551a6e998930e183719ccb44566c375268e13",
@@ -530,7 +530,7 @@
     "benchmarks/peripheral_suite/rtl/peripheral_suite_dut.sv": "c7fc163785390c49eabec7c8daa79a3ac243f9afd66a6afae6c24a6612b2971f",
     "benchmarks/peripheral_suite/rtl/spi_master_apb_if_peakrdl.sv": "dac0582de9983eb4e83e2ba8b07b272e2542f6021fcdf5f8d19061bb40579808",
     "benchmarks/peripheral_suite/rtl/timer_peakrdl.sv": "e27c50b8f9a2777c3de22634b5374e169d2d8f49569374eab24af0b18d16d573",
-    "cpptb/dpi_runtime.hpp": "10739e162273bd8cacd84d4bcf1d4930e643edbedc61a5a89d8733e2abb6b180",
+    "cpptb/dpi_runtime.hpp": "3a1dbfbc9d492554f7fefe763123add2ebfadaf6e7fa9d431eddc53929f982cc",
     "cpptb/test_result.hpp": "05da6e74670a7a9022ee18f876d63095287373a28a63c85665815ade56a4d66a"
   }
 }

@@ -19,6 +19,45 @@
   "sources": [
     "scheduler_conformance.sv"
   ],
+  "internals": [
+    {
+      "path": "internal_wide",
+      "access": "read_write"
+    },
+    {
+      "path": "internal_u64",
+      "access": "read_write"
+    },
+    {
+      "path": "internal_memory",
+      "access": "read_write"
+    },
+    {
+      "path": "force_variable_wide",
+      "access": "read",
+      "force": true
+    },
+    {
+      "path": "force_variable_u64",
+      "access": "read",
+      "force": true
+    },
+    {
+      "path": "force_memory",
+      "access": "read",
+      "force": true
+    },
+    {
+      "path": "force_counter",
+      "access": "read",
+      "force": true
+    },
+    {
+      "path": "internal_net",
+      "access": "read",
+      "force": true
+    }
+  ],
   "clocks": [
     {
       "port": "clk_a",
@@ -40,6 +79,9 @@
       "port": "derived_clk",
       "source": "dut"
     }
+  ],
+  "edge_observers": [
+    "event_observed"
   ],
   "run": {
     "init_function": "cpptb_dpi_init",
@@ -84,13 +126,15 @@
         "--no-sched-zero-delay",
         "-Wno-TIMESCALEMOD",
         "-Wno-WIDTH",
-        "-Wno-UNUSEDSIGNAL"
+        "-Wno-UNUSEDSIGNAL",
+        "-Wno-BLKANDNBLK",
+        "-Wno-MULTIDRIVEN"
       ]
     }
   },
   "conformance": {
     "expected_iterations": 1,
-    "expected_checks": 210,
+    "expected_checks": 273,
     "expected_sim_cycles": 8,
     "expected_failures": 0,
     "negative_cases": [
@@ -135,6 +179,11 @@
         "iterations": 10,
         "case": "subprecision_task_timeout",
         "message": "delay of 1 fs is not representable at 1000 fs simulation precision"
+      },
+      {
+        "iterations": 11,
+        "case": "unobserved_edge",
+        "message": "signal 'comb_sum' has no generated edge observer"
       }
     ]
   }

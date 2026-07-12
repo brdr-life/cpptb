@@ -257,13 +257,17 @@ directionally faster.
 ## Current scope
 
 The coroutine runtime currently targets the Verilator-hosted VPI and DPI paths
-in this repository. Signal values use `uint32_t`; four-state X/Z handling and
-signals wider than 32 bits are not part of this API. Bounded channels remain
-deferred. No compatibility claim is made for additional simulator backends.
+in this repository. Scalar signal values use `uint32_t`; packed values use
+`uint64_t` through 64 bits and `Bits<W>` above 64 bits. Generated DPI bindings
+also support one fixed unpacked dimension with range-aware `.at(index)` access.
+Four-state X/Z propagation, multidimensional arrays, and bounded channels
+remain deferred. No compatibility claim is made for additional simulator
+backends.
 
 The Authoring Core sources currently present under
 `benchmarks/authoring_core/` exercise typed tasks, cycle waits, edge timeouts,
-predicate waits, events, and channels. Its C++ DPI testbench is
+predicate waits, events, channels, wide packed signals, fixed-point arithmetic,
+fixed unpacked arrays, and a synchronous memory front door. Its C++ DPI testbench is
 `benchmarks/authoring_core/cpp_dpi/testbench.cpp`, the corresponding pure-SV
 source is `benchmarks/authoring_core/pure_sv/authoring_core_sv_tb.sv`, and the
 shared workload contract is `benchmarks/authoring_core/workload.py`. Runtime
@@ -277,12 +281,15 @@ child DUT port copy that Verilator overwrites from its top-level input.
 
 `cpptb/dpi_runtime.hpp` owns the design-independent DPI host behavior:
 
-- input/output array transport and driven-signal tracking;
+- compact directional input/output transport and driven-signal tracking;
 - typed signal `get()`/`set()` callbacks and dirty-output detection;
+- generated internal-probe `get()`/`deposit()` access for packed variables and
+  fixed memories;
 - scheduler construction, edge dispatch, and delay deadlines;
 - falling-edge interest and precision-aware time transport;
 - timeout invocation, elapsed wall time, completion, and result reporting;
-- the three standard C exports expected by the generated wrapper.
+- the standard init, step, output-pull, deadline, and edge-interest C exports
+  expected by the generated wrapper.
 
 `cpptb/test_result.hpp` keeps the standard check/failure result contract
 independent of DPI, so user-facing fixtures do not include simulator transport
@@ -293,6 +300,16 @@ generated signal metadata, binding call, testbench registration call, result
 name, and timeout policy. `CPPTB_DEFINE_DPI_RUNTIME(Adapter)` provides the C
 entry points. No design transport needs to copy open arrays, decode events, or
 format a result line.
+
+The hot scheduler step receives only the compact observed-word array. Driven
+words are fetched through a separate idempotent output-pull export on
+initialization or after `STEP_OUTPUTS_CHANGED`, so unchanged steps do not carry
+an output argument through the simulator ABI.
+
+`deposit()` performs the underlying SystemVerilog blocking assignment
+immediately. It does not insert a scheduler delay or observation phase;
+testbench code uses an explicit `co_await Delay{...}` when downstream RTL must
+evaluate before observation.
 
 ## Benchmark
 

@@ -11,6 +11,7 @@ module dpi_scheduler_conformance;
 
   localparam int EDGE_RISING = 0;
   localparam int EDGE_FALLING = 1;
+  localparam int EDGE_ANY = 2;
   localparam int unsigned NO_SIGNAL = 32'hffff_ffff;
   localparam longint unsigned NO_TIMER = 64'hffff_ffff_ffff_ffff;
 
@@ -18,6 +19,7 @@ module dpi_scheduler_conformance;
   localparam int STEP_TIMER_CHANGED = 8;
   localparam int STEP_FALLING_EDGES = 16;
   localparam int STEP_OUTPUTS_CHANGED = 32;
+  localparam int STEP_EDGE_INTEREST_CHANGED = 64;
 
   localparam int SIGNAL_RSTN = 0;
   localparam int SIGNAL_CLKA = 1;
@@ -26,19 +28,68 @@ module dpi_scheduler_conformance;
   localparam int SIGNAL_DERIVEDGATE = 4;
   localparam int SIGNAL_STABLESIGNAL = 5;
   localparam int SIGNAL_PREDICATESIGNAL = 6;
-  localparam int SIGNAL_DRIVEVALUE = 7;
-  localparam int SIGNAL_ADDEND = 8;
-  localparam int SIGNAL_DERIVEDCLK = 9;
-  localparam int SIGNAL_COMBSUM = 10;
-  localparam int SIGNAL_SAMPLEDA = 11;
-  localparam int SIGNAL_SAMPLEDB = 12;
-  localparam int SIGNAL_SAMPLEDMANUAL = 13;
-  localparam int SIGNAL_SAMPLEDDERIVED = 14;
-  localparam int SIGNAL_COUNTA = 15;
-  localparam int SIGNAL_COUNTB = 16;
-  localparam int SIGNAL_COUNTMANUAL = 17;
-  localparam int SIGNAL_COUNTDERIVED = 18;
-  localparam int SIGNAL_COUNT = 19;
+  localparam int SIGNAL_EVENTDRIVE = 7;
+  localparam int SIGNAL_FORCENETSOURCE = 8;
+  localparam int SIGNAL_DRIVEVALUE = 9;
+  localparam int SIGNAL_ADDEND = 10;
+  localparam int SIGNAL_PACKED65I = 11;
+  localparam int SIGNAL_PACKED65O = 14;
+  localparam int SIGNAL_PACKED137I = 17;
+  localparam int SIGNAL_PACKED137O = 22;
+  localparam int SIGNAL_ARRAY73I = 27;
+  localparam int SIGNAL_ARRAY73O = 39;
+  localparam int SIGNAL_MATRIX65I = 51;
+  localparam int SIGNAL_MATRIX65O = 69;
+  localparam int SIGNAL_DERIVEDCLK = 87;
+  localparam int SIGNAL_EVENTOBSERVED = 88;
+  localparam int SIGNAL_COMBSUM = 89;
+  localparam int SIGNAL_SAMPLEDA = 90;
+  localparam int SIGNAL_SAMPLEDB = 91;
+  localparam int SIGNAL_SAMPLEDMANUAL = 92;
+  localparam int SIGNAL_SAMPLEDDERIVED = 93;
+  localparam int SIGNAL_COUNTA = 94;
+  localparam int SIGNAL_COUNTB = 95;
+  localparam int SIGNAL_COUNTMANUAL = 96;
+  localparam int SIGNAL_COUNTDERIVED = 97;
+  localparam int SIGNAL_INTERNALCOMBFANOUT = 98;
+  localparam int SIGNAL_INTERNALCLOCKEDFANOUT = 100;
+  localparam int SIGNAL_INTERNALNETFANOUT = 102;
+  localparam int INPUT_SIGNAL_CLKA = 0;
+  localparam int INPUT_SIGNAL_CLKB = 1;
+  localparam int INPUT_SIGNAL_PACKED65O = 2;
+  localparam int INPUT_SIGNAL_PACKED137O = 5;
+  localparam int INPUT_SIGNAL_ARRAY73O = 10;
+  localparam int INPUT_SIGNAL_MATRIX65O = 22;
+  localparam int INPUT_SIGNAL_DERIVEDCLK = 40;
+  localparam int INPUT_SIGNAL_EVENTOBSERVED = 41;
+  localparam int INPUT_SIGNAL_COMBSUM = 42;
+  localparam int INPUT_SIGNAL_SAMPLEDA = 43;
+  localparam int INPUT_SIGNAL_SAMPLEDB = 44;
+  localparam int INPUT_SIGNAL_SAMPLEDMANUAL = 45;
+  localparam int INPUT_SIGNAL_SAMPLEDDERIVED = 46;
+  localparam int INPUT_SIGNAL_COUNTA = 47;
+  localparam int INPUT_SIGNAL_COUNTB = 48;
+  localparam int INPUT_SIGNAL_COUNTMANUAL = 49;
+  localparam int INPUT_SIGNAL_COUNTDERIVED = 50;
+  localparam int INPUT_SIGNAL_INTERNALCOMBFANOUT = 51;
+  localparam int INPUT_SIGNAL_INTERNALCLOCKEDFANOUT = 53;
+  localparam int INPUT_SIGNAL_INTERNALNETFANOUT = 55;
+  localparam int OUTPUT_SIGNAL_RSTN = 0;
+  localparam int OUTPUT_SIGNAL_MANUALCLK = 1;
+  localparam int OUTPUT_SIGNAL_DERIVEDGATE = 2;
+  localparam int OUTPUT_SIGNAL_STABLESIGNAL = 3;
+  localparam int OUTPUT_SIGNAL_PREDICATESIGNAL = 4;
+  localparam int OUTPUT_SIGNAL_EVENTDRIVE = 5;
+  localparam int OUTPUT_SIGNAL_FORCENETSOURCE = 6;
+  localparam int OUTPUT_SIGNAL_DRIVEVALUE = 7;
+  localparam int OUTPUT_SIGNAL_ADDEND = 8;
+  localparam int OUTPUT_SIGNAL_PACKED65I = 9;
+  localparam int OUTPUT_SIGNAL_PACKED137I = 12;
+  localparam int OUTPUT_SIGNAL_ARRAY73I = 17;
+  localparam int OUTPUT_SIGNAL_MATRIX65I = 29;
+  localparam int SIGNAL_COUNT = 103;
+  localparam int INPUT_WORD_COUNT = 56;
+  localparam int OUTPUT_WORD_COUNT = 47;
 
   import "DPI-C" context function void cpptb_dpi_init(
       input int unsigned iterations,
@@ -50,10 +101,15 @@ module dpi_scheduler_conformance;
       input longint unsigned sim_cycles,
       input int unsigned event_signal_id,
       input int unsigned event_edge,
-      input int unsigned in_words[],
+      input int unsigned in_words[]
+  );
+  import "DPI-C" function void cpptb_dpi_pull_outputs(
       output int unsigned out_words[]
   );
   import "DPI-C" context function longint unsigned cpptb_dpi_next_timer_deadline();
+  import "DPI-C" context function int unsigned cpptb_dpi_edge_interest(
+      input int unsigned signal_id
+  );
 
   logic rst_n;
   logic clk_a;
@@ -62,9 +118,20 @@ module dpi_scheduler_conformance;
   logic derived_gate;
   logic stable_signal;
   logic predicate_signal;
+  logic event_drive;
+  logic [7:0] force_net_source;
   logic [7:0] drive_value;
   logic [7:0] addend;
+  bit [64:0] packed65_i;
+  bit [64:0] packed65_o;
+  bit [136:0] packed137_i;
+  bit [136:0] packed137_o;
+  bit [72:0] array73_i [7:4];
+  bit [72:0] array73_o [7:4];
+  bit [64:0] matrix65_i [2:1] [-1:1];
+  bit [64:0] matrix65_o [2:1] [-1:1];
   logic derived_clk;
+  logic event_observed;
   logic [7:0] comb_sum;
   logic [7:0] sampled_a;
   logic [7:0] sampled_b;
@@ -74,6 +141,9 @@ module dpi_scheduler_conformance;
   logic [7:0] count_b;
   logic [7:0] count_manual;
   logic [7:0] count_derived;
+  bit [63:0] internal_comb_fanout;
+  bit [63:0] internal_clocked_fanout;
+  logic [7:0] internal_net_fanout;
 
   int unsigned iterations;
   longint unsigned sim_cycles;
@@ -81,39 +151,71 @@ module dpi_scheduler_conformance;
   int status;
   bit track_falling_edges;
   int initial_requests;
-  int unsigned in_words[0:SIGNAL_COUNT-1];
-  int unsigned out_words[0:SIGNAL_COUNT-1];
+  int unsigned in_words[0:INPUT_WORD_COUNT-1];
+  int unsigned out_words[0:OUTPUT_WORD_COUNT-1];
+  int unsigned edge_interest[0:SIGNAL_COUNT-1];
 
   task automatic pack_inputs();
-    in_words[SIGNAL_RSTN] = rst_n;
-    in_words[SIGNAL_CLKA] = clk_a;
-    in_words[SIGNAL_CLKB] = clk_b;
-    in_words[SIGNAL_MANUALCLK] = manual_clk;
-    in_words[SIGNAL_DERIVEDGATE] = derived_gate;
-    in_words[SIGNAL_STABLESIGNAL] = stable_signal;
-    in_words[SIGNAL_PREDICATESIGNAL] = predicate_signal;
-    in_words[SIGNAL_DRIVEVALUE] = drive_value;
-    in_words[SIGNAL_ADDEND] = addend;
-    in_words[SIGNAL_DERIVEDCLK] = derived_clk;
-    in_words[SIGNAL_COMBSUM] = comb_sum;
-    in_words[SIGNAL_SAMPLEDA] = sampled_a;
-    in_words[SIGNAL_SAMPLEDB] = sampled_b;
-    in_words[SIGNAL_SAMPLEDMANUAL] = sampled_manual;
-    in_words[SIGNAL_SAMPLEDDERIVED] = sampled_derived;
-    in_words[SIGNAL_COUNTA] = count_a;
-    in_words[SIGNAL_COUNTB] = count_b;
-    in_words[SIGNAL_COUNTMANUAL] = count_manual;
-    in_words[SIGNAL_COUNTDERIVED] = count_derived;
+    in_words[INPUT_SIGNAL_CLKA] = clk_a;
+    in_words[INPUT_SIGNAL_CLKB] = clk_b;
+    in_words[INPUT_SIGNAL_PACKED65O + 0] = packed65_o[0 +: 32];
+    in_words[INPUT_SIGNAL_PACKED65O + 1] = packed65_o[32 +: 32];
+    in_words[INPUT_SIGNAL_PACKED65O + 2] = packed65_o[64 +: 1];
+    in_words[INPUT_SIGNAL_PACKED137O + 0] = packed137_o[0 +: 32];
+    in_words[INPUT_SIGNAL_PACKED137O + 1] = packed137_o[32 +: 32];
+    in_words[INPUT_SIGNAL_PACKED137O + 2] = packed137_o[64 +: 32];
+    in_words[INPUT_SIGNAL_PACKED137O + 3] = packed137_o[96 +: 32];
+    in_words[INPUT_SIGNAL_PACKED137O + 4] = packed137_o[128 +: 9];
+    for (int cpptb_array73_o_index = 4; cpptb_array73_o_index <= 7; cpptb_array73_o_index++) begin
+      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index - 4) * 3] = array73_o[cpptb_array73_o_index][0 +: 32];
+      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index - 4) * 3 + 1] = array73_o[cpptb_array73_o_index][32 +: 32];
+      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index - 4) * 3 + 2] = array73_o[cpptb_array73_o_index][64 +: 9];
+    end
+    for (int cpptb_matrix65_o_index_0 = 1; cpptb_matrix65_o_index_0 <= 2; cpptb_matrix65_o_index_0++) begin
+      for (int cpptb_matrix65_o_index_1 = -1; cpptb_matrix65_o_index_1 <= 1; cpptb_matrix65_o_index_1++) begin
+        in_words[INPUT_SIGNAL_MATRIX65O + ((cpptb_matrix65_o_index_0 - 1) * 3 + (cpptb_matrix65_o_index_1 - -1)) * 3] = matrix65_o[cpptb_matrix65_o_index_0][cpptb_matrix65_o_index_1][0 +: 32];
+        in_words[INPUT_SIGNAL_MATRIX65O + ((cpptb_matrix65_o_index_0 - 1) * 3 + (cpptb_matrix65_o_index_1 - -1)) * 3 + 1] = matrix65_o[cpptb_matrix65_o_index_0][cpptb_matrix65_o_index_1][32 +: 32];
+        in_words[INPUT_SIGNAL_MATRIX65O + ((cpptb_matrix65_o_index_0 - 1) * 3 + (cpptb_matrix65_o_index_1 - -1)) * 3 + 2] = matrix65_o[cpptb_matrix65_o_index_0][cpptb_matrix65_o_index_1][64 +: 1];
+      end
+    end
+    in_words[INPUT_SIGNAL_DERIVEDCLK] = derived_clk;
+    in_words[INPUT_SIGNAL_EVENTOBSERVED] = event_observed;
+    in_words[INPUT_SIGNAL_COMBSUM] = comb_sum;
+    in_words[INPUT_SIGNAL_SAMPLEDA] = sampled_a;
+    in_words[INPUT_SIGNAL_SAMPLEDB] = sampled_b;
+    in_words[INPUT_SIGNAL_SAMPLEDMANUAL] = sampled_manual;
+    in_words[INPUT_SIGNAL_SAMPLEDDERIVED] = sampled_derived;
+    in_words[INPUT_SIGNAL_COUNTA] = count_a;
+    in_words[INPUT_SIGNAL_COUNTB] = count_b;
+    in_words[INPUT_SIGNAL_COUNTMANUAL] = count_manual;
+    in_words[INPUT_SIGNAL_COUNTDERIVED] = count_derived;
+    in_words[INPUT_SIGNAL_INTERNALCOMBFANOUT + 0] = internal_comb_fanout[0 +: 32];
+    in_words[INPUT_SIGNAL_INTERNALCOMBFANOUT + 1] = internal_comb_fanout[32 +: 32];
+    in_words[INPUT_SIGNAL_INTERNALCLOCKEDFANOUT + 0] = internal_clocked_fanout[0 +: 32];
+    in_words[INPUT_SIGNAL_INTERNALCLOCKEDFANOUT + 1] = internal_clocked_fanout[32 +: 32];
+    in_words[INPUT_SIGNAL_INTERNALNETFANOUT] = internal_net_fanout;
   endtask
 
   task automatic apply_outputs();
-    rst_n = out_words[SIGNAL_RSTN][0];
-    manual_clk = out_words[SIGNAL_MANUALCLK][0];
-    derived_gate = out_words[SIGNAL_DERIVEDGATE][0];
-    stable_signal = out_words[SIGNAL_STABLESIGNAL][0];
-    predicate_signal = out_words[SIGNAL_PREDICATESIGNAL][0];
-    drive_value = out_words[SIGNAL_DRIVEVALUE][7:0];
-    addend = out_words[SIGNAL_ADDEND][7:0];
+    rst_n = out_words[OUTPUT_SIGNAL_RSTN][0];
+    manual_clk = out_words[OUTPUT_SIGNAL_MANUALCLK][0];
+    derived_gate = out_words[OUTPUT_SIGNAL_DERIVEDGATE][0];
+    stable_signal = out_words[OUTPUT_SIGNAL_STABLESIGNAL][0];
+    predicate_signal = out_words[OUTPUT_SIGNAL_PREDICATESIGNAL][0];
+    event_drive = out_words[OUTPUT_SIGNAL_EVENTDRIVE][0];
+    force_net_source = out_words[OUTPUT_SIGNAL_FORCENETSOURCE][7:0];
+    drive_value = out_words[OUTPUT_SIGNAL_DRIVEVALUE][7:0];
+    addend = out_words[OUTPUT_SIGNAL_ADDEND][7:0];
+    packed65_i = {out_words[OUTPUT_SIGNAL_PACKED65I + 2][0:0], out_words[OUTPUT_SIGNAL_PACKED65I + 1], out_words[OUTPUT_SIGNAL_PACKED65I + 0]};
+    packed137_i = {out_words[OUTPUT_SIGNAL_PACKED137I + 4][8:0], out_words[OUTPUT_SIGNAL_PACKED137I + 3], out_words[OUTPUT_SIGNAL_PACKED137I + 2], out_words[OUTPUT_SIGNAL_PACKED137I + 1], out_words[OUTPUT_SIGNAL_PACKED137I + 0]};
+    for (int cpptb_array73_i_index = 4; cpptb_array73_i_index <= 7; cpptb_array73_i_index++) begin
+      array73_i[cpptb_array73_i_index] = {out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index - 4) * 3 + 2][8:0], out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index - 4) * 3 + 1], out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index - 4) * 3]};
+    end
+    for (int cpptb_matrix65_i_index_0 = 1; cpptb_matrix65_i_index_0 <= 2; cpptb_matrix65_i_index_0++) begin
+      for (int cpptb_matrix65_i_index_1 = -1; cpptb_matrix65_i_index_1 <= 1; cpptb_matrix65_i_index_1++) begin
+        matrix65_i[cpptb_matrix65_i_index_0][cpptb_matrix65_i_index_1] = {out_words[OUTPUT_SIGNAL_MATRIX65I + ((cpptb_matrix65_i_index_0 - 1) * 3 + (cpptb_matrix65_i_index_1 - -1)) * 3 + 2][0:0], out_words[OUTPUT_SIGNAL_MATRIX65I + ((cpptb_matrix65_i_index_0 - 1) * 3 + (cpptb_matrix65_i_index_1 - -1)) * 3 + 1], out_words[OUTPUT_SIGNAL_MATRIX65I + ((cpptb_matrix65_i_index_0 - 1) * 3 + (cpptb_matrix65_i_index_1 - -1)) * 3]};
+      end
+    end
   endtask
 
   task automatic update_status(input int requests);
@@ -136,8 +238,13 @@ module dpi_scheduler_conformance;
     pack_inputs();
     requests = cpptb_dpi_step(phase, $time, sim_cycles,
                                event_signal_id, event_edge,
-                               in_words, out_words);
-    apply_outputs();
+                               in_words);
+    if ((requests >= 0) &&
+        ((phase == PHASE_INIT) ||
+         ((requests & STEP_OUTPUTS_CHANGED) != 0))) begin
+      cpptb_dpi_pull_outputs(out_words);
+      apply_outputs();
+    end
     update_status(requests);
   endtask
 
@@ -173,6 +280,9 @@ module dpi_scheduler_conformance;
   );
     int requests;
     requests = initial_requests;
+    if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
+      edge_interest[SIGNAL_EVENTOBSERVED] = cpptb_dpi_edge_interest(SIGNAL_EVENTOBSERVED);
+    end
     if ((requests & STEP_TIMER_CHANGED) != 0) begin
       reschedule_timer();
     end
@@ -259,6 +369,23 @@ module dpi_scheduler_conformance;
     end
   endtask
 
+  task automatic observe_signal_0();
+    int requests;
+    int event_edge;
+    while (status == 0) begin
+      @(event_observed);
+      if (status == 0) begin
+        event_edge = event_observed ? EDGE_RISING : EDGE_FALLING;
+        if ((status == 0) &&
+            (((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_EVENTOBSERVED] & 1) != 0)) ||
+             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_EVENTOBSERVED] & 2) != 0)))) begin
+          run_step(PHASE_EDGE, SIGNAL_EVENTOBSERVED, event_edge, requests);
+          service_requests(requests);
+        end
+      end
+    end
+  endtask
+
   initial begin
     clk_a = 1'b0;
     clk_b = 1'b0;
@@ -267,8 +394,14 @@ module dpi_scheduler_conformance;
     derived_gate = '0;
     stable_signal = '0;
     predicate_signal = '0;
+    event_drive = '0;
+    force_net_source = '0;
     drive_value = '0;
     addend = '0;
+    packed65_i = '0;
+    packed137_i = '0;
+    array73_i = '{default: '0};
+    matrix65_i = '{default: '0};
     sim_cycles = 0;
     timer_generation = 0;
     iterations = 1;
@@ -276,9 +409,14 @@ module dpi_scheduler_conformance;
     track_falling_edges = 1'b0;
     void'($value$plusargs("CPPTB_CONFORMANCE_ITERS=%d", iterations));
 
-    for (int i = 0; i < SIGNAL_COUNT; i++) begin
+    for (int i = 0; i < INPUT_WORD_COUNT; i++) begin
       in_words[i] = '0;
+    end
+    for (int i = 0; i < OUTPUT_WORD_COUNT; i++) begin
       out_words[i] = '0;
+    end
+    for (int i = 0; i < SIGNAL_COUNT; i++) begin
+      edge_interest[i] = '0;
     end
 
     cpptb_dpi_init(iterations, TIMEPRECISION_FS);
@@ -290,6 +428,7 @@ module dpi_scheduler_conformance;
         drive_clock_1();
         observe_clock_2();
         observe_clock_3();
+        observe_signal_0();
       join_none
     end
 
@@ -309,9 +448,20 @@ module dpi_scheduler_conformance;
       .derived_gate(derived_gate),
       .stable_signal(stable_signal),
       .predicate_signal(predicate_signal),
+      .event_drive(event_drive),
+      .force_net_source(force_net_source),
       .drive_value(drive_value),
       .addend(addend),
+      .packed65_i(packed65_i),
+      .packed65_o(packed65_o),
+      .packed137_i(packed137_i),
+      .packed137_o(packed137_o),
+      .array73_i(array73_i),
+      .array73_o(array73_o),
+      .matrix65_i(matrix65_i),
+      .matrix65_o(matrix65_o),
       .derived_clk(derived_clk),
+      .event_observed(event_observed),
       .comb_sum(comb_sum),
       .sampled_a(sampled_a),
       .sampled_b(sampled_b),
@@ -320,6 +470,159 @@ module dpi_scheduler_conformance;
       .count_a(count_a),
       .count_b(count_b),
       .count_manual(count_manual),
-      .count_derived(count_derived)
+      .count_derived(count_derived),
+      .internal_comb_fanout(internal_comb_fanout),
+      .internal_clocked_fanout(internal_clocked_fanout),
+      .internal_net_fanout(internal_net_fanout)
   );
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_0_get;
+  function void dpi_scheduler_conformance_internal_0_get(output bit [72:0] value);
+    value = i_dut.internal_wide;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_0_deposit;
+  function void dpi_scheduler_conformance_internal_0_deposit(input bit [72:0] value);
+    i_dut.internal_wide = value;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_1_get;
+  function longint unsigned dpi_scheduler_conformance_internal_1_get();
+    dpi_scheduler_conformance_internal_1_get = i_dut.internal_u64;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_1_deposit;
+  function void dpi_scheduler_conformance_internal_1_deposit(input longint unsigned value);
+    i_dut.internal_u64 = value;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_2_get;
+  function void dpi_scheduler_conformance_internal_2_get(input int index, output bit [72:0] value);
+    value = i_dut.internal_memory[index];
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_2_deposit;
+  function void dpi_scheduler_conformance_internal_2_deposit(input int index, input bit [72:0] value);
+    i_dut.internal_memory[index] = value;
+  endfunction
+
+  bit [72:0] internal_3_force_shadow;
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_3_get;
+  function void dpi_scheduler_conformance_internal_3_get(output bit [72:0] value);
+    value = i_dut.force_variable_wide;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_3_force;
+  function void dpi_scheduler_conformance_internal_3_force(input bit [72:0] value);
+    internal_3_force_shadow = value;
+    force i_dut.force_variable_wide = internal_3_force_shadow;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_3_release;
+  function void dpi_scheduler_conformance_internal_3_release();
+    release i_dut.force_variable_wide;
+  endfunction
+
+  bit [63:0] internal_4_force_shadow;
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_4_get;
+  function longint unsigned dpi_scheduler_conformance_internal_4_get();
+    dpi_scheduler_conformance_internal_4_get = i_dut.force_variable_u64;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_4_force;
+  function void dpi_scheduler_conformance_internal_4_force(input longint unsigned value);
+    internal_4_force_shadow = value;
+    force i_dut.force_variable_u64 = internal_4_force_shadow;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_4_release;
+  function void dpi_scheduler_conformance_internal_4_release();
+    release i_dut.force_variable_u64;
+  endfunction
+
+  bit [72:0] internal_5_force_shadow [7:4];
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_5_get;
+  function void dpi_scheduler_conformance_internal_5_get(input int index, output bit [72:0] value);
+    case (index)
+      4: value = i_dut.force_memory[4];
+      5: value = i_dut.force_memory[5];
+      6: value = i_dut.force_memory[6];
+      7: value = i_dut.force_memory[7];
+      default: $fatal(1, "read index %0d is out of bounds", index);
+    endcase
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_5_force;
+  function void dpi_scheduler_conformance_internal_5_force(input int index, input bit [72:0] value);
+    case (index)
+      4: begin
+        internal_5_force_shadow[4] = value;
+        force i_dut.force_memory[4] = internal_5_force_shadow[4];
+      end
+      5: begin
+        internal_5_force_shadow[5] = value;
+        force i_dut.force_memory[5] = internal_5_force_shadow[5];
+      end
+      6: begin
+        internal_5_force_shadow[6] = value;
+        force i_dut.force_memory[6] = internal_5_force_shadow[6];
+      end
+      7: begin
+        internal_5_force_shadow[7] = value;
+        force i_dut.force_memory[7] = internal_5_force_shadow[7];
+      end
+      default: $fatal(1, "force index %0d is out of bounds", index);
+    endcase
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_5_release;
+  function void dpi_scheduler_conformance_internal_5_release(input int index);
+    case (index)
+      4: release i_dut.force_memory[4];
+      5: release i_dut.force_memory[5];
+      6: release i_dut.force_memory[6];
+      7: release i_dut.force_memory[7];
+      default: $fatal(1, "release index %0d is out of bounds", index);
+    endcase
+  endfunction
+
+  bit [31:0] internal_6_force_shadow;
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_6_get;
+  function int unsigned dpi_scheduler_conformance_internal_6_get();
+    dpi_scheduler_conformance_internal_6_get = i_dut.force_counter;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_6_force;
+  function void dpi_scheduler_conformance_internal_6_force(input int unsigned value);
+    internal_6_force_shadow = value;
+    force i_dut.force_counter = internal_6_force_shadow;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_6_release;
+  function void dpi_scheduler_conformance_internal_6_release();
+    release i_dut.force_counter;
+  endfunction
+
+  bit [7:0] internal_7_force_shadow;
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_7_get;
+  function int unsigned dpi_scheduler_conformance_internal_7_get();
+    dpi_scheduler_conformance_internal_7_get = i_dut.internal_net;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_7_force;
+  function void dpi_scheduler_conformance_internal_7_force(input int unsigned value);
+    internal_7_force_shadow = value;
+    force i_dut.internal_net = internal_7_force_shadow;
+  endfunction
+
+  export "DPI-C" function dpi_scheduler_conformance_internal_7_release;
+  function void dpi_scheduler_conformance_internal_7_release();
+    release i_dut.internal_net;
+  endfunction
+
 endmodule : dpi_scheduler_conformance

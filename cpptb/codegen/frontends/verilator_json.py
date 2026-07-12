@@ -9,7 +9,20 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from cpptb.codegen.design_ir import CodegenError, DesignIR, Port
+from cpptb.codegen.design_ir import (
+    CodegenError,
+    DesignIR,
+    PackedEnumType,
+    PackedEnumValue,
+    PackedField,
+    PackedIntegralType,
+    PackedRange,
+    PackedStructType,
+    PackedType,
+    PackedUnionType,
+    Port,
+    UnpackedRange,
+)
 from cpptb.codegen.frontends import frontend_options
 
 
@@ -104,6 +117,214 @@ def parse_width(dtype: dict[str, Any], port_name: str) -> int:
     return abs(left - right) + 1
 
 
+def parse_range(text: str, port_name: str) -> UnpackedRange:
+    match = re.fullmatch(
+        r"(?:\[(-?\d+):(-?\d+)\]|(-?\d+):(-?\d+))", text
+    )
+    if not match:
+        raise CodegenError(
+            f"port {port_name!r} has unsupported elaborated range {text!r}"
+        )
+    bracketed_left, bracketed_right, bare_left, bare_right = match.groups()
+    left = int(bracketed_left if bracketed_left is not None else bare_left)
+    right = int(bracketed_right if bracketed_right is not None else bare_right)
+    return UnpackedRange(left, right)
+
+
+def _dtype_reference(
+    dtype: dict[str, Any], dtypes: dict[str, dict[str, Any]], name: str
+) -> dict[str, Any]:
+    for key in ("refDTypep", "subDTypep", "dtypep"):
+        address = dtype.get(key)
+        if not address or address == dtype.get("addr"):
+            continue
+        referenced = dtypes.get(address)
+        if referenced is not None:
+            return referenced
+    raise CodegenError(
+        f"cannot resolve the referenced dtype for {name!r} "
+        f"from {dtype.get('type')!r}"
+    )
+
+
+def _dereference_dtype(
+    dtype: dict[str, Any], dtypes: dict[str, dict[str, Any]], name: str
+) -> tuple[dict[str, Any], str | None]:
+    declared_name: str | None = None
+    seen: set[str] = set()
+    current = dtype
+    while current.get("type") in {"REFDTYPE", "TYPEDEFDTYPE"}:
+        address = current.get("addr")
+        if address in seen:
+            raise CodegenError(f"dtype reference cycle while resolving {name!r}")
+        if address:
+            seen.add(address)
+        declared_name = declared_name or current.get("name") or None
+        current = _dtype_reference(current, dtypes, name)
+    return current, declared_name
+
+
+def _constant_integer(text: str, name: str) -> int:
+    normalized = text.replace("_", "").lower()
+    match = re.fullmatch(
+        r"(?P<negative>-)?(?P<width>\d+)'(?P<signed>s)?"
+        r"(?P<base>[bodh])(?P<digits>-?[0-9a-fxz?]+)",
+        normalized,
+    )
+    if not match:
+        try:
+            return int(normalized, 0)
+        except ValueError as error:
+            raise CodegenError(
+                f"enum value {name!r} has unsupported constant {text!r}"
+            ) from error
+
+    digits = match.group("digits")
+    if any(character in digits for character in "xz?"):
+        raise CodegenError(f"enum value {name!r} contains X or Z bits")
+    radix = {"b": 2, "o": 8, "d": 10, "h": 16}[match.group("base")]
+    value = int(digits, radix)
+    width = int(match.group("width"))
+    if match.group("signed") and value >= 0 and value & (1 << (width - 1)):
+        value -= 1 << width
+    if match.group("negative"):
+        value = -value
+    return value
+
+
+def _enum_values(
+    dtype: dict[str, Any], name: str, base: PackedIntegralType
+) -> tuple[PackedEnumValue, ...]:
+    values: list[PackedEnumValue] = []
+    for item in dtype.get("itemsp", []):
+        value_nodes = item.get("valuep", [])
+        if len(value_nodes) != 1 or not value_nodes[0].get("name"):
+            raise CodegenError(
+                f"enum value {item.get('name', '<unnamed>')!r} in {name!r} "
+                "has no single elaborated constant"
+            )
+        item_name = item.get("name", "")
+        value = _constant_integer(value_nodes[0]["name"], item_name)
+        if base.signed and value >= 0 and value & (1 << (base.width - 1)):
+            value -= 1 << base.width
+        values.append(PackedEnumValue(item_name, value))
+    return tuple(values)
+
+
+def packed_type(
+    dtype: dict[str, Any], dtypes: dict[str, dict[str, Any]], name: str
+) -> PackedType:
+    dtype, alias_name = _dereference_dtype(dtype, dtypes, name)
+    kind = dtype.get("type")
+    declared_name = alias_name or dtype.get("name") or None
+
+    if kind == "BASICDTYPE":
+        bit_range = dtype.get("range")
+        parsed_range = parse_range(bit_range, name) if bit_range else None
+        ranges = (
+            (PackedRange(parsed_range.left, parsed_range.right),)
+            if parsed_range is not None
+            else ()
+        )
+        return PackedIntegralType(
+            parse_width(dtype, name),
+            bool(dtype.get("signed", False)),
+            dtype.get("name") != "bit",
+            ranges,
+            alias_name,
+        )
+
+    if kind == "PACKARRAYDTYPE":
+        declared_range = dtype.get("declRange") or dtype.get("range")
+        if not declared_range:
+            raise CodegenError(f"packed array {name!r} has no fixed range")
+        parsed_range = parse_range(declared_range, name)
+        inner = packed_type(_dtype_reference(dtype, dtypes, name), dtypes, name)
+        if not isinstance(inner, PackedIntegralType):
+            raise CodegenError(
+                f"packed array {name!r} has unsupported aggregate element type"
+            )
+        return PackedIntegralType(
+            parsed_range.size * inner.width,
+            bool(dtype.get("signed", inner.signed)),
+            inner.four_state,
+            (PackedRange(parsed_range.left, parsed_range.right), *inner.ranges),
+            declared_name,
+        )
+
+    if kind == "ENUMDTYPE":
+        base = packed_type(_dtype_reference(dtype, dtypes, name), dtypes, name)
+        if not isinstance(base, PackedIntegralType):
+            raise CodegenError(f"packed enum {name!r} has a non-integral base type")
+        return PackedEnumType(base, _enum_values(dtype, name, base), declared_name)
+
+    if kind in {"STRUCTDTYPE", "UNIONDTYPE"}:
+        members: list[tuple[str, PackedType]] = []
+        for member in dtype.get("membersp", []):
+            member_name = member.get("name", "")
+            members.append(
+                (
+                    member_name,
+                    packed_type(
+                        _dtype_reference(member, dtypes, member_name),
+                        dtypes,
+                        member_name,
+                    ),
+                )
+            )
+        if not members:
+            raise CodegenError(f"packed aggregate {name!r} has no members")
+        if kind == "UNIONDTYPE":
+            width = max(member_type.width for _, member_type in members)
+            fields = tuple(
+                PackedField(member_name, member_type, 0)
+                for member_name, member_type in members
+            )
+            return PackedUnionType(
+                width,
+                bool(dtype.get("signed", False)),
+                any(member_type.four_state for _, member_type in members),
+                fields,
+                declared_name,
+            )
+
+        width = sum(member_type.width for _, member_type in members)
+        offset = width
+        fields: list[PackedField] = []
+        for member_name, member_type in members:
+            offset -= member_type.width
+            fields.append(PackedField(member_name, member_type, offset))
+        return PackedStructType(
+            width,
+            bool(dtype.get("signed", False)),
+            any(member_type.four_state for _, member_type in members),
+            tuple(fields),
+            declared_name,
+        )
+
+    raise CodegenError(
+        f"port {name!r} uses unsupported dtype {kind!r}; expected a packed "
+        "integral, enum, struct, or union"
+    )
+
+
+def resolve_port_dtype(
+    dtype: dict[str, Any], dtypes: dict[str, dict[str, Any]], port_name: str
+) -> tuple[dict[str, Any], tuple[UnpackedRange, ...]]:
+    dimensions: list[UnpackedRange] = []
+    element_type, _ = _dereference_dtype(dtype, dtypes, port_name)
+    while element_type.get("type") == "UNPACKARRAYDTYPE":
+        declared_range = element_type.get("declRange")
+        if not declared_range:
+            raise CodegenError(
+                f"port {port_name!r} has an unpacked array without a fixed range"
+            )
+        dimensions.append(parse_range(declared_range, port_name))
+        element_type = _dtype_reference(element_type, dtypes, port_name)
+        element_type, _ = _dereference_dtype(element_type, dtypes, port_name)
+    return element_type, tuple(dimensions)
+
+
 def discover_ports(ast: dict[str, Any], module_name: str) -> list[Port]:
     objects = list(walk_objects(ast))
     module = next(
@@ -135,13 +356,22 @@ def discover_ports(ast: dict[str, Any], module_name: str) -> list[Port]:
         dtype = dtypes.get(statement.get("dtypep"))
         if dtype is None:
             raise CodegenError(f"cannot resolve the dtype for port {name!r}")
+        element_type, unpacked = resolve_port_dtype(dtype, dtypes, name)
+        data_type = packed_type(element_type, dtypes, name)
         ports.append(
             Port(
                 name=name,
                 direction=direction,
-                width=parse_width(dtype, name),
-                signed=bool(dtype.get("signed", False)),
-                four_state=dtype.get("name") != "bit",
+                width=data_type.width,
+                type_kind=(
+                    "packed_union"
+                    if isinstance(data_type, PackedUnionType)
+                    else "integral"
+                ),
+                signed=data_type.signed,
+                four_state=data_type.four_state,
+                unpacked=unpacked,
+                packed_type=data_type,
             )
         )
 
@@ -154,6 +384,11 @@ class VerilatorJsonFrontend:
     name = "verilator_json"
 
     def elaborate(self, manifest: dict[str, Any], base_dir: Path) -> DesignIR:
+        if manifest.get("internals"):
+            raise CodegenError(
+                "the verilator_json frontend cannot resolve configured internals; "
+                "use the Slang frontend"
+            )
         ast = verilator_ast(manifest, base_dir)
         ports = discover_ports(ast, manifest["module"])
         return DesignIR(manifest["module"], tuple(ports))

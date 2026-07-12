@@ -15,6 +15,22 @@ KERNELS = (
     "event",
     "channel",
     "all",
+    "wide64",
+    "wide_echo_137",
+    "wide_slice",
+    "fixed_mac",
+    "array_index",
+    "array_wide",
+    "mem_rw",
+    "hier_probe",
+    "mem_backdoor",
+    "mem_probe_read",
+    "mem_probe_deposit",
+    "mem_probe_read_deposit",
+    "signal_edge",
+    "array_multidim",
+    "force_release",
+    "packed_view",
 )
 
 FEATURE_FIELDS = (
@@ -29,6 +45,23 @@ FEATURE_FIELDS = (
     "event_wait",
     "channel_send",
     "channel_receive",
+    "wide64",
+    "wide_echo_137",
+    "wide_slice",
+    "fixed_mac",
+    "array_index",
+    "array_wide",
+    "array_multidim",
+    "mem_rw",
+    "hier_probe_reads",
+    "hier_probe_deposits",
+    "mem_backdoor_reads",
+    "mem_backdoor_deposits",
+    "probe_diag_reads",
+    "probe_diag_deposits",
+    "signal_edges",
+    "force_release",
+    "packed_view",
 )
 
 RESULT_FIELDS = (
@@ -60,6 +93,23 @@ class ExpectedCounts:
     event_wait: int = 0
     channel_send: int = 0
     channel_receive: int = 0
+    wide64: int = 0
+    wide_echo_137: int = 0
+    wide_slice: int = 0
+    fixed_mac: int = 0
+    array_index: int = 0
+    array_wide: int = 0
+    array_multidim: int = 0
+    mem_rw: int = 0
+    hier_probe_reads: int = 0
+    hier_probe_deposits: int = 0
+    mem_backdoor_reads: int = 0
+    mem_backdoor_deposits: int = 0
+    probe_diag_reads: int = 0
+    probe_diag_deposits: int = 0
+    signal_edges: int = 0
+    force_release: int = 0
+    packed_view: int = 0
 
     def fields(self) -> dict[str, int]:
         return asdict(self)
@@ -104,6 +154,79 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
     if channel_send:
         feature_checks += iterations
 
+    wide64 = iterations if enabled or kernel == "wide64" else 0
+    if wide64:
+        feature_checks += iterations
+
+    wide_echo_137 = iterations if enabled or kernel == "wide_echo_137" else 0
+    if wide_echo_137:
+        feature_checks += iterations
+
+    wide_slice = iterations if enabled or kernel == "wide_slice" else 0
+    if wide_slice:
+        feature_checks += iterations
+
+    fixed_mac = iterations if enabled or kernel == "fixed_mac" else 0
+    if fixed_mac:
+        feature_checks += iterations
+
+    array_index = iterations if enabled or kernel == "array_index" else 0
+    if array_index:
+        feature_checks += iterations * 8
+
+    array_wide = iterations if enabled or kernel == "array_wide" else 0
+    if array_wide:
+        feature_checks += iterations * 4
+
+    array_multidim = iterations if kernel == "array_multidim" else 0
+    if array_multidim:
+        feature_checks += iterations * 6
+
+    mem_rw = iterations if enabled or kernel == "mem_rw" else 0
+    if mem_rw:
+        feature_checks += iterations
+
+    hier_probe_reads = 2 * iterations if enabled or kernel == "hier_probe" else 0
+    hier_probe_deposits = (
+        iterations if enabled or kernel == "hier_probe" else 0
+    )
+    if hier_probe_reads:
+        feature_checks += 2 * iterations
+
+    mem_backdoor_reads = (
+        iterations if enabled or kernel == "mem_backdoor" else 0
+    )
+    mem_backdoor_deposits = mem_backdoor_reads
+    if mem_backdoor_reads:
+        feature_checks += 2 * iterations
+
+    probe_diag_reads = (
+        iterations
+        if kernel in ("mem_probe_read", "mem_probe_read_deposit")
+        else 0
+    )
+    probe_diag_deposits = (
+        iterations
+        if kernel in ("mem_probe_deposit", "mem_probe_read_deposit")
+        else 0
+    )
+    if kernel == "mem_probe_read":
+        feature_checks += 2 * iterations
+    elif kernel == "mem_probe_deposit":
+        feature_checks += iterations
+    elif kernel == "mem_probe_read_deposit":
+        feature_checks += 2 * iterations
+
+    signal_edges = iterations if kernel == "signal_edge" else 0
+
+    force_release = iterations if kernel == "force_release" else 0
+    if force_release:
+        feature_checks += 2 * iterations
+
+    packed_view = iterations if kernel == "packed_view" else 0
+    if packed_view:
+        feature_checks += 4 * iterations
+
     return ExpectedCounts(
         iterations=iterations,
         transactions=iterations,
@@ -119,6 +242,23 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
         event_wait=event_wait,
         channel_send=channel_send,
         channel_receive=channel_receive,
+        wide64=wide64,
+        wide_echo_137=wide_echo_137,
+        wide_slice=wide_slice,
+        fixed_mac=fixed_mac,
+        array_index=array_index,
+        array_wide=array_wide,
+        array_multidim=array_multidim,
+        mem_rw=mem_rw,
+        hier_probe_reads=hier_probe_reads,
+        hier_probe_deposits=hier_probe_deposits,
+        mem_backdoor_reads=mem_backdoor_reads,
+        mem_backdoor_deposits=mem_backdoor_deposits,
+        probe_diag_reads=probe_diag_reads,
+        probe_diag_deposits=probe_diag_deposits,
+        signal_edges=signal_edges,
+        force_release=force_release,
+        packed_view=packed_view,
     )
 
 

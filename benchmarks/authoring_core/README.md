@@ -26,9 +26,10 @@ runner also validates counts and checksum against `workload.py`, independently
 of the other implementation.
 
 For `N > 0`, every kernel has `transactions=N`, one response check per
-transaction, and two final DUT-count checks. Feature kernels add one semantic
-check per iteration except `clock_cycles`, whose effect is proved by its use
-counter and paired cycle count.
+transaction, and two final DUT-count checks. Most feature kernels add one
+semantic check per iteration. `array_index` adds eight, `array_wide` adds four,
+and `force_release` adds two; `clock_cycles` adds none because its effect is
+proved by its use counter and paired cycle count.
 
 | Kernel | Feature counts | Checks |
 |---|---|---:|
@@ -40,7 +41,22 @@ counter and paired cycle count.
 | `wait_until` | `wait_until=N` | `2N + 2` |
 | `event` | `event_set=N`, `event_wait=N` | `2N + 2` |
 | `channel` | `channel_send=N`, `channel_receive=N` | `2N + 2` |
-| `all` | all usage counts `N`, both timeout-hit counts `floor(N/2)` | `7N + 2` |
+| `wide64` | `wide64=N` | `2N + 2` |
+| `wide_echo_137` | `wide_echo_137=N` | `2N + 2` |
+| `wide_slice` | `wide_slice=N` | `2N + 2` |
+| `fixed_mac` | `fixed_mac=N` | `2N + 2` |
+| `array_index` | `array_index=N` | `9N + 2` |
+| `array_wide` | `array_wide=N` | `5N + 2` |
+| `mem_rw` | `mem_rw=N` | `2N + 2` |
+| `hier_probe` | `hier_probe_reads=2N`, `hier_probe_deposits=N` | `3N + 2` |
+| `mem_backdoor` | `mem_backdoor_reads=N`, `mem_backdoor_deposits=N` | `3N + 2` |
+| `mem_probe_read` | `probe_diag_reads=N` | `3N + 2` |
+| `mem_probe_deposit` | `probe_diag_deposits=N` | `2N + 2` |
+| `mem_probe_read_deposit` | both probe diagnostic counts `N` | `3N + 2` |
+| `signal_edge` | `signal_edges=N` | `N + 2` |
+| `array_multidim` | `array_multidim=N` | `7N + 2` |
+| `force_release` | `force_release=N` | `3N + 2` |
+| `all` | all aggregate usage counts enabled, both timeout-hit counts `floor(N/2)` | `28N + 2` |
 
 ## Semantic mapping
 
@@ -53,6 +69,18 @@ counter and paired cycle count.
 | `wait_until(req_ready, predicate, clk)` | `while (!req_ready) @(posedge clk)` |
 | sticky `Event::clear/set/wait` | a sticky bit plus a SystemVerilog event; the waiter first tests the bit |
 | unbounded `Channel<uint32_t>::put_nowait/get` | an unbounded SV queue push/pop plus its queue predicate |
+| `Bits<W>` packed access and slices | packed vectors and indexed part-selects |
+| `Fixed` multiply and quantize | signed packed arithmetic with matching nearest-even saturation |
+| `array.at(index).get()/set()` | fixed unpacked-array element access with the same SV index |
+| scalar memory front-door ports | synchronous address/data/write-enable sequence against internal SV memory |
+| internal `get()` | direct hierarchical read in the same scheduler callback |
+| internal `deposit(value)` followed by explicit `Delay{1_ps}` | blocking hierarchical assignment followed by user-authored `#1ps` before downstream observation |
+| `RisingEdge{rsp_valid}` on a DUT output observer | `@(posedge rsp_valid)` |
+| rank-2 `.at(row).at(column).set()/get()` with 65-bit elements | nested unpacked-array indexed writes/reads |
+| internal `.force(value)`, explicit `Delay{1_ps}`, `.release()`, explicit `Delay{1_ps}` | `force`, `#1ps`, `release`, `#1ps` on the same internal net |
+
+The `signal_edge`, `array_multidim`, and `force_release` kernels are
+intentionally isolated and are not included in `all`.
 
 The task-timeout kernel alternates deterministically: even iterations complete
 the task after `500ps` against a `3ns` limit and consume `value()`; odd
@@ -132,6 +160,13 @@ crossing as `invalid_environment` and qualifies an apparent pass as
 `passed_inconclusive`. It never changes samples or ratios, never turns a
 passing measurement into a failure, and never changes the one fixed
 conditional 16-pair extra-batch policy.
+
+Every isolated kernel uses the same current DUT port surface. The DPI wrapper
+packs all observed ports at each scheduler step, even when a particular kernel
+does not read them, while the pure-SV side has no equivalent transport copy.
+This keeps comparisons within one revision apples-to-apples, but a control
+ratio from a larger DUT revision is not directly comparable to historical
+control results from a smaller port surface.
 
 Every sample records its binary path and SHA256, one-based slot within the pair,
 zero-based global sequence index, pair order, and warmup/initial/extra batch.

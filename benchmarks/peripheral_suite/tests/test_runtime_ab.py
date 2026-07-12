@@ -557,10 +557,17 @@ class RuntimeABTests(unittest.TestCase):
         evidence = RUNTIME_AB.load_source_evidence()
         self.assertEqual(
             evidence["build_provenance"]["binary_sha256"],
-            "48589eac3978a7bc890f59dcb48110072d38080f42f47070e4c6816b18d336b5",
+            "be1d12329edea134999264eb04ca2f9cf276435d89116237f88d4367c9bf6f5b",
         )
         self.assertGreaterEqual(
             len(evidence["build_provenance"]["compiler"]["build_commands"]), 5
+        )
+        self.assertIn(
+            "benchmarks/peripheral_suite/cpp_dpi/framework/dpi_transport.cpp",
+            evidence["input_mismatches"],
+        )
+        self.assertIn(
+            "cpptb/dpi_runtime.hpp", evidence["current_input_sha256"]
         )
         expected_lines = {
             "cpptb/coro_runtime.hpp": 1230,

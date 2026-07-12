@@ -5,26 +5,300 @@
 #include <array>
 #include <cstdint>
 #include <utility>
+#include "svdpi.h"
 
 #include "cpptb/conformance/generated/scheduler_conformance_dut.hpp"
 
+extern "C" {
+    void dpi_scheduler_conformance_internal_0_get(svBitVecVal* value);
+    void dpi_scheduler_conformance_internal_0_deposit(const svBitVecVal* value);
+    unsigned long long dpi_scheduler_conformance_internal_1_get();
+    void dpi_scheduler_conformance_internal_1_deposit(unsigned long long value);
+    void dpi_scheduler_conformance_internal_2_get(int index, svBitVecVal* value);
+    void dpi_scheduler_conformance_internal_2_deposit(int index, const svBitVecVal* value);
+    void dpi_scheduler_conformance_internal_3_get(svBitVecVal* value);
+    void dpi_scheduler_conformance_internal_3_force(const svBitVecVal* value);
+    void dpi_scheduler_conformance_internal_3_release();
+    unsigned long long dpi_scheduler_conformance_internal_4_get();
+    void dpi_scheduler_conformance_internal_4_force(unsigned long long value);
+    void dpi_scheduler_conformance_internal_4_release();
+    void dpi_scheduler_conformance_internal_5_get(int index, svBitVecVal* value);
+    void dpi_scheduler_conformance_internal_5_force(int index, const svBitVecVal* value);
+    void dpi_scheduler_conformance_internal_5_release(int index);
+    unsigned int dpi_scheduler_conformance_internal_6_get();
+    void dpi_scheduler_conformance_internal_6_force(unsigned int value);
+    void dpi_scheduler_conformance_internal_6_release();
+    unsigned int dpi_scheduler_conformance_internal_7_get();
+    void dpi_scheduler_conformance_internal_7_force(unsigned int value);
+    void dpi_scheduler_conformance_internal_7_release();
+}
+
 namespace cpptb::conformance::generated {
 
+inline constexpr bool kCompactInputTransport = true;
 inline constexpr std::array<uint32_t, 4> kClockSignalIds = {
     kSignalClkA,
     kSignalClkB,
     kSignalManualClk,
     kSignalDerivedClk,
 };
-inline constexpr std::array<uint32_t, 7> kDrivenSignalIds = {
+inline constexpr std::array<uint32_t, 1> kEdgeObserverSignalIds = {
+    kSignalEventObserved,
+};
+inline constexpr std::array<std::pair<uint32_t, uint32_t>, 13> kDrivenSignalSpans = {{
+    {kSignalRstN, 1},
+    {kSignalManualClk, 1},
+    {kSignalDerivedGate, 1},
+    {kSignalStableSignal, 1},
+    {kSignalPredicateSignal, 1},
+    {kSignalEventDrive, 1},
+    {kSignalForceNetSource, 1},
+    {kSignalDriveValue, 1},
+    {kSignalAddend, 1},
+    {kSignalPacked65I, 3},
+    {kSignalPacked137I, 5},
+    {kSignalArray73I, 12},
+    {kSignalMatrix65I, 18},
+}};
+inline constexpr std::array<uint32_t, 56> kObservedSignalWordIds = {
+    kSignalClkA,
+    kSignalClkB,
+    kSignalPacked65O,
+    kSignalPacked65O + 1,
+    kSignalPacked65O + 2,
+    kSignalPacked137O,
+    kSignalPacked137O + 1,
+    kSignalPacked137O + 2,
+    kSignalPacked137O + 3,
+    kSignalPacked137O + 4,
+    kSignalArray73O,
+    kSignalArray73O + 1,
+    kSignalArray73O + 2,
+    kSignalArray73O + 3,
+    kSignalArray73O + 4,
+    kSignalArray73O + 5,
+    kSignalArray73O + 6,
+    kSignalArray73O + 7,
+    kSignalArray73O + 8,
+    kSignalArray73O + 9,
+    kSignalArray73O + 10,
+    kSignalArray73O + 11,
+    kSignalMatrix65O,
+    kSignalMatrix65O + 1,
+    kSignalMatrix65O + 2,
+    kSignalMatrix65O + 3,
+    kSignalMatrix65O + 4,
+    kSignalMatrix65O + 5,
+    kSignalMatrix65O + 6,
+    kSignalMatrix65O + 7,
+    kSignalMatrix65O + 8,
+    kSignalMatrix65O + 9,
+    kSignalMatrix65O + 10,
+    kSignalMatrix65O + 11,
+    kSignalMatrix65O + 12,
+    kSignalMatrix65O + 13,
+    kSignalMatrix65O + 14,
+    kSignalMatrix65O + 15,
+    kSignalMatrix65O + 16,
+    kSignalMatrix65O + 17,
+    kSignalDerivedClk,
+    kSignalEventObserved,
+    kSignalCombSum,
+    kSignalSampledA,
+    kSignalSampledB,
+    kSignalSampledManual,
+    kSignalSampledDerived,
+    kSignalCountA,
+    kSignalCountB,
+    kSignalCountManual,
+    kSignalCountDerived,
+    kSignalInternalCombFanout,
+    kSignalInternalCombFanout + 1,
+    kSignalInternalClockedFanout,
+    kSignalInternalClockedFanout + 1,
+    kSignalInternalNetFanout,
+};
+inline constexpr std::array<uint32_t, 47> kDrivenSignalWordIds = {
     kSignalRstN,
     kSignalManualClk,
     kSignalDerivedGate,
     kSignalStableSignal,
     kSignalPredicateSignal,
+    kSignalEventDrive,
+    kSignalForceNetSource,
     kSignalDriveValue,
     kSignalAddend,
+    kSignalPacked65I,
+    kSignalPacked65I + 1,
+    kSignalPacked65I + 2,
+    kSignalPacked137I,
+    kSignalPacked137I + 1,
+    kSignalPacked137I + 2,
+    kSignalPacked137I + 3,
+    kSignalPacked137I + 4,
+    kSignalArray73I,
+    kSignalArray73I + 1,
+    kSignalArray73I + 2,
+    kSignalArray73I + 3,
+    kSignalArray73I + 4,
+    kSignalArray73I + 5,
+    kSignalArray73I + 6,
+    kSignalArray73I + 7,
+    kSignalArray73I + 8,
+    kSignalArray73I + 9,
+    kSignalArray73I + 10,
+    kSignalArray73I + 11,
+    kSignalMatrix65I,
+    kSignalMatrix65I + 1,
+    kSignalMatrix65I + 2,
+    kSignalMatrix65I + 3,
+    kSignalMatrix65I + 4,
+    kSignalMatrix65I + 5,
+    kSignalMatrix65I + 6,
+    kSignalMatrix65I + 7,
+    kSignalMatrix65I + 8,
+    kSignalMatrix65I + 9,
+    kSignalMatrix65I + 10,
+    kSignalMatrix65I + 11,
+    kSignalMatrix65I + 12,
+    kSignalMatrix65I + 13,
+    kSignalMatrix65I + 14,
+    kSignalMatrix65I + 15,
+    kSignalMatrix65I + 16,
+    kSignalMatrix65I + 17,
 };
+
+inline probe::Value<73> internal_0_get(int32_t index) {
+    probe::Value<73>::word_array words{};
+    dpi_scheduler_conformance_internal_0_get(reinterpret_cast<svBitVecVal*>(words.data()));
+    return probe::Value<73>::from_words(words);
+}
+
+inline void internal_0_deposit(int32_t index, probe::Value<73> value) {
+    dpi_scheduler_conformance_internal_0_deposit(reinterpret_cast<const svBitVecVal*>(value.words().data()));
+}
+
+inline auto make_internal_0() {
+    return probe::Probe<73, true>{
+        0, "internal_wide", internal_0_get, internal_0_deposit, nullptr, nullptr};
+}
+
+inline probe::Value<64> internal_1_get(int32_t index) {
+    return dpi_scheduler_conformance_internal_1_get();
+}
+
+inline void internal_1_deposit(int32_t index, probe::Value<64> value) {
+    dpi_scheduler_conformance_internal_1_deposit(value);
+}
+
+inline auto make_internal_1() {
+    return probe::Probe<64, true>{
+        0, "internal_u64", internal_1_get, internal_1_deposit, nullptr, nullptr};
+}
+
+inline probe::Value<73> internal_2_get(int32_t index) {
+    probe::Value<73>::word_array words{};
+    dpi_scheduler_conformance_internal_2_get(index, reinterpret_cast<svBitVecVal*>(words.data()));
+    return probe::Value<73>::from_words(words);
+}
+
+inline void internal_2_deposit(int32_t index, probe::Value<73> value) {
+    dpi_scheduler_conformance_internal_2_deposit(index, reinterpret_cast<const svBitVecVal*>(value.words().data()));
+}
+
+inline auto make_internal_2() {
+    return probe::MemoryProbe<73, 7, 4, true>{
+        "internal_memory", internal_2_get, internal_2_deposit, nullptr, nullptr};
+}
+
+inline probe::Value<73> internal_3_get(int32_t index) {
+    probe::Value<73>::word_array words{};
+    dpi_scheduler_conformance_internal_3_get(reinterpret_cast<svBitVecVal*>(words.data()));
+    return probe::Value<73>::from_words(words);
+}
+
+inline void internal_3_force(int32_t index, probe::Value<73> value) {
+    dpi_scheduler_conformance_internal_3_force(reinterpret_cast<const svBitVecVal*>(value.words().data()));
+}
+
+inline void internal_3_release(int32_t index) {
+    dpi_scheduler_conformance_internal_3_release();
+}
+
+inline auto make_internal_3() {
+    return probe::Probe<73, false, true>{
+        0, "force_variable_wide", internal_3_get, nullptr, internal_3_force, internal_3_release};
+}
+
+inline probe::Value<64> internal_4_get(int32_t index) {
+    return dpi_scheduler_conformance_internal_4_get();
+}
+
+inline void internal_4_force(int32_t index, probe::Value<64> value) {
+    dpi_scheduler_conformance_internal_4_force(value);
+}
+
+inline void internal_4_release(int32_t index) {
+    dpi_scheduler_conformance_internal_4_release();
+}
+
+inline auto make_internal_4() {
+    return probe::Probe<64, false, true>{
+        0, "force_variable_u64", internal_4_get, nullptr, internal_4_force, internal_4_release};
+}
+
+inline probe::Value<73> internal_5_get(int32_t index) {
+    probe::Value<73>::word_array words{};
+    dpi_scheduler_conformance_internal_5_get(index, reinterpret_cast<svBitVecVal*>(words.data()));
+    return probe::Value<73>::from_words(words);
+}
+
+inline void internal_5_force(int32_t index, probe::Value<73> value) {
+    dpi_scheduler_conformance_internal_5_force(index, reinterpret_cast<const svBitVecVal*>(value.words().data()));
+}
+
+inline void internal_5_release(int32_t index) {
+    dpi_scheduler_conformance_internal_5_release(index);
+}
+
+inline auto make_internal_5() {
+    return probe::MemoryProbe<73, 7, 4, false, true>{
+        "force_memory", internal_5_get, nullptr, internal_5_force, internal_5_release};
+}
+
+inline probe::Value<32> internal_6_get(int32_t index) {
+    return dpi_scheduler_conformance_internal_6_get();
+}
+
+inline void internal_6_force(int32_t index, probe::Value<32> value) {
+    dpi_scheduler_conformance_internal_6_force(value);
+}
+
+inline void internal_6_release(int32_t index) {
+    dpi_scheduler_conformance_internal_6_release();
+}
+
+inline auto make_internal_6() {
+    return probe::Probe<32, false, true>{
+        0, "force_counter", internal_6_get, nullptr, internal_6_force, internal_6_release};
+}
+
+inline probe::Value<8> internal_7_get(int32_t index) {
+    return dpi_scheduler_conformance_internal_7_get();
+}
+
+inline void internal_7_force(int32_t index, probe::Value<8> value) {
+    dpi_scheduler_conformance_internal_7_force(value);
+}
+
+inline void internal_7_release(int32_t index) {
+    dpi_scheduler_conformance_internal_7_release();
+}
+
+inline auto make_internal_7() {
+    return probe::Probe<8, false, true>{
+        0, "internal_net", internal_7_get, nullptr, internal_7_force, internal_7_release};
+}
 
 template <typename MakeSignal>
 SchedulerConformanceDut bind_dut(MakeSignal&& make_signal) {
@@ -39,8 +313,19 @@ SchedulerConformanceDut bind_dut(MakeSignal&& make_signal) {
         make_signal(kSignalDerivedGate, "derived_gate"),
         make_signal(kSignalStableSignal, "stable_signal"),
         make_signal(kSignalPredicateSignal, "predicate_signal"),
+        make_signal(kSignalEventDrive, "event_drive"),
+        make_signal(kSignalForceNetSource, "force_net_source"),
         make_signal(kSignalDriveValue, "drive_value"),
         make_signal(kSignalAddend, "addend"),
+        make_signal(coro::SignalSpec<65, true>{}, kSignalPacked65I, "packed65_i"),
+        make_signal(coro::SignalSpec<65, false>{}, kSignalPacked65O, "packed65_o"),
+        make_signal(coro::SignalSpec<137, true>{}, kSignalPacked137I, "packed137_i"),
+        make_signal(coro::SignalSpec<137, false>{}, kSignalPacked137O, "packed137_o"),
+        make_signal(coro::ArraySpec<73, 7, 4, true>{}, kSignalArray73I, "array73_i"),
+        make_signal(coro::ArraySpec<73, 7, 4, false>{}, kSignalArray73O, "array73_o"),
+        coro::reshape_fixed_array(coro::FixedArraySpec<65, true, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(coro::ArraySpec<288, 2, 1, true>{}, kSignalMatrix65I, "matrix65_i")),
+        coro::reshape_fixed_array(coro::FixedArraySpec<65, false, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(coro::ArraySpec<288, 2, 1, false>{}, kSignalMatrix65O, "matrix65_o")),
+        make_signal(kSignalEventObserved, "event_observed"),
         make_signal(kSignalCombSum, "comb_sum"),
         {
             make_signal(kSignalSampledA, "sampled_a"),
@@ -53,6 +338,19 @@ SchedulerConformanceDut bind_dut(MakeSignal&& make_signal) {
             make_signal(kSignalCountB, "count_b"),
             make_signal(kSignalCountManual, "count_manual"),
             make_signal(kSignalCountDerived, "count_derived")
+        },
+        make_signal(coro::SignalSpec<64, false>{}, kSignalInternalCombFanout, "internal_comb_fanout"),
+        make_signal(coro::SignalSpec<64, false>{}, kSignalInternalClockedFanout, "internal_clocked_fanout"),
+        make_signal(kSignalInternalNetFanout, "internal_net_fanout"),
+        {
+            make_internal_0(),
+            make_internal_1(),
+            make_internal_2(),
+            make_internal_3(),
+            make_internal_4(),
+            make_internal_5(),
+            make_internal_6(),
+            make_internal_7()
         }
     };
 }
