@@ -6,11 +6,11 @@
 - Conditional extra pairs: `16`
 - Absolute hard guard: `C++ DPI / pure SV <= 1.10x`
 - Peripheral preflight: `skipped`
-- Measurement environment: `valid`
+- Measurement environment: `invalid`
 
 | Kernel | Paired median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |
 |---|---:|---:|---:|---:|---:|---|---:|
-| `wait_until` | 1.052x | 1.032x | 1.075x | 1.035x | 1.59% | `passed_inconclusive` | `True` |
+| `wait_until` | 0.834x | 0.950x | 0.790x | 0.912x | 9.34% | `passed_inconclusive` | `False` |
 
 The paired median is the guard. A value above `1.10x` is a valid
 failure only when both order strata exceed `1.05x` and the independent

@@ -5,20 +5,208 @@
 #include <array>
 #include <cstdint>
 #include <utility>
+#include "svdpi.h"
 
 #include "benchmarks/authoring_core/cpp_dpi/generated/authoring_core_dut.hpp"
 
+extern "C" {
+    unsigned int dpi_authoring_core_internal_0_get();
+    unsigned int dpi_authoring_core_internal_1_get();
+    void dpi_authoring_core_internal_1_deposit(unsigned int value);
+    unsigned int dpi_authoring_core_internal_2_get(int index);
+    void dpi_authoring_core_internal_2_deposit(int index, unsigned int value);
+    unsigned int dpi_authoring_core_internal_3_get();
+    void dpi_authoring_core_internal_3_force(unsigned int value);
+    void dpi_authoring_core_internal_3_release();
+}
+
 namespace cpptb::benchmarks::authoring_core::generated {
 
+inline constexpr bool kCompactInputTransport = true;
 inline constexpr std::array<uint32_t, 1> kClockSignalIds = {
     kSignalClk,
 };
-inline constexpr std::array<uint32_t, 4> kDrivenSignalIds = {
+inline constexpr std::array<uint32_t, 1> kEdgeObserverSignalIds = {
+    kSignalRspValid,
+};
+inline constexpr std::array<std::pair<uint32_t, uint32_t>, 16> kDrivenSignalSpans = {{
+    {kSignalRstN, 1},
+    {kSignalReqValid, 1},
+    {kSignalReqData, 1},
+    {kSignalRspReady, 1},
+    {kSignalWide64I, 2},
+    {kSignalWide137I, 5},
+    {kSignalFixedAI, 1},
+    {kSignalFixedBI, 1},
+    {kSignalArrayI, 8},
+    {kSignalArrayWideI, 8},
+    {kSignalArrayMultidimI, 18},
+    {kSignalForceSourceI, 1},
+    {kSignalPackedViewI, 1},
+    {kSignalMemAddrI, 1},
+    {kSignalMemWdataI, 1},
+    {kSignalMemWeI, 1},
+}};
+inline constexpr std::array<uint32_t, 52> kObservedSignalWordIds = {
+    kSignalClk,
+    kSignalReqReady,
+    kSignalRspValid,
+    kSignalRspData,
+    kSignalPulse,
+    kSignalRequestCount,
+    kSignalResponseCount,
+    kSignalWide64O,
+    kSignalWide64O + 1,
+    kSignalWide137O,
+    kSignalWide137O + 1,
+    kSignalWide137O + 2,
+    kSignalWide137O + 3,
+    kSignalWide137O + 4,
+    kSignalFixedYO,
+    kSignalArrayO,
+    kSignalArrayO + 1,
+    kSignalArrayO + 2,
+    kSignalArrayO + 3,
+    kSignalArrayO + 4,
+    kSignalArrayO + 5,
+    kSignalArrayO + 6,
+    kSignalArrayO + 7,
+    kSignalArrayWideO,
+    kSignalArrayWideO + 1,
+    kSignalArrayWideO + 2,
+    kSignalArrayWideO + 3,
+    kSignalArrayWideO + 4,
+    kSignalArrayWideO + 5,
+    kSignalArrayWideO + 6,
+    kSignalArrayWideO + 7,
+    kSignalArrayMultidimO,
+    kSignalArrayMultidimO + 1,
+    kSignalArrayMultidimO + 2,
+    kSignalArrayMultidimO + 3,
+    kSignalArrayMultidimO + 4,
+    kSignalArrayMultidimO + 5,
+    kSignalArrayMultidimO + 6,
+    kSignalArrayMultidimO + 7,
+    kSignalArrayMultidimO + 8,
+    kSignalArrayMultidimO + 9,
+    kSignalArrayMultidimO + 10,
+    kSignalArrayMultidimO + 11,
+    kSignalArrayMultidimO + 12,
+    kSignalArrayMultidimO + 13,
+    kSignalArrayMultidimO + 14,
+    kSignalArrayMultidimO + 15,
+    kSignalArrayMultidimO + 16,
+    kSignalArrayMultidimO + 17,
+    kSignalForceFanoutO,
+    kSignalPackedViewO,
+    kSignalMemRdataO,
+};
+inline constexpr std::array<uint32_t, 52> kDrivenSignalWordIds = {
     kSignalRstN,
     kSignalReqValid,
     kSignalReqData,
     kSignalRspReady,
+    kSignalWide64I,
+    kSignalWide64I + 1,
+    kSignalWide137I,
+    kSignalWide137I + 1,
+    kSignalWide137I + 2,
+    kSignalWide137I + 3,
+    kSignalWide137I + 4,
+    kSignalFixedAI,
+    kSignalFixedBI,
+    kSignalArrayI,
+    kSignalArrayI + 1,
+    kSignalArrayI + 2,
+    kSignalArrayI + 3,
+    kSignalArrayI + 4,
+    kSignalArrayI + 5,
+    kSignalArrayI + 6,
+    kSignalArrayI + 7,
+    kSignalArrayWideI,
+    kSignalArrayWideI + 1,
+    kSignalArrayWideI + 2,
+    kSignalArrayWideI + 3,
+    kSignalArrayWideI + 4,
+    kSignalArrayWideI + 5,
+    kSignalArrayWideI + 6,
+    kSignalArrayWideI + 7,
+    kSignalArrayMultidimI,
+    kSignalArrayMultidimI + 1,
+    kSignalArrayMultidimI + 2,
+    kSignalArrayMultidimI + 3,
+    kSignalArrayMultidimI + 4,
+    kSignalArrayMultidimI + 5,
+    kSignalArrayMultidimI + 6,
+    kSignalArrayMultidimI + 7,
+    kSignalArrayMultidimI + 8,
+    kSignalArrayMultidimI + 9,
+    kSignalArrayMultidimI + 10,
+    kSignalArrayMultidimI + 11,
+    kSignalArrayMultidimI + 12,
+    kSignalArrayMultidimI + 13,
+    kSignalArrayMultidimI + 14,
+    kSignalArrayMultidimI + 15,
+    kSignalArrayMultidimI + 16,
+    kSignalArrayMultidimI + 17,
+    kSignalForceSourceI,
+    kSignalPackedViewI,
+    kSignalMemAddrI,
+    kSignalMemWdataI,
+    kSignalMemWeI,
 };
+
+inline probe::Value<32> internal_0_get(int32_t index) {
+    return dpi_authoring_core_internal_0_get();
+}
+
+inline auto make_internal_0() {
+    return probe::Probe<32, false>{
+        0, "cycle_count", internal_0_get, nullptr, nullptr, nullptr};
+}
+
+inline probe::Value<32> internal_1_get(int32_t index) {
+    return dpi_authoring_core_internal_1_get();
+}
+
+inline void internal_1_deposit(int32_t index, probe::Value<32> value) {
+    dpi_authoring_core_internal_1_deposit(value);
+}
+
+inline auto make_internal_1() {
+    return probe::Probe<32, true>{
+        0, "pending_data", internal_1_get, internal_1_deposit, nullptr, nullptr};
+}
+
+inline probe::Value<32> internal_2_get(int32_t index) {
+    return dpi_authoring_core_internal_2_get(index);
+}
+
+inline void internal_2_deposit(int32_t index, probe::Value<32> value) {
+    dpi_authoring_core_internal_2_deposit(index, value);
+}
+
+inline auto make_internal_2() {
+    return probe::MemoryProbe<32, 0, 255, true>{
+        "memory", internal_2_get, internal_2_deposit, nullptr, nullptr};
+}
+
+inline probe::Value<32> internal_3_get(int32_t index) {
+    return dpi_authoring_core_internal_3_get();
+}
+
+inline void internal_3_force(int32_t index, probe::Value<32> value) {
+    dpi_authoring_core_internal_3_force(value);
+}
+
+inline void internal_3_release(int32_t index) {
+    dpi_authoring_core_internal_3_release();
+}
+
+inline auto make_internal_3() {
+    return probe::Probe<32, false, true>{
+        0, "force_target", internal_3_get, nullptr, internal_3_force, internal_3_release};
+}
 
 template <typename MakeSignal>
 AuthoringCoreDut bind_dut(MakeSignal&& make_signal) {
@@ -33,7 +221,34 @@ AuthoringCoreDut bind_dut(MakeSignal&& make_signal) {
         make_signal(kSignalRspReady, "rsp_ready"),
         make_signal(kSignalPulse, "pulse"),
         make_signal(kSignalRequestCount, "request_count"),
-        make_signal(kSignalResponseCount, "response_count")
+        make_signal(kSignalResponseCount, "response_count"),
+        make_signal(coro::SignalSpec<64, true>{}, kSignalWide64I, "wide64_i"),
+        make_signal(coro::SignalSpec<64, false>{}, kSignalWide64O, "wide64_o"),
+        make_signal(coro::SignalSpec<137, true>{}, kSignalWide137I, "wide137_i"),
+        make_signal(coro::SignalSpec<137, false>{}, kSignalWide137O, "wide137_o"),
+        make_signal(kSignalFixedAI, "fixed_a_i"),
+        make_signal(kSignalFixedBI, "fixed_b_i"),
+        make_signal(kSignalFixedYO, "fixed_y_o"),
+        make_signal(coro::ArraySpec<32, 1, 8, true>{}, kSignalArrayI, "array_i"),
+        make_signal(coro::ArraySpec<32, 1, 8, false>{}, kSignalArrayO, "array_o"),
+        make_signal(coro::ArraySpec<64, 3, 0, true>{}, kSignalArrayWideI, "array_wide_i"),
+        make_signal(coro::ArraySpec<64, 3, 0, false>{}, kSignalArrayWideO, "array_wide_o"),
+        coro::reshape_fixed_array(coro::FixedArraySpec<65, true, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(coro::ArraySpec<288, 2, 1, true>{}, kSignalArrayMultidimI, "array_multidim_i")),
+        coro::reshape_fixed_array(coro::FixedArraySpec<65, false, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(coro::ArraySpec<288, 2, 1, false>{}, kSignalArrayMultidimO, "array_multidim_o")),
+        make_signal(kSignalForceSourceI, "force_source_i"),
+        make_signal(kSignalForceFanoutO, "force_fanout_o"),
+        make_signal(kSignalPackedViewI, "packed_view_i"),
+        make_signal(kSignalPackedViewO, "packed_view_o"),
+        make_signal(kSignalMemAddrI, "mem_addr_i"),
+        make_signal(kSignalMemWdataI, "mem_wdata_i"),
+        make_signal(kSignalMemWeI, "mem_we_i"),
+        make_signal(kSignalMemRdataO, "mem_rdata_o"),
+        {
+            make_internal_0(),
+            make_internal_1(),
+            make_internal_2(),
+            make_internal_3()
+        }
     };
 }
 

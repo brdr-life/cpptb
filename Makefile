@@ -5,6 +5,7 @@ MOJOTB_OBJ_DIR := $(MOJOTB_BUILD_DIR)/obj
 CPPTB_BUILD_DIR := $(BUILD_DIR)/cpptb
 CPPTB_OBJ_DIR := $(CPPTB_BUILD_DIR)/obj
 CPPTB_CORO_RUNTIME_TEST := $(CPPTB_BUILD_DIR)/coro_runtime_test
+CPPTB_PACKED_VALUE_TEST := $(CPPTB_BUILD_DIR)/packed_value_test
 CPPTB_APB_EVENT_OBJ_DIR := $(CPPTB_BUILD_DIR)/apb_event_obj
 CPPTB_MULTICLOCK_DIR := cpptb/examples/dpi_multiclock
 CPPTB_MULTICLOCK_OBJ_DIR := $(CPPTB_BUILD_DIR)/dpi_multiclock_obj
@@ -44,9 +45,10 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event channel all
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event channel all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
+AUTHORING_CORE_EXTRA_CFLAGS ?=
 FEATURE ?=
 FEATURE_REGRESSION_RUNNER := python3 benchmarks/run_regression.py
 UV_CACHE_DIR ?= $(BUILD_DIR)/uv-cache
@@ -179,15 +181,25 @@ $(CPPTB_BUILD_DIR)/vpi_counter_host: cpptb/verilator_vpi_host.cpp cpptb/runtime.
 cpp-vpi-run: $(CPPTB_BUILD_DIR)/vpi_counter_host
 	./$(CPPTB_BUILD_DIR)/vpi_counter_host
 
-$(CPPTB_CORO_RUNTIME_TEST): cpptb/coro_runtime.hpp cpptb/tests/coro_runtime_test.cpp
+$(CPPTB_CORO_RUNTIME_TEST): cpptb/coro_runtime.hpp cpptb/packed_bits.hpp cpptb/probe.hpp \
+		cpptb/tests/coro_runtime_test.cpp
 	mkdir -p $(CPPTB_BUILD_DIR)
 	$(CXX) -std=c++20 -I. \
+		-DCPPTB_CORO_FRAME_POOL_DIAGNOSTICS \
 		-I$(VERILATOR_ROOT)/include \
 		-I$(VERILATOR_ROOT)/include/vltstd \
 		cpptb/tests/coro_runtime_test.cpp -o $@
 
 cpp-coro-runtime-test: $(CPPTB_CORO_RUNTIME_TEST)
 	$(CPPTB_CORO_RUNTIME_TEST)
+
+$(CPPTB_PACKED_VALUE_TEST): cpptb/packed_bits.hpp cpptb/fixed.hpp \
+		cpptb/tests/packed_value_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -O3 -I. cpptb/tests/packed_value_test.cpp -o $@
+
+cpptb-packed-value-test: $(CPPTB_PACKED_VALUE_TEST)
+	$(CPPTB_PACKED_VALUE_TEST)
 
 $(CPPTB_APB_EVENT_OBJ_DIR)/Vvpi_apb_event_unit.mk: $(CPPTB_APB_EVENT_RTL)
 	mkdir -p $(CPPTB_APB_EVENT_OBJ_DIR)
@@ -199,7 +211,7 @@ $(CPPTB_APB_EVENT_OBJ_DIR)/Vvpi_apb_event_unit.mk: $(CPPTB_APB_EVENT_RTL)
 $(CPPTB_APB_EVENT_OBJ_DIR)/Vvpi_apb_event_unit__ALL.a: $(CPPTB_APB_EVENT_OBJ_DIR)/Vvpi_apb_event_unit.mk
 	$(MAKE) -C $(CPPTB_APB_EVENT_OBJ_DIR) -f Vvpi_apb_event_unit.mk Vvpi_apb_event_unit__ALL.a CXXFLAGS=-I$(LIBCXX_INC)
 
-$(CPPTB_BUILD_DIR)/apb_event_host: cpptb/coro_runtime.hpp \
+$(CPPTB_BUILD_DIR)/apb_event_host: cpptb/coro_runtime.hpp cpptb/packed_bits.hpp \
 		cpptb/rggen_apb_event/apb_event_dut.hpp \
 		cpptb/rggen_apb_event/verilator_host.cpp \
 		cpptb/rggen_apb_event/tests/apb_event_test.cpp \
@@ -222,7 +234,7 @@ $(CPPTB_BUILD_DIR)/apb_event_host: cpptb/coro_runtime.hpp \
 cpp-apb-event-run: $(CPPTB_BUILD_DIR)/apb_event_host
 	./$(CPPTB_BUILD_DIR)/apb_event_host
 
-$(CPPTB_BENCH_BUILD_DIR)/apb_event_bench_host: cpptb/coro_runtime.hpp \
+$(CPPTB_BENCH_BUILD_DIR)/apb_event_bench_host: cpptb/coro_runtime.hpp cpptb/packed_bits.hpp \
 		cpptb/rggen_apb_event/apb_event_dut.hpp \
 		benchmarks/cocotb_cpp_compare/cpptb/apb_event_bench.cpp \
 		benchmarks/cocotb_cpp_compare/cpptb/apb_event_bench.hpp \
@@ -270,6 +282,8 @@ cpptb-codegen-test:
 
 cpptb-codegen-frontend-check:
 	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) \
+		$(AUTHORING_CORE_DPI_MANIFEST) --check --compare-frontend verilator_json
+	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) \
 		$(CPPTB_MULTICLOCK_MANIFEST) --check --compare-frontend verilator_json
 	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) \
 		$(PERIPHERAL_SUITE_DPI_MANIFEST) --check --compare-frontend verilator_json
@@ -294,7 +308,8 @@ $(CPPTB_CONFORMANCE_BINARY): $(CPPTB_CODEGEN_SOURCES) \
 		$(CPPTB_CONFORMANCE_DIR)/framework.cpp \
 		$(CPPTB_CONFORMANCE_DIR)/dpi_transport.cpp \
 		$(CPPTB_CONFORMANCE_DIR)/testbench.cpp \
-		cpptb/coro_runtime.hpp cpptb/dpi_runtime.hpp cpptb/test_result.hpp
+		cpptb/coro_runtime.hpp cpptb/packed_bits.hpp cpptb/probe.hpp cpptb/dpi_runtime.hpp \
+		cpptb/test_result.hpp
 	$(CODEGEN_PYTHON) $(CPPTB_CONFORMANCE_RUNNER) --build-only
 	touch $@
 
@@ -309,7 +324,7 @@ $(CPPTB_MULTICLOCK_OBJ_DIR)/Vdpi_dual_clock_mailbox: \
 		$(CPPTB_MULTICLOCK_DIR)/framework.hpp \
 		$(CPPTB_MULTICLOCK_DIR)/testbench.cpp \
 		$(CPPTB_MULTICLOCK_DIR)/dpi_transport.cpp \
-		$(CPPTB_MULTICLOCK_GENERATED) cpptb/coro_runtime.hpp \
+		$(CPPTB_MULTICLOCK_GENERATED) cpptb/coro_runtime.hpp cpptb/packed_bits.hpp \
 		cpptb/dpi_runtime.hpp cpptb/test_result.hpp
 	mkdir -p $(CPPTB_MULTICLOCK_OBJ_DIR)
 	verilator --binary --timing --no-sched-zero-delay \
@@ -358,7 +373,7 @@ $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite.mk: $(PERIPHERAL_SUITE_VPI
 $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite__ALL.a: $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite.mk
 	$(MAKE) -C $(PERIPHERAL_SUITE_VPI_OBJ_DIR) -f Vvpi_peripheral_suite.mk Vvpi_peripheral_suite__ALL.a CXXFLAGS=-I$(LIBCXX_INC)
 
-$(PERIPHERAL_SUITE_BUILD_DIR)/peripheral_suite_host: cpptb/coro_runtime.hpp \
+$(PERIPHERAL_SUITE_BUILD_DIR)/peripheral_suite_host: cpptb/coro_runtime.hpp cpptb/packed_bits.hpp \
 		benchmarks/peripheral_suite/cpp_vpi/framework/peripheral_suite.hpp \
 		benchmarks/peripheral_suite/cpp_vpi/framework/peripheral_suite_bench.cpp \
 		benchmarks/peripheral_suite/cpp_vpi/framework/peripheral_suite_bench.hpp \
@@ -431,7 +446,8 @@ $(PERIPHERAL_SUITE_DPI_OBJ_DIR)/Vdpi_peripheral_suite: $(PERIPHERAL_SUITE_DPI_RT
 		benchmarks/peripheral_suite/cpp_dpi/framework/peripheral_suite_fixture.hpp \
 		$(PERIPHERAL_SUITE_DPI_GENERATED) \
 		benchmarks/peripheral_suite/cpp_dpi/testbench.cpp \
-		cpptb/coro_runtime.hpp cpptb/dpi_runtime.hpp cpptb/test_result.hpp
+		cpptb/coro_runtime.hpp cpptb/packed_bits.hpp cpptb/dpi_runtime.hpp \
+		cpptb/test_result.hpp
 	mkdir -p $(PERIPHERAL_SUITE_DPI_OBJ_DIR)
 	verilator --binary --timing \
 		--no-sched-zero-delay \
@@ -504,12 +520,14 @@ define AUTHORING_CORE_DPI_template
 $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		$(AUTHORING_CORE_DPI_GENERATED) cpptb/coro_runtime.hpp \
-		cpptb/dpi_runtime.hpp cpptb/test_result.hpp Makefile
+		cpptb/packed_bits.hpp cpptb/fixed.hpp cpptb/dpi_runtime.hpp \
+		cpptb/test_result.hpp Makefile
 	mkdir -p $$(dir $$@)
 	verilator --binary --timing --no-sched-zero-delay \
-		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
+		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
+		-Wno-MULTIDRIVEN \
 		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-I$$(CURDIR) -DAUTHORING_CORE_KERNEL=$(2)" \
+		-CFLAGS "-I$$(CURDIR) -DAUTHORING_CORE_KERNEL=$(2) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
 		--Mdir $$(dir $$@) \
 		--top-module dpi_authoring_core \
 		$(AUTHORING_CORE_RTL) \
@@ -527,6 +545,22 @@ $(eval $(call AUTHORING_CORE_DPI_template,event,5))
 $(eval $(call AUTHORING_CORE_DPI_template,channel,6))
 $(eval $(call AUTHORING_CORE_DPI_template,all,7))
 $(eval $(call AUTHORING_CORE_DPI_template,task_timeout,8))
+$(eval $(call AUTHORING_CORE_DPI_template,wide64,9))
+$(eval $(call AUTHORING_CORE_DPI_template,wide_echo_137,10))
+$(eval $(call AUTHORING_CORE_DPI_template,wide_slice,11))
+$(eval $(call AUTHORING_CORE_DPI_template,fixed_mac,12))
+$(eval $(call AUTHORING_CORE_DPI_template,array_index,13))
+$(eval $(call AUTHORING_CORE_DPI_template,array_wide,14))
+$(eval $(call AUTHORING_CORE_DPI_template,mem_rw,15))
+$(eval $(call AUTHORING_CORE_DPI_template,hier_probe,16))
+$(eval $(call AUTHORING_CORE_DPI_template,mem_backdoor,17))
+$(eval $(call AUTHORING_CORE_DPI_template,mem_probe_read,18))
+$(eval $(call AUTHORING_CORE_DPI_template,mem_probe_deposit,19))
+$(eval $(call AUTHORING_CORE_DPI_template,mem_probe_read_deposit,20))
+$(eval $(call AUTHORING_CORE_DPI_template,signal_edge,21))
+$(eval $(call AUTHORING_CORE_DPI_template,array_multidim,22))
+$(eval $(call AUTHORING_CORE_DPI_template,force_release,23))
+$(eval $(call AUTHORING_CORE_DPI_template,packed_view,24))
 
 AUTHORING_CORE_DPI_BINARIES := $(foreach kernel,$(AUTHORING_CORE_KERNELS),$(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(kernel)/Vdpi_authoring_core)
 
@@ -541,7 +575,8 @@ $(AUTHORING_CORE_SV_OBJ_DIR)/Vauthoring_core_sv_tb: \
 		Makefile
 	mkdir -p $(AUTHORING_CORE_SV_OBJ_DIR)
 	verilator --binary --timing \
-		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
+		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
+		-Wno-MULTIDRIVEN \
 		-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)" \
 		--Mdir $(AUTHORING_CORE_SV_OBJ_DIR) \
 		--top-module authoring_core_sv_tb \

@@ -2,6 +2,7 @@
 // Do not edit by hand.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "cpptb/coro_runtime.hpp"

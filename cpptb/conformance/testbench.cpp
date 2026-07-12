@@ -17,6 +17,226 @@ using coro::Signal;
 using coro::Task;
 using namespace coro;
 
+template <size_t Width, size_t WordCount>
+Bits<Width> xor_words(Bits<Width> value,
+                      const std::array<uint32_t, WordCount>& mask) {
+    static_assert(WordCount == Bits<Width>::word_count);
+    for (size_t word = 0; word < WordCount; ++word) {
+        value.set_word(word, value.word(word) ^ mask[word]);
+    }
+    return value;
+}
+
+Task<void> packed_signal_contract(ConformanceTb tb) {
+    const auto packed65 = Bits<65>::from_words(
+        {0x89ab'cdefu, 0x0123'4567u, 0xffff'ffffu});
+    tb.dut.packed65_i.set(packed65);
+    tb.expect_true("65-bit driven readback is masked snapshot",
+                   tb.dut.packed65_i.get() == packed65);
+
+    const auto packed137 = Bits<137>::from_words(
+        {0x0011'2233u, 0x4455'6677u, 0x8899'aabbu, 0xccdd'eeffu,
+         0xffff'ffffu});
+    tb.dut.packed137_i.set(packed137);
+    tb.expect_true("137-bit driven readback is masked snapshot",
+                   tb.dut.packed137_i.get() == packed137);
+
+    co_await Delay{1_ps};
+    const auto expected65 = xor_words<65>(
+        packed65, std::array<uint32_t, 3>{0x89ab'cdefu, 0x0123'4567u, 1u});
+    tb.expect_true("65-bit transformed DUT output",
+                   tb.dut.packed65_o.get() == expected65);
+    const auto expected137 = xor_words<137>(
+        packed137,
+        std::array<uint32_t, 5>{0xdead'beefu, 0x89ab'cdefu,
+                                0x0123'4567u, 0xaa55'aa55u, 0x155u});
+    tb.expect_true("137-bit transformed DUT output",
+                   tb.dut.packed137_o.get() == expected137);
+}
+
+Task<void> unpacked_array_contract(ConformanceTb tb) {
+    constexpr std::array<uint32_t, 3> mask = {
+        0x89ab'cdefu, 0x0123'4567u, 0x0000'01ffu};
+
+    for (int32_t index = 4; index <= 7; ++index) {
+        Bits<73> value;
+        value.set_word(0, 0x1020'3040u + static_cast<uint32_t>(index));
+        value.set_word(1, 0x5060'7080u + static_cast<uint32_t>(index));
+        value.set_word(2, 0x0000'0100u + static_cast<uint32_t>(index));
+        tb.dut.array73_i.at(index).set(value);
+        tb.expect_true("73-bit array driven readback",
+                       tb.dut.array73_i.at(index).get() == value);
+    }
+
+    co_await Delay{1_ps};
+    for (int32_t index = 4; index <= 7; ++index) {
+        Bits<73> value;
+        value.set_word(0, 0x1020'3040u + static_cast<uint32_t>(index));
+        value.set_word(1, 0x5060'7080u + static_cast<uint32_t>(index));
+        value.set_word(2, 0x0000'0100u + static_cast<uint32_t>(index));
+        tb.expect_true("73-bit transformed array output",
+                       tb.dut.array73_o.at(index).get() ==
+                           xor_words<73>(value, mask));
+    }
+}
+
+Task<void> multidimensional_array_contract(ConformanceTb tb) {
+    const auto mask = Bits<65>::from_words(
+        {0x89ab'cdefu, 0x0123'4567u, 1u});
+
+    for (int32_t row = 1; row <= 2; ++row) {
+        for (int32_t column = -1; column <= 1; ++column) {
+            Bits<65> value;
+            const uint32_t ordinal =
+                static_cast<uint32_t>((row - 1) * 3 + column + 1);
+            value.set_word(0, 0x1020'3040u + ordinal);
+            value.set_word(1, 0x5060'7080u + ordinal);
+            value.set_word(2, ordinal & 1u);
+            tb.dut.matrix65_i.at(row).at(column).set(value);
+            tb.expect_true("rank-2 wide array driven readback",
+                           tb.dut.matrix65_i.at(row).at(column).get() == value);
+        }
+    }
+
+    co_await Delay{1_ps};
+    for (int32_t row = 1; row <= 2; ++row) {
+        for (int32_t column = -1; column <= 1; ++column) {
+            Bits<65> value;
+            const uint32_t ordinal =
+                static_cast<uint32_t>((row - 1) * 3 + column + 1);
+            value.set_word(0, 0x1020'3040u + ordinal);
+            value.set_word(1, 0x5060'7080u + ordinal);
+            value.set_word(2, ordinal & 1u);
+            tb.expect_true(
+                "rank-2 wide array transformed output",
+                tb.dut.matrix65_o.at(row).at(column).get() ==
+                    xor_words<65>(value,
+                                  std::array<uint32_t, 3>{mask.word(0),
+                                                          mask.word(1),
+                                                          mask.word(2)}));
+        }
+    }
+}
+
+Task<void> internal_probe_contract(ConformanceTb tb) {
+    tb.dut.internal.internal_u64.deposit(0x1111'2222'3333'4444ull);
+    tb.dut.internal.internal_u64.deposit(0xfedc'ba98'7654'3210ull);
+    tb.expect_true("64-bit internal deposit is immediate",
+                   tb.dut.internal.internal_u64.get() ==
+                       0xfedc'ba98'7654'3210ull);
+
+    const auto superseded_scalar = Bits<73>::from_words(
+        {0x1111'2222u, 0x3333'4444u, 0x0000'0055u});
+    const auto scalar = Bits<73>::from_words(
+        {0x89ab'cdefu, 0x0123'4567u, 0xffff'ffffu});
+    tb.dut.internal.internal_wide.deposit(superseded_scalar);
+    tb.dut.internal.internal_wide.deposit(scalar);
+    tb.expect_true("wide internal deposit is immediate",
+                   tb.dut.internal.internal_wide.get() == scalar);
+
+    tb.dut.internal.internal_memory.at(6).deposit(superseded_scalar);
+
+    for (int32_t index = 7; index >= 4; --index) {
+        Bits<73> value;
+        value.set_word(0, 0x1020'3040u + static_cast<uint32_t>(index));
+        value.set_word(1, 0x5060'7080u + static_cast<uint32_t>(index));
+        value.set_word(2, 0xffff'ff00u + static_cast<uint32_t>(index));
+        tb.dut.internal.internal_memory.at(index).deposit(value);
+    }
+
+    co_await Delay{1_ps};
+    tb.expect_true("64-bit internal direct ABI deposit and read",
+                   tb.dut.internal.internal_u64.get() ==
+                       0xfedc'ba98'7654'3210ull);
+    tb.expect_true("internal deposit propagates through combinational logic",
+                   tb.dut.internal_comb_fanout.get() ==
+                       0xfedc'ba98'7654'3210ull);
+    tb.expect_true("same-step internal scalar deposits are last-write-wins",
+                   tb.dut.internal.internal_wide.get() == scalar);
+
+    for (int32_t index = 7; index >= 4; --index) {
+        Bits<73> expected;
+        expected.set_word(0, 0x1020'3040u + static_cast<uint32_t>(index));
+        expected.set_word(1, 0x5060'7080u + static_cast<uint32_t>(index));
+        expected.set_word(2, 0xffff'ff00u + static_cast<uint32_t>(index));
+        tb.expect_true("73-bit descending internal memory deposit and read",
+                       tb.dut.internal.internal_memory.at(index).get() ==
+                           expected);
+    }
+
+    co_await RisingEdge{tb.dut.clock.a};
+    co_await Delay{1_ps};
+    tb.expect_true("internal deposit propagates through clocked logic",
+                   tb.dut.internal_clocked_fanout.get() ==
+                       0xfedc'ba98'7654'3210ull);
+}
+
+Task<void> force_release_contract(ConformanceTb tb) {
+    tb.dut.force_net_source.set(0x12);
+    co_await Delay{1_ps};
+    tb.expect_eq("force net baseline driver", tb.dut.internal_net_fanout.get(),
+                 0x48);
+
+    tb.dut.internal.internal_net.force(0xa5);
+    tb.expect_eq("force net immediate readback",
+                 tb.dut.internal.internal_net.get(), 0xa5);
+    co_await Delay{1_ps};
+    tb.expect_eq("force net propagates after explicit delay",
+                 tb.dut.internal_net_fanout.get(), 0xa5);
+
+    tb.dut.force_net_source.set(0x34);
+    co_await Delay{1_ps};
+    tb.expect_eq("force net overrides changing driver",
+                 tb.dut.internal_net_fanout.get(), 0xa5);
+    tb.dut.internal.internal_net.release();
+    co_await Delay{1_ps};
+    tb.expect_eq("release net restores resolved driver",
+                 tb.dut.internal_net_fanout.get(), 0x6e);
+
+    tb.dut.internal.force_variable_u64.release();
+    tb.dut.internal.force_variable_u64.force(0x1111'2222'3333'4444ull);
+    tb.dut.internal.force_variable_u64.force(0x0123'4567'89ab'cdefull);
+    tb.expect_true("64-bit variable force is immediate",
+                   tb.dut.internal.force_variable_u64.get() ==
+                       0x0123'4567'89ab'cdefull);
+    tb.dut.internal.force_variable_u64.release();
+    tb.expect_true("released variable retains forced value",
+                   tb.dut.internal.force_variable_u64.get() ==
+                       0x0123'4567'89ab'cdefull);
+
+    const auto wide = Bits<73>::from_words(
+        {0x89ab'cdefu, 0x0123'4567u, 0xffff'ffffu});
+    tb.dut.internal.force_variable_wide.force(wide);
+    tb.expect_true("73-bit variable force is masked and immediate",
+                   tb.dut.internal.force_variable_wide.get() == wide);
+    tb.dut.internal.force_variable_wide.release();
+    tb.expect_true("released wide variable retains forced value",
+                   tb.dut.internal.force_variable_wide.get() == wide);
+
+    for (const int32_t index : {4, 7}) {
+        auto memory = Bits<73>::from_words(
+            {0x1020'3040u + static_cast<uint32_t>(index),
+             0x5060'7080u + static_cast<uint32_t>(index),
+             0xffff'ffffu});
+        tb.dut.internal.force_memory.at(index).force(memory);
+        tb.expect_true("constant-index memory endpoint force is immediate",
+                       tb.dut.internal.force_memory.at(index).get() == memory);
+        tb.dut.internal.force_memory.at(index).release();
+    }
+
+    tb.dut.internal.force_counter.force(0x55);
+    co_await RisingEdge{tb.dut.clock.a};
+    co_await RisingEdge{tb.dut.clock.a};
+    co_await Delay{1_ps};
+    tb.expect_eq("RTL writes do not override force",
+                 tb.dut.internal.force_counter.get(), 0x55);
+    tb.dut.internal.force_counter.release();
+    co_await RisingEdge{tb.dut.clock.a};
+    co_await Delay{1_ps};
+    tb.expect_eq("RTL write resumes after release",
+                 tb.dut.internal.force_counter.get(), 0x56);
+}
+
 Task<void> delay_and_settling_contract(ConformanceTb tb) {
     tb.dut.rst_n.set(0);
     tb.dut.derived_gate.set(1);
@@ -180,6 +400,46 @@ Task<void> wait_nested_edge(ConformanceTb tb) {
 Task<void> nested_task_contract(ConformanceTb tb) {
     co_await wait_nested_edge(tb);
     tb.expect_time("nested task continuation time", tb.now(), 2_ns);
+}
+
+Task<void> observe_rising_signal(ConformanceTb tb) {
+    co_await RisingEdge{tb.dut.event_observed};
+    tb.expect_eq("DUT output rising edge value", tb.dut.event_observed.get(), 1);
+    tb.expect_time("DUT output rising edge time", tb.now(), 1_ps);
+}
+
+Task<void> observe_falling_signal(ConformanceTb tb) {
+    co_await FallingEdge{tb.dut.event_observed};
+    tb.expect_eq("DUT output falling edge value", tb.dut.event_observed.get(), 0);
+    tb.expect_time("DUT output falling edge time", tb.now(), 2_ps);
+}
+
+Task<void> observe_any_signal_edge(ConformanceTb tb, SimTime expected_time,
+                                   uint32_t expected_value) {
+    co_await Edge{tb.dut.event_observed};
+    tb.expect_eq("DUT output any-edge value", tb.dut.event_observed.get(),
+                 expected_value);
+    tb.expect_time("DUT output any-edge time", tb.now(), expected_time);
+}
+
+Task<void> signal_observer_contract(ConformanceTb tb) {
+    tb.dut.event_drive.set(0);
+    co_await Delay{1_ps};
+
+    const auto rising = tb.spawn(observe_rising_signal(tb));
+    const auto rising_any =
+        tb.spawn(observe_any_signal_edge(tb, 1_ps, 1));
+    tb.dut.event_drive.set(1);
+    co_await rising;
+    co_await rising_any;
+    co_await Delay{1_ps};
+
+    const auto falling = tb.spawn(observe_falling_signal(tb));
+    const auto falling_any =
+        tb.spawn(observe_any_signal_edge(tb, 2_ps, 0));
+    tb.dut.event_drive.set(0);
+    co_await falling;
+    co_await falling_any;
 }
 
 Task<void> lifecycle_worker(ConformanceTb tb) {
@@ -372,6 +632,43 @@ Task<void> same_deadline_delay_contract(ConformanceTb tb) {
     tb.expect_eq("same-deadline Delay FIFO third", order.values[2], 3);
     tb.expect_true("same-deadline earlier processes complete",
                    first.done() && second.done());
+}
+
+struct TimerRearmOrder {
+    std::array<uint32_t, 2> values{};
+    std::array<uint64_t, 2> times{};
+    uint32_t count = 0;
+};
+
+Task<void> timer_rearm_marker(ConformanceTb tb, TimerRearmOrder& order,
+                              SimTime delay, uint32_t marker) {
+    co_await Delay{delay};
+    if (order.count < order.values.size()) {
+        order.values[order.count] = marker;
+        order.times[order.count] = tb.now().in_femtoseconds();
+        ++order.count;
+    }
+}
+
+Task<void> earlier_deadline_rearm_contract(ConformanceTb tb) {
+    TimerRearmOrder order;
+    const auto later = tb.spawn(timer_rearm_marker(tb, order, 10_ns, 2));
+
+    co_await RisingEdge{tb.dut.clock.a};
+    const auto earlier = tb.spawn(timer_rearm_marker(tb, order, 1_ns, 1));
+    co_await earlier;
+    tb.expect_time("earlier rearmed timer deadline", tb.now(), 3_ns);
+    tb.expect_eq("earlier rearmed timer callback count", order.count, 1);
+    tb.expect_eq("earlier rearmed timer callback order", order.values[0], 1);
+    tb.expect_time("earlier rearmed timer recorded time",
+                   SimTime{order.times[0]}, 3_ns);
+
+    co_await later;
+    tb.expect_time("original later timer deadline", tb.now(), 10_ns);
+    tb.expect_eq("both rearmed timer callbacks complete", order.count, 2);
+    tb.expect_eq("original later timer callback order", order.values[1], 2);
+    tb.expect_time("original later timer recorded time",
+                   SimTime{order.times[1]}, 10_ns);
 }
 
 Task<void> stale_falling_interest_contract(ConformanceTb tb) {
@@ -1123,6 +1420,10 @@ Task<void> subprecision_task_timeout_violation(ConformanceTb) {
         co_await with_timeout(timeout_value(1_ps, 1, probe), 1_fs));
 }
 
+Task<void> unobserved_edge_violation(ConformanceTb tb) {
+    co_await RisingEdge{tb.dut.comb_sum};
+}
+
 }  // namespace
 
 void register_user_testbench(ConformanceTb& tb) {
@@ -1153,9 +1454,18 @@ void register_user_testbench(ConformanceTb& tb) {
             tb.sequence(subprecision_task_timeout_violation);
             return;
         }
+        if (selected == "unobserved_edge") {
+            tb.sequence(unobserved_edge_violation);
+            return;
+        }
     }
 
     tb.sequence(delay_and_settling_contract);
+    tb.sequence(packed_signal_contract);
+    tb.sequence(unpacked_array_contract);
+    tb.sequence(multidimensional_array_contract);
+    tb.sequence(internal_probe_contract);
+    tb.sequence(force_release_contract);
     tb.sequence(delay_and_first_contract);
     tb.sequence(edge_contract);
     tb.sequence(manual_clock_driver);
@@ -1166,10 +1476,12 @@ void register_user_testbench(ConformanceTb& tb) {
     tb.sequence(ordered_waiter_second);
     tb.sequence(ordered_waiter_verifier);
     tb.sequence(nested_task_contract);
+    tb.sequence(signal_observer_contract);
     tb.sequence(process_and_variadic_contract);
     tb.sequence(process_completion_contract);
     tb.sequence(cancellation_contract);
     tb.sequence(same_deadline_delay_contract);
+    tb.sequence(earlier_deadline_rearm_contract);
     tb.sequence(stale_falling_interest_contract);
     tb.sequence(typed_task_contract);
     tb.sequence(typed_cancellation_contract);

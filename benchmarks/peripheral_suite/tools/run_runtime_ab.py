@@ -207,19 +207,25 @@ def load_source_evidence():
     ):
         raise RuntimeError("runtime confirmation captures are not byte-identical")
     build_provenance = json.loads(BUILD_PROVENANCE.read_text(encoding="utf-8"))
+    current_input_sha256 = {}
+    input_mismatches = {}
     for relative_path, expected in build_provenance["input_sha256"].items():
-        actual = _sha256(REPO / relative_path)
+        path = REPO / relative_path
+        actual = _sha256(path) if path.is_file() else None
+        current_input_sha256[relative_path] = actual
         if actual != expected:
-            raise RuntimeError(
-                f"documented build input hash mismatch for {relative_path}: "
-                f"{actual} != {expected}"
-            )
+            input_mismatches[relative_path] = {
+                "recorded_sha256": expected,
+                "current_sha256": actual,
+            }
     return {
         "source_sha256": source_hashes,
         "source_provenance_sha256": _sha256(SOURCE_PROVENANCE),
         "source_provenance": provenance,
         "build_provenance": build_provenance,
         "build_provenance_sha256": _sha256(BUILD_PROVENANCE),
+        "current_input_sha256": current_input_sha256,
+        "input_mismatches": input_mismatches,
     }
 
 

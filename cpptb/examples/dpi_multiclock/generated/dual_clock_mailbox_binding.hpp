@@ -10,11 +10,31 @@
 
 namespace cpptb::examples::dpi_multiclock::generated {
 
+inline constexpr bool kCompactInputTransport = true;
 inline constexpr std::array<uint32_t, 2> kClockSignalIds = {
     kSignalWriteClk,
     kSignalReadClk,
 };
-inline constexpr std::array<uint32_t, 5> kDrivenSignalIds = {
+inline constexpr std::array<uint32_t, 0> kEdgeObserverSignalIds = {
+};
+inline constexpr std::array<std::pair<uint32_t, uint32_t>, 5> kDrivenSignalSpans = {{
+    {kSignalRstN, 1},
+    {kSignalWriteData, 1},
+    {kSignalWriteValid, 1},
+    {kSignalReadReady, 1},
+    {kSignalProbeIn, 1},
+}};
+inline constexpr std::array<uint32_t, 8> kObservedSignalWordIds = {
+    kSignalWriteClk,
+    kSignalWriteReady,
+    kSignalWriteCount,
+    kSignalReadClk,
+    kSignalReadData,
+    kSignalReadValid,
+    kSignalReadCount,
+    kSignalProbeEcho,
+};
+inline constexpr std::array<uint32_t, 5> kDrivenSignalWordIds = {
     kSignalRstN,
     kSignalWriteData,
     kSignalWriteValid,

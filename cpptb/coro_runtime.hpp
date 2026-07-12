@@ -11,6 +11,7 @@
 #include <deque>
 #include <limits>
 #include <memory>
+#include <new>
 #include <optional>
 #include <queue>
 #include <string_view>
@@ -19,7 +20,12 @@
 #include <utility>
 #include <vector>
 
+#include "cpptb/packed_bits.hpp"
 #include "vpi_user.h"
+
+#define CPPTB_CORO_PACKED_SIGNAL_API 1
+#define CPPTB_CORO_UNPACKED_ARRAY_API 1
+#define CPPTB_CORO_MULTIDIMENSIONAL_ARRAY_API 1
 
 namespace cpptb::coro {
 
@@ -32,6 +38,17 @@ enum class EdgeKind : uint8_t {
 enum class WaitKind : uint8_t {
     Edge,
     Delay,
+};
+
+enum EdgeInterest : uint8_t {
+    kEdgeInterestNone = 0,
+    kEdgeInterestRising = 1u << 0,
+    kEdgeInterestFalling = 1u << 1,
+};
+
+struct EdgeInterestChange {
+    uint32_t signal_id = 0;
+    uint8_t interest = kEdgeInterestNone;
 };
 
 struct Signal {
@@ -61,6 +78,229 @@ struct Signal {
         set_fn(context, id, data);
     }
 };
+
+template <size_t Width, bool Writable>
+struct SignalSpec {
+    static_assert(Width > 0, "signal width must be positive");
+
+    static constexpr size_t width = Width;
+    static constexpr bool writable = Writable;
+};
+
+template <size_t ElementWidth, int32_t Left, int32_t Right, bool Writable>
+struct ArraySpec {
+    static_assert(ElementWidth > 0, "array element width must be positive");
+
+    static constexpr size_t element_width = ElementWidth;
+    static constexpr int32_t left = Left;
+    static constexpr int32_t right = Right;
+    static constexpr bool writable = Writable;
+};
+
+template <int32_t Left, int32_t Right>
+struct ArrayDimension {
+    static constexpr int32_t left = Left;
+    static constexpr int32_t right = Right;
+    static constexpr int32_t low = Left < Right ? Left : Right;
+    static constexpr int32_t high = Left < Right ? Right : Left;
+    static constexpr size_t size =
+        static_cast<size_t>(high - low) + 1;
+};
+
+template <size_t ElementWidth, bool Writable, typename... Dimensions>
+struct FixedArraySpec {
+    static_assert(ElementWidth > 0, "array element width must be positive");
+    static_assert(sizeof...(Dimensions) > 0,
+                  "an unpacked array must have at least one dimension");
+
+    static constexpr size_t element_width = ElementWidth;
+    static constexpr bool writable = Writable;
+    static constexpr size_t rank = sizeof...(Dimensions);
+    static constexpr size_t element_count = (Dimensions::size * ...);
+    static constexpr size_t word_count =
+        element_count * ((ElementWidth + 31) / 32);
+};
+
+template <size_t Width>
+using PackedSignalValue = std::conditional_t<
+    (Width <= 32), uint32_t,
+    std::conditional_t<(Width <= 64), uint64_t, cpptb::Bits<Width>>>;
+
+template <size_t Width, bool Writable>
+class PackedSignal {
+    static_assert(Width > 32,
+                  "PackedSignal is reserved for signals wider than 32 bits");
+
+   public:
+    using value_type = PackedSignalValue<Width>;
+    using GetWordsFn = void (*)(void* context, uint32_t id, uint32_t* words,
+                                uint32_t word_count);
+    using SetWordsFn = void (*)(void* context, uint32_t id,
+                                const uint32_t* words, uint32_t word_count);
+
+    static constexpr size_t width = Width;
+    static constexpr size_t word_count = (Width + 31) / 32;
+
+    uint32_t id = 0;
+    const char* name = "";
+    void* context = nullptr;
+    GetWordsFn get_words_fn = nullptr;
+    SetWordsFn set_words_fn = nullptr;
+
+    value_type get() const {
+        if (!get_words_fn) {
+            std::fprintf(stderr,
+                         "cpptb: signal %u has no packed get transport\n", id);
+            std::abort();
+        }
+
+        typename cpptb::Bits<Width>::word_array words{};
+        get_words_fn(context, id, words.data(),
+                     static_cast<uint32_t>(word_count));
+        const auto bits = cpptb::Bits<Width>::from_words(words);
+        if constexpr (Width <= 64) {
+            return bits.to_uint64();
+        } else {
+            return bits;
+        }
+    }
+
+    void set(value_type value) const requires(Writable) {
+        if (!set_words_fn) {
+            std::fprintf(stderr,
+                         "cpptb: signal %u has no packed set transport\n", id);
+            std::abort();
+        }
+
+        cpptb::Bits<Width> bits;
+        if constexpr (Width <= 64) {
+            bits = cpptb::Bits<Width>::from_uint(value);
+        } else {
+            bits = value;
+        }
+        set_words_fn(context, id, bits.words().data(),
+                     static_cast<uint32_t>(word_count));
+    }
+};
+
+template <size_t Width>
+using DrivenSignal = PackedSignal<Width, true>;
+
+template <size_t Width>
+using ObservedSignal = PackedSignal<Width, false>;
+
+namespace detail {
+
+template <typename... Dimensions>
+inline constexpr size_t array_element_count_v = (Dimensions::size * ... * 1);
+
+}  // namespace detail
+
+// Transport words are flattened in row-major declaration order: dimensions
+// are visited from left to right, every index runs from its numeric low bound
+// to high bound, and the packed element words run least-significant first.
+template <size_t ElementWidth, bool Writable, size_t DimensionIndex,
+          typename Dimension, typename... RemainingDimensions>
+class FixedUnpackedArray {
+   public:
+    using GetWordsFn = void (*)(void* context, uint32_t id, uint32_t* words,
+                                uint32_t word_count);
+    using SetWordsFn = void (*)(void* context, uint32_t id,
+                                const uint32_t* words, uint32_t word_count);
+
+    static constexpr size_t element_width = ElementWidth;
+    static constexpr size_t element_word_count = (ElementWidth + 31) / 32;
+    static constexpr size_t rank = 1 + sizeof...(RemainingDimensions);
+    static constexpr int32_t left() { return Dimension::left; }
+    static constexpr int32_t right() { return Dimension::right; }
+    static constexpr int32_t low() { return Dimension::low; }
+    static constexpr int32_t high() { return Dimension::high; }
+    static constexpr size_t size() { return Dimension::size; }
+    static constexpr size_t element_count =
+        Dimension::size *
+        detail::array_element_count_v<RemainingDimensions...>;
+    static constexpr size_t word_count = element_count * element_word_count;
+
+    uint32_t base_id = 0;
+    const char* name = "";
+    void* context = nullptr;
+    Signal::GetFn get_fn = nullptr;
+    Signal::SetFn set_fn = nullptr;
+    GetWordsFn get_words_fn = nullptr;
+    SetWordsFn set_words_fn = nullptr;
+
+    [[nodiscard]] auto at(int32_t index) const {
+        if (index < low() || index > high()) {
+            std::fprintf(stderr,
+                         "cpptb: unpacked array '%s' dimension %zu index %d "
+                         "is out of bounds [%d:%d]\n",
+                         name, DimensionIndex + 1, index, Dimension::left,
+                         Dimension::right);
+            std::abort();
+        }
+        constexpr size_t stride_words =
+            element_word_count *
+            detail::array_element_count_v<RemainingDimensions...>;
+        const uint32_t element_id =
+            base_id + static_cast<uint32_t>(index - low()) *
+                          static_cast<uint32_t>(stride_words);
+        if constexpr (sizeof...(RemainingDimensions) != 0) {
+            return FixedUnpackedArray<ElementWidth, Writable,
+                                      DimensionIndex + 1,
+                                      RemainingDimensions...>{
+                element_id, name, context, get_fn, set_fn, get_words_fn,
+                set_words_fn};
+        } else if constexpr (ElementWidth <= 32) {
+            return Signal{nullptr, element_id, name, context, get_fn, set_fn};
+        } else {
+            return PackedSignal<ElementWidth, Writable>{
+                element_id, name, context, get_words_fn, set_words_fn};
+        }
+    }
+};
+
+template <size_t ElementWidth, int32_t Left, int32_t Right, bool Writable>
+using UnpackedArray =
+    FixedUnpackedArray<ElementWidth, Writable, 0,
+                       ArrayDimension<Left, Right>>;
+
+template <size_t Width, bool Writable, typename... Dimensions>
+using FixedArray = FixedUnpackedArray<Width, Writable, 0, Dimensions...>;
+
+template <size_t Width, int32_t Left, int32_t Right>
+using DrivenArray = UnpackedArray<Width, Left, Right, true>;
+
+template <size_t Width, int32_t Left, int32_t Right>
+using ObservedArray = UnpackedArray<Width, Left, Right, false>;
+
+template <size_t Width, typename... Dimensions>
+using DrivenFixedArray = FixedArray<Width, true, Dimensions...>;
+
+template <size_t Width, typename... Dimensions>
+using ObservedFixedArray = FixedArray<Width, false, Dimensions...>;
+
+template <size_t ElementWidth, bool Writable, typename FirstDimension,
+          typename... RemainingDimensions, size_t TransportWidth,
+          int32_t Left, int32_t Right>
+auto reshape_fixed_array(
+    FixedArraySpec<ElementWidth, Writable, FirstDimension,
+                   RemainingDimensions...>,
+    UnpackedArray<TransportWidth, Left, Right, Writable> transport) {
+    static_assert(FirstDimension::left == Left &&
+                      FirstDimension::right == Right,
+                  "transport and fixed array outer dimensions must match");
+    constexpr size_t expected_transport_width =
+        ((ElementWidth + 31) / 32) *
+        detail::array_element_count_v<RemainingDimensions...> * 32;
+    static_assert(TransportWidth == expected_transport_width,
+                  "transport width must cover every inner array word");
+    return FixedArray<ElementWidth, Writable, FirstDimension,
+                      RemainingDimensions...>{
+        transport.base_id,       transport.name,
+        transport.context,       transport.get_fn,
+        transport.set_fn,        transport.get_words_fn,
+        transport.set_words_fn};
+}
 
 inline uint32_t vpi_signal_get(void* context, uint32_t) {
     auto* handle = reinterpret_cast<vpiHandle>(context);
@@ -199,11 +439,126 @@ struct SchedulerLifetime;
 template <typename T>
 class Task;
 
+namespace detail {
+
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+struct CoroutineFramePoolStats {
+    uint64_t system_allocations = 0;
+    uint64_t reused_allocations = 0;
+    uint64_t cached_deallocations = 0;
+    uint64_t system_deallocations = 0;
+};
+#endif
+
+class CoroutineFramePool {
+   public:
+    static constexpr size_t kAlignment = alignof(std::max_align_t);
+    static constexpr size_t kMaxFrameSize = 2'048;
+    static constexpr size_t kBucketCount = kMaxFrameSize / kAlignment;
+    static constexpr uint16_t kMaxCachedPerBucket = 32;
+    static_assert(kMaxFrameSize % kAlignment == 0);
+
+    CoroutineFramePool() = default;
+    CoroutineFramePool(const CoroutineFramePool&) = delete;
+    CoroutineFramePool& operator=(const CoroutineFramePool&) = delete;
+
+    ~CoroutineFramePool() {
+        for (auto* head : free_lists_) {
+            while (head) {
+                auto* next = head->next;
+                ::operator delete(head);
+                head = next;
+            }
+        }
+    }
+
+    void* allocate(size_t size) {
+        const size_t bucket = bucket_for(size);
+        if (bucket == kBucketCount) {
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+            ++stats_.system_allocations;
+#endif
+            return ::operator new(size);
+        }
+
+        if (auto* node = free_lists_[bucket]) {
+            free_lists_[bucket] = node->next;
+            --cached_counts_[bucket];
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+            ++stats_.reused_allocations;
+#endif
+            return node;
+        }
+
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+        ++stats_.system_allocations;
+#endif
+        return ::operator new((bucket + 1) * kAlignment);
+    }
+
+    void deallocate(void* pointer, size_t size) noexcept {
+        if (!pointer) return;
+        const size_t bucket = bucket_for(size);
+        if (bucket == kBucketCount ||
+            cached_counts_[bucket] == kMaxCachedPerBucket) {
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+            ++stats_.system_deallocations;
+#endif
+            ::operator delete(pointer);
+            return;
+        }
+
+        auto* node = static_cast<FreeNode*>(pointer);
+        node->next = free_lists_[bucket];
+        free_lists_[bucket] = node;
+        ++cached_counts_[bucket];
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+        ++stats_.cached_deallocations;
+#endif
+    }
+
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+    const CoroutineFramePoolStats& stats() const noexcept { return stats_; }
+    void reset_stats() noexcept { stats_ = {}; }
+#endif
+
+   private:
+    struct FreeNode {
+        FreeNode* next = nullptr;
+    };
+
+    static constexpr size_t bucket_for(size_t size) noexcept {
+        if (size == 0 || size > kMaxFrameSize) return kBucketCount;
+        return (size - 1) / kAlignment;
+    }
+
+    std::array<FreeNode*, kBucketCount> free_lists_{};
+    std::array<uint16_t, kBucketCount> cached_counts_{};
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+    CoroutineFramePoolStats stats_{};
+#endif
+};
+
+inline CoroutineFramePool& coroutine_frame_pool() {
+    static thread_local CoroutineFramePool pool;
+    return pool;
+}
+
+}  // namespace detail
+
 struct TaskPromiseBase {
     Scheduler* scheduler = nullptr;
     std::coroutine_handle<> continuation = nullptr;
     std::shared_ptr<JoinState> join_state;
     size_t state_index = std::numeric_limits<size_t>::max();
+
+    static void* operator new(size_t size) {
+        return detail::coroutine_frame_pool().allocate(size);
+    }
+
+    static void operator delete(void* pointer, size_t size) noexcept {
+        detail::coroutine_frame_pool().deallocate(pointer, size);
+    }
 
     std::suspend_always initial_suspend() noexcept { return {}; }
 
@@ -488,6 +843,10 @@ class Scheduler {
         states_[state_index] = CoroutineState{};
         states_[state_index].handle = handle;
         states_[state_index].promise = &promise;
+        if (state_index >= edge_wait_indices_by_state_.size()) {
+            edge_wait_indices_by_state_.resize(state_index + 1);
+        }
+        edge_wait_indices_by_state_[state_index].clear();
         promise.state_index = state_index;
         ++active_coroutines_;
         return state_index;
@@ -713,7 +1072,9 @@ class Scheduler {
         const bool resumed_specific =
             resume_edge_queue(edge_queue_index(signal_id, edge));
         const bool resumed_any =
-            resume_edge_queue(edge_queue_index(signal_id, EdgeKind::Any));
+            edge == EdgeKind::Any
+                ? false
+                : resume_edge_queue(edge_queue_index(signal_id, EdgeKind::Any));
         if (resumed_specific || resumed_any) {
             drain_ready();
         } else {
@@ -743,6 +1104,51 @@ class Scheduler {
 
     bool has_falling_edge_waiters() const {
         return falling_edge_registrations_ != 0;
+    }
+
+    uint8_t edge_interest(uint32_t signal_id) const {
+        if (signal_id >= edge_interest_counts_.size()) {
+            return kEdgeInterestNone;
+        }
+        return interest_mask(edge_interest_counts_[signal_id]);
+    }
+
+    bool has_edge_interest(uint32_t signal_id, EdgeKind edge) const {
+        if (signal_id >= edge_interest_counts_.size()) return false;
+        const auto& counts = edge_interest_counts_[signal_id];
+        if (edge == EdgeKind::Any) {
+            return counts[static_cast<size_t>(EdgeKind::Any)] != 0;
+        }
+        return counts[static_cast<size_t>(edge)] != 0 ||
+               counts[static_cast<size_t>(EdgeKind::Any)] != 0;
+    }
+
+    void set_edge_interest_publication(uint32_t signal_id, bool enabled) {
+        if (edge_interest(signal_id) != kEdgeInterestNone ||
+            (signal_id < edge_interest_change_pending_.size() &&
+             edge_interest_change_pending_[signal_id])) {
+            std::fprintf(stderr,
+                         "cpptb: edge interest publication must be configured "
+                         "before registering waits for signal %u\n",
+                         signal_id);
+            std::abort();
+        }
+        if (signal_id >= edge_interest_publication_enabled_.size()) {
+            edge_interest_publication_enabled_.resize(signal_id + 1, true);
+        }
+        edge_interest_publication_enabled_[signal_id] = enabled;
+    }
+
+    uint64_t edge_interest_generation() const {
+        return edge_interest_generation_;
+    }
+
+    std::optional<EdgeInterestChange> consume_edge_interest_change() {
+        if (edge_interest_changes_.empty()) return std::nullopt;
+        const uint32_t signal_id = edge_interest_changes_.front();
+        edge_interest_changes_.pop_front();
+        edge_interest_change_pending_[signal_id] = false;
+        return EdgeInterestChange{signal_id, edge_interest(signal_id)};
     }
 
     bool consume_timer_schedule_changed() {
@@ -838,6 +1244,68 @@ class Scheduler {
         return static_cast<size_t>(signal_id) * 3 + static_cast<size_t>(edge);
     }
 
+    static uint8_t interest_mask(const std::array<uint32_t, 3>& counts) {
+        uint8_t mask = kEdgeInterestNone;
+        if (counts[static_cast<size_t>(EdgeKind::Rising)] != 0 ||
+            counts[static_cast<size_t>(EdgeKind::Any)] != 0) {
+            mask |= kEdgeInterestRising;
+        }
+        if (counts[static_cast<size_t>(EdgeKind::Falling)] != 0 ||
+            counts[static_cast<size_t>(EdgeKind::Any)] != 0) {
+            mask |= kEdgeInterestFalling;
+        }
+        return mask;
+    }
+
+    void record_edge_interest_change(uint32_t signal_id, uint8_t previous) {
+        const uint8_t current = edge_interest(signal_id);
+        if (current == previous) return;
+        if (signal_id < edge_interest_publication_enabled_.size() &&
+            !edge_interest_publication_enabled_[signal_id]) {
+            return;
+        }
+        ++edge_interest_generation_;
+        if (!edge_interest_change_pending_[signal_id]) {
+            edge_interest_change_pending_[signal_id] = true;
+            edge_interest_changes_.push_back(signal_id);
+        }
+    }
+
+    void add_edge_interest(size_t state_index, size_t queue_index) {
+        const uint32_t signal_id = static_cast<uint32_t>(queue_index / 3);
+        const size_t edge_index = queue_index % 3;
+        if (signal_id >= edge_interest_counts_.size()) {
+            edge_interest_counts_.resize(signal_id + 1);
+            edge_interest_change_pending_.resize(signal_id + 1, false);
+            edge_interest_publication_enabled_.resize(signal_id + 1, true);
+        }
+        if (state_index >= edge_wait_indices_by_state_.size()) {
+            edge_wait_indices_by_state_.resize(state_index + 1);
+        }
+        const uint8_t previous = edge_interest(signal_id);
+        ++edge_interest_counts_[signal_id][edge_index];
+        edge_wait_indices_by_state_[state_index].push_back(queue_index);
+        record_edge_interest_change(signal_id, previous);
+    }
+
+    void remove_edge_interests(size_t state_index) {
+        if (state_index >= edge_wait_indices_by_state_.size()) return;
+        for (const size_t queue_index : edge_wait_indices_by_state_[state_index]) {
+            const uint32_t signal_id = static_cast<uint32_t>(queue_index / 3);
+            const size_t edge_index = queue_index % 3;
+            const uint8_t previous = edge_interest(signal_id);
+            auto& count = edge_interest_counts_[signal_id][edge_index];
+            if (count == 0) {
+                std::fprintf(stderr,
+                             "cpptb: edge interest bookkeeping underflow\n");
+                std::abort();
+            }
+            --count;
+            record_edge_interest_change(signal_id, previous);
+        }
+        edge_wait_indices_by_state_[state_index].clear();
+    }
+
     uint64_t begin_wait(CoroutineState& state) {
         if (state.waiting) end_wait(state);
         state.waiting = true;
@@ -849,6 +1317,8 @@ class Scheduler {
     void end_wait(CoroutineState& state) {
         if (!state.waiting) return;
         state.waiting = false;
+        const size_t state_index = static_cast<size_t>(&state - states_.data());
+        remove_edge_interests(state_index);
         if (state.edge_wait_count != 0) {
             stale_edge_registrations_ += state.edge_wait_count;
             state.edge_wait_count = 0;
@@ -871,6 +1341,7 @@ class Scheduler {
                     edge_waiters_[queue_index].push_back(registration);
                     ++edge_queue_entries_;
                     auto& state = states_[registration.state_index];
+                    add_edge_interest(registration.state_index, queue_index);
                     ++state.edge_wait_count;
                     if (request.edge == EdgeKind::Falling ||
                         request.edge == EdgeKind::Any) {
@@ -1075,6 +1546,11 @@ class Scheduler {
     std::vector<size_t> free_process_slots_;
     std::vector<size_t> finished_states_;
     std::vector<std::vector<WaitRegistration>> edge_waiters_;
+    std::vector<std::vector<size_t>> edge_wait_indices_by_state_;
+    std::vector<std::array<uint32_t, 3>> edge_interest_counts_;
+    std::vector<bool> edge_interest_change_pending_;
+    std::vector<bool> edge_interest_publication_enabled_;
+    std::deque<uint32_t> edge_interest_changes_;
     std::priority_queue<TimerRegistration, std::vector<TimerRegistration>,
                         TimerRegistrationLater>
         timer_waiters_;
@@ -1086,6 +1562,7 @@ class Scheduler {
     size_t falling_edge_registrations_ = 0;
     size_t edge_queue_entries_ = 0;
     size_t stale_edge_registrations_ = 0;
+    uint64_t edge_interest_generation_ = 0;
     uint64_t femtoseconds_per_tick_ = 1'000'000u;
     bool timer_schedule_changed_ = false;
     bool draining_ = false;
@@ -1856,6 +2333,26 @@ class Testbench {
 
     void notify_edge(uint32_t signal_id, EdgeKind edge) {
         scheduler_.resume_edge(signal_id, edge);
+    }
+
+    uint8_t edge_interest(uint32_t signal_id) const {
+        return scheduler_.edge_interest(signal_id);
+    }
+
+    bool has_edge_interest(uint32_t signal_id, EdgeKind edge) const {
+        return scheduler_.has_edge_interest(signal_id, edge);
+    }
+
+    void set_edge_interest_publication(uint32_t signal_id, bool enabled) {
+        scheduler_.set_edge_interest_publication(signal_id, enabled);
+    }
+
+    uint64_t edge_interest_generation() const {
+        return scheduler_.edge_interest_generation();
+    }
+
+    std::optional<EdgeInterestChange> consume_edge_interest_change() {
+        return scheduler_.consume_edge_interest_change();
     }
 
     bool has_falling_edge_waiters() const {

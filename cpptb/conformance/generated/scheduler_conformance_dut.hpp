@@ -2,33 +2,49 @@
 // Do not edit by hand.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "cpptb/coro_runtime.hpp"
+#include "cpptb/probe.hpp"
 
 namespace cpptb::conformance {
 
 enum SignalId : uint32_t {
-    kSignalRstN,
-    kSignalClkA,
-    kSignalClkB,
-    kSignalManualClk,
-    kSignalDerivedGate,
-    kSignalStableSignal,
-    kSignalPredicateSignal,
-    kSignalDriveValue,
-    kSignalAddend,
-    kSignalDerivedClk,
-    kSignalCombSum,
-    kSignalSampledA,
-    kSignalSampledB,
-    kSignalSampledManual,
-    kSignalSampledDerived,
-    kSignalCountA,
-    kSignalCountB,
-    kSignalCountManual,
-    kSignalCountDerived,
-    kSignalCount,
+    kSignalRstN = 0,
+    kSignalClkA = 1,
+    kSignalClkB = 2,
+    kSignalManualClk = 3,
+    kSignalDerivedGate = 4,
+    kSignalStableSignal = 5,
+    kSignalPredicateSignal = 6,
+    kSignalEventDrive = 7,
+    kSignalForceNetSource = 8,
+    kSignalDriveValue = 9,
+    kSignalAddend = 10,
+    kSignalPacked65I = 11,
+    kSignalPacked65O = 14,
+    kSignalPacked137I = 17,
+    kSignalPacked137O = 22,
+    kSignalArray73I = 27,
+    kSignalArray73O = 39,
+    kSignalMatrix65I = 51,
+    kSignalMatrix65O = 69,
+    kSignalDerivedClk = 87,
+    kSignalEventObserved = 88,
+    kSignalCombSum = 89,
+    kSignalSampledA = 90,
+    kSignalSampledB = 91,
+    kSignalSampledManual = 92,
+    kSignalSampledDerived = 93,
+    kSignalCountA = 94,
+    kSignalCountB = 95,
+    kSignalCountManual = 96,
+    kSignalCountDerived = 97,
+    kSignalInternalCombFanout = 98,
+    kSignalInternalClockedFanout = 100,
+    kSignalInternalNetFanout = 102,
+    kSignalCount = 103,
 };
 
 struct ConformanceClocks {
@@ -52,17 +68,43 @@ struct ConformanceCounts {
     coro::Signal derived;
 };
 
+struct InternalDut {
+    probe::Probe<73, true> internal_wide;
+    probe::Probe<64, true> internal_u64;
+    probe::MemoryProbe<73, 7, 4, true> internal_memory;
+    probe::Probe<73, false, true> force_variable_wide;
+    probe::Probe<64, false, true> force_variable_u64;
+    probe::MemoryProbe<73, 7, 4, false, true> force_memory;
+    probe::Probe<32, false, true> force_counter;
+    probe::Probe<8, false, true> internal_net;
+};
+
 struct SchedulerConformanceDut {
     coro::Signal rst_n;
     ConformanceClocks clock;
     coro::Signal derived_gate;
     coro::Signal stable_signal;
     coro::Signal predicate_signal;
+    coro::Signal event_drive;
+    coro::Signal force_net_source;
     coro::Signal drive_value;
     coro::Signal addend;
+    coro::DrivenSignal<65> packed65_i;
+    coro::ObservedSignal<65> packed65_o;
+    coro::DrivenSignal<137> packed137_i;
+    coro::ObservedSignal<137> packed137_o;
+    coro::DrivenArray<73, 7, 4> array73_i;
+    coro::ObservedArray<73, 7, 4> array73_o;
+    coro::DrivenFixedArray<65, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> matrix65_i;
+    coro::ObservedFixedArray<65, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> matrix65_o;
+    coro::Signal event_observed;
     coro::Signal comb_sum;
     ConformanceSamples sample;
     ConformanceCounts count;
+    coro::ObservedSignal<64> internal_comb_fanout;
+    coro::ObservedSignal<64> internal_clocked_fanout;
+    coro::Signal internal_net_fanout;
+    InternalDut internal;
 };
 
 }  // namespace cpptb::conformance

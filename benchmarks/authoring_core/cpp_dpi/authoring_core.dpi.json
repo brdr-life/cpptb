@@ -15,6 +15,25 @@
     }
   },
   "sources": ["../rtl/authoring_core_dut.sv"],
+  "internals": [
+    {
+      "path": "cycle_count",
+      "access": "read"
+    },
+    {
+      "path": "pending_data",
+      "access": "read_write"
+    },
+    {
+      "path": "memory",
+      "access": "read_write"
+    },
+    {
+      "path": "force_target",
+      "access": "read",
+      "force": true
+    }
+  ],
   "clocks": [
     {
       "port": "clk",
@@ -23,10 +42,13 @@
       "primary": true
     }
   ],
+  "edge_observers": ["rsp_valid"],
   "run": {
     "init_function": "authoring_core_dpi_init",
     "step_function": "authoring_core_dpi_step",
+    "pull_outputs_function": "authoring_core_dpi_pull_outputs",
     "next_deadline_function": "authoring_core_dpi_next_timer_deadline",
+    "edge_interest_function": "authoring_core_dpi_edge_interest",
     "iteration_plusarg": "AUTHORING_CORE_ITERS",
     "default_iterations": 10000,
     "timeprecision": "1ps"

@@ -10,10 +10,121 @@
 #include <vector>
 
 #include "cpptb/coro_runtime.hpp"
+#include "cpptb/probe.hpp"
 
 namespace {
 
 using namespace cpptb::coro;
+
+template <typename SignalType>
+concept WritablePackedSignal = requires(
+    SignalType signal, typename SignalType::value_type value) {
+    signal.set(value);
+};
+
+static_assert(WritablePackedSignal<DrivenSignal<65>>);
+static_assert(!WritablePackedSignal<ObservedSignal<65>>);
+static_assert(WritablePackedSignal<decltype(
+              std::declval<DrivenArray<65, 7, 4>>().at(4))>);
+static_assert(!WritablePackedSignal<decltype(
+              std::declval<ObservedArray<65, 7, 4>>().at(4))>);
+using RankTwoDriven =
+    DrivenFixedArray<65, ArrayDimension<2, 1>, ArrayDimension<-1, 1>>;
+using RankThreeObserved =
+    ObservedFixedArray<8, ArrayDimension<0, 1>, ArrayDimension<4, 3>,
+                       ArrayDimension<-2, -1>>;
+static_assert(WritablePackedSignal<decltype(
+              std::declval<RankTwoDriven>().at(1).at(-1))>);
+static_assert(!WritablePackedSignal<decltype(
+              std::declval<RankThreeObserved>().at(0).at(3).at(-2))>);
+static_assert(RankTwoDriven::rank == 2);
+static_assert(RankTwoDriven::word_count == 18);
+static_assert(FixedArraySpec<8, false, ArrayDimension<0, 1>,
+                             ArrayDimension<4, 3>,
+                             ArrayDimension<-2, -1>>::word_count == 8);
+
+template <typename ProbeType>
+concept WritableProbe = requires(
+    ProbeType value, typename ProbeType::value_type data) {
+    value.deposit(data);
+};
+
+template <typename ProbeType>
+concept EdgeWaitableProbe = requires(ProbeType value) { RisingEdge{value}; };
+
+template <typename ProbeType>
+concept ForceableProbe = requires(
+    ProbeType value, typename ProbeType::value_type data) {
+    value.force(data);
+    value.release();
+};
+
+static_assert(WritableProbe<cpptb::probe::Probe<32, true>>);
+static_assert(!WritableProbe<cpptb::probe::Probe<32, false>>);
+static_assert(ForceableProbe<cpptb::probe::Probe<32, false, true>>);
+static_assert(!ForceableProbe<cpptb::probe::Probe<32, true, false>>);
+static_assert(!EdgeWaitableProbe<cpptb::probe::Probe<32, true>>);
+
+std::array<uint32_t, 12> probe_words{};
+uint32_t narrow_probe_value = 0;
+uint32_t narrow_force_value = 0;
+uint32_t narrow_release_count = 0;
+
+uint32_t narrow_probe_get(int32_t) { return narrow_probe_value; }
+
+void narrow_probe_deposit(int32_t, uint32_t value) {
+    narrow_probe_value = value;
+}
+
+void narrow_probe_force(int32_t, uint32_t value) {
+    narrow_force_value = value;
+}
+
+void narrow_probe_release(int32_t) { ++narrow_release_count; }
+
+cpptb::Bits<73> probe_get(int32_t index) {
+    const size_t offset = static_cast<size_t>(index - 4) * 3;
+    cpptb::Bits<73>::word_array words{};
+    for (size_t word = 0; word < 3; ++word) {
+        words.at(word) = probe_words.at(offset + word);
+    }
+    return cpptb::Bits<73>::from_words(words);
+}
+
+void probe_deposit(int32_t index, cpptb::Bits<73> value) {
+    const size_t offset = static_cast<size_t>(index - 4) * 3;
+    for (size_t word = 0; word < 3; ++word) {
+        probe_words.at(offset + word) = value.word(word);
+    }
+}
+
+struct ArrayTransport {
+    std::array<uint32_t, 32> words{};
+};
+
+uint32_t array_get(void* context, uint32_t id) {
+    return static_cast<ArrayTransport*>(context)->words.at(id);
+}
+
+void array_set(void* context, uint32_t id, uint32_t value) {
+    static_cast<ArrayTransport*>(context)->words.at(id) = value;
+}
+
+void array_get_words(void* context, uint32_t id, uint32_t* words,
+                     uint32_t word_count) {
+    auto& source = static_cast<ArrayTransport*>(context)->words;
+    for (uint32_t word = 0; word < word_count; ++word) {
+        words[word] = source.at(id + word);
+    }
+}
+
+void array_set_words(void* context, uint32_t id, const uint32_t* words,
+                     uint32_t word_count) {
+    auto& destination = static_cast<ArrayTransport*>(context)->words;
+    for (uint32_t word = 0; word < word_count; ++word) {
+        destination.at(id + word) = words[word];
+    }
+}
 
 struct Results {
     uint32_t rising = 0;
@@ -193,6 +304,24 @@ Task<void> delayed_increment(uint32_t& value, SimTime delay = 4_ns) {
     co_await Delay{delay};
     ++value;
 }
+
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+__attribute__((noinline)) uint32_t sum_large_frame(
+    const std::array<uint8_t, 4'096>& bytes) {
+    uint32_t sum = 0;
+    for (const uint8_t value : bytes) sum += value;
+    return sum;
+}
+
+Task<void> oversized_frame(uint32_t& checksum) {
+    std::array<uint8_t, 4'096> bytes{};
+    for (size_t index = 0; index < bytes.size(); ++index) {
+        bytes[index] = static_cast<uint8_t>(index);
+    }
+    co_await Delay{1_ns};
+    checksum = sum_large_frame(bytes);
+}
+#endif
 
 struct SpawnOnDestroy {
     Testbench* tb;
@@ -647,6 +776,34 @@ void trigger_subprecision_task_timeout() {
     tb.spawn_detached(subprecision_task_timeout());
 }
 
+void trigger_unpacked_array_oob() {
+    ArrayTransport transport;
+    const DrivenArray<32, 4, 7> array{
+        3, "array_i", &transport, array_get, array_set, array_get_words,
+        array_set_words};
+    (void)array.at(3);
+}
+
+void trigger_multidimensional_array_oob() {
+    ArrayTransport transport;
+    const RankTwoDriven array{
+        0, "matrix_i", &transport, array_get, array_set, array_get_words,
+        array_set_words};
+    (void)array.at(2).at(3);
+}
+
+void trigger_memory_probe_oob() {
+    const cpptb::probe::MemoryProbe<73, 7, 4, true> memory{
+        "memory", probe_get, probe_deposit};
+    (void)memory.at(3);
+}
+
+void trigger_probe_outside_callback() {
+    const cpptb::probe::Probe<73, false> value{
+        4, "state", probe_get, nullptr};
+    (void)value.get();
+}
+
 bool expect(const char* label, uint32_t actual, uint32_t expected) {
     if (actual == expected) return true;
     std::fprintf(stderr, "%s: got %u expected %u\n", label, actual, expected);
@@ -721,6 +878,112 @@ int main() {
     static_assert(1_ms == SimTime{1'000'000'000'000});
 
     bool passed = true;
+    {
+        narrow_probe_value = 0xffff'ffffu;
+        const cpptb::probe::Probe<7, true> value{
+            0, "narrow", narrow_probe_get, narrow_probe_deposit};
+        cpptb::probe::detail::DpiCallbackScope callback_scope;
+        passed &= expect("narrow probe masks get", value.get(), 0x7fu);
+        value.deposit(0x1a5u);
+        passed &= expect("narrow probe masks deposit", narrow_probe_value,
+                         0x25u);
+    }
+    {
+        narrow_force_value = 0;
+        narrow_release_count = 0;
+        const cpptb::probe::Probe<7, false, true> value{
+            0, "forced", narrow_probe_get, nullptr, narrow_probe_force,
+            narrow_probe_release};
+        cpptb::probe::detail::DpiCallbackScope callback_scope;
+        value.force(0x1a5u);
+        passed &= expect("narrow probe masks force", narrow_force_value,
+                         0x25u);
+        value.release();
+        passed &= expect("probe release callback", narrow_release_count, 1);
+    }
+    {
+        static_assert(cpptb::probe::MemoryProbe<73, 7, 4, true>::left() == 7);
+        static_assert(cpptb::probe::MemoryProbe<73, 7, 4, true>::right() == 4);
+        static_assert(cpptb::probe::MemoryProbe<73, 7, 4, true>::size() == 4);
+        probe_words.fill(0);
+        const cpptb::probe::MemoryProbe<73, 7, 4, true> memory{
+            "memory", probe_get, probe_deposit};
+        cpptb::probe::detail::DpiCallbackScope callback_scope;
+        const auto value = cpptb::Bits<73>::from_words(
+            {0x89ab'cdefu, 0x0123'4567u, 0xffff'ffffu});
+        memory.at(6).deposit(value);
+        passed &= expect("memory probe low word", probe_words[6],
+                         0x89ab'cdefu);
+        passed &= expect("memory probe middle word", probe_words[7],
+                         0x0123'4567u);
+        passed &= expect("memory probe masks high word", probe_words[8],
+                         0x0000'01ffu);
+        passed &= expect("memory probe get low word",
+                         memory.at(6).get().word(0), 0x89ab'cdefu);
+    }
+    {
+        static_assert(DrivenArray<32, 4, 7>::left() == 4);
+        static_assert(DrivenArray<32, 4, 7>::right() == 7);
+        static_assert(DrivenArray<32, 4, 7>::size() == 4);
+        static_assert(ObservedArray<64, 3, 0>::low() == 0);
+        static_assert(ObservedArray<64, 3, 0>::high() == 3);
+
+        ArrayTransport transport;
+        const DrivenArray<32, 4, 7> narrow{
+            3, "narrow_i", &transport, array_get, array_set, array_get_words,
+            array_set_words};
+        narrow.at(4).set(0x1234'5678u);
+        narrow.at(7).set(0x89ab'cdefu);
+        passed &= expect("ascending array low index id", transport.words[3],
+                         0x1234'5678u);
+        passed &= expect("ascending array high index id", transport.words[6],
+                         0x89ab'cdefu);
+        passed &= expect("array scalar get", narrow.at(7).get(),
+                         0x89ab'cdefu);
+
+        const DrivenArray<64, 3, 0> wide{
+            8, "wide_i", &transport, array_get, array_set, array_get_words,
+            array_set_words};
+        wide.at(0).set(0x0123'4567'89ab'cdefull);
+        wide.at(3).set(0xfedc'ba98'7654'3210ull);
+        passed &= expect("descending array numeric low word", transport.words[8],
+                         0x89ab'cdefu);
+        passed &= expect("descending array numeric low high word",
+                         transport.words[9], 0x0123'4567u);
+        passed &= expect("descending array numeric high word",
+                         transport.words[14], 0x7654'3210u);
+        passed &= expect("descending array numeric high high word",
+                         transport.words[15], 0xfedc'ba98u);
+        passed &= expect("array packed get low",
+                         static_cast<uint32_t>(wide.at(3).get()),
+                         0x7654'3210u);
+
+        const RankTwoDriven matrix = reshape_fixed_array(
+            FixedArraySpec<65, true, ArrayDimension<2, 1>,
+                           ArrayDimension<-1, 1>>{},
+            UnpackedArray<288, 2, 1, true>{
+                0, "matrix_i", &transport, array_get, array_set,
+                array_get_words, array_set_words});
+        matrix.at(1).at(-1).set(
+            cpptb::Bits<65>::from_uint(0x0123'4567'89ab'cdefull));
+        matrix.at(2).at(1).set(
+            cpptb::Bits<65>::from_uint(0xfedc'ba98'7654'3210ull));
+        passed &= expect("rank-2 first element low word", transport.words[0],
+                         0x89ab'cdefu);
+        passed &= expect("rank-2 outer stride", transport.words[15],
+                         0x7654'3210u);
+        passed &= expect("rank-2 inner index get",
+                         matrix.at(2).at(1).get().word(0), 0x7654'3210u);
+
+        const DrivenFixedArray<8, ArrayDimension<0, 1>,
+                               ArrayDimension<4, 3>,
+                               ArrayDimension<-2, -1>> cube{
+            20, "cube_i", &transport, array_get, array_set, array_get_words,
+            array_set_words};
+        cube.at(1).at(4).at(-1).set(0x5au);
+        passed &= expect("rank-3 row-major offset", transport.words[27],
+                         0x5au);
+    }
     {
         Testbench tb;
         uint32_t primitive = 0;
@@ -1524,6 +1787,9 @@ int main() {
         Testbench tb;
         uint32_t runs = 0;
         uint32_t destructions = 0;
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+        detail::coroutine_frame_pool().reset_stats();
+#endif
         for (uint32_t iteration = 0; iteration < 512; ++iteration) {
             const auto root = tb.spawn(immediate_root(runs, destructions));
             passed &= expect("reused tracked root done", root.done() ? 1 : 0,
@@ -1534,7 +1800,33 @@ int main() {
         passed &= expect("repeated root frame destruction", destructions,
                          1'024);
         passed &= expect("repeated roots all done", tb.done() ? 1 : 0, 1);
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+        const auto& pool_stats = detail::coroutine_frame_pool().stats();
+        passed &= expect("coroutine frame pool reuses allocations",
+                         pool_stats.reused_allocations > 1'000 ? 1 : 0, 1);
+        passed &= expect("coroutine frame pool bounds system allocations",
+                         pool_stats.system_allocations < 8 ? 1 : 0, 1);
+#endif
     }
+
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+    {
+        detail::coroutine_frame_pool().reset_stats();
+        Testbench tb;
+        uint32_t checksum = 0;
+        const auto process = tb.spawn(oversized_frame(checksum));
+        tb.set_time(1);
+        passed &= expect("oversized coroutine frame completes",
+                         process.done() ? 1 : 0, 1);
+        passed &= expect("oversized coroutine frame preserves locals",
+                         checksum, 522'240);
+        const auto& pool_stats = detail::coroutine_frame_pool().stats();
+        passed &= expect("oversized frame bypasses pool allocation",
+                         pool_stats.system_allocations > 0 ? 1 : 0, 1);
+        passed &= expect("oversized frame bypasses pool deallocation",
+                         pool_stats.system_deallocations > 0 ? 1 : 0, 1);
+    }
+#endif
 
     {
         Process completed;
@@ -1711,6 +2003,102 @@ int main() {
 
     {
         Testbench tb;
+        Results results;
+        const Signal signal{nullptr, 31, "edge_interest"};
+
+        const auto edge_process = tb.spawn(wait_for_edges(signal, results));
+        passed &= expect("rising interest mask",
+                         tb.edge_interest(signal.id), kEdgeInterestRising);
+        passed &= expect("rising interest query",
+                         tb.has_edge_interest(signal.id, EdgeKind::Rising), 1);
+        auto change = tb.consume_edge_interest_change();
+        passed &= expect("rising interest change present", change.has_value(),
+                         1);
+        passed &= expect("rising interest change id", change->signal_id,
+                         signal.id);
+        passed &= expect("rising interest change mask", change->interest,
+                         kEdgeInterestRising);
+
+        tb.notify_edge(signal.id, EdgeKind::Rising);
+        passed &= expect("edge waiter advances to falling", results.rising, 1);
+        passed &= expect("falling interest mask",
+                         tb.edge_interest(signal.id), kEdgeInterestFalling);
+        change = tb.consume_edge_interest_change();
+        passed &= expect("falling interest change present", change.has_value(),
+                         1);
+        passed &= expect("falling interest change mask", change->interest,
+                         kEdgeInterestFalling);
+
+        tb.notify_edge(signal.id, EdgeKind::Falling);
+        passed &= expect("edge waiter completes", edge_process.done(), 1);
+        passed &= expect("completed waiter clears interest",
+                         tb.edge_interest(signal.id), kEdgeInterestNone);
+        change = tb.consume_edge_interest_change();
+        passed &= expect("completion interest change present",
+                         change.has_value(), 1);
+        passed &= expect("completion interest mask", change->interest,
+                         kEdgeInterestNone);
+
+        const auto any_process = tb.spawn(wait_for_change(signal, results));
+        passed &= expect("Any edge maps to both observer directions",
+                         tb.edge_interest(signal.id),
+                         kEdgeInterestRising | kEdgeInterestFalling);
+        change = tb.consume_edge_interest_change();
+        passed &= expect("Any interest change present", change.has_value(), 1);
+        passed &= expect("Any interest change mask", change->interest,
+                         kEdgeInterestRising | kEdgeInterestFalling);
+        any_process.cancel();
+        passed &= expect("cancelled Any waiter clears interest",
+                         tb.edge_interest(signal.id), kEdgeInterestNone);
+        change = tb.consume_edge_interest_change();
+        passed &= expect("cancel interest change present", change.has_value(),
+                         1);
+        passed &= expect("cancel interest change mask", change->interest,
+                         kEdgeInterestNone);
+        passed &= expect("interest change queue drains",
+                         tb.consume_edge_interest_change().has_value(), 0);
+    }
+
+    {
+        Testbench tb;
+        Results results;
+        const Signal clock{nullptr, 32, "publication_suppressed_clock"};
+        tb.set_edge_interest_publication(clock.id, false);
+        const auto initial_generation = tb.edge_interest_generation();
+
+        const auto edge_process = tb.spawn(wait_for_edges(clock, results));
+        passed &= expect("suppressed clock retains rising interest",
+                         tb.edge_interest(clock.id), kEdgeInterestRising);
+        passed &= expect("suppressed clock publishes no rising change",
+                         tb.consume_edge_interest_change().has_value(), 0);
+        passed &= expect("suppressed clock generation remains stable",
+                         tb.edge_interest_generation(), initial_generation);
+
+        tb.notify_edge(clock.id, EdgeKind::Rising);
+        passed &= expect("suppressed clock rising edge resumes", results.rising,
+                         1);
+        passed &= expect("suppressed clock retains falling interest",
+                         tb.edge_interest(clock.id), kEdgeInterestFalling);
+        passed &= expect("suppressed clock retains falling summary",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 1);
+        passed &= expect("suppressed clock publishes no falling change",
+                         tb.consume_edge_interest_change().has_value(), 0);
+
+        tb.notify_edge(clock.id, EdgeKind::Falling);
+        passed &= expect("suppressed clock waiter completes",
+                         edge_process.done(), 1);
+        passed &= expect("suppressed clock clears interest",
+                         tb.edge_interest(clock.id), kEdgeInterestNone);
+        passed &= expect("suppressed clock clears falling summary",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+        passed &= expect("suppressed clock publishes no completion change",
+                         tb.consume_edge_interest_change().has_value(), 0);
+        passed &= expect("suppressed clock generation stays stable",
+                         tb.edge_interest_generation(), initial_generation);
+    }
+
+    {
+        Testbench tb;
         uint32_t spawned_runs = 0;
         uint32_t spawned_destructions = 0;
         uint32_t destructor_runs = 0;
@@ -1824,5 +2212,18 @@ int main() {
     passed &= expect_abort(
         "Channel active lifetime abort", trigger_channel_destroyed_with_waiter,
         "Channel destroyed with active waiters");
+    passed &= expect_abort("unpacked array bounds abort",
+                           trigger_unpacked_array_oob,
+                           "array_i' dimension 1 index 3 is out of bounds [4:7]");
+    passed &= expect_abort(
+        "multidimensional array bounds abort",
+        trigger_multidimensional_array_oob,
+        "matrix_i' dimension 2 index 3 is out of bounds [-1:1]");
+    passed &= expect_abort(
+        "memory probe bounds abort", trigger_memory_probe_oob,
+        "memory' index 3 is out of bounds [7:4]");
+    passed &= expect_abort(
+        "probe callback lifetime abort", trigger_probe_outside_callback,
+        "internal probe 'state' used outside a DPI callback");
     return passed ? 0 : 1;
 }

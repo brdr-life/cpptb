@@ -11,6 +11,7 @@ module dpi_authoring_core;
 
   localparam int EDGE_RISING = 0;
   localparam int EDGE_FALLING = 1;
+  localparam int EDGE_ANY = 2;
   localparam int unsigned NO_SIGNAL = 32'hffff_ffff;
   localparam longint unsigned NO_TIMER = 64'hffff_ffff_ffff_ffff;
 
@@ -18,6 +19,7 @@ module dpi_authoring_core;
   localparam int STEP_TIMER_CHANGED = 8;
   localparam int STEP_FALLING_EDGES = 16;
   localparam int STEP_OUTPUTS_CHANGED = 32;
+  localparam int STEP_EDGE_INTEREST_CHANGED = 64;
 
   localparam int SIGNAL_CLK = 0;
   localparam int SIGNAL_RSTN = 1;
@@ -30,7 +32,62 @@ module dpi_authoring_core;
   localparam int SIGNAL_PULSE = 8;
   localparam int SIGNAL_REQUESTCOUNT = 9;
   localparam int SIGNAL_RESPONSECOUNT = 10;
-  localparam int SIGNAL_COUNT = 11;
+  localparam int SIGNAL_WIDE64I = 11;
+  localparam int SIGNAL_WIDE64O = 13;
+  localparam int SIGNAL_WIDE137I = 15;
+  localparam int SIGNAL_WIDE137O = 20;
+  localparam int SIGNAL_FIXEDAI = 25;
+  localparam int SIGNAL_FIXEDBI = 26;
+  localparam int SIGNAL_FIXEDYO = 27;
+  localparam int SIGNAL_ARRAYI = 28;
+  localparam int SIGNAL_ARRAYO = 36;
+  localparam int SIGNAL_ARRAYWIDEI = 44;
+  localparam int SIGNAL_ARRAYWIDEO = 52;
+  localparam int SIGNAL_ARRAYMULTIDIMI = 60;
+  localparam int SIGNAL_ARRAYMULTIDIMO = 78;
+  localparam int SIGNAL_FORCESOURCEI = 96;
+  localparam int SIGNAL_FORCEFANOUTO = 97;
+  localparam int SIGNAL_PACKEDVIEWI = 98;
+  localparam int SIGNAL_PACKEDVIEWO = 99;
+  localparam int SIGNAL_MEMADDRI = 100;
+  localparam int SIGNAL_MEMWDATAI = 101;
+  localparam int SIGNAL_MEMWEI = 102;
+  localparam int SIGNAL_MEMRDATAO = 103;
+  localparam int INPUT_SIGNAL_CLK = 0;
+  localparam int INPUT_SIGNAL_REQREADY = 1;
+  localparam int INPUT_SIGNAL_RSPVALID = 2;
+  localparam int INPUT_SIGNAL_RSPDATA = 3;
+  localparam int INPUT_SIGNAL_PULSE = 4;
+  localparam int INPUT_SIGNAL_REQUESTCOUNT = 5;
+  localparam int INPUT_SIGNAL_RESPONSECOUNT = 6;
+  localparam int INPUT_SIGNAL_WIDE64O = 7;
+  localparam int INPUT_SIGNAL_WIDE137O = 9;
+  localparam int INPUT_SIGNAL_FIXEDYO = 14;
+  localparam int INPUT_SIGNAL_ARRAYO = 15;
+  localparam int INPUT_SIGNAL_ARRAYWIDEO = 23;
+  localparam int INPUT_SIGNAL_ARRAYMULTIDIMO = 31;
+  localparam int INPUT_SIGNAL_FORCEFANOUTO = 49;
+  localparam int INPUT_SIGNAL_PACKEDVIEWO = 50;
+  localparam int INPUT_SIGNAL_MEMRDATAO = 51;
+  localparam int OUTPUT_SIGNAL_RSTN = 0;
+  localparam int OUTPUT_SIGNAL_REQVALID = 1;
+  localparam int OUTPUT_SIGNAL_REQDATA = 2;
+  localparam int OUTPUT_SIGNAL_RSPREADY = 3;
+  localparam int OUTPUT_SIGNAL_WIDE64I = 4;
+  localparam int OUTPUT_SIGNAL_WIDE137I = 6;
+  localparam int OUTPUT_SIGNAL_FIXEDAI = 11;
+  localparam int OUTPUT_SIGNAL_FIXEDBI = 12;
+  localparam int OUTPUT_SIGNAL_ARRAYI = 13;
+  localparam int OUTPUT_SIGNAL_ARRAYWIDEI = 21;
+  localparam int OUTPUT_SIGNAL_ARRAYMULTIDIMI = 29;
+  localparam int OUTPUT_SIGNAL_FORCESOURCEI = 47;
+  localparam int OUTPUT_SIGNAL_PACKEDVIEWI = 48;
+  localparam int OUTPUT_SIGNAL_MEMADDRI = 49;
+  localparam int OUTPUT_SIGNAL_MEMWDATAI = 50;
+  localparam int OUTPUT_SIGNAL_MEMWEI = 51;
+  localparam int SIGNAL_COUNT = 104;
+  localparam int INPUT_WORD_COUNT = 52;
+  localparam int OUTPUT_WORD_COUNT = 52;
 
   import "DPI-C" context function void authoring_core_dpi_init(
       input int unsigned iterations,
@@ -42,10 +99,15 @@ module dpi_authoring_core;
       input longint unsigned sim_cycles,
       input int unsigned event_signal_id,
       input int unsigned event_edge,
-      input int unsigned in_words[],
+      input int unsigned in_words[]
+  );
+  import "DPI-C" function void authoring_core_dpi_pull_outputs(
       output int unsigned out_words[]
   );
   import "DPI-C" context function longint unsigned authoring_core_dpi_next_timer_deadline();
+  import "DPI-C" context function int unsigned authoring_core_dpi_edge_interest(
+      input int unsigned signal_id
+  );
 
   logic clk;
   logic rst_n;
@@ -58,6 +120,27 @@ module dpi_authoring_core;
   logic pulse;
   logic [31:0] request_count;
   logic [31:0] response_count;
+  bit [63:0] wide64_i;
+  bit [63:0] wide64_o;
+  bit [136:0] wide137_i;
+  bit [136:0] wide137_o;
+  logic [15:0] fixed_a_i;
+  logic [15:0] fixed_b_i;
+  logic [15:0] fixed_y_o;
+  logic [31:0] array_i [1:8];
+  logic [31:0] array_o [1:8];
+  bit [63:0] array_wide_i [3:0];
+  bit [63:0] array_wide_o [3:0];
+  bit [64:0] array_multidim_i [2:1] [-1:1];
+  bit [64:0] array_multidim_o [2:1] [-1:1];
+  logic [31:0] force_source_i;
+  logic [31:0] force_fanout_o;
+  logic [10:0] packed_view_i;
+  logic [10:0] packed_view_o;
+  logic [7:0] mem_addr_i;
+  logic [31:0] mem_wdata_i;
+  logic mem_we_i;
+  logic [31:0] mem_rdata_o;
 
   int unsigned iterations;
   longint unsigned sim_cycles;
@@ -65,28 +148,70 @@ module dpi_authoring_core;
   int status;
   bit track_falling_edges;
   int initial_requests;
-  int unsigned in_words[0:SIGNAL_COUNT-1];
-  int unsigned out_words[0:SIGNAL_COUNT-1];
+  int unsigned in_words[0:INPUT_WORD_COUNT-1];
+  int unsigned out_words[0:OUTPUT_WORD_COUNT-1];
+  int unsigned edge_interest[0:SIGNAL_COUNT-1];
 
   task automatic pack_inputs();
-    in_words[SIGNAL_CLK] = clk;
-    in_words[SIGNAL_RSTN] = rst_n;
-    in_words[SIGNAL_REQVALID] = req_valid;
-    in_words[SIGNAL_REQDATA] = req_data;
-    in_words[SIGNAL_REQREADY] = req_ready;
-    in_words[SIGNAL_RSPVALID] = rsp_valid;
-    in_words[SIGNAL_RSPDATA] = rsp_data;
-    in_words[SIGNAL_RSPREADY] = rsp_ready;
-    in_words[SIGNAL_PULSE] = pulse;
-    in_words[SIGNAL_REQUESTCOUNT] = request_count;
-    in_words[SIGNAL_RESPONSECOUNT] = response_count;
+    in_words[INPUT_SIGNAL_CLK] = clk;
+    in_words[INPUT_SIGNAL_REQREADY] = req_ready;
+    in_words[INPUT_SIGNAL_RSPVALID] = rsp_valid;
+    in_words[INPUT_SIGNAL_RSPDATA] = rsp_data;
+    in_words[INPUT_SIGNAL_PULSE] = pulse;
+    in_words[INPUT_SIGNAL_REQUESTCOUNT] = request_count;
+    in_words[INPUT_SIGNAL_RESPONSECOUNT] = response_count;
+    in_words[INPUT_SIGNAL_WIDE64O + 0] = wide64_o[0 +: 32];
+    in_words[INPUT_SIGNAL_WIDE64O + 1] = wide64_o[32 +: 32];
+    in_words[INPUT_SIGNAL_WIDE137O + 0] = wide137_o[0 +: 32];
+    in_words[INPUT_SIGNAL_WIDE137O + 1] = wide137_o[32 +: 32];
+    in_words[INPUT_SIGNAL_WIDE137O + 2] = wide137_o[64 +: 32];
+    in_words[INPUT_SIGNAL_WIDE137O + 3] = wide137_o[96 +: 32];
+    in_words[INPUT_SIGNAL_WIDE137O + 4] = wide137_o[128 +: 9];
+    in_words[INPUT_SIGNAL_FIXEDYO] = fixed_y_o;
+    for (int cpptb_array_o_index = 1; cpptb_array_o_index <= 8; cpptb_array_o_index++) begin
+      in_words[INPUT_SIGNAL_ARRAYO + (cpptb_array_o_index - 1) * 1] = array_o[cpptb_array_o_index];
+    end
+    for (int cpptb_array_wide_o_index = 0; cpptb_array_wide_o_index <= 3; cpptb_array_wide_o_index++) begin
+      in_words[INPUT_SIGNAL_ARRAYWIDEO + (cpptb_array_wide_o_index - 0) * 2] = array_wide_o[cpptb_array_wide_o_index][0 +: 32];
+      in_words[INPUT_SIGNAL_ARRAYWIDEO + (cpptb_array_wide_o_index - 0) * 2 + 1] = array_wide_o[cpptb_array_wide_o_index][32 +: 32];
+    end
+    for (int cpptb_array_multidim_o_index_0 = 1; cpptb_array_multidim_o_index_0 <= 2; cpptb_array_multidim_o_index_0++) begin
+      for (int cpptb_array_multidim_o_index_1 = -1; cpptb_array_multidim_o_index_1 <= 1; cpptb_array_multidim_o_index_1++) begin
+        in_words[INPUT_SIGNAL_ARRAYMULTIDIMO + ((cpptb_array_multidim_o_index_0 - 1) * 3 + (cpptb_array_multidim_o_index_1 - -1)) * 3] = array_multidim_o[cpptb_array_multidim_o_index_0][cpptb_array_multidim_o_index_1][0 +: 32];
+        in_words[INPUT_SIGNAL_ARRAYMULTIDIMO + ((cpptb_array_multidim_o_index_0 - 1) * 3 + (cpptb_array_multidim_o_index_1 - -1)) * 3 + 1] = array_multidim_o[cpptb_array_multidim_o_index_0][cpptb_array_multidim_o_index_1][32 +: 32];
+        in_words[INPUT_SIGNAL_ARRAYMULTIDIMO + ((cpptb_array_multidim_o_index_0 - 1) * 3 + (cpptb_array_multidim_o_index_1 - -1)) * 3 + 2] = array_multidim_o[cpptb_array_multidim_o_index_0][cpptb_array_multidim_o_index_1][64 +: 1];
+      end
+    end
+    in_words[INPUT_SIGNAL_FORCEFANOUTO] = force_fanout_o;
+    in_words[INPUT_SIGNAL_PACKEDVIEWO] = packed_view_o;
+    in_words[INPUT_SIGNAL_MEMRDATAO] = mem_rdata_o;
   endtask
 
   task automatic apply_outputs();
-    rst_n = out_words[SIGNAL_RSTN][0];
-    req_valid = out_words[SIGNAL_REQVALID][0];
-    req_data = out_words[SIGNAL_REQDATA];
-    rsp_ready = out_words[SIGNAL_RSPREADY][0];
+    rst_n = out_words[OUTPUT_SIGNAL_RSTN][0];
+    req_valid = out_words[OUTPUT_SIGNAL_REQVALID][0];
+    req_data = out_words[OUTPUT_SIGNAL_REQDATA];
+    rsp_ready = out_words[OUTPUT_SIGNAL_RSPREADY][0];
+    wide64_i = {out_words[OUTPUT_SIGNAL_WIDE64I + 1], out_words[OUTPUT_SIGNAL_WIDE64I + 0]};
+    wide137_i = {out_words[OUTPUT_SIGNAL_WIDE137I + 4][8:0], out_words[OUTPUT_SIGNAL_WIDE137I + 3], out_words[OUTPUT_SIGNAL_WIDE137I + 2], out_words[OUTPUT_SIGNAL_WIDE137I + 1], out_words[OUTPUT_SIGNAL_WIDE137I + 0]};
+    fixed_a_i = out_words[OUTPUT_SIGNAL_FIXEDAI][15:0];
+    fixed_b_i = out_words[OUTPUT_SIGNAL_FIXEDBI][15:0];
+    for (int cpptb_array_i_index = 1; cpptb_array_i_index <= 8; cpptb_array_i_index++) begin
+      array_i[cpptb_array_i_index] = out_words[OUTPUT_SIGNAL_ARRAYI + (cpptb_array_i_index - 1) * 1];
+    end
+    for (int cpptb_array_wide_i_index = 0; cpptb_array_wide_i_index <= 3; cpptb_array_wide_i_index++) begin
+      array_wide_i[cpptb_array_wide_i_index] = {out_words[OUTPUT_SIGNAL_ARRAYWIDEI + (cpptb_array_wide_i_index - 0) * 2 + 1], out_words[OUTPUT_SIGNAL_ARRAYWIDEI + (cpptb_array_wide_i_index - 0) * 2]};
+    end
+    for (int cpptb_array_multidim_i_index_0 = 1; cpptb_array_multidim_i_index_0 <= 2; cpptb_array_multidim_i_index_0++) begin
+      for (int cpptb_array_multidim_i_index_1 = -1; cpptb_array_multidim_i_index_1 <= 1; cpptb_array_multidim_i_index_1++) begin
+        array_multidim_i[cpptb_array_multidim_i_index_0][cpptb_array_multidim_i_index_1] = {out_words[OUTPUT_SIGNAL_ARRAYMULTIDIMI + ((cpptb_array_multidim_i_index_0 - 1) * 3 + (cpptb_array_multidim_i_index_1 - -1)) * 3 + 2][0:0], out_words[OUTPUT_SIGNAL_ARRAYMULTIDIMI + ((cpptb_array_multidim_i_index_0 - 1) * 3 + (cpptb_array_multidim_i_index_1 - -1)) * 3 + 1], out_words[OUTPUT_SIGNAL_ARRAYMULTIDIMI + ((cpptb_array_multidim_i_index_0 - 1) * 3 + (cpptb_array_multidim_i_index_1 - -1)) * 3]};
+      end
+    end
+    force_source_i = out_words[OUTPUT_SIGNAL_FORCESOURCEI];
+    packed_view_i = out_words[OUTPUT_SIGNAL_PACKEDVIEWI][10:0];
+    mem_addr_i = out_words[OUTPUT_SIGNAL_MEMADDRI][7:0];
+    mem_wdata_i = out_words[OUTPUT_SIGNAL_MEMWDATAI];
+    mem_we_i = out_words[OUTPUT_SIGNAL_MEMWEI][0];
   endtask
 
   task automatic update_status(input int requests);
@@ -109,8 +234,13 @@ module dpi_authoring_core;
     pack_inputs();
     requests = authoring_core_dpi_step(phase, $time, sim_cycles,
                                event_signal_id, event_edge,
-                               in_words, out_words);
-    apply_outputs();
+                               in_words);
+    if ((requests >= 0) &&
+        ((phase == PHASE_INIT) ||
+         ((requests & STEP_OUTPUTS_CHANGED) != 0))) begin
+      authoring_core_dpi_pull_outputs(out_words);
+      apply_outputs();
+    end
     update_status(requests);
   endtask
 
@@ -146,6 +276,9 @@ module dpi_authoring_core;
   );
     int requests;
     requests = initial_requests;
+    if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
+      edge_interest[SIGNAL_RSPVALID] = authoring_core_dpi_edge_interest(SIGNAL_RSPVALID);
+    end
     if ((requests & STEP_TIMER_CHANGED) != 0) begin
       reschedule_timer();
     end
@@ -177,12 +310,41 @@ module dpi_authoring_core;
     end
   endtask
 
+  task automatic observe_signal_0();
+    int requests;
+    int event_edge;
+    while (status == 0) begin
+      @(rsp_valid);
+      if (status == 0) begin
+        event_edge = rsp_valid ? EDGE_RISING : EDGE_FALLING;
+        if ((status == 0) &&
+            (((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_RSPVALID] & 1) != 0)) ||
+             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_RSPVALID] & 2) != 0)))) begin
+          run_step(PHASE_EDGE, SIGNAL_RSPVALID, event_edge, requests);
+          service_requests(requests);
+        end
+      end
+    end
+  endtask
+
   initial begin
     clk = 1'b0;
     rst_n = '0;
     req_valid = '0;
     req_data = '0;
     rsp_ready = '0;
+    wide64_i = '0;
+    wide137_i = '0;
+    fixed_a_i = '0;
+    fixed_b_i = '0;
+    array_i = '{default: '0};
+    array_wide_i = '{default: '0};
+    array_multidim_i = '{default: '0};
+    force_source_i = '0;
+    packed_view_i = '0;
+    mem_addr_i = '0;
+    mem_wdata_i = '0;
+    mem_we_i = '0;
     sim_cycles = 0;
     timer_generation = 0;
     iterations = 10000;
@@ -190,9 +352,14 @@ module dpi_authoring_core;
     track_falling_edges = 1'b0;
     void'($value$plusargs("AUTHORING_CORE_ITERS=%d", iterations));
 
-    for (int i = 0; i < SIGNAL_COUNT; i++) begin
+    for (int i = 0; i < INPUT_WORD_COUNT; i++) begin
       in_words[i] = '0;
+    end
+    for (int i = 0; i < OUTPUT_WORD_COUNT; i++) begin
       out_words[i] = '0;
+    end
+    for (int i = 0; i < SIGNAL_COUNT; i++) begin
+      edge_interest[i] = '0;
     end
 
     authoring_core_dpi_init(iterations, TIMEPRECISION_FS);
@@ -201,6 +368,7 @@ module dpi_authoring_core;
     if (status == 0) begin
       fork
         drive_clock_0();
+        observe_signal_0();
       join_none
     end
 
@@ -223,6 +391,71 @@ module dpi_authoring_core;
       .rsp_ready(rsp_ready),
       .pulse(pulse),
       .request_count(request_count),
-      .response_count(response_count)
+      .response_count(response_count),
+      .wide64_i(wide64_i),
+      .wide64_o(wide64_o),
+      .wide137_i(wide137_i),
+      .wide137_o(wide137_o),
+      .fixed_a_i(fixed_a_i),
+      .fixed_b_i(fixed_b_i),
+      .fixed_y_o(fixed_y_o),
+      .array_i(array_i),
+      .array_o(array_o),
+      .array_wide_i(array_wide_i),
+      .array_wide_o(array_wide_o),
+      .array_multidim_i(array_multidim_i),
+      .array_multidim_o(array_multidim_o),
+      .force_source_i(force_source_i),
+      .force_fanout_o(force_fanout_o),
+      .packed_view_i(packed_view_i),
+      .packed_view_o(packed_view_o),
+      .mem_addr_i(mem_addr_i),
+      .mem_wdata_i(mem_wdata_i),
+      .mem_we_i(mem_we_i),
+      .mem_rdata_o(mem_rdata_o)
   );
+
+  export "DPI-C" function dpi_authoring_core_internal_0_get;
+  function int unsigned dpi_authoring_core_internal_0_get();
+    dpi_authoring_core_internal_0_get = i_dut.cycle_count;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_internal_1_get;
+  function int unsigned dpi_authoring_core_internal_1_get();
+    dpi_authoring_core_internal_1_get = i_dut.pending_data;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_internal_1_deposit;
+  function void dpi_authoring_core_internal_1_deposit(input int unsigned value);
+    i_dut.pending_data = value;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_internal_2_get;
+  function int unsigned dpi_authoring_core_internal_2_get(input int index);
+    dpi_authoring_core_internal_2_get = i_dut.memory[index];
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_internal_2_deposit;
+  function void dpi_authoring_core_internal_2_deposit(input int index, input int unsigned value);
+    i_dut.memory[index] = value;
+  endfunction
+
+  bit [31:0] internal_3_force_shadow;
+
+  export "DPI-C" function dpi_authoring_core_internal_3_get;
+  function int unsigned dpi_authoring_core_internal_3_get();
+    dpi_authoring_core_internal_3_get = i_dut.force_target;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_internal_3_force;
+  function void dpi_authoring_core_internal_3_force(input int unsigned value);
+    internal_3_force_shadow = value;
+    force i_dut.force_target = internal_3_force_shadow;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_internal_3_release;
+  function void dpi_authoring_core_internal_3_release();
+    release i_dut.force_target;
+  endfunction
+
 endmodule : dpi_authoring_core

@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -40,6 +41,58 @@ class ContractTests(unittest.TestCase):
             "$(eval $(call AUTHORING_CORE_DPI_template,task_timeout,8))",
             makefile,
         )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,wide_echo_137,10))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,fixed_mac,12))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,array_index,13))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,array_wide,14))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,mem_rw,15))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,hier_probe,16))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,mem_backdoor,17))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,mem_probe_read,18))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,mem_probe_deposit,19))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,mem_probe_read_deposit,20))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,signal_edge,21))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,array_multidim,22))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,force_release,23))",
+            makefile,
+        )
         self.assertIn("AUTHORING_CORE_OPT_FAST ?= -O3", makefile)
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)"'),
@@ -57,7 +110,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(control.timeout_hits, 0)
 
         integrated = workload.expected_counts("all", 1)
-        self.assertEqual(integrated.checks, 9)
+        self.assertEqual(integrated.checks, 30)
         self.assertEqual(integrated.task_value, 1)
         self.assertEqual(integrated.clock_cycles, 1)
         self.assertEqual(integrated.timeouts, 1)
@@ -66,6 +119,17 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(integrated.task_timeout_hits, 0)
         self.assertEqual(integrated.event_set, 1)
         self.assertEqual(integrated.channel_receive, 1)
+        self.assertEqual(integrated.wide64, 1)
+        self.assertEqual(integrated.wide_echo_137, 1)
+        self.assertEqual(integrated.wide_slice, 1)
+        self.assertEqual(integrated.fixed_mac, 1)
+        self.assertEqual(integrated.array_index, 1)
+        self.assertEqual(integrated.array_wide, 1)
+        self.assertEqual(integrated.mem_rw, 1)
+        self.assertEqual(integrated.hier_probe_reads, 2)
+        self.assertEqual(integrated.hier_probe_deposits, 1)
+        self.assertEqual(integrated.mem_backdoor_reads, 1)
+        self.assertEqual(integrated.mem_backdoor_deposits, 1)
 
     def test_boundary_counts_even_and_odd(self):
         self.assertEqual(workload.expected_counts("timeout", 2).timeout_hits, 1)
@@ -80,7 +144,40 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(
             workload.expected_counts("task_timeout", 4).task_timeout_hits, 2
         )
-        self.assertEqual(workload.expected_counts("all", 3).checks, 23)
+        self.assertEqual(workload.expected_counts("all", 3).checks, 86)
+
+    def test_wide_and_fixed_kernels_have_isolated_counts(self):
+        for kernel in ("wide64", "wide_echo_137", "wide_slice", "fixed_mac"):
+            with self.subTest(kernel=kernel):
+                counts = workload.expected_counts(kernel, 5)
+                self.assertEqual(counts.transactions, 5)
+                self.assertEqual(counts.checks, 12)
+                self.assertEqual(getattr(counts, kernel), 5)
+                enabled = [
+                    field
+                    for field in workload.FEATURE_FIELDS
+                    if getattr(counts, field) != 0
+                ]
+                self.assertEqual(enabled, [kernel])
+
+    def test_array_and_memory_kernels_have_isolated_counts(self):
+        expected_checks = {
+            "array_index": 47,
+            "array_wide": 27,
+            "mem_rw": 12,
+        }
+        for kernel, checks in expected_checks.items():
+            with self.subTest(kernel=kernel):
+                counts = workload.expected_counts(kernel, 5)
+                self.assertEqual(counts.transactions, 5)
+                self.assertEqual(counts.checks, checks)
+                self.assertEqual(getattr(counts, kernel), 5)
+                enabled = [
+                    field
+                    for field in workload.FEATURE_FIELDS
+                    if getattr(counts, field) != 0
+                ]
+                self.assertEqual(enabled, [kernel])
 
     def test_task_timeout_has_exact_isolated_feature_counts(self):
         counts = workload.expected_counts("task_timeout", 5)
@@ -90,6 +187,173 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(counts.task_timeout_hits, 2)
         self.assertEqual(counts.timeouts, 0)
         self.assertEqual(counts.task_value, 0)
+
+    def test_probe_kernels_have_exact_isolated_counts(self):
+        for kernel, enabled_fields in (
+            ("hier_probe", ["hier_probe_reads", "hier_probe_deposits"]),
+            ("mem_backdoor", ["mem_backdoor_reads", "mem_backdoor_deposits"]),
+        ):
+            with self.subTest(kernel=kernel):
+                counts = workload.expected_counts(kernel, 5)
+                self.assertEqual(counts.transactions, 5)
+                self.assertEqual(counts.checks, 17)
+                enabled = [
+                    field
+                    for field in workload.FEATURE_FIELDS
+                    if getattr(counts, field) != 0
+                ]
+                self.assertEqual(enabled, enabled_fields)
+
+    def test_probe_attribution_kernels_have_exact_counts(self):
+        expected = {
+            "mem_probe_read": (5, 0, 17),
+            "mem_probe_deposit": (0, 5, 12),
+            "mem_probe_read_deposit": (5, 5, 17),
+        }
+        for kernel, (reads, deposits, checks) in expected.items():
+            with self.subTest(kernel=kernel):
+                counts = workload.expected_counts(kernel, 5)
+                self.assertEqual(counts.transactions, 5)
+                self.assertEqual(counts.probe_diag_reads, reads)
+                self.assertEqual(counts.probe_diag_deposits, deposits)
+                self.assertEqual(counts.checks, checks)
+
+    def test_signal_edge_has_exact_isolated_counts(self):
+        counts = workload.expected_counts("signal_edge", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 7)
+        self.assertEqual(counts.signal_edges, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["signal_edges"],
+        )
+        self.assertEqual(workload.expected_counts("all", 5).signal_edges, 0)
+
+    def test_signal_edge_observer_and_exact_waits_are_registered(self):
+        manifest = json.loads(
+            (BENCH_DIR / "cpp_dpi/authoring_core.dpi.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(manifest["edge_observers"], ["rsp_valid"])
+
+        cpp = (BENCH_DIR / "cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
+        sv = (BENCH_DIR / "pure_sv/authoring_core_sv_tb.sv").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("co_await RisingEdge{context.dut.rsp_valid};", cpp)
+        self.assertIn("task automatic run_signal_edge();", sv)
+        self.assertIn("@(posedge rsp_valid);", sv)
+
+    def test_array_multidim_has_exact_isolated_counts(self):
+        counts = workload.expected_counts("array_multidim", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 37)
+        self.assertEqual(counts.array_multidim, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["array_multidim"],
+        )
+        self.assertEqual(workload.expected_counts("all", 5).array_multidim, 0)
+
+    def test_array_multidim_authors_exact_rank_two_accesses(self):
+        cpp = (BENCH_DIR / "cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
+        sv = (BENCH_DIR / "pure_sv/authoring_core_sv_tb.sv").read_text(
+            encoding="utf-8"
+        )
+        rtl = (BENCH_DIR / "rtl/authoring_core_dut.sv").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("bit [64:0] array_multidim_i [2:1][-1:1]", rtl)
+        self.assertIn(
+            "context.dut.array_multidim_i.at(row).at(column).set(", cpp
+        )
+        self.assertIn(
+            "context.dut.array_multidim_o.at(row).at(column).get()", cpp
+        )
+        self.assertIn("array_multidim_i[row][column] =", sv)
+        self.assertIn("check65(array_multidim_o[row][column]", sv)
+
+    def test_force_release_has_exact_isolated_contract(self):
+        counts = workload.expected_counts("force_release", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 17)
+        self.assertEqual(counts.force_release, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["force_release"],
+        )
+        self.assertEqual(workload.expected_counts("all", 5).force_release, 0)
+
+    def test_force_release_uses_dedicated_net_and_exact_delays(self):
+        manifest = json.loads(
+            (BENCH_DIR / "cpp_dpi/authoring_core.dpi.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        internal = next(
+            item for item in manifest["internals"]
+            if item["path"] == "force_target"
+        )
+        self.assertEqual(
+            internal,
+            {"path": "force_target", "access": "read", "force": True},
+        )
+
+        cpp = (BENCH_DIR / "cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
+        sv = (BENCH_DIR / "pure_sv/authoring_core_sv_tb.sv").read_text(
+            encoding="utf-8"
+        )
+        rtl = (BENCH_DIR / "rtl/authoring_core_dut.sv").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("input  bit [31:0] force_source_i", rtl)
+        self.assertIn("wire [31:0] force_target = force_source_i", rtl)
+        self.assertIn("assign force_fanout_o = force_target;", rtl)
+        self.assertIn("context.dut.internal.force_target.force(forced);", cpp)
+        self.assertIn("context.dut.internal.force_target.release();", cpp)
+        self.assertIn("force i_dut.force_target = value;", sv)
+        self.assertIn("release i_dut.force_target;", sv)
+
+        cpp_feature = cpp[
+            cpp.index("Task<void> force_release_feature"):
+            cpp.index("Task<void> packed_view_feature")
+        ]
+        sv_feature = sv[
+            sv.index("task automatic force_release_feature"):
+            sv.index("task automatic packed_view_feature")
+        ]
+        self.assertEqual(cpp_feature.count("co_await Delay{1_ps};"), 2)
+        self.assertEqual(sv_feature.count("#1ps;"), 2)
+
+    def test_packed_view_has_exact_isolated_counts_and_twin(self):
+        counts = workload.expected_counts("packed_view", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 27)
+        self.assertEqual(counts.packed_view, 5)
+        self.assertEqual(workload.expected_counts("all", 5).packed_view, 0)
+
+        cpp = (BENCH_DIR / "cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
+        sv = (BENCH_DIR / "pure_sv/authoring_core_sv_tb.sv").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("PacketTValue::from_signal_value", cpp)
+        self.assertIn("packet.view().inner()", cpp)
+        self.assertIn("set_state(StateT::StateRun)", cpp)
+        self.assertIn("task automatic packed_view_feature", sv)
+        self.assertIn("value.state = STATE_RUN;", sv)
 
     def test_expected_checksum_is_stable(self):
         self.assertEqual(workload.expected_checksum(1), 1_407_418_725)

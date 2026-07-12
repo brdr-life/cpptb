@@ -16,6 +16,7 @@ module dpi_peripheral_suite;
 
   localparam int EDGE_RISING = 0;
   localparam int EDGE_FALLING = 1;
+  localparam int EDGE_ANY = 2;
   localparam int unsigned NO_SIGNAL = 32'hffff_ffff;
   localparam longint unsigned NO_TIMER = 64'hffff_ffff_ffff_ffff;
 
@@ -23,6 +24,7 @@ module dpi_peripheral_suite;
   localparam int STEP_TIMER_CHANGED = 8;
   localparam int STEP_FALLING_EDGES = 16;
   localparam int STEP_OUTPUTS_CHANGED = 32;
+  localparam int STEP_EDGE_INTEREST_CHANGED = 64;
 
   localparam int SIGNAL_HCLK = 0;
   localparam int SIGNAL_HRESETN = 1;
@@ -87,7 +89,72 @@ module dpi_peripheral_suite;
   localparam int SIGNAL_I2CSDAPADI = 60;
   localparam int SIGNAL_I2CSDAPADO = 61;
   localparam int SIGNAL_I2CSDAPADOENO = 62;
+  localparam int INPUT_SIGNAL_HCLK = 0;
+  localparam int INPUT_SIGNAL_TIMERPRDATA = 1;
+  localparam int INPUT_SIGNAL_TIMERPREADY = 2;
+  localparam int INPUT_SIGNAL_TIMERPSLVERR = 3;
+  localparam int INPUT_SIGNAL_TIMERIRQ = 4;
+  localparam int INPUT_SIGNAL_SPIPRDATA = 5;
+  localparam int INPUT_SIGNAL_SPIPREADY = 6;
+  localparam int INPUT_SIGNAL_SPIPSLVERR = 7;
+  localparam int INPUT_SIGNAL_SPICLKDIV = 8;
+  localparam int INPUT_SIGNAL_SPICLKDIVVALID = 9;
+  localparam int INPUT_SIGNAL_SPIADDR = 10;
+  localparam int INPUT_SIGNAL_SPIADDRLEN = 11;
+  localparam int INPUT_SIGNAL_SPICMD = 12;
+  localparam int INPUT_SIGNAL_SPICMDLEN = 13;
+  localparam int INPUT_SIGNAL_SPICSREG = 14;
+  localparam int INPUT_SIGNAL_SPIDATALEN = 15;
+  localparam int INPUT_SIGNAL_SPIDUMMYRD = 16;
+  localparam int INPUT_SIGNAL_SPIDUMMYWR = 17;
+  localparam int INPUT_SIGNAL_SPIINTTHTX = 18;
+  localparam int INPUT_SIGNAL_SPIINTTHRX = 19;
+  localparam int INPUT_SIGNAL_SPIINTCNTTX = 20;
+  localparam int INPUT_SIGNAL_SPIINTCNTRX = 21;
+  localparam int INPUT_SIGNAL_SPIINTEN = 22;
+  localparam int INPUT_SIGNAL_SPIINTCNTEN = 23;
+  localparam int INPUT_SIGNAL_SPIINTRDSTA = 24;
+  localparam int INPUT_SIGNAL_SPISWRST = 25;
+  localparam int INPUT_SIGNAL_SPIRD = 26;
+  localparam int INPUT_SIGNAL_SPIWR = 27;
+  localparam int INPUT_SIGNAL_SPIQRD = 28;
+  localparam int INPUT_SIGNAL_SPIQWR = 29;
+  localparam int INPUT_SIGNAL_SPIDATATX = 30;
+  localparam int INPUT_SIGNAL_SPIDATATXVALID = 31;
+  localparam int INPUT_SIGNAL_SPIDATARXREADY = 32;
+  localparam int INPUT_SIGNAL_I2CPRDATA = 33;
+  localparam int INPUT_SIGNAL_I2CPREADY = 34;
+  localparam int INPUT_SIGNAL_I2CPSLVERR = 35;
+  localparam int INPUT_SIGNAL_I2CINTERRUPT = 36;
+  localparam int INPUT_SIGNAL_I2CSCLPADO = 37;
+  localparam int INPUT_SIGNAL_I2CSCLPADOENO = 38;
+  localparam int INPUT_SIGNAL_I2CSDAPADO = 39;
+  localparam int INPUT_SIGNAL_I2CSDAPADOENO = 40;
+  localparam int OUTPUT_SIGNAL_HRESETN = 0;
+  localparam int OUTPUT_SIGNAL_TIMERPADDR = 1;
+  localparam int OUTPUT_SIGNAL_TIMERPWDATA = 2;
+  localparam int OUTPUT_SIGNAL_TIMERPWRITE = 3;
+  localparam int OUTPUT_SIGNAL_TIMERPSEL = 4;
+  localparam int OUTPUT_SIGNAL_TIMERPENABLE = 5;
+  localparam int OUTPUT_SIGNAL_SPIPADDR = 6;
+  localparam int OUTPUT_SIGNAL_SPIPWDATA = 7;
+  localparam int OUTPUT_SIGNAL_SPIPWRITE = 8;
+  localparam int OUTPUT_SIGNAL_SPIPSEL = 9;
+  localparam int OUTPUT_SIGNAL_SPIPENABLE = 10;
+  localparam int OUTPUT_SIGNAL_SPISTATUS = 11;
+  localparam int OUTPUT_SIGNAL_SPIDATATXREADY = 12;
+  localparam int OUTPUT_SIGNAL_SPIDATARX = 13;
+  localparam int OUTPUT_SIGNAL_SPIDATARXVALID = 14;
+  localparam int OUTPUT_SIGNAL_I2CPADDR = 15;
+  localparam int OUTPUT_SIGNAL_I2CPWDATA = 16;
+  localparam int OUTPUT_SIGNAL_I2CPWRITE = 17;
+  localparam int OUTPUT_SIGNAL_I2CPSEL = 18;
+  localparam int OUTPUT_SIGNAL_I2CPENABLE = 19;
+  localparam int OUTPUT_SIGNAL_I2CSCLPADI = 20;
+  localparam int OUTPUT_SIGNAL_I2CSDAPADI = 21;
   localparam int SIGNAL_COUNT = 63;
+  localparam int INPUT_WORD_COUNT = 41;
+  localparam int OUTPUT_WORD_COUNT = 22;
 
   import "DPI-C" context function void cpptb_dpi_init(
       input int unsigned iterations,
@@ -99,10 +166,15 @@ module dpi_peripheral_suite;
       input longint unsigned sim_cycles,
       input int unsigned event_signal_id,
       input int unsigned event_edge,
-      input int unsigned in_words[],
+      input int unsigned in_words[]
+  );
+  import "DPI-C" function void cpptb_dpi_pull_outputs(
       output int unsigned out_words[]
   );
   import "DPI-C" context function longint unsigned cpptb_dpi_next_timer_deadline();
+  import "DPI-C" context function int unsigned cpptb_dpi_edge_interest(
+      input int unsigned signal_id
+  );
 
   logic HCLK;
   logic HRESETn;
@@ -174,98 +246,77 @@ module dpi_peripheral_suite;
   int status;
   bit track_falling_edges;
   int initial_requests;
-  int unsigned in_words[0:SIGNAL_COUNT-1];
-  int unsigned out_words[0:SIGNAL_COUNT-1];
+  int unsigned in_words[0:INPUT_WORD_COUNT-1];
+  int unsigned out_words[0:OUTPUT_WORD_COUNT-1];
+  int unsigned edge_interest[0:SIGNAL_COUNT-1];
 
   task automatic pack_inputs();
-    in_words[SIGNAL_HCLK] = HCLK;
-    in_words[SIGNAL_HRESETN] = HRESETn;
-    in_words[SIGNAL_TIMERPADDR] = timer_PADDR;
-    in_words[SIGNAL_TIMERPWDATA] = timer_PWDATA;
-    in_words[SIGNAL_TIMERPWRITE] = timer_PWRITE;
-    in_words[SIGNAL_TIMERPSEL] = timer_PSEL;
-    in_words[SIGNAL_TIMERPENABLE] = timer_PENABLE;
-    in_words[SIGNAL_TIMERPRDATA] = timer_PRDATA;
-    in_words[SIGNAL_TIMERPREADY] = timer_PREADY;
-    in_words[SIGNAL_TIMERPSLVERR] = timer_PSLVERR;
-    in_words[SIGNAL_TIMERIRQ] = timer_irq;
-    in_words[SIGNAL_SPIPADDR] = spi_PADDR;
-    in_words[SIGNAL_SPIPWDATA] = spi_PWDATA;
-    in_words[SIGNAL_SPIPWRITE] = spi_PWRITE;
-    in_words[SIGNAL_SPIPSEL] = spi_PSEL;
-    in_words[SIGNAL_SPIPENABLE] = spi_PENABLE;
-    in_words[SIGNAL_SPIPRDATA] = spi_PRDATA;
-    in_words[SIGNAL_SPIPREADY] = spi_PREADY;
-    in_words[SIGNAL_SPIPSLVERR] = spi_PSLVERR;
-    in_words[SIGNAL_SPICLKDIV] = spi_clk_div;
-    in_words[SIGNAL_SPICLKDIVVALID] = spi_clk_div_valid;
-    in_words[SIGNAL_SPISTATUS] = spi_status;
-    in_words[SIGNAL_SPIADDR] = spi_addr;
-    in_words[SIGNAL_SPIADDRLEN] = spi_addr_len;
-    in_words[SIGNAL_SPICMD] = spi_cmd;
-    in_words[SIGNAL_SPICMDLEN] = spi_cmd_len;
-    in_words[SIGNAL_SPICSREG] = spi_csreg;
-    in_words[SIGNAL_SPIDATALEN] = spi_data_len;
-    in_words[SIGNAL_SPIDUMMYRD] = spi_dummy_rd;
-    in_words[SIGNAL_SPIDUMMYWR] = spi_dummy_wr;
-    in_words[SIGNAL_SPIINTTHTX] = spi_int_th_tx;
-    in_words[SIGNAL_SPIINTTHRX] = spi_int_th_rx;
-    in_words[SIGNAL_SPIINTCNTTX] = spi_int_cnt_tx;
-    in_words[SIGNAL_SPIINTCNTRX] = spi_int_cnt_rx;
-    in_words[SIGNAL_SPIINTEN] = spi_int_en;
-    in_words[SIGNAL_SPIINTCNTEN] = spi_int_cnt_en;
-    in_words[SIGNAL_SPIINTRDSTA] = spi_int_rd_sta;
-    in_words[SIGNAL_SPISWRST] = spi_swrst;
-    in_words[SIGNAL_SPIRD] = spi_rd;
-    in_words[SIGNAL_SPIWR] = spi_wr;
-    in_words[SIGNAL_SPIQRD] = spi_qrd;
-    in_words[SIGNAL_SPIQWR] = spi_qwr;
-    in_words[SIGNAL_SPIDATATX] = spi_data_tx;
-    in_words[SIGNAL_SPIDATATXVALID] = spi_data_tx_valid;
-    in_words[SIGNAL_SPIDATATXREADY] = spi_data_tx_ready;
-    in_words[SIGNAL_SPIDATARX] = spi_data_rx;
-    in_words[SIGNAL_SPIDATARXVALID] = spi_data_rx_valid;
-    in_words[SIGNAL_SPIDATARXREADY] = spi_data_rx_ready;
-    in_words[SIGNAL_I2CPADDR] = i2c_PADDR;
-    in_words[SIGNAL_I2CPWDATA] = i2c_PWDATA;
-    in_words[SIGNAL_I2CPWRITE] = i2c_PWRITE;
-    in_words[SIGNAL_I2CPSEL] = i2c_PSEL;
-    in_words[SIGNAL_I2CPENABLE] = i2c_PENABLE;
-    in_words[SIGNAL_I2CPRDATA] = i2c_PRDATA;
-    in_words[SIGNAL_I2CPREADY] = i2c_PREADY;
-    in_words[SIGNAL_I2CPSLVERR] = i2c_PSLVERR;
-    in_words[SIGNAL_I2CINTERRUPT] = i2c_interrupt;
-    in_words[SIGNAL_I2CSCLPADI] = i2c_scl_pad_i;
-    in_words[SIGNAL_I2CSCLPADO] = i2c_scl_pad_o;
-    in_words[SIGNAL_I2CSCLPADOENO] = i2c_scl_padoen_o;
-    in_words[SIGNAL_I2CSDAPADI] = i2c_sda_pad_i;
-    in_words[SIGNAL_I2CSDAPADO] = i2c_sda_pad_o;
-    in_words[SIGNAL_I2CSDAPADOENO] = i2c_sda_padoen_o;
+    in_words[INPUT_SIGNAL_HCLK] = HCLK;
+    in_words[INPUT_SIGNAL_TIMERPRDATA] = timer_PRDATA;
+    in_words[INPUT_SIGNAL_TIMERPREADY] = timer_PREADY;
+    in_words[INPUT_SIGNAL_TIMERPSLVERR] = timer_PSLVERR;
+    in_words[INPUT_SIGNAL_TIMERIRQ] = timer_irq;
+    in_words[INPUT_SIGNAL_SPIPRDATA] = spi_PRDATA;
+    in_words[INPUT_SIGNAL_SPIPREADY] = spi_PREADY;
+    in_words[INPUT_SIGNAL_SPIPSLVERR] = spi_PSLVERR;
+    in_words[INPUT_SIGNAL_SPICLKDIV] = spi_clk_div;
+    in_words[INPUT_SIGNAL_SPICLKDIVVALID] = spi_clk_div_valid;
+    in_words[INPUT_SIGNAL_SPIADDR] = spi_addr;
+    in_words[INPUT_SIGNAL_SPIADDRLEN] = spi_addr_len;
+    in_words[INPUT_SIGNAL_SPICMD] = spi_cmd;
+    in_words[INPUT_SIGNAL_SPICMDLEN] = spi_cmd_len;
+    in_words[INPUT_SIGNAL_SPICSREG] = spi_csreg;
+    in_words[INPUT_SIGNAL_SPIDATALEN] = spi_data_len;
+    in_words[INPUT_SIGNAL_SPIDUMMYRD] = spi_dummy_rd;
+    in_words[INPUT_SIGNAL_SPIDUMMYWR] = spi_dummy_wr;
+    in_words[INPUT_SIGNAL_SPIINTTHTX] = spi_int_th_tx;
+    in_words[INPUT_SIGNAL_SPIINTTHRX] = spi_int_th_rx;
+    in_words[INPUT_SIGNAL_SPIINTCNTTX] = spi_int_cnt_tx;
+    in_words[INPUT_SIGNAL_SPIINTCNTRX] = spi_int_cnt_rx;
+    in_words[INPUT_SIGNAL_SPIINTEN] = spi_int_en;
+    in_words[INPUT_SIGNAL_SPIINTCNTEN] = spi_int_cnt_en;
+    in_words[INPUT_SIGNAL_SPIINTRDSTA] = spi_int_rd_sta;
+    in_words[INPUT_SIGNAL_SPISWRST] = spi_swrst;
+    in_words[INPUT_SIGNAL_SPIRD] = spi_rd;
+    in_words[INPUT_SIGNAL_SPIWR] = spi_wr;
+    in_words[INPUT_SIGNAL_SPIQRD] = spi_qrd;
+    in_words[INPUT_SIGNAL_SPIQWR] = spi_qwr;
+    in_words[INPUT_SIGNAL_SPIDATATX] = spi_data_tx;
+    in_words[INPUT_SIGNAL_SPIDATATXVALID] = spi_data_tx_valid;
+    in_words[INPUT_SIGNAL_SPIDATARXREADY] = spi_data_rx_ready;
+    in_words[INPUT_SIGNAL_I2CPRDATA] = i2c_PRDATA;
+    in_words[INPUT_SIGNAL_I2CPREADY] = i2c_PREADY;
+    in_words[INPUT_SIGNAL_I2CPSLVERR] = i2c_PSLVERR;
+    in_words[INPUT_SIGNAL_I2CINTERRUPT] = i2c_interrupt;
+    in_words[INPUT_SIGNAL_I2CSCLPADO] = i2c_scl_pad_o;
+    in_words[INPUT_SIGNAL_I2CSCLPADOENO] = i2c_scl_padoen_o;
+    in_words[INPUT_SIGNAL_I2CSDAPADO] = i2c_sda_pad_o;
+    in_words[INPUT_SIGNAL_I2CSDAPADOENO] = i2c_sda_padoen_o;
   endtask
 
   task automatic apply_outputs();
-    HRESETn = out_words[SIGNAL_HRESETN][0];
-    timer_PADDR = out_words[SIGNAL_TIMERPADDR][11:0];
-    timer_PWDATA = out_words[SIGNAL_TIMERPWDATA];
-    timer_PWRITE = out_words[SIGNAL_TIMERPWRITE][0];
-    timer_PSEL = out_words[SIGNAL_TIMERPSEL][0];
-    timer_PENABLE = out_words[SIGNAL_TIMERPENABLE][0];
-    spi_PADDR = out_words[SIGNAL_SPIPADDR][11:0];
-    spi_PWDATA = out_words[SIGNAL_SPIPWDATA];
-    spi_PWRITE = out_words[SIGNAL_SPIPWRITE][0];
-    spi_PSEL = out_words[SIGNAL_SPIPSEL][0];
-    spi_PENABLE = out_words[SIGNAL_SPIPENABLE][0];
-    spi_status = out_words[SIGNAL_SPISTATUS];
-    spi_data_tx_ready = out_words[SIGNAL_SPIDATATXREADY][0];
-    spi_data_rx = out_words[SIGNAL_SPIDATARX];
-    spi_data_rx_valid = out_words[SIGNAL_SPIDATARXVALID][0];
-    i2c_PADDR = out_words[SIGNAL_I2CPADDR][11:0];
-    i2c_PWDATA = out_words[SIGNAL_I2CPWDATA];
-    i2c_PWRITE = out_words[SIGNAL_I2CPWRITE][0];
-    i2c_PSEL = out_words[SIGNAL_I2CPSEL][0];
-    i2c_PENABLE = out_words[SIGNAL_I2CPENABLE][0];
-    i2c_scl_pad_i = out_words[SIGNAL_I2CSCLPADI][0];
-    i2c_sda_pad_i = out_words[SIGNAL_I2CSDAPADI][0];
+    HRESETn = out_words[OUTPUT_SIGNAL_HRESETN][0];
+    timer_PADDR = out_words[OUTPUT_SIGNAL_TIMERPADDR][11:0];
+    timer_PWDATA = out_words[OUTPUT_SIGNAL_TIMERPWDATA];
+    timer_PWRITE = out_words[OUTPUT_SIGNAL_TIMERPWRITE][0];
+    timer_PSEL = out_words[OUTPUT_SIGNAL_TIMERPSEL][0];
+    timer_PENABLE = out_words[OUTPUT_SIGNAL_TIMERPENABLE][0];
+    spi_PADDR = out_words[OUTPUT_SIGNAL_SPIPADDR][11:0];
+    spi_PWDATA = out_words[OUTPUT_SIGNAL_SPIPWDATA];
+    spi_PWRITE = out_words[OUTPUT_SIGNAL_SPIPWRITE][0];
+    spi_PSEL = out_words[OUTPUT_SIGNAL_SPIPSEL][0];
+    spi_PENABLE = out_words[OUTPUT_SIGNAL_SPIPENABLE][0];
+    spi_status = out_words[OUTPUT_SIGNAL_SPISTATUS];
+    spi_data_tx_ready = out_words[OUTPUT_SIGNAL_SPIDATATXREADY][0];
+    spi_data_rx = out_words[OUTPUT_SIGNAL_SPIDATARX];
+    spi_data_rx_valid = out_words[OUTPUT_SIGNAL_SPIDATARXVALID][0];
+    i2c_PADDR = out_words[OUTPUT_SIGNAL_I2CPADDR][11:0];
+    i2c_PWDATA = out_words[OUTPUT_SIGNAL_I2CPWDATA];
+    i2c_PWRITE = out_words[OUTPUT_SIGNAL_I2CPWRITE][0];
+    i2c_PSEL = out_words[OUTPUT_SIGNAL_I2CPSEL][0];
+    i2c_PENABLE = out_words[OUTPUT_SIGNAL_I2CPENABLE][0];
+    i2c_scl_pad_i = out_words[OUTPUT_SIGNAL_I2CSCLPADI][0];
+    i2c_sda_pad_i = out_words[OUTPUT_SIGNAL_I2CSDAPADI][0];
   endtask
 
   task automatic update_status(input int requests);
@@ -288,8 +339,13 @@ module dpi_peripheral_suite;
     pack_inputs();
     requests = cpptb_dpi_step(phase, $time, sim_cycles,
                                event_signal_id, event_edge,
-                               in_words, out_words);
-    apply_outputs();
+                               in_words);
+    if ((requests >= 0) &&
+        ((phase == PHASE_INIT) ||
+         ((requests & STEP_OUTPUTS_CHANGED) != 0))) begin
+      cpptb_dpi_pull_outputs(out_words);
+      apply_outputs();
+    end
     update_status(requests);
   endtask
 
@@ -387,9 +443,14 @@ module dpi_peripheral_suite;
     track_falling_edges = 1'b0;
     void'($value$plusargs("PERIPHERAL_SUITE_ITERS=%d", iterations));
 
-    for (int i = 0; i < SIGNAL_COUNT; i++) begin
+    for (int i = 0; i < INPUT_WORD_COUNT; i++) begin
       in_words[i] = '0;
+    end
+    for (int i = 0; i < OUTPUT_WORD_COUNT; i++) begin
       out_words[i] = '0;
+    end
+    for (int i = 0; i < SIGNAL_COUNT; i++) begin
+      edge_interest[i] = '0;
     end
 
     cpptb_dpi_init(iterations, TIMEPRECISION_FS);
@@ -479,4 +540,5 @@ module dpi_peripheral_suite;
       .i2c_sda_pad_o(i2c_sda_pad_o),
       .i2c_sda_padoen_o(i2c_sda_padoen_o)
   );
+
 endmodule : dpi_peripheral_suite

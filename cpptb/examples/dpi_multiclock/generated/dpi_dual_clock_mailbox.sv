@@ -11,6 +11,7 @@ module dpi_dual_clock_mailbox;
 
   localparam int EDGE_RISING = 0;
   localparam int EDGE_FALLING = 1;
+  localparam int EDGE_ANY = 2;
   localparam int unsigned NO_SIGNAL = 32'hffff_ffff;
   localparam longint unsigned NO_TIMER = 64'hffff_ffff_ffff_ffff;
 
@@ -18,6 +19,7 @@ module dpi_dual_clock_mailbox;
   localparam int STEP_TIMER_CHANGED = 8;
   localparam int STEP_FALLING_EDGES = 16;
   localparam int STEP_OUTPUTS_CHANGED = 32;
+  localparam int STEP_EDGE_INTEREST_CHANGED = 64;
 
   localparam int SIGNAL_RSTN = 0;
   localparam int SIGNAL_WRITECLK = 1;
@@ -32,7 +34,22 @@ module dpi_dual_clock_mailbox;
   localparam int SIGNAL_READCOUNT = 10;
   localparam int SIGNAL_PROBEIN = 11;
   localparam int SIGNAL_PROBEECHO = 12;
+  localparam int INPUT_SIGNAL_WRITECLK = 0;
+  localparam int INPUT_SIGNAL_WRITEREADY = 1;
+  localparam int INPUT_SIGNAL_WRITECOUNT = 2;
+  localparam int INPUT_SIGNAL_READCLK = 3;
+  localparam int INPUT_SIGNAL_READDATA = 4;
+  localparam int INPUT_SIGNAL_READVALID = 5;
+  localparam int INPUT_SIGNAL_READCOUNT = 6;
+  localparam int INPUT_SIGNAL_PROBEECHO = 7;
+  localparam int OUTPUT_SIGNAL_RSTN = 0;
+  localparam int OUTPUT_SIGNAL_WRITEDATA = 1;
+  localparam int OUTPUT_SIGNAL_WRITEVALID = 2;
+  localparam int OUTPUT_SIGNAL_READREADY = 3;
+  localparam int OUTPUT_SIGNAL_PROBEIN = 4;
   localparam int SIGNAL_COUNT = 13;
+  localparam int INPUT_WORD_COUNT = 8;
+  localparam int OUTPUT_WORD_COUNT = 5;
 
   import "DPI-C" context function void cpptb_dpi_init(
       input int unsigned iterations,
@@ -44,10 +61,15 @@ module dpi_dual_clock_mailbox;
       input longint unsigned sim_cycles,
       input int unsigned event_signal_id,
       input int unsigned event_edge,
-      input int unsigned in_words[],
+      input int unsigned in_words[]
+  );
+  import "DPI-C" function void cpptb_dpi_pull_outputs(
       output int unsigned out_words[]
   );
   import "DPI-C" context function longint unsigned cpptb_dpi_next_timer_deadline();
+  import "DPI-C" context function int unsigned cpptb_dpi_edge_interest(
+      input int unsigned signal_id
+  );
 
   logic rst_n;
   logic write_clk;
@@ -69,31 +91,27 @@ module dpi_dual_clock_mailbox;
   int status;
   bit track_falling_edges;
   int initial_requests;
-  int unsigned in_words[0:SIGNAL_COUNT-1];
-  int unsigned out_words[0:SIGNAL_COUNT-1];
+  int unsigned in_words[0:INPUT_WORD_COUNT-1];
+  int unsigned out_words[0:OUTPUT_WORD_COUNT-1];
+  int unsigned edge_interest[0:SIGNAL_COUNT-1];
 
   task automatic pack_inputs();
-    in_words[SIGNAL_RSTN] = rst_n;
-    in_words[SIGNAL_WRITECLK] = write_clk;
-    in_words[SIGNAL_WRITEDATA] = write_data;
-    in_words[SIGNAL_WRITEVALID] = write_valid;
-    in_words[SIGNAL_WRITEREADY] = write_ready;
-    in_words[SIGNAL_WRITECOUNT] = write_count;
-    in_words[SIGNAL_READCLK] = read_clk;
-    in_words[SIGNAL_READDATA] = read_data;
-    in_words[SIGNAL_READVALID] = read_valid;
-    in_words[SIGNAL_READREADY] = read_ready;
-    in_words[SIGNAL_READCOUNT] = read_count;
-    in_words[SIGNAL_PROBEIN] = probe_in;
-    in_words[SIGNAL_PROBEECHO] = probe_echo;
+    in_words[INPUT_SIGNAL_WRITECLK] = write_clk;
+    in_words[INPUT_SIGNAL_WRITEREADY] = write_ready;
+    in_words[INPUT_SIGNAL_WRITECOUNT] = write_count;
+    in_words[INPUT_SIGNAL_READCLK] = read_clk;
+    in_words[INPUT_SIGNAL_READDATA] = read_data;
+    in_words[INPUT_SIGNAL_READVALID] = read_valid;
+    in_words[INPUT_SIGNAL_READCOUNT] = read_count;
+    in_words[INPUT_SIGNAL_PROBEECHO] = probe_echo;
   endtask
 
   task automatic apply_outputs();
-    rst_n = out_words[SIGNAL_RSTN][0];
-    write_data = out_words[SIGNAL_WRITEDATA][7:0];
-    write_valid = out_words[SIGNAL_WRITEVALID][0];
-    read_ready = out_words[SIGNAL_READREADY][0];
-    probe_in = out_words[SIGNAL_PROBEIN][7:0];
+    rst_n = out_words[OUTPUT_SIGNAL_RSTN][0];
+    write_data = out_words[OUTPUT_SIGNAL_WRITEDATA][7:0];
+    write_valid = out_words[OUTPUT_SIGNAL_WRITEVALID][0];
+    read_ready = out_words[OUTPUT_SIGNAL_READREADY][0];
+    probe_in = out_words[OUTPUT_SIGNAL_PROBEIN][7:0];
   endtask
 
   task automatic update_status(input int requests);
@@ -116,8 +134,13 @@ module dpi_dual_clock_mailbox;
     pack_inputs();
     requests = cpptb_dpi_step(phase, $time, sim_cycles,
                                event_signal_id, event_edge,
-                               in_words, out_words);
-    apply_outputs();
+                               in_words);
+    if ((requests >= 0) &&
+        ((phase == PHASE_INIT) ||
+         ((requests & STEP_OUTPUTS_CHANGED) != 0))) begin
+      cpptb_dpi_pull_outputs(out_words);
+      apply_outputs();
+    end
     update_status(requests);
   endtask
 
@@ -222,9 +245,14 @@ module dpi_dual_clock_mailbox;
     track_falling_edges = 1'b0;
     void'($value$plusargs("CPPTB_MULTICLOCK_ITERS=%d", iterations));
 
-    for (int i = 0; i < SIGNAL_COUNT; i++) begin
+    for (int i = 0; i < INPUT_WORD_COUNT; i++) begin
       in_words[i] = '0;
+    end
+    for (int i = 0; i < OUTPUT_WORD_COUNT; i++) begin
       out_words[i] = '0;
+    end
+    for (int i = 0; i < SIGNAL_COUNT; i++) begin
+      edge_interest[i] = '0;
     end
 
     cpptb_dpi_init(iterations, TIMEPRECISION_FS);
@@ -260,4 +288,5 @@ module dpi_dual_clock_mailbox;
       .probe_in(probe_in),
       .probe_echo(probe_echo)
   );
+
 endmodule : dpi_dual_clock_mailbox

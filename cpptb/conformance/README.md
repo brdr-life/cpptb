@@ -166,7 +166,7 @@ Run the configured backend:
 make cpptb-conformance-run
 ```
 
-The exact positive result contract is 210 checks, eight primary generated-clock
+The exact positive result contract is 273 checks, eight primary generated-clock
 cycles, and zero failures. These values and all negative diagnostics are
 declared in `scheduler_conformance.dpi.json`.
 
