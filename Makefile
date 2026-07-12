@@ -186,6 +186,7 @@ $(CPPTB_CORO_RUNTIME_TEST): cpptb/coro_runtime.hpp cpptb/packed_bits.hpp cpptb/p
 	mkdir -p $(CPPTB_BUILD_DIR)
 	$(CXX) -std=c++20 -I. \
 		-DCPPTB_CORO_FRAME_POOL_DIAGNOSTICS \
+		-DCPPTB_CORO_WAIT_PATH_DIAGNOSTICS \
 		-I$(VERILATOR_ROOT)/include \
 		-I$(VERILATOR_ROOT)/include/vltstd \
 		cpptb/tests/coro_runtime_test.cpp -o $@
