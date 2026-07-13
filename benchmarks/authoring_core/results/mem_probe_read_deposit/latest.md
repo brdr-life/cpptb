@@ -10,7 +10,7 @@
 
 | Kernel | Paired median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |
 |---|---:|---:|---:|---:|---:|---|---:|
-| `mem_probe_read_deposit` | 1.070x | 1.066x | 1.075x | 1.073x | 0.28% | `passed` | `False` |
+| `mem_probe_read_deposit` | 1.032x | 1.025x | 1.056x | 1.045x | 1.27% | `passed` | `False` |
 
 The paired median is the guard. A value above `1.10x` is a valid
 failure only when both order strata exceed `1.05x` and the independent
