@@ -422,3 +422,9 @@ contracts, but their sibling active-region process ordering has not yet been
 validated on a second simulator. Treat that exact coincidence ordering as a
 backend conformance requirement, not a proven portable SystemVerilog
 guarantee, until another supported simulator runs the same cases.
+
+The final post-review serial feature regression passed every authoring kernel,
+the multiclock and clockless timer equivalence cases, and the peripheral
+suite. Authoring paired C++ DPI/pure-SV ratios ranged from `0.740x` to
+`1.058x`; the peripheral suite passed at `0.986x`. No measured feature
+crossed the `1.10x` hard stop.
