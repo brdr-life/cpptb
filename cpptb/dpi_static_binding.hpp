@@ -212,7 +212,7 @@ class StaticPackedRef {
             }
         }
         if constexpr (Width <= 32) {
-            return words[0];
+            return detail::normalize_scalar<Width>(words[0]);
         } else {
             return detail::words_to_value<Width>(words.data());
         }
@@ -257,7 +257,7 @@ class StaticOnDemandRef {
         get_words_fn(word_offset, words.data(),
                      static_cast<uint32_t>(word_count));
         if constexpr (Width <= 32) {
-            return words[0];
+            return detail::normalize_scalar<Width>(words[0]);
         } else {
             return detail::words_to_value<Width>(words.data());
         }
