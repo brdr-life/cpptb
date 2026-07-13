@@ -34,7 +34,7 @@
       ],
       "returncode": 0,
       "stderr": "",
-      "stdout": "build/cpptb/dpi_multiclock_obj/Vdpi_dual_clock_mailbox \\\n\t\t+CPPTB_MULTICLOCK_ITERS=${CPPTB_MULTICLOCK_ITERS:-16}\nCPP_DPI_MULTICLOCK_RESULT iterations=16 checks=23 sim_cycles=147 wall_ms=0.140 failures=0\n- cpptb/examples/dpi_multiclock/generated/dpi_dual_clock_mailbox.sv:302: Verilog $finish\n- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01\n- Verilator: $finish at 586ns; walltime 0.000 s; speed 3.830 ms/s\n- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB\n"
+      "stdout": "build/cpptb/dpi_multiclock_obj/Vdpi_dual_clock_mailbox \\\n\t\t+CPPTB_MULTICLOCK_ITERS=${CPPTB_MULTICLOCK_ITERS:-16}\nCPP_DPI_MULTICLOCK_RESULT iterations=16 checks=23 sim_cycles=147 wall_ms=0.148 failures=0\n- cpptb/examples/dpi_multiclock/generated/dpi_dual_clock_mailbox.sv:302: Verilog $finish\n- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01\n- Verilator: $finish at 586ns; walltime 0.000 s; speed 3.640 ms/s\n- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB\n"
     },
     "pure_sv": {
       "command": [
@@ -43,19 +43,19 @@
       ],
       "returncode": 0,
       "stderr": "",
-      "stdout": "build/cpptb/dpi_multiclock_sv_obj/Vdual_clock_mailbox_sv_tb \\\n\t\t+CPPTB_MULTICLOCK_ITERS=${CPPTB_MULTICLOCK_ITERS:-16}\nPURE_SV_MULTICLOCK_RESULT iterations=16 checks=23 sim_cycles=147 failures=0\n- cpptb/examples/dpi_multiclock/pure_sv/dual_clock_mailbox_sv_tb.sv:189: Verilog $finish\n- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01\n- Verilator: $finish at 586ns; walltime 0.000 s; speed 4.156 ms/s\n- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB\n"
+      "stdout": "build/cpptb/dpi_multiclock_sv_obj/Vdual_clock_mailbox_sv_tb \\\n\t\t+CPPTB_MULTICLOCK_ITERS=${CPPTB_MULTICLOCK_ITERS:-16}\nPURE_SV_MULTICLOCK_RESULT iterations=16 checks=23 sim_cycles=147 failures=0\n- cpptb/examples/dpi_multiclock/pure_sv/dual_clock_mailbox_sv_tb.sv:189: Verilog $finish\n- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01\n- Verilator: $finish at 586ns; walltime 0.000 s; speed 4.127 ms/s\n- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB\n"
     }
   },
   "settle": {
-    "elapsed_seconds": 3.766687586903572e-05,
+    "elapsed_seconds": 2.6667024940252304e-05,
     "poll_seconds": 5.0,
     "probes": [
       {
-        "elapsed_seconds": 3.766687586903572e-05,
-        "load_average_1m": 3.16015625,
+        "elapsed_seconds": 2.6667024940252304e-05,
+        "load_average_1m": 3.14892578125,
         "logical_cpu_count": 8,
-        "normalized_load_1m": 0.39501953125,
-        "timestamp_utc": "2026-07-13T03:33:51.974928+00:00"
+        "normalized_load_1m": 0.39361572265625,
+        "timestamp_utc": "2026-07-13T04:14:51.178523+00:00"
       }
     ],
     "status": "settled",

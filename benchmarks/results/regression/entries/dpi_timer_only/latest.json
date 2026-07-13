@@ -34,7 +34,7 @@
       ],
       "returncode": 0,
       "stderr": "",
-      "stdout": "build/cpptb/dpi_timer_only_obj/Vdpi_timer_only_probe \\\n\t\t+CPPTB_TIMER_ONLY_ITERS=${CPPTB_TIMER_ONLY_ITERS:-9}\nCPP_DPI_TIMER_ONLY_RESULT iterations=9 checks=39 sim_cycles=0 wall_ms=0.017 failures=0\n- cpptb/examples/dpi_timer_only/generated/dpi_timer_only_probe.sv:210: Verilog $finish\n- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01\n- Verilator: $finish at 99ns; walltime 0.000 s; speed 3.300 ms/s\n- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB\n"
+      "stdout": "build/cpptb/dpi_timer_only_obj/Vdpi_timer_only_probe \\\n\t\t+CPPTB_TIMER_ONLY_ITERS=${CPPTB_TIMER_ONLY_ITERS:-9}\nCPP_DPI_TIMER_ONLY_RESULT iterations=9 checks=39 sim_cycles=0 wall_ms=0.019 failures=0\n- cpptb/examples/dpi_timer_only/generated/dpi_timer_only_probe.sv:210: Verilog $finish\n- S i m u l a t i o n   R e p o r t: Verilator 5.050 2026-07-01\n- Verilator: $finish at 99ns; walltime 0.000 s; speed 3.194 ms/s\n- Verilator: cpu 0.000 s on 1 threads; allocated 2 MB\n"
     },
     "pure_sv": {
       "command": [
@@ -47,15 +47,15 @@
     }
   },
   "settle": {
-    "elapsed_seconds": 2.3375265300273895e-05,
+    "elapsed_seconds": 2.4166889488697052e-05,
     "poll_seconds": 5.0,
     "probes": [
       {
-        "elapsed_seconds": 2.3375265300273895e-05,
-        "load_average_1m": 3.16015625,
+        "elapsed_seconds": 2.4166889488697052e-05,
+        "load_average_1m": 3.14892578125,
         "logical_cpu_count": 8,
-        "normalized_load_1m": 0.39501953125,
-        "timestamp_utc": "2026-07-13T03:33:52.138416+00:00"
+        "normalized_load_1m": 0.39361572265625,
+        "timestamp_utc": "2026-07-13T04:14:51.336063+00:00"
       }
     ],
     "status": "settled",
