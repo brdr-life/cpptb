@@ -209,11 +209,14 @@ Use `spawn_detached()` for fire-and-forget roots. Both forms reclaim completed
 root coroutine frames; detached roots omit the process-control metadata used
 for handles, status, awaiting, and cancellation.
 
-The end-to-end multi-clock example is in `cpptb/examples/dpi_multiclock/`:
+The end-to-end multi-clock example is in `cpptb/examples/dpi_multiclock/`.
+The clockless absolute-delay twin is in `cpptb/examples/dpi_timer_only/`:
 
 ```sh
 make cpp-coro-runtime-test
 make cpp-dpi-multiclock-run
+make cpp-dpi-timer-only-run
+make cpp-dpi-timer-only-sv-run
 ```
 
 ## Scheduler ordering and cleanup
@@ -228,6 +231,30 @@ Generated clocks are configured as static edge sources before the first wait is
 registered. Their edges are delivered unconditionally, so waits on those IDs do
 not contribute dynamic edge-interest masks or publications; waiter lifecycle,
 cancellation, `First`, and falling-edge summaries are otherwise unchanged.
+
+Generated DPI wrappers use one persistent, clock-agnostic timer owner. The
+module-level `timer_deadline` is the source of truth, `timer_owner_target`
+describes only the owner's current positive sleep, and `timer_kick` wakes an
+idle owner. A generation-checked one-shot process is retained only when a
+non-owner callback inserts a deadline strictly earlier than the owner's stale
+sleep target. Clock drivers and observers remain independent, so
+`clock_cycles()` is still an edge primitive while `Delay` works with no clocks.
+
+The generated timer contract is:
+
+- **I1:** after `STEP_TIMER_CHANGED`, `timer_deadline` equals the scheduler's
+  earliest live deadline or `NO_TIMER`;
+- **I2:** the persistent owner and strict-earlier fallback deliver each live
+  deadline exactly once; generation checks prevent stale fallback delivery;
+- **I3:** timer dispatch uses no zero delay, delayed nonblocking assignment, or
+  `disable fork`;
+- **I4:** every live deadline has an owner or fallback wake no later than that
+  deadline;
+- **I5:** the fallback is unreachable in a clockless wrapper because no
+  non-owner step can insert an earlier deadline while the owner sleeps;
+- **I6:** there remains one next-deadline DPI query per timer-change request,
+  and steady-state timer arms allocate no SystemVerilog process. Only the
+  exceptional strict-earlier fallback allocates a one-shot process.
 
 Zero-duration delays and delays that cannot be represented at the configured
 simulation precision abort with a diagnostic. Awaiting a default-constructed,

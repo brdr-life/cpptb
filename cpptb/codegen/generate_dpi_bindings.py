@@ -1799,6 +1799,9 @@ def render_sv(
             "  int unsigned iterations;",
             "  longint unsigned sim_cycles;",
             "  longint unsigned timer_generation;",
+            "  longint unsigned timer_deadline;",
+            "  longint unsigned timer_owner_target;",
+            "  event timer_kick;",
             "  int status;",
             "  bit track_falling_edges;",
             "  int initial_requests;",
@@ -1866,16 +1869,39 @@ def render_sv(
             "    end",
             "  endtask",
             "",
-            "  task automatic reschedule_timer();",
+            "  task automatic update_timer_schedule();",
             "    longint unsigned deadline;",
             "    longint unsigned generation;",
             f"    deadline = {next_deadline_function}();",
+            "    timer_deadline = deadline;",
             "    timer_generation++;",
             "    generation = timer_generation;",
             "    if (deadline != NO_TIMER) begin",
-            "      fork",
-            "        timer_wakeup(deadline, generation);",
-            "      join_none",
+            "      if (timer_owner_target == NO_TIMER) begin",
+            "        -> timer_kick;",
+            "      end else if (deadline < timer_owner_target) begin",
+            "        fork",
+            "          timer_wakeup(deadline, generation);",
+            "        join_none",
+            "      end",
+            "    end",
+            "  endtask",
+            "",
+            "  task automatic timer_owner();",
+            "    int requests;",
+            "    longint unsigned target;",
+            "    while (status == 0) begin",
+            "      if (timer_deadline == NO_TIMER) begin",
+            "        @(timer_kick);",
+            "      end else if (timer_deadline > $time) begin",
+            "        target = timer_deadline;",
+            "        timer_owner_target = target;",
+            "        #(target - $time);",
+            "        timer_owner_target = NO_TIMER;",
+            "      end else begin",
+            "        run_step(PHASE_DELAY, NO_SIGNAL, EDGE_RISING, requests);",
+            "        service_requests(requests);",
+            "      end",
             "    end",
             "  endtask",
             "",
@@ -1901,7 +1927,7 @@ def render_sv(
     lines.extend(
         [
             "    if ((requests & STEP_TIMER_CHANGED) != 0) begin",
-            "      reschedule_timer();",
+            "      update_timer_schedule();",
             "    end",
             "  endtask",
             "",
@@ -2036,6 +2062,8 @@ def render_sv(
         [
             "    sim_cycles = 0;",
             "    timer_generation = 0;",
+            "    timer_deadline = NO_TIMER;",
+            "    timer_owner_target = NO_TIMER;",
             f"    iterations = {default_iterations};",
             "    status = 0;",
             "    track_falling_edges = 1'b0;",
@@ -2056,26 +2084,15 @@ def render_sv(
             "    service_requests(initial_requests);",
         ]
     )
-    if clocks or edge_observers:
-        lines.extend(
-            [
-                "    if (status == 0) begin",
-                "      fork",
-            ]
-        )
-        for index, clock in enumerate(clocks):
-            if clock_source(clock) == "generated":
-                lines.append(f"        drive_clock_{index}();")
-            else:
-                lines.append(f"        observe_clock_{index}();")
-        for index, _ in enumerate(edge_observers):
-            lines.append(f"        observe_signal_{index}();")
-        lines.extend(
-            [
-                "      join_none",
-                "    end",
-            ]
-        )
+    lines.extend(["    fork", "      timer_owner();"])
+    for index, clock in enumerate(clocks):
+        if clock_source(clock) == "generated":
+            lines.append(f"      drive_clock_{index}();")
+        else:
+            lines.append(f"      observe_clock_{index}();")
+    for index, _ in enumerate(edge_observers):
+        lines.append(f"      observe_signal_{index}();")
+    lines.append("    join_none")
     lines.extend(
         [
             "",

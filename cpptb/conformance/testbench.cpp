@@ -640,6 +640,165 @@ struct TimerRearmOrder {
     uint32_t count = 0;
 };
 
+struct TimerDispatchTrace {
+    std::array<uint32_t, 8> values{};
+    std::array<uint64_t, 8> times{};
+    uint32_t count = 0;
+};
+
+void record_timer_dispatch(ConformanceTb tb, TimerDispatchTrace& trace,
+                           uint32_t marker) {
+    if (trace.count >= trace.values.size()) {
+        tb.expect_true("timer dispatch trace capacity", false);
+        return;
+    }
+    trace.values[trace.count] = marker;
+    trace.times[trace.count] = tb.now().in_femtoseconds();
+    ++trace.count;
+}
+
+Task<void> r1_timer_rearm(ConformanceTb tb, TimerDispatchTrace& trace) {
+    co_await Delay{2_ns};
+    record_timer_dispatch(tb, trace, 1);
+    co_await Delay{5_ns};
+    record_timer_dispatch(tb, trace, 3);
+    tb.dut.drive_value.set(0x51);
+    co_await Delay{1_ps};
+    tb.expect_eq("R1 later rearm output settles", tb.dut.comb_sum.get(), 0x51);
+}
+
+Task<void> r1_coincident_clock(ConformanceTb tb, TimerDispatchTrace& trace) {
+    co_await RisingEdge{tb.dut.clock.a};
+    record_timer_dispatch(tb, trace, 2);
+}
+
+Task<void> timer_r1_contract(ConformanceTb tb) {
+    TimerDispatchTrace trace;
+    const auto timer = tb.spawn(r1_timer_rearm(tb, trace));
+    const auto clock = tb.spawn(r1_coincident_clock(tb, trace));
+
+    co_await timer;
+    tb.expect_time("R1 later rearm completion time", tb.now(), 7_ns + 1_ps);
+    tb.expect_eq("R1 exact callback count", trace.count, 3);
+    tb.expect_eq("R1 initial timer precedes coincident clock", trace.values[0], 1);
+    tb.expect_eq("R1 coincident clock callback order", trace.values[1], 2);
+    tb.expect_eq("R1 later timer callback order", trace.values[2], 3);
+    tb.expect_time("R1 initial timer exact time", SimTime{trace.times[0]}, 2_ns);
+    tb.expect_time("R1 coincident clock exact time", SimTime{trace.times[1]}, 2_ns);
+    tb.expect_time("R1 later timer exact time", SimTime{trace.times[2]}, 7_ns);
+    tb.expect_true("R1 coincident clock process completes", clock.done());
+
+    co_await Delay{1_ps};
+    tb.expect_time("R1 stale wake observation time", tb.now(), 7_ns + 2_ps);
+    tb.expect_eq("R1 callbacks remain exact once", trace.count, 3);
+}
+
+Task<void> r2_original_timer(ConformanceTb tb, TimerDispatchTrace& trace) {
+    co_await Delay{4_ns};
+    record_timer_dispatch(tb, trace, 1);
+}
+
+Task<void> r2_equal_timer_from_clock(ConformanceTb tb,
+                                     TimerDispatchTrace& trace) {
+    co_await RisingEdge{tb.dut.clock.a};
+    tb.expect_time("R2 equal timer arm time", tb.now(), 2_ns);
+    co_await Delay{2_ns};
+    record_timer_dispatch(tb, trace, 2);
+    tb.dut.drive_value.set(0x62);
+}
+
+Task<void> timer_r2_contract(ConformanceTb tb) {
+    TimerDispatchTrace trace;
+    const auto original = tb.spawn(r2_original_timer(tb, trace));
+    const auto equal = tb.spawn(r2_equal_timer_from_clock(tb, trace));
+
+    co_await equal;
+    tb.expect_time("R2 equal-target completion time", tb.now(), 4_ns);
+    tb.expect_eq("R2 exact callback count", trace.count, 2);
+    tb.expect_eq("R2 same-deadline FIFO original", trace.values[0], 1);
+    tb.expect_eq("R2 same-deadline FIFO mid-sleep arm", trace.values[1], 2);
+    tb.expect_time("R2 original timer exact time", SimTime{trace.times[0]}, 4_ns);
+    tb.expect_time("R2 equal timer exact time", SimTime{trace.times[1]}, 4_ns);
+    tb.expect_true("R2 original timer process completes", original.done());
+
+    co_await Delay{1_ps};
+    tb.expect_time("R2 post-settle time", tb.now(), 4_ns + 1_ps);
+    tb.expect_eq("R2 callbacks remain exact once", trace.count, 2);
+    tb.expect_eq("R2 equal timer output settles", tb.dut.comb_sum.get(), 0x62);
+}
+
+Task<void> chained_original_timer(ConformanceTb tb,
+                                  TimerDispatchTrace& trace) {
+    co_await Delay{11_ns};
+    record_timer_dispatch(tb, trace, 3);
+    tb.dut.drive_value.set(0x73);
+    co_await Delay{1_ps};
+    tb.expect_eq("chained earlier timer output settles", tb.dut.comb_sum.get(),
+                 0x73);
+}
+
+Task<void> chained_from_clock_a(ConformanceTb tb, TimerDispatchTrace& trace) {
+    co_await RisingEdge{tb.dut.clock.a};
+    co_await Delay{6_ns};
+    record_timer_dispatch(tb, trace, 2);
+}
+
+Task<void> chained_from_clock_b(ConformanceTb tb, TimerDispatchTrace& trace) {
+    co_await RisingEdge{tb.dut.clock.b};
+    co_await Delay{1_ns};
+    record_timer_dispatch(tb, trace, 1);
+}
+
+Task<void> chained_earlier_deadlines_contract(ConformanceTb tb) {
+    TimerDispatchTrace trace;
+    const auto original = tb.spawn(chained_original_timer(tb, trace));
+    const auto clock_a = tb.spawn(chained_from_clock_a(tb, trace));
+    const auto clock_b = tb.spawn(chained_from_clock_b(tb, trace));
+
+    co_await original;
+    tb.expect_time("chained earlier completion time", tb.now(), 11_ns + 1_ps);
+    tb.expect_eq("chained earlier exact callback count", trace.count, 3);
+    tb.expect_eq("chained earlier first callback order", trace.values[0], 1);
+    tb.expect_eq("chained earlier second callback order", trace.values[1], 2);
+    tb.expect_eq("chained earlier original callback order", trace.values[2], 3);
+    tb.expect_time("chained earliest exact time", SimTime{trace.times[0]}, 7_ns);
+    tb.expect_time("chained second exact time", SimTime{trace.times[1]}, 8_ns);
+    tb.expect_time("chained original exact time", SimTime{trace.times[2]}, 11_ns);
+    tb.expect_true("chained non-owner clock processes complete",
+                   clock_a.done() && clock_b.done());
+
+    co_await Delay{1_ps};
+    tb.expect_time("chained stale wake observation time", tb.now(),
+                   11_ns + 2_ps);
+    tb.expect_eq("chained callbacks remain exact once", trace.count, 3);
+}
+
+Task<void> idle_rearm_worker(ConformanceTb tb, TimerDispatchTrace& trace) {
+    co_await RisingEdge{tb.dut.clock.a};
+    tb.expect_time("idle rearm clock time", tb.now(), 2_ns);
+    co_await Delay{1_ns};
+    record_timer_dispatch(tb, trace, 1);
+    tb.dut.drive_value.set(0x84);
+    co_await Delay{1_ps};
+    tb.expect_eq("idle rearm output settles", tb.dut.comb_sum.get(), 0x84);
+}
+
+Task<void> idle_timer_rearm_contract(ConformanceTb tb) {
+    TimerDispatchTrace trace;
+    const auto worker = tb.spawn(idle_rearm_worker(tb, trace));
+
+    co_await worker;
+    tb.expect_time("idle rearm completion time", tb.now(), 3_ns + 1_ps);
+    tb.expect_eq("idle rearm exact callback count", trace.count, 1);
+    tb.expect_eq("idle rearm callback marker", trace.values[0], 1);
+    tb.expect_time("idle rearm exact timer time", SimTime{trace.times[0]}, 3_ns);
+
+    co_await Delay{1_ps};
+    tb.expect_time("idle rearm stale wake observation time", tb.now(),
+                   3_ns + 2_ps);
+    tb.expect_eq("idle rearm callback remains exact once", trace.count, 1);
+}
+
 Task<void> timer_rearm_marker(ConformanceTb tb, TimerRearmOrder& order,
                               SimTime delay, uint32_t marker) {
     co_await Delay{delay};
@@ -1427,6 +1586,27 @@ Task<void> unobserved_edge_violation(ConformanceTb tb) {
 }  // namespace
 
 void register_user_testbench(ConformanceTb& tb) {
+    if (const char* positive_case =
+            std::getenv("CPPTB_CONFORMANCE_POSITIVE_CASE")) {
+        const std::string_view selected{positive_case};
+        if (selected == "timer_r1") {
+            tb.sequence(timer_r1_contract);
+            return;
+        }
+        if (selected == "timer_r2") {
+            tb.sequence(timer_r2_contract);
+            return;
+        }
+        if (selected == "timer_chained_earlier") {
+            tb.sequence(chained_earlier_deadlines_contract);
+            return;
+        }
+        if (selected == "timer_idle_rearm") {
+            tb.sequence(idle_timer_rearm_contract);
+            return;
+        }
+    }
+
     if (const char* negative_case =
             std::getenv("CPPTB_CONFORMANCE_NEGATIVE_CASE")) {
         const std::string_view selected{negative_case};

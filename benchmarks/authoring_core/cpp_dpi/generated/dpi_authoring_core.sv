@@ -145,6 +145,9 @@ module dpi_authoring_core;
   int unsigned iterations;
   longint unsigned sim_cycles;
   longint unsigned timer_generation;
+  longint unsigned timer_deadline;
+  longint unsigned timer_owner_target;
+  event timer_kick;
   int status;
   bit track_falling_edges;
   int initial_requests;
@@ -258,16 +261,39 @@ module dpi_authoring_core;
     end
   endtask
 
-  task automatic reschedule_timer();
+  task automatic update_timer_schedule();
     longint unsigned deadline;
     longint unsigned generation;
     deadline = authoring_core_dpi_next_timer_deadline();
+    timer_deadline = deadline;
     timer_generation++;
     generation = timer_generation;
     if (deadline != NO_TIMER) begin
-      fork
-        timer_wakeup(deadline, generation);
-      join_none
+      if (timer_owner_target == NO_TIMER) begin
+        -> timer_kick;
+      end else if (deadline < timer_owner_target) begin
+        fork
+          timer_wakeup(deadline, generation);
+        join_none
+      end
+    end
+  endtask
+
+  task automatic timer_owner();
+    int requests;
+    longint unsigned target;
+    while (status == 0) begin
+      if (timer_deadline == NO_TIMER) begin
+        @(timer_kick);
+      end else if (timer_deadline > $time) begin
+        target = timer_deadline;
+        timer_owner_target = target;
+        #(target - $time);
+        timer_owner_target = NO_TIMER;
+      end else begin
+        run_step(PHASE_DELAY, NO_SIGNAL, EDGE_RISING, requests);
+        service_requests(requests);
+      end
     end
   endtask
 
@@ -280,7 +306,7 @@ module dpi_authoring_core;
       edge_interest[SIGNAL_RSPVALID] = authoring_core_dpi_edge_interest(SIGNAL_RSPVALID);
     end
     if ((requests & STEP_TIMER_CHANGED) != 0) begin
-      reschedule_timer();
+      update_timer_schedule();
     end
   endtask
 
@@ -347,6 +373,8 @@ module dpi_authoring_core;
     mem_we_i = '0;
     sim_cycles = 0;
     timer_generation = 0;
+    timer_deadline = NO_TIMER;
+    timer_owner_target = NO_TIMER;
     iterations = 10000;
     status = 0;
     track_falling_edges = 1'b0;
@@ -365,12 +393,11 @@ module dpi_authoring_core;
     authoring_core_dpi_init(iterations, TIMEPRECISION_FS);
     run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);
     service_requests(initial_requests);
-    if (status == 0) begin
-      fork
-        drive_clock_0();
-        observe_signal_0();
-      join_none
-    end
+    fork
+      timer_owner();
+      drive_clock_0();
+      observe_signal_0();
+    join_none
 
     wait (status != 0);
     timer_generation++;

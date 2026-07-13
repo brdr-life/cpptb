@@ -21,6 +21,7 @@ class Category(str, Enum):
 class AdapterKind(str, Enum):
     AUTHORING_CORE = "authoring_core"
     DPI_MULTICLOCK = "dpi_multiclock"
+    DPI_TIMER_ONLY = "dpi_timer_only"
     PERIPHERAL_SUITE = "peripheral_suite"
 
 
@@ -174,6 +175,35 @@ BENCHMARKS: tuple[Benchmark, ...] = (
             iterations_environment="CPPTB_MULTICLOCK_ITERS",
         ),
         default_iterations=16,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_timer_only",
+        label="DPI timer only",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_TIMER_ONLY,
+        build_targets=(
+            "cpp-dpi-timer-only-build",
+            "cpp-dpi-timer-only-sv-build",
+        ),
+        binaries=(
+            Binary(
+                "cpp_dpi",
+                "build/cpptb/dpi_timer_only_obj/Vdpi_timer_only_probe",
+            ),
+            Binary(
+                "pure_sv",
+                "build/cpptb/dpi_timer_only_sv_obj/Vtimer_only_probe_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-timer-only-run"),
+                ("make", "cpp-dpi-timer-only-sv-run"),
+            ),
+            iterations_environment="CPPTB_TIMER_ONLY_ITERS",
+        ),
+        default_iterations=9,
         gate_policy=GatePolicy.EQUIVALENCE_ONLY,
     ),
     Benchmark(

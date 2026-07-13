@@ -227,6 +227,44 @@ class CodegenTests(unittest.TestCase):
         self.assertNotIn("sample_delay", wrapper)
         self.assertIn("cpptb_dpi_next_timer_deadline", wrapper)
         self.assertIn("cpptb_dpi_edge_interest", wrapper)
+        self.assertIn("longint unsigned timer_deadline;", wrapper)
+        self.assertIn("longint unsigned timer_owner_target;", wrapper)
+        self.assertIn("event timer_kick;", wrapper)
+        self.assertIn("task automatic timer_owner();", wrapper)
+        self.assertIn("task automatic update_timer_schedule();", wrapper)
+        self.assertIn("if (timer_owner_target == NO_TIMER) begin", wrapper)
+        self.assertIn("end else if (deadline < timer_owner_target) begin", wrapper)
+        self.assertIn("timer_wakeup(deadline, generation);", wrapper)
+        self.assertNotIn("reschedule_timer", wrapper)
+        self.assertNotIn("#0", wrapper)
+        self.assertNotIn("<=", wrapper)
+        self.assertNotIn("disable fork", wrapper)
+        launcher = wrapper.index("    fork\n      timer_owner();")
+        self.assertLess(launcher, wrapper.index("      drive_clock_0();", launcher))
+        self.assertLess(launcher, wrapper.index("      drive_clock_1();", launcher))
+
+    def test_generates_persistent_timer_owner_for_clockless_wrapper(self):
+        config = manifest()
+        del config["clock"]
+        config["clocks"] = []
+        ports = map_ports(
+            [
+                Port("data_i", "input", 8),
+                Port("data_o", "output", 8),
+            ],
+            config,
+        )
+
+        wrapper = render_sv(ports, [], config, "clockless.json")
+
+        self.assertIn("task automatic timer_owner();", wrapper)
+        self.assertIn("    fork\n      timer_owner();\n    join_none", wrapper)
+        self.assertNotIn("task automatic drive_clock_", wrapper)
+        self.assertNotIn("task automatic observe_clock_", wrapper)
+        self.assertNotIn("reschedule_timer", wrapper)
+        self.assertNotIn("#0", wrapper)
+        self.assertNotIn("<=", wrapper)
+        self.assertNotIn("disable fork", wrapper)
 
     def test_generates_opt_in_dut_output_edge_observer(self):
         config = manifest()
@@ -251,6 +289,9 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("edge_interest[SIGNAL_BUSREADY]", wrapper)
         self.assertIn("STEP_EDGE_INTEREST_CHANGED", wrapper)
         self.assertIn("observe_signal_0();", wrapper)
+        launcher = wrapper.index("    fork\n      timer_owner();")
+        self.assertLess(launcher, wrapper.index("      drive_clock_0();", launcher))
+        self.assertLess(launcher, wrapper.index("      observe_signal_0();", launcher))
 
     def test_rejects_invalid_edge_observer_ports(self):
         ports = [

@@ -137,6 +137,36 @@
     "expected_checks": 273,
     "expected_sim_cycles": 8,
     "expected_failures": 0,
+    "positive_cases": [
+      {
+        "case": "timer_r1",
+        "expected_iterations": 1,
+        "expected_checks": 12,
+        "expected_sim_cycles": 2,
+        "expected_failures": 0
+      },
+      {
+        "case": "timer_r2",
+        "expected_iterations": 1,
+        "expected_checks": 11,
+        "expected_sim_cycles": 1,
+        "expected_failures": 0
+      },
+      {
+        "case": "timer_chained_earlier",
+        "expected_iterations": 1,
+        "expected_checks": 12,
+        "expected_sim_cycles": 3,
+        "expected_failures": 0
+      },
+      {
+        "case": "timer_idle_rearm",
+        "expected_iterations": 1,
+        "expected_checks": 8,
+        "expected_sim_cycles": 1,
+        "expected_failures": 0
+      }
+    ],
     "negative_cases": [
       {
         "iterations": 2,
