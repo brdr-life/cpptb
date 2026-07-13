@@ -65,6 +65,24 @@ void static_on_demand_set(uint32_t offset, const uint32_t* words,
     }
 }
 
+uint32_t static_dynamic_get(void* opaque, uint32_t id) {
+    auto* context = static_cast<cpptb::dpi::StaticBindingContext*>(opaque);
+    if (id == 6) return static_on_demand_words.at(0);
+    return context->outputs[id];
+}
+
+void static_dynamic_set(void* opaque, uint32_t id, uint32_t value) {
+    auto* context = static_cast<cpptb::dpi::StaticBindingContext*>(opaque);
+    if (id == 6) {
+        const uint32_t previous = static_on_demand_words.at(0);
+        if (previous == value) return;
+        static_on_demand_words.at(0) = value;
+        context->deliver_local_edge(id, previous, value);
+        return;
+    }
+    context->set_packed_scalar(id, value);
+}
+
 template <bool Writable, bool Driven,
           cpptb::dpi::OnDemandSetWordsFn SetWords>
 concept ValidStaticOnDemandSpec = requires {
@@ -229,6 +247,11 @@ Task<void> wait_for_edges(Signal signal, Results& results) {
     ++results.rising;
     co_await FallingEdge{signal};
     ++results.falling;
+}
+
+Task<void> wait_for_one_rising(Signal signal, uint32_t& wakes) {
+    co_await RisingEdge{signal};
+    ++wakes;
 }
 
 Task<void> wait_for_change(Signal signal, Results& results) {
@@ -1028,12 +1051,13 @@ int main() {
 
     bool passed = true;
     {
+        Testbench tb;
         std::array<uint32_t, 8> inputs{};
         std::array<uint32_t, 8> outputs{};
         std::array<bool, 8> configured_clock{};
         std::array<bool, 8> local_edge_capable{};
         bool outputs_dirty = false;
-        bool local_edge_delivery_enabled = false;
+        bool local_edge_delivery_enabled = true;
         cpptb::dpi::StaticBindingContext context{
             .inputs = inputs.data(),
             .outputs = outputs.data(),
@@ -1042,34 +1066,100 @@ int main() {
             .local_edge_capable = local_edge_capable.data(),
             .outputs_dirty = &outputs_dirty,
             .local_edge_delivery_enabled = &local_edge_delivery_enabled,
+            .scheduler = &tb,
+            .dynamic_context = nullptr,
+            .dynamic_get = static_dynamic_get,
+            .dynamic_set = static_dynamic_set,
         };
+        context.dynamic_context = &context;
+        local_edge_capable.at(3) = true;
+        local_edge_capable.at(6) = true;
 
         const StaticPackedScalar packed{&context, "packed_1bit"};
+        uint32_t packed_direct_wakes = 0;
+        const auto packed_direct_waiter = tb.spawn(wait_for_one_rising(
+            static_cast<Signal>(packed), packed_direct_wakes));
         packed.set(2);
         passed &= expect("static packed masks zero-equivalent narrow write",
                          outputs.at(3), 0);
         passed &= expect("static packed masked no-op remains clean",
                          outputs_dirty ? 1 : 0, 0);
+        passed &= expect("static packed masked no-op has no rising edge",
+                         packed_direct_wakes, 0);
         packed.set(3);
         passed &= expect("static packed masks narrow write", outputs.at(3), 1);
         passed &= expect("static packed normalized change is dirty",
                          outputs_dirty ? 1 : 0, 1);
+        passed &= expect("static packed normalized change has one rising edge",
+                         packed_direct_wakes, 1);
+        passed &= expect("static packed rising waiter completes",
+                         packed_direct_waiter.done() ? 1 : 0, 1);
+
+        packed.set(0);
+        outputs_dirty = false;
+        uint32_t packed_dynamic_wakes = 0;
+        const Signal packed_dynamic = packed;
+        const auto packed_dynamic_waiter =
+            tb.spawn(wait_for_one_rising(packed_dynamic, packed_dynamic_wakes));
+        packed_dynamic.set(2);
+        passed &= expect("dynamic packed narrow no-op remains zero",
+                         outputs.at(3), 0);
+        passed &= expect("dynamic packed narrow no-op remains clean",
+                         outputs_dirty ? 1 : 0, 0);
+        passed &= expect("dynamic packed narrow no-op has no rising edge",
+                         packed_dynamic_wakes, 0);
+        packed_dynamic.set(3);
+        passed &= expect("dynamic packed narrow write is normalized",
+                         outputs.at(3), 1);
+        passed &= expect("dynamic packed normalized change has one rising edge",
+                         packed_dynamic_wakes, 1);
+        passed &= expect("dynamic packed rising waiter completes",
+                         packed_dynamic_waiter.done() ? 1 : 0, 1);
 
         static_on_demand_words.fill(0);
         outputs_dirty = false;
         const StaticOnDemandScalar on_demand{
             &context, "on_demand_1bit", static_on_demand_get,
             static_on_demand_set};
+        uint32_t on_demand_direct_wakes = 0;
+        const auto on_demand_direct_waiter = tb.spawn(wait_for_one_rising(
+            static_cast<Signal>(on_demand), on_demand_direct_wakes));
         on_demand.set(2);
         passed &= expect("static on-demand masks zero-equivalent narrow write",
                          static_on_demand_words.at(0), 0);
         passed &= expect("static on-demand direct write does not dirty outputs",
                          outputs_dirty ? 1 : 0, 0);
+        passed &= expect("static on-demand masked no-op has no rising edge",
+                         on_demand_direct_wakes, 0);
         on_demand.set(3);
         passed &= expect("static on-demand masks narrow write",
                          static_on_demand_words.at(0), 1);
         passed &= expect("static on-demand remains outside packed dirty state",
                          outputs_dirty ? 1 : 0, 0);
+        passed &= expect(
+            "static on-demand normalized change has one rising edge",
+            on_demand_direct_wakes, 1);
+        passed &= expect("static on-demand rising waiter completes",
+                         on_demand_direct_waiter.done() ? 1 : 0, 1);
+
+        on_demand.set(0);
+        uint32_t on_demand_dynamic_wakes = 0;
+        const Signal on_demand_dynamic = on_demand;
+        const auto on_demand_dynamic_waiter = tb.spawn(
+            wait_for_one_rising(on_demand_dynamic, on_demand_dynamic_wakes));
+        on_demand_dynamic.set(2);
+        passed &= expect("dynamic on-demand narrow no-op remains zero",
+                         static_on_demand_words.at(0), 0);
+        passed &= expect("dynamic on-demand narrow no-op has no rising edge",
+                         on_demand_dynamic_wakes, 0);
+        on_demand_dynamic.set(3);
+        passed &= expect("dynamic on-demand narrow write is normalized",
+                         static_on_demand_words.at(0), 1);
+        passed &= expect(
+            "dynamic on-demand normalized change has one rising edge",
+            on_demand_dynamic_wakes, 1);
+        passed &= expect("dynamic on-demand rising waiter completes",
+                         on_demand_dynamic_waiter.done() ? 1 : 0, 1);
     }
     {
         narrow_probe_value = 0xffff'ffffu;
