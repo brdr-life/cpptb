@@ -303,7 +303,7 @@ fresh 32-pair exact guard. The existing `1.10x` hard stop remains unchanged.
 
 Fable's finalized E2 generated-SV architecture replaces steady-state
 per-deadline forks with one persistent timer owner. This change does not modify
-the C++ scheduler or DPI runtime and has not been performance benchmarked. The
+the C++ scheduler or DPI runtime. The
 owner sleeps only for a positive interval, parks on `timer_kick` when the
 published deadline is `NO_TIMER`, and re-reads the module variable after every
 wake. A byte-equivalent generation-checked `timer_wakeup` remains as the
@@ -324,4 +324,73 @@ later-rearm coincidence contract at 12 checks/two cycles, R2 equal-target
 mid-sleep contract at 11 checks/one cycle, chained earlier deadlines at 12
 checks/three cycles, and idle rearm at eight checks/one cycle. The main suite
 remains 273 checks/eight cycles, and the clockless C++ DPI/pure-SV twin matches
-exactly with zero cycles. No timing benchmark is credited to this change.
+exactly with zero cycles.
+
+Matched six-pair, 1,000,000-iteration C++ A/B runs measured candidate/baseline
+CPU ratios of about `0.964x` for `array_multidim`, `0.977x` for timeout,
+`0.964x` for task timeout, and `0.981x` for control. The exact
+`array_multidim` C++ DPI/pure-SV guard passed at `1.067x` in a valid
+environment.
+
+`Delay(duration)` and `ClockCycles(clock, count)` remain separate scheduling
+concepts. Delay is an absolute simulator-time wait owned by the clock-agnostic
+timer service. ClockCycles is an edge wait against the caller-selected signal
+and therefore works with any configured clock in a multi-clock design without
+making that clock the scheduler's time base.
+
+## Isolated scheduler experiments (2026-07-12)
+
+Six architecture experiments were implemented and tested in independent git
+worktrees before integration:
+
+1. Static edge sources retain real rising/falling wait queues, stale
+   registration cleanup, cancellation, and `First` behavior while omitting
+   interest accounting and publication for configured clocks. The standalone
+   exact guard passed at `1.092x`.
+2. The clock-agnostic timer owner described above removes steady-state
+   per-deadline process allocation and passed standalone at `1.067x`.
+3. Opt-in on-demand transport removes selected wide or unpacked ports from the
+   packed per-step arrays and accesses them through generated standard DPI
+   exports. Six-pair C++ A/B ratios were about `0.913x` for `array_wide`
+   and `0.978x` for the 137-bit echo. The multidimensional benchmark remains
+   on packed transport because moving it on demand was neutral in C++ A/B and
+   failed the exact guard.
+4. A single scheduler-boundary experiment was rejected. It drained timer and
+   edge notifications together, changing the existing equal-time contract:
+   a coroutine resumed by a timer could no longer arm an edge wait in time to
+   observe an edge from the same DPI step.
+5. Static generated signal bindings were promising in isolation, measuring
+   about `0.991x` on `array_multidim` and `0.948x` on `signal_edge`.
+   They require a transport-aware integration so on-demand signals cannot be
+   mistaken for packed-array offsets.
+6. A direct single-edge park path measured about `0.992x` in C++ A/B. Its
+   standalone exact guard crossed the limit at `1.105x`, so it is retained
+   only when the combined stack independently passes the guard.
+
+The first integrated stack of static edge sources, the single-edge fast path,
+and the generic timer owner measured `0.940x` versus the checkpoint C++
+binary and `1.039x` versus the exact pure-SV twin. Adding tuned on-demand
+transport measured `0.936x` versus the checkpoint and `1.046x` versus pure
+SV. Checks, scheduler cycles, checksums, and selected workload counters matched
+in every admitted run, and both exact measurements used valid environments.
+The `1.10x` hard stop remains unchanged.
+
+Transport-aware static generated bindings were then added to the integrated
+stack. Packed bindings encode validated directional offsets and access the
+runtime arrays without dynamic signal dispatch. On-demand bindings encode
+their generated callbacks instead of a synthetic packed offset; callback-scope
+checks, dynamic scalar conversion, local-edge delivery, and input-view lifetime
+remain unchanged.
+
+Six alternating 1,000,000-iteration C++ A/B pairs against the checkpoint
+measured:
+
+- `array_multidim`: `0.9052x` paired, `0.9041x` independent;
+- `array_wide`: `0.8712x` paired, `0.8721x` independent;
+- `signal_edge`: `0.9500x` paired, `0.9497x` independent;
+- `wide_echo_137`: `0.9313x` paired, `0.9296x` independent.
+
+Transactions, checks, scheduler cycles, checksums, and failures matched for
+every workload. The final exact `array_multidim` C++ DPI/pure-SV guard passed
+at `1.012x` in a valid environment, leaving substantially more margin than
+the required `1.10x` limit.
