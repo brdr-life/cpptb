@@ -28,16 +28,26 @@ inline constexpr std::array<uint32_t, 2> kDrivenSignalWordIds = {
     kSignalSlowValue,
 };
 
+inline constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 4> kStaticPackedBindingSpans = {{
+    {kSignalFastEcho, 1, 0, false},
+    {kSignalSlowEcho, 1, 1, false},
+    {kSignalFastValue, 1, 0, true},
+    {kSignalSlowValue, 1, 1, true},
+}};
+static_assert(cpptb::dpi::validate_static_packed_binding_spans(
+    kStaticPackedBindingSpans, kObservedSignalWordIds,
+    kDrivenSignalWordIds));
+
 template <typename MakeSignal>
 TimerOnlyProbeDut bind_dut(MakeSignal&& make_signal) {
     return {
         {
-            make_signal(kSignalFastValue, "fast_value"),
-            make_signal(kSignalFastEcho, "fast_echo")
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalFastValue, 0>{}, "fast_value"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalFastEcho, 0>{}, "fast_echo")
         },
         {
-            make_signal(kSignalSlowValue, "slow_value"),
-            make_signal(kSignalSlowEcho, "slow_echo")
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalSlowValue, 1>{}, "slow_value"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalSlowEcho, 1>{}, "slow_echo")
         }
     };
 }

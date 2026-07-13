@@ -615,6 +615,36 @@ def driven_port_names(ports: list[Port], manifest: dict[str, Any]) -> set[str]:
     }
 
 
+def static_binding_enabled(manifest: dict[str, Any]) -> bool:
+    codegen = manifest.get("codegen", {})
+    if not isinstance(codegen, dict):
+        raise CodegenError("manifest codegen must be an object")
+    enabled = codegen.get("static_binding", False)
+    if not isinstance(enabled, bool):
+        raise CodegenError("manifest codegen.static_binding must be a boolean")
+    return enabled
+
+
+def static_packed_transport_offsets(
+    ports: list[Port], manifest: dict[str, Any]
+) -> dict[str, int]:
+    driven_names = driven_port_names(ports, manifest)
+    packed_observed = [
+        port
+        for port in ports
+        if port.transport == "packed" and port.name not in driven_names
+    ]
+    packed_driven = [
+        port
+        for port in ports
+        if port.transport == "packed" and port.name in driven_names
+    ]
+    return {
+        **directional_transport_offsets(packed_observed),
+        **directional_transport_offsets(packed_driven),
+    }
+
+
 def edge_observer_ports(
     ports: list[Port], manifest: dict[str, Any]
 ) -> list[Port]:
@@ -670,6 +700,29 @@ def cpp_signal_type(port: Port, driven_names: set[str]) -> str:
     if port.width <= 32:
         return "coro::Signal"
     return f"coro::{direction}Signal<{port.width}>"
+
+
+def cpp_static_signal_type(
+    port: Port,
+    driven_names: set[str],
+    packed_transport_offsets: dict[str, int],
+) -> str:
+    writable = "true" if port.name in driven_names else "false"
+    driven = writable
+    transport = "Packed" if port.transport == "packed" else "OnDemand"
+    template_values = f"{port.width}, {writable}, {driven}, {signal_id(port.name)}"
+    if port.transport == "packed":
+        template_values += f", {packed_transport_offsets[port.name]}"
+    if port.unpacked:
+        dimensions = ", ".join(
+            f"coro::ArrayDimension<{dimension.left}, {dimension.right}>"
+            for dimension in port.unpacked
+        )
+        return (
+            f"cpptb::dpi::Static{transport}FixedArray<{template_values}"
+            f", 0, {dimensions}>"
+        )
+    return f"cpptb::dpi::Static{transport}Signal<{template_values}>"
 
 
 def cpp_internal_type(internal: Internal) -> str:
@@ -1055,6 +1108,7 @@ def render_cpp_dut(
     source: str,
 ) -> str:
     packed_types = collect_packed_cpp_types(ports)
+    static_binding = static_binding_enabled(manifest)
     lines = [
         generated_banner(source).rstrip(),
         "#pragma once",
@@ -1062,7 +1116,11 @@ def render_cpp_dut(
         "#include <cstddef>",
         "#include <cstdint>",
         "",
-        '#include "cpptb/coro_runtime.hpp"',
+        (
+            '#include "cpptb/dpi_static_binding.hpp"'
+            if static_binding
+            else '#include "cpptb/coro_runtime.hpp"'
+        ),
     ]
     if internals:
         lines.append('#include "cpptb/probe.hpp"')
@@ -1076,6 +1134,7 @@ def render_cpp_dut(
     )
     offsets = signal_word_offsets(ports)
     driven_names = driven_port_names(ports, manifest)
+    packed_transport_offsets = static_packed_transport_offsets(ports, manifest)
     if all(port_word_count(port) == 1 for port in ports):
         lines.extend(f"    {signal_id(port.name)}," for port in ports)
         lines.extend(["    kSignalCount,", "};", ""])
@@ -1090,9 +1149,17 @@ def render_cpp_dut(
 
     for node in collect_structs(root, manifest):
         lines.append(f"struct {node_type(node, manifest)} {{")
+        if static_binding and not node.path:
+            lines.append("    static constexpr bool cpptb_static_binding = true;")
         for name, child in node.children.items():
             field_type = (
-                cpp_signal_type(child, driven_names)
+                (
+                    cpp_static_signal_type(
+                        child, driven_names, packed_transport_offsets
+                    )
+                    if static_binding
+                    else cpp_signal_type(child, driven_names)
+                )
                 if isinstance(child, Port)
                 else (
                     cpp_internal_type(child)
@@ -1113,6 +1180,7 @@ def render_binding_expr(
     driven_names: set[str],
     internal_indices: dict[Internal, int],
     on_demand_indices: dict[Port, int],
+    static_packed_offsets: dict[str, int] | None = None,
     indent: int = 4,
 ) -> list[str]:
     prefix = " " * indent
@@ -1122,7 +1190,49 @@ def render_binding_expr(
         comma = "," if index + 1 < len(values) else ""
         if isinstance(child, Port):
             writable = "true" if child.name in driven_names else "false"
-            if child.unpacked:
+            driven = writable
+            if static_packed_offsets is not None:
+                dimensions = ", ".join(
+                    f"coro::ArrayDimension<{dimension.left}, "
+                    f"{dimension.right}>"
+                    for dimension in child.unpacked
+                )
+                if child.transport == "packed":
+                    spec_name = (
+                        "StaticPackedArraySpec"
+                        if child.unpacked
+                        else "StaticPackedSignalSpec"
+                    )
+                    template_values = (
+                        f"{child.width}, {writable}, {driven}, "
+                        f"{signal_id(child.name)}, "
+                        f"{static_packed_offsets[child.name]}"
+                    )
+                else:
+                    spec_name = (
+                        "StaticOnDemandArraySpec"
+                        if child.unpacked
+                        else "StaticOnDemandSignalSpec"
+                    )
+                    on_demand_index = on_demand_indices[child]
+                    setter = (
+                        f"on_demand_port_{on_demand_index}_set_words"
+                        if writable == "true"
+                        else "nullptr"
+                    )
+                    template_values = (
+                        f"{child.width}, {writable}, {driven}, "
+                        f"{signal_id(child.name)}, "
+                        f"on_demand_port_{on_demand_index}_get_words, {setter}"
+                    )
+                if dimensions:
+                    template_values += f", {dimensions}"
+                expression = (
+                    f"make_signal(cpptb::dpi::{spec_name}<{template_values}>{{}}, "
+                    f'"{child.name}")'
+                )
+                lines.append(" " * (indent + 4) + expression + comma)
+            elif child.unpacked:
                 declared_range = child.unpacked[0]
                 if len(child.unpacked) == 1:
                     transport_spec = (
@@ -1202,6 +1312,7 @@ def render_binding_expr(
                 driven_names,
                 internal_indices,
                 on_demand_indices,
+                static_packed_offsets,
                 indent + 4,
             )
             child_lines[-1] += comma
@@ -1537,14 +1648,16 @@ def render_cpp_binding(
     compact_input_transport = bool(
         manifest.get("run", {}).get("compact_input_transport", True)
     )
+    static_binding = static_binding_enabled(manifest)
     selected_on_demand = on_demand_ports(ports)
     effective_compact_input_transport = (
-        compact_input_transport or bool(selected_on_demand)
+        compact_input_transport or bool(selected_on_demand) or static_binding
     )
     driven = [port for port in ports if port.name in driven_names]
     observed = [port for port in ports if port.name not in driven_names]
     packed_driven = packed_ports(driven)
     packed_observed = packed_ports(observed)
+    packed_transport_offsets = static_packed_transport_offsets(ports, manifest)
     offsets = signal_word_offsets(ports)
     include = manifest["outputs"]["cpp_include"]
     lines = [
@@ -1615,6 +1728,29 @@ def render_cpp_binding(
     ])
     lines.extend(f"    {word_id}," for word_id in signal_word_ids(packed_driven))
     lines.extend(["};", ""])
+    if static_binding:
+        static_packed_ports = [*packed_observed, *packed_driven]
+        lines.extend(
+            [
+                f"inline constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, "
+                f"{len(static_packed_ports)}> kStaticPackedBindingSpans = {{{{",
+            ]
+        )
+        for port in static_packed_ports:
+            driven_value = "true" if port.name in driven_names else "false"
+            lines.append(
+                f"    {{{signal_id(port.name)}, {port_word_count(port)}, "
+                f"{packed_transport_offsets[port.name]}, {driven_value}}},"
+            )
+        lines.extend(
+            [
+                "}};",
+                "static_assert(cpptb::dpi::validate_static_packed_binding_spans(",
+                "    kStaticPackedBindingSpans, kObservedSignalWordIds,",
+                "    kDrivenSignalWordIds));",
+                "",
+            ]
+        )
     lines.extend(cpp_on_demand_helpers(ports, manifest))
     if internals:
         lines.extend(cpp_internal_helpers(internals, manifest))
@@ -1631,6 +1767,7 @@ def render_cpp_binding(
             for index, port in enumerate(ports)
             if port.transport == "on_demand"
         },
+        packed_transport_offsets if static_binding else None,
         4,
     )
     expression[0] = "    return " + expression[0].lstrip()
@@ -2035,7 +2172,9 @@ def render_sv(
     packed_observed_ports = packed_ports(observed_ports)
     packed_driven_ports = packed_ports(driven_ports)
     effective_compact_input_transport = (
-        compact_input_transport or bool(selected_on_demand)
+        compact_input_transport
+        or bool(selected_on_demand)
+        or static_binding_enabled(manifest)
     )
     all_offsets = signal_word_offsets(ports)
     global_offsets = {

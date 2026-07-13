@@ -191,7 +191,7 @@ $(CPPTB_BUILD_DIR)/vpi_counter_host: cpptb/verilator_vpi_host.cpp cpptb/runtime.
 cpp-vpi-run: $(CPPTB_BUILD_DIR)/vpi_counter_host
 	./$(CPPTB_BUILD_DIR)/vpi_counter_host
 
-$(CPPTB_CORO_RUNTIME_TEST): cpptb/coro_runtime.hpp cpptb/packed_bits.hpp cpptb/probe.hpp \
+$(CPPTB_CORO_RUNTIME_TEST): cpptb/coro_runtime.hpp cpptb/dpi_static_binding.hpp cpptb/packed_bits.hpp cpptb/probe.hpp \
 		cpptb/tests/coro_runtime_test.cpp
 	mkdir -p $(CPPTB_BUILD_DIR)
 	$(CXX) -std=c++20 -I. \
@@ -338,7 +338,7 @@ $(CPPTB_CONFORMANCE_BINARY): $(CPPTB_CODEGEN_SOURCES) \
 		$(CPPTB_CONFORMANCE_DIR)/framework.cpp \
 		$(CPPTB_CONFORMANCE_DIR)/dpi_transport.cpp \
 		$(CPPTB_CONFORMANCE_DIR)/testbench.cpp \
-		cpptb/coro_runtime.hpp cpptb/packed_bits.hpp cpptb/probe.hpp cpptb/dpi_runtime.hpp \
+		cpptb/coro_runtime.hpp cpptb/dpi_static_binding.hpp cpptb/packed_bits.hpp cpptb/probe.hpp cpptb/dpi_runtime.hpp \
 		cpptb/test_result.hpp
 	$(CODEGEN_PYTHON) $(CPPTB_CONFORMANCE_RUNNER) --build-only
 	touch $@
@@ -355,7 +355,7 @@ $(CPPTB_MULTICLOCK_OBJ_DIR)/Vdpi_dual_clock_mailbox: \
 		$(CPPTB_MULTICLOCK_DIR)/testbench.cpp \
 		$(CPPTB_MULTICLOCK_DIR)/dpi_transport.cpp \
 		$(CPPTB_MULTICLOCK_GENERATED) cpptb/coro_runtime.hpp cpptb/packed_bits.hpp \
-		cpptb/dpi_runtime.hpp cpptb/test_result.hpp
+		cpptb/dpi_runtime.hpp cpptb/dpi_static_binding.hpp cpptb/test_result.hpp
 	mkdir -p $(CPPTB_MULTICLOCK_OBJ_DIR)
 	verilator --binary --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL \
@@ -398,7 +398,7 @@ $(CPPTB_TIMER_ONLY_OBJ_DIR)/Vdpi_timer_only_probe: \
 		$(CPPTB_TIMER_ONLY_DIR)/testbench.cpp \
 		$(CPPTB_TIMER_ONLY_DIR)/dpi_transport.cpp \
 		$(CPPTB_TIMER_ONLY_GENERATED) cpptb/coro_runtime.hpp cpptb/packed_bits.hpp \
-		cpptb/dpi_runtime.hpp cpptb/test_result.hpp
+		cpptb/dpi_runtime.hpp cpptb/dpi_static_binding.hpp cpptb/test_result.hpp
 	mkdir -p $(CPPTB_TIMER_ONLY_OBJ_DIR)
 	verilator --binary --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL \
@@ -593,7 +593,7 @@ define AUTHORING_CORE_DPI_template
 $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		$(AUTHORING_CORE_DPI_GENERATED) cpptb/coro_runtime.hpp \
-		cpptb/packed_bits.hpp cpptb/fixed.hpp cpptb/dpi_runtime.hpp \
+		cpptb/packed_bits.hpp cpptb/fixed.hpp cpptb/dpi_runtime.hpp cpptb/dpi_static_binding.hpp \
 		cpptb/test_result.hpp Makefile
 	mkdir -p $$(dir $$@)
 	verilator --binary --timing --no-sched-zero-delay \

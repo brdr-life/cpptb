@@ -1,0 +1,438 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+
+#include "cpptb/coro_runtime.hpp"
+
+namespace cpptb::dpi {
+
+using OnDemandGetWordsFn = void (*)(uint32_t, uint32_t*, uint32_t);
+using OnDemandSetWordsFn = void (*)(uint32_t, const uint32_t*, uint32_t);
+
+struct NoStaticBindingContext {};
+
+struct StaticBindingContext {
+    uint32_t* inputs = nullptr;
+    uint32_t* outputs = nullptr;
+    const uint32_t* current_inputs = nullptr;
+    bool* configured_clock = nullptr;
+    bool* local_edge_capable = nullptr;
+    bool* outputs_dirty = nullptr;
+    bool* local_edge_delivery_enabled = nullptr;
+    coro::Testbench* scheduler = nullptr;
+    void* dynamic_context = nullptr;
+    coro::Signal::GetFn dynamic_get = nullptr;
+    coro::Signal::SetFn dynamic_set = nullptr;
+
+    void deliver_local_edge(uint32_t id, uint32_t previous,
+                            uint32_t value) const {
+        if (!*local_edge_delivery_enabled || !scheduler ||
+            !local_edge_capable[id] || configured_clock[id]) {
+            return;
+        }
+        coro::EdgeKind edge = coro::EdgeKind::Any;
+        if (previous == 0 && value != 0) {
+            edge = coro::EdgeKind::Rising;
+        } else if (previous != 0 && value == 0) {
+            edge = coro::EdgeKind::Falling;
+        }
+        if (scheduler->has_edge_interest(id, edge)) {
+            scheduler->notify_edge(id, edge);
+        }
+    }
+
+    void set_packed_scalar(uint32_t id, uint32_t value) const {
+        const uint32_t previous = outputs[id];
+        if (previous == value) return;
+        outputs[id] = value;
+        *outputs_dirty = true;
+        deliver_local_edge(id, previous, value);
+    }
+
+    coro::Signal dynamic_signal(uint32_t id, const char* name) const {
+        return {nullptr, id, name, dynamic_context, dynamic_get, dynamic_set};
+    }
+};
+
+struct StaticPackedBindingSpan {
+    uint32_t id = 0;
+    uint32_t word_count = 0;
+    uint32_t transport_offset = 0;
+    bool driven = false;
+};
+
+template <size_t SpanCount, size_t ObservedCount, size_t DrivenCount>
+consteval bool validate_static_packed_binding_spans(
+    const std::array<StaticPackedBindingSpan, SpanCount>& spans,
+    const std::array<uint32_t, ObservedCount>& observed_word_ids,
+    const std::array<uint32_t, DrivenCount>& driven_word_ids) {
+    size_t observed_words = 0;
+    size_t driven_words = 0;
+    for (const auto span : spans) {
+        const size_t table_size = span.driven ? DrivenCount : ObservedCount;
+        if (span.transport_offset > table_size ||
+            span.word_count > table_size - span.transport_offset) {
+            return false;
+        }
+        for (uint32_t word = 0; word < span.word_count; ++word) {
+            const auto table_id =
+                span.driven
+                    ? driven_word_ids[span.transport_offset + word]
+                    : observed_word_ids[span.transport_offset + word];
+            if (table_id != span.id + word) return false;
+        }
+        if (span.driven) {
+            driven_words += span.word_count;
+        } else {
+            observed_words += span.word_count;
+        }
+    }
+    return observed_words == ObservedCount && driven_words == DrivenCount;
+}
+
+template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+          uint32_t TransportOffset>
+    requires(Writable == Driven)
+struct StaticPackedSignalSpec {
+    static_assert(Width > 0, "signal width must be positive");
+};
+
+template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+          OnDemandGetWordsFn GetWords, OnDemandSetWordsFn SetWords>
+    requires(Writable == Driven && GetWords != nullptr &&
+             Writable == (SetWords != nullptr))
+struct StaticOnDemandSignalSpec {
+    static_assert(Width > 0, "signal width must be positive");
+};
+
+template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+          uint32_t TransportOffset, typename... Dimensions>
+    requires(Writable == Driven)
+struct StaticPackedArraySpec {
+    static_assert(Width > 0, "array element width must be positive");
+    static_assert(sizeof...(Dimensions) > 0);
+};
+
+template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+          OnDemandGetWordsFn GetWords, OnDemandSetWordsFn SetWords,
+          typename... Dimensions>
+    requires(Writable == Driven && GetWords != nullptr &&
+             Writable == (SetWords != nullptr))
+struct StaticOnDemandArraySpec {
+    static_assert(Width > 0, "array element width must be positive");
+    static_assert(sizeof...(Dimensions) > 0);
+};
+
+namespace detail {
+
+template <typename... Dimensions>
+inline constexpr size_t static_array_element_count_v =
+    (Dimensions::size * ... * 1);
+
+template <size_t Width>
+auto words_to_value(const uint32_t* words) {
+    typename cpptb::Bits<Width>::word_array storage{};
+    for (size_t word = 0; word < storage.size(); ++word) {
+        storage[word] = words[word];
+    }
+    const auto bits = cpptb::Bits<Width>::from_words(storage);
+    if constexpr (Width <= 64) {
+        return bits.to_uint64();
+    } else {
+        return bits;
+    }
+}
+
+template <size_t Width>
+auto value_to_words(coro::PackedSignalValue<Width> value) {
+    cpptb::Bits<Width> bits;
+    if constexpr (Width <= 64) {
+        bits = cpptb::Bits<Width>::from_uint(value);
+    } else {
+        bits = value;
+    }
+    return bits.words();
+}
+
+}  // namespace detail
+
+template <size_t Width, bool Writable, bool Driven>
+    requires(Writable == Driven)
+class StaticPackedRef {
+   public:
+    using value_type = coro::PackedSignalValue<Width>;
+    static constexpr size_t word_count = (Width + 31) / 32;
+
+    StaticBindingContext* context = nullptr;
+    uint32_t id = 0;
+    uint32_t transport_offset = 0;
+    const char* name = "";
+
+    value_type get() const {
+        typename cpptb::Bits<Width>::word_array words{};
+        for (size_t word = 0; word < word_count; ++word) {
+            if constexpr (Driven) {
+                words[word] = context->outputs[id + word];
+            } else if (context->current_inputs) {
+                words[word] = context->current_inputs[transport_offset + word];
+            } else {
+                words[word] = context->inputs[id + word];
+            }
+        }
+        if constexpr (Width <= 32) {
+            return words[0];
+        } else {
+            return detail::words_to_value<Width>(words.data());
+        }
+    }
+
+    void set(value_type value) const requires(Writable) {
+        if constexpr (Width <= 32) {
+            context->set_packed_scalar(id, value);
+        } else {
+            const auto words = detail::value_to_words<Width>(value);
+            bool changed = false;
+            for (size_t word = 0; word < word_count; ++word) {
+                changed = changed || context->outputs[id + word] != words[word];
+                context->outputs[id + word] = words[word];
+            }
+            *context->outputs_dirty = *context->outputs_dirty || changed;
+        }
+    }
+
+    operator coro::Signal() const requires(Width <= 32) {
+        return context->dynamic_signal(id, name);
+    }
+};
+
+template <size_t Width, bool Writable, bool Driven>
+    requires(Writable == Driven)
+class StaticOnDemandRef {
+   public:
+    using value_type = coro::PackedSignalValue<Width>;
+    static constexpr size_t word_count = (Width + 31) / 32;
+
+    StaticBindingContext* context = nullptr;
+    uint32_t id = 0;
+    uint32_t word_offset = 0;
+    const char* name = "";
+    OnDemandGetWordsFn get_words_fn = nullptr;
+    OnDemandSetWordsFn set_words_fn = nullptr;
+
+    value_type get() const {
+        typename cpptb::Bits<Width>::word_array words{};
+        get_words_fn(word_offset, words.data(),
+                     static_cast<uint32_t>(word_count));
+        if constexpr (Width <= 32) {
+            return words[0];
+        } else {
+            return detail::words_to_value<Width>(words.data());
+        }
+    }
+
+    void set(value_type value) const requires(Writable) {
+        const auto words = detail::value_to_words<Width>(value);
+        if constexpr (Width <= 32) {
+            const uint32_t previous = get();
+            if (previous == words[0]) return;
+            set_words_fn(word_offset, words.data(), 1);
+            context->deliver_local_edge(id, previous, words[0]);
+        } else {
+            set_words_fn(word_offset, words.data(),
+                         static_cast<uint32_t>(word_count));
+        }
+    }
+
+    operator coro::Signal() const requires(Width <= 32) {
+        return context->dynamic_signal(id, name);
+    }
+};
+
+template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+          uint32_t TransportOffset>
+    requires(Writable == Driven)
+class StaticPackedSignal {
+   public:
+    using value_type = coro::PackedSignalValue<Width>;
+    static constexpr size_t width = Width;
+    static constexpr size_t word_count = (Width + 31) / 32;
+    static constexpr bool writable = Writable;
+    static constexpr bool driven = Driven;
+    static constexpr uint32_t global_id = Id;
+    static constexpr uint32_t transport_offset = TransportOffset;
+
+    StaticBindingContext* context = nullptr;
+    const char* name = "";
+
+    value_type get() const {
+        return StaticPackedRef<Width, Writable, Driven>{
+            context, Id, TransportOffset, name}.get();
+    }
+
+    void set(value_type value) const requires(Writable) {
+        StaticPackedRef<Width, Writable, Driven>{
+            context, Id, TransportOffset, name}.set(value);
+    }
+
+    operator coro::Signal() const requires(Width <= 32) {
+        return context->dynamic_signal(Id, name);
+    }
+};
+
+template <size_t Width, bool Writable, bool Driven, uint32_t Id>
+    requires(Writable == Driven)
+class StaticOnDemandSignal {
+   public:
+    using value_type = coro::PackedSignalValue<Width>;
+    static constexpr size_t width = Width;
+    static constexpr size_t word_count = (Width + 31) / 32;
+    static constexpr bool writable = Writable;
+    static constexpr bool driven = Driven;
+    static constexpr uint32_t global_id = Id;
+
+    StaticBindingContext* context = nullptr;
+    const char* name = "";
+    OnDemandGetWordsFn get_words_fn = nullptr;
+    OnDemandSetWordsFn set_words_fn = nullptr;
+
+    value_type get() const {
+        return StaticOnDemandRef<Width, Writable, Driven>{
+            context, Id, 0, name, get_words_fn, set_words_fn}.get();
+    }
+
+    void set(value_type value) const requires(Writable) {
+        StaticOnDemandRef<Width, Writable, Driven>{
+            context, Id, 0, name, get_words_fn, set_words_fn}.set(value);
+    }
+
+    operator coro::Signal() const requires(Width <= 32) {
+        return context->dynamic_signal(Id, name);
+    }
+};
+
+template <size_t ElementWidth, bool Writable, bool Driven, uint32_t BaseId,
+          uint32_t BaseTransportOffset, size_t DimensionIndex,
+          typename Dimension, typename... RemainingDimensions>
+    requires(Writable == Driven)
+class StaticPackedFixedArray {
+   public:
+    static constexpr size_t element_width = ElementWidth;
+    static constexpr size_t element_word_count = (ElementWidth + 31) / 32;
+    static constexpr size_t rank = 1 + sizeof...(RemainingDimensions);
+    static constexpr size_t element_count =
+        Dimension::size *
+        detail::static_array_element_count_v<RemainingDimensions...>;
+    static constexpr size_t word_count = element_count * element_word_count;
+    static constexpr bool writable = Writable;
+    static constexpr bool driven = Driven;
+    static constexpr uint32_t base_id = BaseId;
+    static constexpr uint32_t base_transport_offset = BaseTransportOffset;
+    static constexpr int32_t left() { return Dimension::left; }
+    static constexpr int32_t right() { return Dimension::right; }
+    static constexpr int32_t low() { return Dimension::low; }
+    static constexpr int32_t high() { return Dimension::high; }
+    static constexpr size_t size() { return Dimension::size; }
+
+    StaticBindingContext* context = nullptr;
+    const char* name = "";
+    uint32_t id_offset = 0;
+    uint32_t transport_offset_delta = 0;
+
+    [[nodiscard]] auto at(int32_t index) const {
+        check_bounds(index);
+        constexpr uint32_t stride_words = static_cast<uint32_t>(
+            element_word_count *
+            detail::static_array_element_count_v<RemainingDimensions...>);
+        const uint32_t offset =
+            static_cast<uint32_t>(index - low()) * stride_words;
+        if constexpr (sizeof...(RemainingDimensions) != 0) {
+            return StaticPackedFixedArray<
+                ElementWidth, Writable, Driven, BaseId, BaseTransportOffset,
+                DimensionIndex + 1, RemainingDimensions...>{
+                context, name, id_offset + offset,
+                transport_offset_delta + offset};
+        } else {
+            return StaticPackedRef<ElementWidth, Writable, Driven>{
+                context, BaseId + id_offset + offset,
+                BaseTransportOffset + transport_offset_delta + offset, name};
+        }
+    }
+
+   private:
+    void check_bounds(int32_t index) const {
+        if (index >= low() && index <= high()) return;
+        std::fprintf(stderr,
+                     "cpptb: unpacked array '%s' dimension %zu index %d "
+                     "is out of bounds [%d:%d]\n",
+                     name, DimensionIndex + 1, index, Dimension::left,
+                     Dimension::right);
+        std::abort();
+    }
+};
+
+template <size_t ElementWidth, bool Writable, bool Driven, uint32_t BaseId,
+          size_t DimensionIndex, typename Dimension,
+          typename... RemainingDimensions>
+    requires(Writable == Driven)
+class StaticOnDemandFixedArray {
+   public:
+    static constexpr size_t element_width = ElementWidth;
+    static constexpr size_t element_word_count = (ElementWidth + 31) / 32;
+    static constexpr size_t rank = 1 + sizeof...(RemainingDimensions);
+    static constexpr size_t element_count =
+        Dimension::size *
+        detail::static_array_element_count_v<RemainingDimensions...>;
+    static constexpr size_t word_count = element_count * element_word_count;
+    static constexpr bool writable = Writable;
+    static constexpr bool driven = Driven;
+    static constexpr uint32_t base_id = BaseId;
+    static constexpr int32_t left() { return Dimension::left; }
+    static constexpr int32_t right() { return Dimension::right; }
+    static constexpr int32_t low() { return Dimension::low; }
+    static constexpr int32_t high() { return Dimension::high; }
+    static constexpr size_t size() { return Dimension::size; }
+
+    StaticBindingContext* context = nullptr;
+    const char* name = "";
+    OnDemandGetWordsFn get_words_fn = nullptr;
+    OnDemandSetWordsFn set_words_fn = nullptr;
+    uint32_t id_offset = 0;
+    uint32_t word_offset_delta = 0;
+
+    [[nodiscard]] auto at(int32_t index) const {
+        check_bounds(index);
+        constexpr uint32_t stride_words = static_cast<uint32_t>(
+            element_word_count *
+            detail::static_array_element_count_v<RemainingDimensions...>);
+        const uint32_t offset =
+            static_cast<uint32_t>(index - low()) * stride_words;
+        if constexpr (sizeof...(RemainingDimensions) != 0) {
+            return StaticOnDemandFixedArray<
+                ElementWidth, Writable, Driven, BaseId, DimensionIndex + 1,
+                RemainingDimensions...>{
+                context, name, get_words_fn, set_words_fn,
+                id_offset + offset, word_offset_delta + offset};
+        } else {
+            return StaticOnDemandRef<ElementWidth, Writable, Driven>{
+                context, BaseId + id_offset + offset,
+                word_offset_delta + offset, name, get_words_fn, set_words_fn};
+        }
+    }
+
+   private:
+    void check_bounds(int32_t index) const {
+        if (index >= low() && index <= high()) return;
+        std::fprintf(stderr,
+                     "cpptb: unpacked array '%s' dimension %zu index %d "
+                     "is out of bounds [%d:%d]\n",
+                     name, DimensionIndex + 1, index, Dimension::left,
+                     Dimension::right);
+        std::abort();
+    }
+};
+
+}  // namespace cpptb::dpi

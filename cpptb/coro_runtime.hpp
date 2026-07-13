@@ -2068,9 +2068,12 @@ Task<TimeoutResult<T>> with_timeout(Task<T> task, SimTime timeout) {
     co_return co_await TaskTimeoutAwaiter<T>{std::move(task), timeout};
 }
 
-template <typename Predicate>
-    requires std::invocable<Predicate&, uint32_t>
-Task<void> wait_until(Signal signal, Predicate predicate, Signal clock) {
+template <typename SignalType, typename Predicate>
+    requires std::invocable<Predicate&, uint32_t> &&
+             requires(SignalType signal) {
+                 { signal.get() } -> std::convertible_to<uint32_t>;
+             }
+Task<void> wait_until(SignalType signal, Predicate predicate, Signal clock) {
     while (!static_cast<bool>(predicate(signal.get()))) {
         co_await RisingEdge{clock};
     }

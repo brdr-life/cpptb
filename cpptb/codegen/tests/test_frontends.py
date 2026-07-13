@@ -296,6 +296,7 @@ module sample(input logic [7:0] matrix_i [1:0] [4:2] [-1:1]);
 endmodule
 """
         )
+        manifest["codegen"] = {"static_binding": True}
         verilator_design = VerilatorJsonFrontend().elaborate(manifest, base_dir)
         self.assertEqual(
             design.transport_signature(), verilator_design.transport_signature()
