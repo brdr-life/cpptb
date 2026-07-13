@@ -146,6 +146,19 @@ class MulticlockTests(unittest.TestCase):
         self.assertEqual(result["status"], "passed")
         self.assertTrue(result["exact_match"])
 
+    def test_counter_markers_use_the_same_exact_equivalence_contract(self) -> None:
+        cpp = (
+            "CPP_DPI_COUNTER_RESULT iterations=8 checks=9 sim_cycles=11 "
+            "wall_ms=0.01 failures=0\n"
+        )
+        sv = (
+            "PURE_SV_COUNTER_RESULT iterations=8 checks=9 "
+            "sim_cycles=11 failures=0\n"
+        )
+        result = regression.compare_multiclock(cpp, sv)
+        self.assertEqual(result["status"], "passed")
+        self.assertTrue(result["exact_match"])
+
     def test_all_four_fields_must_match(self) -> None:
         sv = self.SV.replace("sim_cycles=81", "sim_cycles=82")
         result = regression.compare_multiclock(self.CPP, sv)
