@@ -10,7 +10,7 @@
 
 | Kernel | Paired median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |
 |---|---:|---:|---:|---:|---:|---|---:|
-| `clock_cycles` | 0.969x | 0.960x | 0.972x | 0.963x | 0.66% | `passed` | `False` |
+| `clock_cycles` | 0.986x | 0.976x | 0.988x | 0.979x | 0.63% | `passed` | `False` |
 
 The paired median is the guard. A value above `1.10x` is a valid
 failure only when both order strata exceed `1.05x` and the independent
