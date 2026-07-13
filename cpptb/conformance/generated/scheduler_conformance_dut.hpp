@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "cpptb/coro_runtime.hpp"
+#include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/probe.hpp"
 
 namespace cpptb::conformance {
@@ -48,24 +48,24 @@ enum SignalId : uint32_t {
 };
 
 struct ConformanceClocks {
-    coro::Signal a;
-    coro::Signal b;
-    coro::Signal manual;
-    coro::Signal derived;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalClkA, 0> a;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalClkB, 1> b;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalManualClk, 1> manual;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalDerivedClk, 17> derived;
 };
 
 struct ConformanceSamples {
-    coro::Signal a;
-    coro::Signal b;
-    coro::Signal manual;
-    coro::Signal derived;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalSampledA, 19> a;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalSampledB, 20> b;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalSampledManual, 21> manual;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalSampledDerived, 22> derived;
 };
 
 struct ConformanceCounts {
-    coro::Signal a;
-    coro::Signal b;
-    coro::Signal manual;
-    coro::Signal derived;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalCountA, 23> a;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalCountB, 24> b;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalCountManual, 25> manual;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalCountDerived, 26> derived;
 };
 
 struct InternalDut {
@@ -80,30 +80,31 @@ struct InternalDut {
 };
 
 struct SchedulerConformanceDut {
-    coro::Signal rst_n;
+    static constexpr bool cpptb_static_binding = true;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalRstN, 0> rst_n;
     ConformanceClocks clock;
-    coro::Signal derived_gate;
-    coro::Signal stable_signal;
-    coro::Signal predicate_signal;
-    coro::Signal event_drive;
-    coro::Signal force_net_source;
-    coro::Signal drive_value;
-    coro::Signal addend;
-    coro::DrivenSignal<65> packed65_i;
-    coro::ObservedSignal<65> packed65_o;
-    coro::DrivenSignal<137> packed137_i;
-    coro::ObservedSignal<137> packed137_o;
-    coro::DrivenArray<73, 7, 4> array73_i;
-    coro::ObservedArray<73, 7, 4> array73_o;
-    coro::DrivenFixedArray<65, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> matrix65_i;
-    coro::ObservedFixedArray<65, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> matrix65_o;
-    coro::Signal event_observed;
-    coro::Signal comb_sum;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalDerivedGate, 2> derived_gate;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalStableSignal, 3> stable_signal;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalPredicateSignal, 4> predicate_signal;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalEventDrive, 5> event_drive;
+    cpptb::dpi::StaticPackedSignal<8, true, true, kSignalForceNetSource, 6> force_net_source;
+    cpptb::dpi::StaticPackedSignal<8, true, true, kSignalDriveValue, 7> drive_value;
+    cpptb::dpi::StaticPackedSignal<8, true, true, kSignalAddend, 8> addend;
+    cpptb::dpi::StaticPackedSignal<65, true, true, kSignalPacked65I, 9> packed65_i;
+    cpptb::dpi::StaticPackedSignal<65, false, false, kSignalPacked65O, 2> packed65_o;
+    cpptb::dpi::StaticOnDemandSignal<137, true, true, kSignalPacked137I> packed137_i;
+    cpptb::dpi::StaticOnDemandSignal<137, false, false, kSignalPacked137O> packed137_o;
+    cpptb::dpi::StaticPackedFixedArray<73, true, true, kSignalArray73I, 12, 0, coro::ArrayDimension<7, 4>> array73_i;
+    cpptb::dpi::StaticPackedFixedArray<73, false, false, kSignalArray73O, 5, 0, coro::ArrayDimension<7, 4>> array73_o;
+    cpptb::dpi::StaticOnDemandFixedArray<65, true, true, kSignalMatrix65I, 0, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> matrix65_i;
+    cpptb::dpi::StaticOnDemandFixedArray<65, false, false, kSignalMatrix65O, 0, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> matrix65_o;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalEventObserved, 18> event_observed;
+    cpptb::dpi::StaticOnDemandSignal<8, false, false, kSignalCombSum> comb_sum;
     ConformanceSamples sample;
     ConformanceCounts count;
-    coro::ObservedSignal<64> internal_comb_fanout;
-    coro::ObservedSignal<64> internal_clocked_fanout;
-    coro::Signal internal_net_fanout;
+    cpptb::dpi::StaticPackedSignal<64, false, false, kSignalInternalCombFanout, 27> internal_comb_fanout;
+    cpptb::dpi::StaticPackedSignal<64, false, false, kSignalInternalClockedFanout, 29> internal_clocked_fanout;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalInternalNetFanout, 31> internal_net_fanout;
     InternalDut internal;
 };
 

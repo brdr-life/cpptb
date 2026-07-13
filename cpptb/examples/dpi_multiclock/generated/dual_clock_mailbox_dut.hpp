@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "cpptb/coro_runtime.hpp"
+#include "cpptb/dpi_static_binding.hpp"
 
 namespace cpptb::examples::dpi_multiclock {
 
@@ -27,28 +27,29 @@ enum SignalId : uint32_t {
 };
 
 struct WriteDomain {
-    coro::Signal clk;
-    coro::Signal data;
-    coro::Signal valid;
-    coro::Signal ready;
-    coro::Signal count;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalWriteClk, 0> clk;
+    cpptb::dpi::StaticPackedSignal<8, true, true, kSignalWriteData, 1> data;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalWriteValid, 2> valid;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalWriteReady, 1> ready;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalWriteCount, 2> count;
 };
 
 struct ReadDomain {
-    coro::Signal clk;
-    coro::Signal data;
-    coro::Signal valid;
-    coro::Signal ready;
-    coro::Signal count;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalReadClk, 3> clk;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalReadData, 4> data;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalReadValid, 5> valid;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalReadReady, 3> ready;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalReadCount, 6> count;
 };
 
 struct PhaseProbe {
-    coro::Signal in;
-    coro::Signal echo;
+    cpptb::dpi::StaticPackedSignal<8, true, true, kSignalProbeIn, 4> in;
+    cpptb::dpi::StaticPackedSignal<8, false, false, kSignalProbeEcho, 7> echo;
 };
 
 struct DualClockMailboxDut {
-    coro::Signal rst_n;
+    static constexpr bool cpptb_static_binding = true;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalRstN, 0> rst_n;
     WriteDomain write;
     ReadDomain read;
     PhaseProbe probe;

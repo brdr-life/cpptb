@@ -55,6 +55,171 @@ def manifest():
 
 
 class CodegenTests(unittest.TestCase):
+    def test_static_binding_is_opt_in_and_disabled_is_byte_identical(self):
+        base = manifest()
+        del base["clock"]
+        base["clocks"] = []
+        ports = map_ports(
+            [Port("drive", "input", 1), Port("observe", "output", 1)],
+            base,
+        )
+        tree = build_tree(ports)
+        disabled = {**base, "codegen": {"static_binding": False}}
+
+        self.assertEqual(
+            render_cpp_dut(ports, [], tree, base, "sample.json"),
+            render_cpp_dut(ports, [], tree, disabled, "sample.json"),
+        )
+        self.assertEqual(
+            render_cpp_binding(ports, [], tree, base, "sample.json"),
+            render_cpp_binding(ports, [], tree, disabled, "sample.json"),
+        )
+        self.assertEqual(
+            render_sv(ports, [], base, "sample.json"),
+            render_sv(ports, [], disabled, "sample.json"),
+        )
+
+    def test_generates_mixed_static_packed_and_on_demand_bindings(self):
+        config = manifest()
+        del config["clock"]
+        config["clocks"] = []
+        config["codegen"] = {"static_binding": True}
+        config.setdefault("run", {})["compact_input_transport"] = False
+        ports = map_ports(
+            [
+                Port("packed_scalar_i", "input", 1),
+                Port(
+                    "lazy_scalar_i", "input", 1,
+                    transport="on_demand"
+                ),
+                Port("packed64_i", "input", 64, four_state=False),
+                Port(
+                    "lazy64_i", "input", 64, four_state=False,
+                    transport="on_demand"
+                ),
+                Port(
+                    "lazy137_i", "input", 137, four_state=False,
+                    transport="on_demand"
+                ),
+                Port(
+                    "packed_array_i", "input", 8,
+                    unpacked=(UnpackedRange(3, 1),)
+                ),
+                Port(
+                    "lazy_matrix_i", "input", 65, four_state=False,
+                    unpacked=(UnpackedRange(2, 1), UnpackedRange(-1, 1)),
+                    transport="on_demand"
+                ),
+                Port("packed_scalar_o", "output", 1),
+                Port(
+                    "lazy_scalar_o", "output", 1,
+                    transport="on_demand"
+                ),
+                Port("packed64_o", "output", 64, four_state=False),
+                Port(
+                    "lazy64_o", "output", 64, four_state=False,
+                    transport="on_demand"
+                ),
+                Port(
+                    "lazy137_o", "output", 137, four_state=False,
+                    transport="on_demand"
+                ),
+                Port(
+                    "packed_array_o", "output", 8,
+                    unpacked=(UnpackedRange(3, 1),)
+                ),
+                Port(
+                    "lazy_matrix_o", "output", 65, four_state=False,
+                    unpacked=(UnpackedRange(2, 1), UnpackedRange(-1, 1)),
+                    transport="on_demand"
+                ),
+            ],
+            config,
+        )
+        tree = build_tree(ports)
+        header = render_cpp_dut(ports, [], tree, config, "sample.json")
+        binding = render_cpp_binding(ports, [], tree, config, "sample.json")
+        wrapper = render_sv(ports, [], config, "sample.json")
+
+        self.assertIn('#include "cpptb/dpi_static_binding.hpp"', header)
+        self.assertIn(
+            "static constexpr bool cpptb_static_binding = true;", header
+        )
+        self.assertIn(
+            "StaticPackedSignal<1, true, true, kSignalPackedScalarI, 0>",
+            header,
+        )
+        self.assertIn(
+            "StaticOnDemandSignal<1, true, true, kSignalLazyScalarI>",
+            header,
+        )
+        self.assertIn(
+            "StaticPackedSignal<64, true, true, kSignalPacked64I, 1>",
+            header,
+        )
+        self.assertIn(
+            "StaticOnDemandSignal<64, true, true, kSignalLazy64I>",
+            header,
+        )
+        self.assertIn(
+            "StaticOnDemandSignal<137, false, false, kSignalLazy137O>",
+            header,
+        )
+        self.assertIn(
+            "StaticPackedFixedArray<8, true, true, "
+            "kSignalPackedArrayI, 3, 0, coro::ArrayDimension<3, 1>>",
+            header,
+        )
+        self.assertIn(
+            "StaticOnDemandFixedArray<65, false, false, "
+            "kSignalLazyMatrixO, 0, coro::ArrayDimension<2, 1>, "
+            "coro::ArrayDimension<-1, 1>>",
+            header,
+        )
+
+        self.assertIn(
+            "StaticPackedSignalSpec<64, true, true, kSignalPacked64I, 1>",
+            binding,
+        )
+        self.assertIn(
+            "StaticOnDemandSignalSpec<1, true, true, "
+            "kSignalLazyScalarI, on_demand_port_1_get_words, "
+            "on_demand_port_1_set_words>",
+            binding,
+        )
+        self.assertIn(
+            "StaticOnDemandArraySpec<65, false, false, "
+            "kSignalLazyMatrixO, on_demand_port_13_get_words, nullptr, "
+            "coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>",
+            binding,
+        )
+        self.assertIn("kStaticPackedBindingSpans", binding)
+        self.assertIn("validate_static_packed_binding_spans", binding)
+        self.assertNotIn(
+            "StaticOnDemandSignalSpec<64, true, true, kSignalLazy64I, 3,",
+            binding,
+        )
+
+        self.assertIn(
+            "unsigned long long dpi_sample_dut_port_3_get();", binding
+        )
+        self.assertIn(
+            "void dpi_sample_dut_port_4_get(svBitVecVal* value);", binding
+        )
+        self.assertIn("localparam int INPUT_WORD_COUNT = 6", wrapper)
+        self.assertIn("localparam int OUTPUT_WORD_COUNT = 6", wrapper)
+        self.assertNotIn("INPUT_SIGNAL_LAZY64I", wrapper)
+        self.assertNotIn("OUTPUT_SIGNAL_LAZY137O", wrapper)
+
+    def test_rejects_non_boolean_static_binding_flag(self):
+        config = manifest()
+        config["codegen"] = {"static_binding": "yes"}
+        ports = map_ports([Port("clk", "input", 1)], config)
+        with self.assertRaisesRegex(CodegenError, "must be a boolean"):
+            render_cpp_dut(
+                ports, [], build_tree(ports), config, "sample.json"
+            )
+
     def test_generates_raw_preserving_packed_enum_and_struct_views(self):
         state_base = PackedIntegralType(
             3, signed=True, four_state=True, ranges=(PackedRange(2, 0),)

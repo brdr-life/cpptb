@@ -42,27 +42,46 @@ inline constexpr std::array<uint32_t, 5> kDrivenSignalWordIds = {
     kSignalProbeIn,
 };
 
+inline constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 13> kStaticPackedBindingSpans = {{
+    {kSignalWriteClk, 1, 0, false},
+    {kSignalWriteReady, 1, 1, false},
+    {kSignalWriteCount, 1, 2, false},
+    {kSignalReadClk, 1, 3, false},
+    {kSignalReadData, 1, 4, false},
+    {kSignalReadValid, 1, 5, false},
+    {kSignalReadCount, 1, 6, false},
+    {kSignalProbeEcho, 1, 7, false},
+    {kSignalRstN, 1, 0, true},
+    {kSignalWriteData, 1, 1, true},
+    {kSignalWriteValid, 1, 2, true},
+    {kSignalReadReady, 1, 3, true},
+    {kSignalProbeIn, 1, 4, true},
+}};
+static_assert(cpptb::dpi::validate_static_packed_binding_spans(
+    kStaticPackedBindingSpans, kObservedSignalWordIds,
+    kDrivenSignalWordIds));
+
 template <typename MakeSignal>
 DualClockMailboxDut bind_dut(MakeSignal&& make_signal) {
     return {
-        make_signal(kSignalRstN, "rst_n"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalRstN, 0>{}, "rst_n"),
         {
-            make_signal(kSignalWriteClk, "write_clk"),
-            make_signal(kSignalWriteData, "write_data"),
-            make_signal(kSignalWriteValid, "write_valid"),
-            make_signal(kSignalWriteReady, "write_ready"),
-            make_signal(kSignalWriteCount, "write_count")
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalWriteClk, 0>{}, "write_clk"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalWriteData, 1>{}, "write_data"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalWriteValid, 2>{}, "write_valid"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalWriteReady, 1>{}, "write_ready"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalWriteCount, 2>{}, "write_count")
         },
         {
-            make_signal(kSignalReadClk, "read_clk"),
-            make_signal(kSignalReadData, "read_data"),
-            make_signal(kSignalReadValid, "read_valid"),
-            make_signal(kSignalReadReady, "read_ready"),
-            make_signal(kSignalReadCount, "read_count")
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalReadClk, 3>{}, "read_clk"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalReadData, 4>{}, "read_data"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalReadValid, 5>{}, "read_valid"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalReadReady, 3>{}, "read_ready"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalReadCount, 6>{}, "read_count")
         },
         {
-            make_signal(kSignalProbeIn, "probe_in"),
-            make_signal(kSignalProbeEcho, "probe_echo")
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalProbeIn, 4>{}, "probe_in"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalProbeEcho, 7>{}, "probe_echo")
         }
     };
 }

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "cpptb/coro_runtime.hpp"
+#include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/probe.hpp"
 
 namespace {
@@ -42,6 +43,64 @@ static_assert(RankTwoDriven::word_count == 18);
 static_assert(FixedArraySpec<8, false, ArrayDimension<0, 1>,
                              ArrayDimension<4, 3>,
                              ArrayDimension<-2, -1>>::word_count == 8);
+
+template <bool Writable, bool Driven>
+concept ValidStaticPackedSpec = requires {
+    typename cpptb::dpi::StaticPackedSignalSpec<1, Writable, Driven, 0, 0>;
+};
+
+void static_on_demand_get(uint32_t, uint32_t*, uint32_t) {}
+void static_on_demand_set(uint32_t, const uint32_t*, uint32_t) {}
+
+template <bool Writable, bool Driven,
+          cpptb::dpi::OnDemandSetWordsFn SetWords>
+concept ValidStaticOnDemandSpec = requires {
+    typename cpptb::dpi::StaticOnDemandSignalSpec<
+        1, Writable, Driven, 0, static_on_demand_get, SetWords>;
+};
+
+using StaticPackedScalar =
+    cpptb::dpi::StaticPackedSignal<1, true, true, 3, 1>;
+using StaticObservedPacked =
+    cpptb::dpi::StaticPackedSignal<64, false, false, 4, 0>;
+using StaticOnDemandScalar =
+    cpptb::dpi::StaticOnDemandSignal<1, true, true, 6>;
+using StaticOnDemandMatrix = cpptb::dpi::StaticOnDemandFixedArray<
+    137, false, false, 7, 0, ArrayDimension<2, 1>,
+    ArrayDimension<-1, 1>>;
+
+static_assert(ValidStaticPackedSpec<true, true>);
+static_assert(ValidStaticPackedSpec<false, false>);
+static_assert(!ValidStaticPackedSpec<true, false>);
+static_assert(!ValidStaticPackedSpec<false, true>);
+static_assert(ValidStaticOnDemandSpec<true, true, static_on_demand_set>);
+static_assert(ValidStaticOnDemandSpec<false, false, nullptr>);
+static_assert(!ValidStaticOnDemandSpec<true, true, nullptr>);
+static_assert(!ValidStaticOnDemandSpec<false, false, static_on_demand_set>);
+static_assert(WritablePackedSignal<StaticPackedScalar>);
+static_assert(!WritablePackedSignal<StaticObservedPacked>);
+static_assert(WritablePackedSignal<StaticOnDemandScalar>);
+static_assert(!WritablePackedSignal<decltype(
+              std::declval<StaticOnDemandMatrix>().at(1).at(-1))>);
+static_assert(std::convertible_to<StaticPackedScalar, Signal>);
+static_assert(std::convertible_to<StaticOnDemandScalar, Signal>);
+static_assert(StaticPackedScalar::transport_offset == 1);
+static_assert(StaticOnDemandMatrix::base_id == 7);
+
+constexpr std::array<uint32_t, 3> kStaticObservedWordIds{4, 8, 9};
+constexpr std::array<uint32_t, 3> kStaticDrivenWordIds{0, 1, 2};
+constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 3>
+    kValidStaticSpans{{{4, 1, 0, false},
+                       {8, 2, 1, false},
+                       {0, 3, 0, true}}};
+constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 3>
+    kStaleStaticSpans{{{4, 1, 1, false},
+                       {8, 2, 0, false},
+                       {0, 3, 0, true}}};
+static_assert(cpptb::dpi::validate_static_packed_binding_spans(
+    kValidStaticSpans, kStaticObservedWordIds, kStaticDrivenWordIds));
+static_assert(!cpptb::dpi::validate_static_packed_binding_spans(
+    kStaleStaticSpans, kStaticObservedWordIds, kStaticDrivenWordIds));
 
 template <typename ProbeType>
 concept WritableProbe = requires(
