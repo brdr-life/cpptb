@@ -20,9 +20,12 @@ class Category(str, Enum):
 
 class AdapterKind(str, Enum):
     AUTHORING_CORE = "authoring_core"
+    DPI_APB_REGFILE = "dpi_apb_regfile"
     DPI_COUNTER = "dpi_counter"
+    DPI_FIFO_SCOREBOARD = "dpi_fifo_scoreboard"
     DPI_MULTICLOCK = "dpi_multiclock"
     DPI_TIMER_ONLY = "dpi_timer_only"
+    DPI_WATCHDOG_TIMEOUT = "dpi_watchdog_timeout"
     PERIPHERAL_SUITE = "peripheral_suite"
 
 
@@ -225,6 +228,93 @@ BENCHMARKS: tuple[Benchmark, ...] = (
             iterations_environment="CPPTB_TIMER_ONLY_ITERS",
         ),
         default_iterations=9,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_fifo_scoreboard",
+        label="DPI FIFO scoreboard",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_FIFO_SCOREBOARD,
+        build_targets=(
+            "cpp-dpi-fifo-scoreboard-build",
+            "cpp-dpi-fifo-scoreboard-sv-build",
+        ),
+        binaries=(
+            Binary(
+                "cpp_dpi",
+                "build/cpptb/dpi_fifo_scoreboard_obj/Vdpi_stream_fifo",
+            ),
+            Binary(
+                "pure_sv",
+                "build/cpptb/dpi_fifo_scoreboard_sv_obj/Vstream_fifo_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-fifo-scoreboard-run"),
+                ("make", "cpp-dpi-fifo-scoreboard-sv-run"),
+            ),
+            iterations_environment="CPPTB_FIFO_SCOREBOARD_ITERS",
+        ),
+        default_iterations=24,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_apb_regfile",
+        label="DPI APB register file",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_APB_REGFILE,
+        build_targets=(
+            "cpp-dpi-apb-regfile-build",
+            "cpp-dpi-apb-regfile-sv-build",
+        ),
+        binaries=(
+            Binary(
+                "cpp_dpi",
+                "build/cpptb/dpi_apb_regfile_obj/Vdpi_apb_regfile",
+            ),
+            Binary(
+                "pure_sv",
+                "build/cpptb/dpi_apb_regfile_sv_obj/Vapb_regfile_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-apb-regfile-run"),
+                ("make", "cpp-dpi-apb-regfile-sv-run"),
+            ),
+            iterations_environment="CPPTB_APB_REGFILE_ITERS",
+        ),
+        default_iterations=12,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_watchdog_timeout",
+        label="DPI watchdog timeout",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_WATCHDOG_TIMEOUT,
+        build_targets=(
+            "cpp-dpi-watchdog-timeout-build",
+            "cpp-dpi-watchdog-timeout-sv-build",
+        ),
+        binaries=(
+            Binary(
+                "cpp_dpi",
+                "build/cpptb/dpi_watchdog_timeout_obj/Vdpi_stalling_responder",
+            ),
+            Binary(
+                "pure_sv",
+                "build/cpptb/dpi_watchdog_timeout_sv_obj/Vstalling_responder_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-watchdog-timeout-run"),
+                ("make", "cpp-dpi-watchdog-timeout-sv-run"),
+            ),
+            iterations_environment="CPPTB_WATCHDOG_TIMEOUT_ITERS",
+        ),
+        default_iterations=8,
         gate_policy=GatePolicy.EQUIVALENCE_ONLY,
     ),
     Benchmark(

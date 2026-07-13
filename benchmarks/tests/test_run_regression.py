@@ -159,6 +159,24 @@ class MulticlockTests(unittest.TestCase):
         self.assertEqual(result["status"], "passed")
         self.assertTrue(result["exact_match"])
 
+    def test_expanded_examples_use_the_same_exact_equivalence_contract(self) -> None:
+        examples = {
+            "FIFO_SCOREBOARD": (24, 27, 44),
+            "APB_REGFILE": (12, 41, 80),
+            "WATCHDOG_TIMEOUT": (8, 20, 44),
+        }
+        for marker, (iterations, checks, sim_cycles) in examples.items():
+            with self.subTest(marker=marker):
+                fields = (
+                    f"iterations={iterations} checks={checks} "
+                    f"sim_cycles={sim_cycles} failures=0"
+                )
+                cpp = f"CPP_DPI_{marker}_RESULT {fields}\n"
+                sv = f"PURE_SV_{marker}_RESULT {fields}\n"
+                result = regression.compare_multiclock(cpp, sv)
+                self.assertEqual(result["status"], "passed")
+                self.assertTrue(result["exact_match"])
+
     def test_all_four_fields_must_match(self) -> None:
         sv = self.SV.replace("sim_cycles=81", "sim_cycles=82")
         result = regression.compare_multiclock(self.CPP, sv)

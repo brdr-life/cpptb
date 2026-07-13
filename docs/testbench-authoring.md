@@ -4,32 +4,29 @@ cpptb testbenches are C++20 coroutines connected to a generated, typed DUT.
 The public runtime is under `include/cpptb/`; generated SystemVerilog uses DPI
 to exchange signal batches and simulator events with that runtime.
 
-Start with the small counter or the multi-process, multi-clock example:
+Start with the small counter, then move to the FIFO scoreboard or APB example:
 
 ```sh
 make cpp-dpi-counter-run
-make cpp-dpi-multiclock-run
+make cpp-dpi-fifo-scoreboard-run
+make cpp-dpi-apb-regfile-run
 ```
 
-The testbench shape is intentionally close to cocotb:
+The APB example keeps protocol timing in a reusable helper, leaving the test
+sequence register-oriented:
 
 ```cpp
-void register_tests(coro::Testbench& tb, ApbEventDut dut) {
-    tb.spawn(reset_driver(tb, dut));
-    tb.spawn(apb_register_sequence(tb, dut));
-    tb.spawn(irq_monitor(tb, dut));
-    tb.spawn(sleep_monitor(tb, dut));
-}
+Task<void> register_sequence(ApbRegfileTb tb) {
+    co_await reset_dut(tb);
+    const ApbMaster apb{tb};
 
-Task<void> apb_register_sequence(coro::Testbench& tb, ApbEventDut dut) {
-    const ApbMaster apb{tb, dut};
-
-    co_await apb.write("write irq enable", kIrqEnable, 0x0000'002a);
-    dut.irq_i.set(0x0000'0008);
-    co_await clock_cycles(dut.HCLK, 3);
-    co_await apb.read_expect("irq pending from irq_i", kIrqPending, 0x8);
+    co_await apb.write(0x04, 0x1234'5678);
+    co_await apb.read_expect("register readback", 0x04, 0x1234'5678);
 }
 ```
+
+The complete implementation, including `Task<uint32_t> read(...)`, is in
+`examples/apb_regfile/testbench.cpp`.
 
 The user-facing primitives are deliberately small:
 
@@ -102,54 +99,30 @@ wins when the task's result is present as the parent resumes. Zero and
 sub-precision timeout durations are rejected under the same rules as
 `Delay`.
 
-These pieces compose into ordinary driver, monitor, and scoreboard code:
+These pieces compose into ordinary driver, monitor, and scoreboard code. The
+following is the core of the runnable `fifo_scoreboard` example:
 
 ```cpp
-struct Sample {
-    uint32_t expected;
-    uint32_t actual;
-};
-
-Task<uint32_t> make_word(uint32_t index) {
-    co_return index ^ 0xa5a5'5a5a;
-}
-
-Task<void> driver(Dut dut, Channel<uint32_t>& expected) {
-    for (uint32_t index = 0; index < 16; ++index) {
-        const uint32_t word = co_await make_word(index);
-        co_await wait_until(dut.ready,
-                            [](uint32_t value) { return value != 0; },
-                            dut.clk);
-        dut.data.set(word);
-        dut.valid.set(1);
-        co_await RisingEdge{dut.clk};
-        dut.valid.set(0);
-        co_await expected.put(word);
+Task<void> scoreboard(FifoScoreboardTb tb,
+                      Channel<uint32_t>& expected_words,
+                      Channel<uint32_t>& observed_words) {
+    for (uint32_t index = 0; index < tb.iterations(); ++index) {
+        const uint32_t expected = co_await expected_words.get();
+        const uint32_t actual = co_await observed_words.get();
+        tb.expect_eq("FIFO payload", actual, expected);
     }
 }
 
-Task<void> monitor(Dut dut, Channel<uint32_t>& observed) {
-    for (uint32_t count = 0; count < 16;) {
-        co_await RisingEdge{dut.clk};
-        if (dut.out_valid.get() == 0) continue;
-        observed.put_nowait(dut.out_data.get());
-        ++count;
-    }
-}
+Task<void> fifo_test(FifoScoreboardTb tb) {
+    Event reset_done;
+    Channel<uint32_t> expected_words;
+    Channel<uint32_t> observed_words;
 
-Task<void> scoreboard(Channel<uint32_t>& expected,
-                      Channel<uint32_t>& observed) {
-    for (uint32_t count = 0; count < 16; ++count) {
-        const Sample sample{co_await expected.get(), co_await observed.get()};
-        check_equal(sample.actual, sample.expected);
-    }
-}
-
-Task<void> test(Dut dut) {
-    Channel<uint32_t> expected;
-    Channel<uint32_t> observed;
-    co_await Join{driver(dut, expected), monitor(dut, observed),
-                  scoreboard(expected, observed)};
+    co_await Join{reset_dut(tb, reset_done),
+                  input_driver(tb, reset_done, expected_words),
+                  output_ready_driver(tb, reset_done),
+                  output_monitor(tb, reset_done, observed_words),
+                  scoreboard(tb, expected_words, observed_words)};
 }
 ```
 
@@ -185,14 +158,41 @@ Use `spawn_detached()` for fire-and-forget roots. Both forms reclaim completed
 root coroutine frames; detached roots omit the process-control metadata used
 for handles, status, awaiting, and cancellation.
 
-The end-to-end multi-clock example is in `examples/multiclock/`.
-The clockless absolute-delay twin is in `examples/timer_only/`:
+`examples/watchdog_timeout/testbench.cpp` shows both forms of `with_timeout()`
+and a complete `spawn()`/`cancel()`/await lifecycle. Its deadlines are kept
+strictly separate from response times so the expected result is independent of
+same-timestamp ordering.
+
+## Cocotb concept map
+
+cpptb follows familiar cocotb testbench structure while keeping signal access
+and timing explicit:
+
+| Verification concept | cocotb | cpptb | Pure-SV twin |
+|---|---|---|---|
+| Timed wait | `await Timer(1, unit="ns")` | `co_await Delay{1_ns}` | `#1ns` |
+| Signal edge | `await RisingEdge(dut.clk)` | `co_await RisingEdge{dut.clk}` | `@(posedge clk)` |
+| Concurrent work | `start_soon()` / task groups | `spawn()` or `Join{...}` | `fork ... join` |
+| FIFO communication | `Queue` | `Channel<T>` | `mailbox` |
+| Notification | `Event` | `Event` | `event` |
+| Deadline | `with_timeout()` | `with_timeout()` | explicit event/deadline race |
+
+The mapping is informed by cocotb's official documentation for
+[testbench structure](https://docs.cocotb.org/en/stable/writing_testbenches.html),
+[coroutines and concurrency](https://docs.cocotb.org/en/stable/coroutines.html),
+and the [timing model](https://docs.cocotb.org/en/stable/timing_model.html).
+In particular, an edge wake does not by itself promise that downstream
+sequential or combinational logic has settled. The examples therefore show
+the sampling point explicitly with `Delay{1_ps}`, mirrored by `#1ps` in SV.
+
+The complete learning path is indexed in `examples/README.md`. Run individual
+pairs or all examples through the standard target:
 
 ```sh
-make cpp-coro-runtime-test
-make cpp-dpi-multiclock-run
-make cpp-dpi-timer-only-run
-make cpp-dpi-timer-only-sv-run
+make feature-test FEATURE=dpi_fifo_scoreboard
+make feature-test FEATURE=dpi_apb_regfile
+make feature-test FEATURE=dpi_watchdog_timeout
+make examples-test
 ```
 
 ## Scheduler ordering and cleanup

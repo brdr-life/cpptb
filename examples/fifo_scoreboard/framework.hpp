@@ -1,0 +1,40 @@
+#pragma once
+
+#include <cstdint>
+#include <utility>
+
+#include "cpptb/coro_runtime.hpp"
+#include "cpptb/test_result.hpp"
+#include "examples/fifo_scoreboard/generated/stream_fifo_dut.hpp"
+
+namespace cpptb::examples::fifo_scoreboard {
+
+class FifoScoreboardTb {
+   public:
+    StreamFifoDut dut;
+
+    FifoScoreboardTb(coro::Testbench& scheduler, StreamFifoDut dut_value,
+                     TestResult& result, uint32_t iterations)
+        : dut(dut_value),
+          scheduler_(&scheduler),
+          result_(&result),
+          iterations_(iterations) {}
+
+    void run(coro::Task<void> task) {
+        scheduler_->spawn_detached(std::move(task));
+    }
+
+    void expect_eq(const char* label, uint32_t actual,
+                   uint32_t expected) const;
+
+    uint32_t iterations() const { return iterations_; }
+
+   private:
+    coro::Testbench* scheduler_ = nullptr;
+    TestResult* result_ = nullptr;
+    uint32_t iterations_ = 0;
+};
+
+void register_user_testbench(FifoScoreboardTb& tb);
+
+}  // namespace cpptb::examples::fifo_scoreboard
