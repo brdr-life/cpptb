@@ -49,8 +49,21 @@ concept ValidStaticPackedSpec = requires {
     typename cpptb::dpi::StaticPackedSignalSpec<1, Writable, Driven, 0, 0>;
 };
 
-void static_on_demand_get(uint32_t, uint32_t*, uint32_t) {}
-void static_on_demand_set(uint32_t, const uint32_t*, uint32_t) {}
+std::array<uint32_t, 4> static_on_demand_words{};
+
+void static_on_demand_get(uint32_t offset, uint32_t* words,
+                          uint32_t word_count) {
+    for (uint32_t word = 0; word < word_count; ++word) {
+        words[word] = static_on_demand_words.at(offset + word);
+    }
+}
+
+void static_on_demand_set(uint32_t offset, const uint32_t* words,
+                          uint32_t word_count) {
+    for (uint32_t word = 0; word < word_count; ++word) {
+        static_on_demand_words.at(offset + word) = words[word];
+    }
+}
 
 template <bool Writable, bool Driven,
           cpptb::dpi::OnDemandSetWordsFn SetWords>
@@ -1014,6 +1027,50 @@ int main() {
     static_assert(1_ms == SimTime{1'000'000'000'000});
 
     bool passed = true;
+    {
+        std::array<uint32_t, 8> inputs{};
+        std::array<uint32_t, 8> outputs{};
+        std::array<bool, 8> configured_clock{};
+        std::array<bool, 8> local_edge_capable{};
+        bool outputs_dirty = false;
+        bool local_edge_delivery_enabled = false;
+        cpptb::dpi::StaticBindingContext context{
+            .inputs = inputs.data(),
+            .outputs = outputs.data(),
+            .current_inputs = nullptr,
+            .configured_clock = configured_clock.data(),
+            .local_edge_capable = local_edge_capable.data(),
+            .outputs_dirty = &outputs_dirty,
+            .local_edge_delivery_enabled = &local_edge_delivery_enabled,
+        };
+
+        const StaticPackedScalar packed{&context, "packed_1bit"};
+        packed.set(2);
+        passed &= expect("static packed masks zero-equivalent narrow write",
+                         outputs.at(3), 0);
+        passed &= expect("static packed masked no-op remains clean",
+                         outputs_dirty ? 1 : 0, 0);
+        packed.set(3);
+        passed &= expect("static packed masks narrow write", outputs.at(3), 1);
+        passed &= expect("static packed normalized change is dirty",
+                         outputs_dirty ? 1 : 0, 1);
+
+        static_on_demand_words.fill(0);
+        outputs_dirty = false;
+        const StaticOnDemandScalar on_demand{
+            &context, "on_demand_1bit", static_on_demand_get,
+            static_on_demand_set};
+        on_demand.set(2);
+        passed &= expect("static on-demand masks zero-equivalent narrow write",
+                         static_on_demand_words.at(0), 0);
+        passed &= expect("static on-demand direct write does not dirty outputs",
+                         outputs_dirty ? 1 : 0, 0);
+        on_demand.set(3);
+        passed &= expect("static on-demand masks narrow write",
+                         static_on_demand_words.at(0), 1);
+        passed &= expect("static on-demand remains outside packed dirty state",
+                         outputs_dirty ? 1 : 0, 0);
+    }
     {
         narrow_probe_value = 0xffff'ffffu;
         const cpptb::probe::Probe<7, true> value{

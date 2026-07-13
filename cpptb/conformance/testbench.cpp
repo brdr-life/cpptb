@@ -1339,7 +1339,7 @@ struct PredicateProbe {
 
 Task<void> predicate_driver(ConformanceTb tb) {
     co_await Delay{3_ns};
-    tb.dut.predicate_signal.set(7);
+    tb.dut.predicate_signal.set(1);
 }
 
 Task<void> wait_until_contract(ConformanceTb tb) {
@@ -1370,7 +1370,7 @@ Task<void> wait_until_contract(ConformanceTb tb) {
             const auto index = delayed.evaluations++;
             delayed.times[index] = tb.now().in_femtoseconds();
             delayed.values[index] = value;
-            return value >= 7;
+            return value == 1;
         },
         tb.dut.clock.a);
 
@@ -1384,7 +1384,7 @@ Task<void> wait_until_contract(ConformanceTb tb) {
                    SimTime{delayed.times[2]}, 6_ns);
     tb.expect_eq("wait_until delayed initial value", delayed.values[0], 0);
     tb.expect_eq("wait_until delayed edge value", delayed.values[1], 0);
-    tb.expect_eq("wait_until delayed completion value", delayed.values[2], 7);
+    tb.expect_eq("wait_until delayed completion value", delayed.values[2], 1);
     tb.expect_true("wait_until Delay-driven predicate process done",
                    driver.done());
 }

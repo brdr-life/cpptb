@@ -158,6 +158,15 @@ auto value_to_words(coro::PackedSignalValue<Width> value) {
     return bits.words();
 }
 
+template <size_t Width>
+constexpr uint32_t normalize_scalar(uint32_t value) {
+    static_assert(Width > 0 && Width <= 32);
+    if constexpr (Width < 32) {
+        return value & ((uint32_t{1} << Width) - 1);
+    }
+    return value;
+}
+
 }  // namespace detail
 
 template <size_t Width, bool Writable, bool Driven>
@@ -192,7 +201,8 @@ class StaticPackedRef {
 
     void set(value_type value) const requires(Writable) {
         if constexpr (Width <= 32) {
-            context->set_packed_scalar(id, value);
+            context->set_packed_scalar(
+                id, detail::normalize_scalar<Width>(value));
         } else {
             const auto words = detail::value_to_words<Width>(value);
             bool changed = false;
@@ -235,6 +245,9 @@ class StaticOnDemandRef {
     }
 
     void set(value_type value) const requires(Writable) {
+        if constexpr (Width <= 32) {
+            value = detail::normalize_scalar<Width>(value);
+        }
         const auto words = detail::value_to_words<Width>(value);
         if constexpr (Width <= 32) {
             const uint32_t previous = get();
