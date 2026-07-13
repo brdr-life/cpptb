@@ -484,10 +484,12 @@ module dpi_peripheral_suite;
     cpptb_dpi_init(iterations, TIMEPRECISION_FS);
     run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);
     service_requests(initial_requests);
-    fork
-      timer_owner();
-      drive_clock_0();
-    join_none
+    if (status == 0) begin
+      fork
+        timer_owner();
+        drive_clock_0();
+      join_none
+    end
 
     wait (status != 0);
     timer_generation++;

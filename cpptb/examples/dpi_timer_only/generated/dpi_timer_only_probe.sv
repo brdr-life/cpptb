@@ -196,9 +196,11 @@ module dpi_timer_only_probe;
     cpptb_dpi_init(iterations, TIMEPRECISION_FS);
     run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);
     service_requests(initial_requests);
-    fork
-      timer_owner();
-    join_none
+    if (status == 0) begin
+      fork
+        timer_owner();
+      join_none
+    end
 
     wait (status != 0);
     timer_generation++;

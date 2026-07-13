@@ -239,9 +239,14 @@ class CodegenTests(unittest.TestCase):
         self.assertNotIn("#0", wrapper)
         self.assertNotIn("<=", wrapper)
         self.assertNotIn("disable fork", wrapper)
-        launcher = wrapper.index("    fork\n      timer_owner();")
-        self.assertLess(launcher, wrapper.index("      drive_clock_0();", launcher))
-        self.assertLess(launcher, wrapper.index("      drive_clock_1();", launcher))
+        launcher = wrapper.index(
+            "    if (status == 0) begin\n"
+            "      fork\n"
+            "        timer_owner();"
+        )
+        self.assertLess(wrapper.index("service_requests(initial_requests);"), launcher)
+        self.assertLess(launcher, wrapper.index("        drive_clock_0();", launcher))
+        self.assertLess(launcher, wrapper.index("        drive_clock_1();", launcher))
 
     def test_generates_persistent_timer_owner_for_clockless_wrapper(self):
         config = manifest()
@@ -258,7 +263,14 @@ class CodegenTests(unittest.TestCase):
         wrapper = render_sv(ports, [], config, "clockless.json")
 
         self.assertIn("task automatic timer_owner();", wrapper)
-        self.assertIn("    fork\n      timer_owner();\n    join_none", wrapper)
+        self.assertIn(
+            "    if (status == 0) begin\n"
+            "      fork\n"
+            "        timer_owner();\n"
+            "      join_none\n"
+            "    end",
+            wrapper,
+        )
         self.assertNotIn("task automatic drive_clock_", wrapper)
         self.assertNotIn("task automatic observe_clock_", wrapper)
         self.assertNotIn("reschedule_timer", wrapper)
@@ -289,9 +301,14 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("edge_interest[SIGNAL_BUSREADY]", wrapper)
         self.assertIn("STEP_EDGE_INTEREST_CHANGED", wrapper)
         self.assertIn("observe_signal_0();", wrapper)
-        launcher = wrapper.index("    fork\n      timer_owner();")
-        self.assertLess(launcher, wrapper.index("      drive_clock_0();", launcher))
-        self.assertLess(launcher, wrapper.index("      observe_signal_0();", launcher))
+        launcher = wrapper.index(
+            "    if (status == 0) begin\n"
+            "      fork\n"
+            "        timer_owner();"
+        )
+        self.assertLess(wrapper.index("service_requests(initial_requests);"), launcher)
+        self.assertLess(launcher, wrapper.index("        drive_clock_0();", launcher))
+        self.assertLess(launcher, wrapper.index("        observe_signal_0();", launcher))
 
     def test_rejects_invalid_edge_observer_ports(self):
         ports = [
