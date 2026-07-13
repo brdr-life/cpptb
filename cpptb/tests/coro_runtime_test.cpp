@@ -302,6 +302,14 @@ Task<void> wait_for_static_first(Signal clock, Signal observer,
                        Delay{5_ns}});
 }
 
+Task<void> wait_for_dynamic_edge_first(Signal rising, Signal falling,
+                                       Signal changed, uint32_t& winner,
+                                       uint32_t& resumes) {
+    winner = static_cast<uint32_t>(
+        co_await First{RisingEdge{rising}, FallingEdge{falling}, Edge{changed}});
+    ++resumes;
+}
+
 Task<void> cancellation_racer(Process* target) {
     co_await Delay{4_ns};
     target->cancel();
@@ -2071,6 +2079,46 @@ int main() {
                          kEdgeInterestNone);
         passed &= expect("interest change queue drains",
                          tb.consume_edge_interest_change().has_value(), 0);
+    }
+
+    {
+        Testbench tb;
+        const Signal rising{nullptr, 32, "dynamic_rising"};
+        const Signal falling{nullptr, 33, "dynamic_falling"};
+        const Signal changed{nullptr, 34, "dynamic_changed"};
+        uint32_t winner = 99;
+        uint32_t resumes = 0;
+        const auto process = tb.spawn(wait_for_dynamic_edge_first(
+            rising, falling, changed, winner, resumes));
+
+        passed &= expect("dynamic First rising interest",
+                         tb.edge_interest(rising.id), kEdgeInterestRising);
+        passed &= expect("dynamic First falling interest",
+                         tb.edge_interest(falling.id), kEdgeInterestFalling);
+        passed &= expect("dynamic First any-edge interest",
+                         tb.edge_interest(changed.id),
+                         kEdgeInterestRising | kEdgeInterestFalling);
+        passed &= expect("dynamic First falling summary",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 1);
+
+        tb.notify_edge(rising.id, EdgeKind::Rising);
+        passed &= expect("dynamic First winner", winner, 0);
+        passed &= expect("dynamic First completes", process.done() ? 1 : 0,
+                         1);
+        passed &= expect("dynamic First resumes once", resumes, 1);
+        passed &= expect("dynamic First clears winner interest",
+                         tb.edge_interest(rising.id), kEdgeInterestNone);
+        passed &= expect("dynamic First clears falling loser interest",
+                         tb.edge_interest(falling.id), kEdgeInterestNone);
+        passed &= expect("dynamic First clears any-edge loser interest",
+                         tb.edge_interest(changed.id), kEdgeInterestNone);
+        passed &= expect("dynamic First clears falling summary",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+
+        tb.notify_edge(falling.id, EdgeKind::Falling);
+        tb.notify_edge(changed.id, EdgeKind::Any);
+        passed &= expect("dynamic First stale losers do not resume", resumes,
+                         1);
     }
 
     {
