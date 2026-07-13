@@ -16,6 +16,7 @@ from benchmarks.authoring_core.workload import KERNELS
 
 EXPECTED_NAMES = (
     *KERNELS,
+    "dpi_counter",
     "dpi_multiclock",
     "dpi_timer_only",
     "peripheral_suite",
@@ -42,6 +43,10 @@ class RegistryTests(unittest.TestCase):
                     entry.binary_paths, tuple(binary.path for binary in entry.binaries)
                 )
 
+        self.assertEqual(
+            registry.get_benchmark("dpi_counter").gate_policy,
+            registry.GatePolicy.EQUIVALENCE_ONLY,
+        )
         self.assertEqual(
             registry.get_benchmark("dpi_multiclock").gate_policy,
             registry.GatePolicy.EQUIVALENCE_ONLY,
@@ -75,14 +80,19 @@ class RegistryTests(unittest.TestCase):
                 entry.name
                 for entry in registry.list_benchmarks(category="integration")
             ),
-            ("dpi_multiclock", "dpi_timer_only", "peripheral_suite"),
+            (
+                "dpi_counter",
+                "dpi_multiclock",
+                "dpi_timer_only",
+                "peripheral_suite",
+            ),
         )
         self.assertEqual(
             tuple(
                 entry.name
                 for entry in registry.list_benchmarks(gate_policy="equivalence_only")
             ),
-            ("dpi_multiclock", "dpi_timer_only"),
+            ("dpi_counter", "dpi_multiclock", "dpi_timer_only"),
         )
         with self.assertRaises(KeyError):
             registry.get_benchmark("missing")

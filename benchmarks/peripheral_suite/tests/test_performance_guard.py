@@ -200,6 +200,19 @@ class EnvironmentValidityTests(unittest.TestCase):
 
 
 class CommandMeasurementTests(unittest.TestCase):
+    def test_cocotb_commands_use_repository_local_uv_cache(self):
+        for mode in ("--build-only", "--no-build"):
+            with self.subTest(mode=mode):
+                command = RUNNER.cocotb_command(123, mode)
+                cache_index = command.index("--cache-dir") + 1
+                self.assertEqual(
+                    command[cache_index], str(RUNNER.REPO / "build" / "uv-cache")
+                )
+                self.assertEqual(command[-3:], ["--iters", "123", mode])
+
+        with self.assertRaisesRegex(ValueError, "unsupported cocotb runner mode"):
+            RUNNER.cocotb_command(123, "--invalid")
+
     def test_child_cpu_and_rss_are_rusage_children_deltas(self):
         before = SimpleNamespace(ru_utime=1.0, ru_stime=2.0, ru_maxrss=100.0)
         after = SimpleNamespace(ru_utime=1.025, ru_stime=2.010, ru_maxrss=140.0)

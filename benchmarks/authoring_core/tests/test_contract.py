@@ -235,14 +235,14 @@ class ContractTests(unittest.TestCase):
 
     def test_signal_edge_observer_and_exact_waits_are_registered(self):
         manifest = json.loads(
-            (BENCH_DIR / "cpp_dpi/authoring_core.dpi.json").read_text(
+            (BENCH_DIR / "testbenches/cpp_dpi/authoring_core.dpi.json").read_text(
                 encoding="utf-8"
             )
         )
         self.assertEqual(manifest["edge_observers"], ["rsp_valid"])
 
-        cpp = (BENCH_DIR / "cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
-        sv = (BENCH_DIR / "pure_sv/authoring_core_sv_tb.sv").read_text(
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
+        sv = (BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv").read_text(
             encoding="utf-8"
         )
         self.assertIn("co_await RisingEdge{context.dut.rsp_valid};", cpp)
@@ -265,8 +265,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(workload.expected_counts("all", 5).array_multidim, 0)
 
     def test_array_multidim_authors_exact_rank_two_accesses(self):
-        cpp = (BENCH_DIR / "cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
-        sv = (BENCH_DIR / "pure_sv/authoring_core_sv_tb.sv").read_text(
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
+        sv = (BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv").read_text(
             encoding="utf-8"
         )
         rtl = (BENCH_DIR / "rtl/authoring_core_dut.sv").read_text(
@@ -299,7 +299,7 @@ class ContractTests(unittest.TestCase):
 
     def test_force_release_uses_dedicated_net_and_exact_delays(self):
         manifest = json.loads(
-            (BENCH_DIR / "cpp_dpi/authoring_core.dpi.json").read_text(
+            (BENCH_DIR / "testbenches/cpp_dpi/authoring_core.dpi.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -312,8 +312,8 @@ class ContractTests(unittest.TestCase):
             {"path": "force_target", "access": "read", "force": True},
         )
 
-        cpp = (BENCH_DIR / "cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
-        sv = (BENCH_DIR / "pure_sv/authoring_core_sv_tb.sv").read_text(
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
+        sv = (BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv").read_text(
             encoding="utf-8"
         )
         rtl = (BENCH_DIR / "rtl/authoring_core_dut.sv").read_text(
@@ -345,8 +345,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(counts.packed_view, 5)
         self.assertEqual(workload.expected_counts("all", 5).packed_view, 0)
 
-        cpp = (BENCH_DIR / "cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
-        sv = (BENCH_DIR / "pure_sv/authoring_core_sv_tb.sv").read_text(
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
+        sv = (BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv").read_text(
             encoding="utf-8"
         )
         self.assertIn("PacketTValue::from_signal_value", cpp)

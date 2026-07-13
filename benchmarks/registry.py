@@ -20,6 +20,7 @@ class Category(str, Enum):
 
 class AdapterKind(str, Enum):
     AUTHORING_CORE = "authoring_core"
+    DPI_COUNTER = "dpi_counter"
     DPI_MULTICLOCK = "dpi_multiclock"
     DPI_TIMER_ONLY = "dpi_timer_only"
     PERIPHERAL_SUITE = "peripheral_suite"
@@ -154,6 +155,26 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring("array_multidim", "Multidimensional unpacked array"),
     _authoring("force_release", "Internal net force/release"),
     _authoring("packed_view", "Packed enum/struct views"),
+    Benchmark(
+        name="dpi_counter",
+        label="DPI counter",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_COUNTER,
+        build_targets=("cpp-dpi-counter-build", "cpp-dpi-counter-sv-build"),
+        binaries=(
+            Binary("cpp_dpi", "build/cpptb/dpi_counter_obj/Vdpi_counter"),
+            Binary("pure_sv", "build/cpptb/dpi_counter_sv_obj/Vcounter_sv_tb"),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-counter-run"),
+                ("make", "cpp-dpi-counter-sv-run"),
+            ),
+            iterations_environment="CPPTB_COUNTER_ITERS",
+        ),
+        default_iterations=8,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
     Benchmark(
         name="dpi_multiclock",
         label="DPI multiclock",

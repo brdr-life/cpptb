@@ -1,24 +1,29 @@
-# Mojo + Verilator Counter Demo
+# Examples
 
-This directory is a small proof that Mojo can drive a Verilated hardware model.
+The examples are ordered from a first testbench to more involved
+multi-process testbenches:
 
-The integration shape is:
+| Example | Demonstrates | Run |
+|---|---|---|
+| [`counter`](counter/) | Generated clock, reset, signal reads and writes, edge waits, and post-edge sampling | `make cpp-dpi-counter-run` |
+| [`timer_only`](timer_only/) | Clockless absolute delays and concurrent timer processes | `make cpp-dpi-timer-only-run` |
+| [`multiclock`](multiclock/) | Independent clocks, reset, producer/consumer traffic, `First`, and explicit settle delays | `make cpp-dpi-multiclock-run` |
 
-1. Verilator compiles `counter.sv` into a C++ model.
-2. `counter_c_api.cpp` wraps that C++ model with an `extern "C"` API.
-3. `counter_driver.mojo` loads `build/libcounter.dylib` with `std.ffi.OwnedDLHandle`.
-4. Mojo calls the C ABI functions to reset, tick, and read the simulated counter.
-
-Run it from the repo root:
-
-```sh
-make run
-```
-
-Expected output:
+Each directory keeps the same recognizable shape:
 
 ```text
-after reset: 0
-after 5 enabled ticks: 5
-after disabled tick: 5
+example/
+├── README.md
+├── design.dpi.json
+├── design.sv
+├── testbench.cpp
+├── framework.cpp/.hpp
+├── dpi_transport.cpp
+├── generated/
+└── systemverilog/
 ```
+
+`testbench.cpp` is the primary user-facing file. The framework and transport
+files connect the generated DUT type to the reusable runtime. The
+`systemverilog/` testbench executes the equivalent sequence for semantic and
+performance comparisons.
