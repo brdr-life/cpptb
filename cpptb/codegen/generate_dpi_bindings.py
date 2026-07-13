@@ -45,6 +45,7 @@ TIME_UNIT_FEMTOSECONDS = {
     "ms": 1_000_000_000_000,
     "s": 1_000_000_000_000_000,
 }
+PORT_TRANSPORTS = frozenset({"packed", "on_demand"})
 
 
 def time_literal_femtoseconds(value: str, label: str) -> int:
@@ -199,6 +200,52 @@ def map_ports(ports: list[Port], manifest: dict[str, Any]) -> list[Port]:
                 f"{'.'.join(port.cpp_path)!r}"
             )
     return mapped
+
+
+def apply_port_transport(design: DesignIR, manifest: dict[str, Any]) -> DesignIR:
+    configured = manifest.get("port_transport", {})
+    if not isinstance(configured, dict):
+        raise CodegenError("manifest port_transport must be an object")
+    if not all(isinstance(name, str) and name for name in configured):
+        raise CodegenError("manifest port_transport keys must be port names")
+
+    by_name = {port.name: port for port in design.ports}
+    clock_names = {
+        clock.get("port")
+        for clock in clock_configs(manifest)
+        if "port" in clock
+    }
+    configured_observers = manifest.get("edge_observers", [])
+    edge_observer_names = (
+        {name for name in configured_observers if isinstance(name, str)}
+        if isinstance(configured_observers, list)
+        else set()
+    )
+    for name, transport in configured.items():
+        if name not in by_name:
+            raise CodegenError(f"port_transport port {name!r} was not found")
+        if not isinstance(transport, str) or transport not in PORT_TRANSPORTS:
+            choices = ", ".join(sorted(PORT_TRANSPORTS))
+            raise CodegenError(
+                f"port {name!r} has invalid transport {transport!r}; "
+                f"expected one of {choices}"
+            )
+        if transport == "on_demand" and name in clock_names:
+            raise CodegenError(
+                f"configured clock port {name!r} cannot use on_demand transport"
+            )
+        if transport == "on_demand" and name in edge_observer_names:
+            raise CodegenError(
+                f"edge observer port {name!r} cannot use on_demand transport"
+            )
+
+    return replace(
+        design,
+        ports=tuple(
+            replace(port, transport=configured.get(port.name, "packed"))
+            for port in design.ports
+        ),
+    )
 
 
 def packed_union_path(
@@ -509,6 +556,12 @@ def internal_export_name(
     return f"{manifest['top_module']}_internal_{index}_{operation}"
 
 
+def port_export_name(
+    manifest: dict[str, Any], index: int, operation: str
+) -> str:
+    return f"{manifest['top_module']}_port_{index}_{operation}"
+
+
 def port_word_count(port: Port) -> int:
     count = (port.width + 31) // 32
     for dimension in port.unpacked:
@@ -543,6 +596,14 @@ def signal_word_ids(ports: list[Port]) -> list[str]:
         for word in range(port_word_count(port)):
             ids.append(base if word == 0 else f"{base} + {word}")
     return ids
+
+
+def packed_ports(ports: list[Port]) -> list[Port]:
+    return [port for port in ports if port.transport == "packed"]
+
+
+def on_demand_ports(ports: list[Port]) -> list[Port]:
+    return [port for port in ports if port.transport == "on_demand"]
 
 
 def driven_port_names(ports: list[Port], manifest: dict[str, Any]) -> set[str]:
@@ -1051,6 +1112,7 @@ def render_binding_expr(
     node: TreeNode,
     driven_names: set[str],
     internal_indices: dict[Internal, int],
+    on_demand_indices: dict[Port, int],
     indent: int = 4,
 ) -> list[str]:
     prefix = " " * indent
@@ -1063,10 +1125,16 @@ def render_binding_expr(
             if child.unpacked:
                 declared_range = child.unpacked[0]
                 if len(child.unpacked) == 1:
-                    expression = (
-                        f"make_signal(coro::ArraySpec<{child.width}, "
+                    transport_spec = (
+                        f"coro::ArraySpec<{child.width}, "
                         f"{declared_range.left}, {declared_range.right}, "
-                        f"{writable}>{{}}, {signal_id(child.name)}, "
+                        f"{writable}>{{}}"
+                    )
+                    signal_spec = render_signal_spec(
+                        child, transport_spec, on_demand_indices, writable
+                    )
+                    expression = (
+                        f"make_signal({signal_spec}, {signal_id(child.name)}, "
                         f'"{child.name}")'
                     )
                 else:
@@ -1079,24 +1147,48 @@ def render_binding_expr(
                     for dimension in child.unpacked[1:]:
                         inner_words *= dimension.size
                     transport_width = inner_words * 32
+                    transport_spec = (
+                        f"coro::ArraySpec<{transport_width}, "
+                        f"{declared_range.left}, {declared_range.right}, "
+                        f"{writable}>{{}}"
+                    )
+                    signal_spec = render_signal_spec(
+                        child, transport_spec, on_demand_indices, writable
+                    )
                     expression = (
                         f"coro::reshape_fixed_array(coro::FixedArraySpec<"
                         f"{child.width}, {writable}, {dimensions}>{{}}, "
-                        f"make_signal(coro::ArraySpec<{transport_width}, "
-                        f"{declared_range.left}, {declared_range.right}, "
-                        f"{writable}>{{}}, {signal_id(child.name)}, "
+                        f"make_signal({signal_spec}, {signal_id(child.name)}, "
                         f'"{child.name}"))'
                     )
                 lines.append(" " * (indent + 4) + expression + comma)
             elif child.width <= 32:
-                lines.append(
-                    " " * (indent + 4)
-                    + f'make_signal({signal_id(child.name)}, "{child.name}"){comma}'
-                )
+                if child.transport == "packed":
+                    expression = (
+                        f'make_signal({signal_id(child.name)}, "{child.name}")'
+                    )
+                else:
+                    transport_spec = (
+                        f"coro::SignalSpec<{child.width}, {writable}>{{}}"
+                    )
+                    signal_spec = render_signal_spec(
+                        child, transport_spec, on_demand_indices, writable
+                    )
+                    expression = (
+                        f"make_signal({signal_spec}, {signal_id(child.name)}, "
+                        f'"{child.name}")'
+                    )
+                lines.append(" " * (indent + 4) + expression + comma)
             else:
+                transport_spec = (
+                    f"coro::SignalSpec<{child.width}, {writable}>{{}}"
+                )
+                signal_spec = render_signal_spec(
+                    child, transport_spec, on_demand_indices, writable
+                )
                 lines.append(
                     " " * (indent + 4)
-                    + f"make_signal(coro::SignalSpec<{child.width}, {writable}>{{}}, "
+                    + f"make_signal({signal_spec}, "
                     + f'{signal_id(child.name)}, "{child.name}"){comma}'
                 )
         elif isinstance(child, Internal):
@@ -1106,12 +1198,32 @@ def render_binding_expr(
             )
         else:
             child_lines = render_binding_expr(
-                child, driven_names, internal_indices, indent + 4
+                child,
+                driven_names,
+                internal_indices,
+                on_demand_indices,
+                indent + 4,
             )
             child_lines[-1] += comma
             lines.extend(child_lines)
     lines.append(prefix + "}")
     return lines
+
+
+def render_signal_spec(
+    port: Port,
+    transport_spec: str,
+    on_demand_indices: dict[Port, int],
+    writable: str,
+) -> str:
+    if port.transport == "packed":
+        return transport_spec
+    index = on_demand_indices[port]
+    setter = f"on_demand_port_{index}_set_words" if writable == "true" else "nullptr"
+    return (
+        f"OnDemandSpec{{{transport_spec}, {port_word_count(port)}, "
+        f"on_demand_port_{index}_get_words, {setter}}}"
+    )
 
 
 def cpp_internal_export_declarations(
@@ -1256,6 +1368,162 @@ def cpp_internal_helpers(
     return lines
 
 
+def cpp_port_export_declarations(
+    ports: list[Port], manifest: dict[str, Any]
+) -> list[str]:
+    lines: list[str] = []
+    for index, port in enumerate(ports):
+        if port.transport != "on_demand":
+            continue
+        index_args = ", ".join(
+            f"int index_{rank}" for rank in range(len(port.unpacked))
+        )
+        get_name = port_export_name(manifest, index, "get")
+        if port.width <= 32:
+            lines.append(f"unsigned int {get_name}({index_args});")
+        elif port.width <= 64:
+            lines.append(f"unsigned long long {get_name}({index_args});")
+        else:
+            separator = ", " if index_args else ""
+            lines.append(
+                f"void {get_name}({index_args}{separator}svBitVecVal* value);"
+            )
+        if port.direction != "input":
+            continue
+        set_name = port_export_name(manifest, index, "set")
+        value_type = (
+            "unsigned int"
+            if port.width <= 32
+            else (
+                "unsigned long long"
+                if port.width <= 64
+                else "const svBitVecVal*"
+            )
+        )
+        separator = ", " if index_args else ""
+        lines.append(
+            f"void {set_name}({index_args}{separator}{value_type} value);"
+        )
+    return lines
+
+
+def cpp_on_demand_index_lines(port: Port) -> tuple[list[str], str]:
+    if not port.unpacked:
+        return [], ""
+    lines = ["    uint32_t remaining = element;"]
+    for rank in reversed(range(len(port.unpacked))):
+        dimension = port.unpacked[rank]
+        lines.append(
+            f"    const int index_{rank} = static_cast<int>(remaining % "
+            f"{dimension.size}) + {dimension.low};"
+        )
+        if rank != 0:
+            lines.append(f"    remaining /= {dimension.size};")
+    arguments = ", ".join(
+        f"index_{rank}" for rank in range(len(port.unpacked))
+    )
+    return lines, arguments
+
+
+def cpp_on_demand_helpers(
+    ports: list[Port], manifest: dict[str, Any]
+) -> list[str]:
+    selected = on_demand_ports(ports)
+    if not selected:
+        return []
+    lines = [
+        "using OnDemandGetWordsFn = void (*)(uint32_t, uint32_t*, uint32_t);",
+        "using OnDemandSetWordsFn = void (*)(uint32_t, const uint32_t*, uint32_t);",
+        "",
+        "template <typename TransportSpec>",
+        "struct OnDemandSpec {",
+        "    static constexpr bool on_demand = true;",
+        "    TransportSpec transport_spec;",
+        "    uint32_t word_count;",
+        "    OnDemandGetWordsFn get_words_fn;",
+        "    OnDemandSetWordsFn set_words_fn;",
+        "};",
+        "",
+    ]
+    for index, port in enumerate(ports):
+        if port.transport != "on_demand":
+            continue
+        element_words = element_word_count(port)
+        element_count = port_word_count(port) // element_words
+        get_name = port_export_name(manifest, index, "get")
+        index_lines, index_args = cpp_on_demand_index_lines(port)
+        prefix = f"{index_args}, " if index_args else ""
+        lines.extend(
+            [
+                f"inline void on_demand_port_{index}_get_words(",
+                "    uint32_t word_offset, uint32_t* words, uint32_t word_count) {",
+                f'    probe::detail::require_signal_callback("{port.name}");',
+                f"    constexpr uint32_t kElementWords = {element_words};",
+                f"    constexpr uint32_t kElementCount = {element_count};",
+                "    const uint32_t element = word_offset / kElementWords;",
+                "    if (!words || (word_offset % kElementWords) != 0 ||",
+                "        word_count != kElementWords || element >= kElementCount) {",
+                f'        std::fprintf(stderr, "cpptb: invalid on-demand get for {port.name}\\n");',
+                "        std::abort();",
+                "    }",
+            ]
+        )
+        lines.extend(index_lines)
+        if port.width <= 32:
+            lines.append(f"    words[0] = {get_name}({index_args});")
+        elif port.width <= 64:
+            lines.extend(
+                [
+                    f"    const uint64_t value = {get_name}({index_args});",
+                    "    words[0] = static_cast<uint32_t>(value);",
+                    "    words[1] = static_cast<uint32_t>(value >> 32);",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    f"    {get_name}({prefix}reinterpret_cast<svBitVecVal*>(words));",
+                ]
+            )
+        lines.extend(["}", ""])
+
+        if port.direction != "input":
+            continue
+        set_name = port_export_name(manifest, index, "set")
+        lines.extend(
+            [
+                f"inline void on_demand_port_{index}_set_words(",
+                "    uint32_t word_offset, const uint32_t* words, uint32_t word_count) {",
+                f'    probe::detail::require_signal_callback("{port.name}");',
+                f"    constexpr uint32_t kElementWords = {element_words};",
+                f"    constexpr uint32_t kElementCount = {element_count};",
+                "    const uint32_t element = word_offset / kElementWords;",
+                "    if (!words || (word_offset % kElementWords) != 0 ||",
+                "        word_count != kElementWords || element >= kElementCount) {",
+                f'        std::fprintf(stderr, "cpptb: invalid on-demand set for {port.name}\\n");',
+                "        std::abort();",
+                "    }",
+            ]
+        )
+        lines.extend(index_lines)
+        if port.width <= 32:
+            lines.append(f"    {set_name}({prefix}words[0]);")
+        elif port.width <= 64:
+            lines.extend(
+                [
+                    "    const uint64_t value = static_cast<uint64_t>(words[0]) |",
+                    "        (static_cast<uint64_t>(words[1]) << 32);",
+                    f"    {set_name}({prefix}value);",
+                ]
+            )
+        else:
+            lines.append(
+                f"    {set_name}({prefix}reinterpret_cast<const svBitVecVal*>(words));"
+            )
+        lines.extend(["}", ""])
+    return lines
+
+
 def render_cpp_binding(
     ports: list[Port],
     internals: list[Internal],
@@ -1269,8 +1537,14 @@ def render_cpp_binding(
     compact_input_transport = bool(
         manifest.get("run", {}).get("compact_input_transport", True)
     )
+    selected_on_demand = on_demand_ports(ports)
+    effective_compact_input_transport = (
+        compact_input_transport or bool(selected_on_demand)
+    )
     driven = [port for port in ports if port.name in driven_names]
     observed = [port for port in ports if port.name not in driven_names]
+    packed_driven = packed_ports(driven)
+    packed_observed = packed_ports(observed)
     offsets = signal_word_offsets(ports)
     include = manifest["outputs"]["cpp_include"]
     lines = [
@@ -1281,22 +1555,31 @@ def render_cpp_binding(
         "#include <cstdint>",
         "#include <utility>",
     ]
-    if internals:
+    if internals or selected_on_demand:
         lines.append('#include "svdpi.h"')
-    lines.extend(["", f'#include "{include}"', ""])
-    if internals:
-        lines.extend(['extern "C" {'])
+    if selected_on_demand:
         lines.extend(
-            f"    {declaration}"
-            for declaration in cpp_internal_export_declarations(internals, manifest)
+            [
+                '#include "cpptb/probe.hpp"',
+                "#include <cstdio>",
+                "#include <cstdlib>",
+            ]
         )
+    lines.extend(["", f'#include "{include}"', ""])
+    if internals or selected_on_demand:
+        lines.extend(['extern "C" {'])
+        declarations = [
+            *cpp_port_export_declarations(ports, manifest),
+            *cpp_internal_export_declarations(internals, manifest),
+        ]
+        lines.extend(f"    {declaration}" for declaration in declarations)
         lines.extend(["}", ""])
     lines.extend(
         [
             f"namespace {manifest['namespace']}::generated {{",
             "",
             f"inline constexpr bool kCompactInputTransport = "
-            f"{'true' if compact_input_transport else 'false'};",
+            f"{'true' if effective_compact_input_transport else 'false'};",
             f"inline constexpr std::array<uint32_t, {len(clock_names)}> kClockSignalIds = {{",
         ]
     )
@@ -1319,17 +1602,20 @@ def render_cpp_binding(
     )
     lines.extend([
         "}};",
-        f"inline constexpr std::array<uint32_t, {sum(port_word_count(port) for port in observed)}> "
+        f"inline constexpr std::array<uint32_t, {sum(port_word_count(port) for port in packed_observed)}> "
         "kObservedSignalWordIds = {",
     ])
-    lines.extend(f"    {word_id}," for word_id in signal_word_ids(observed))
+    lines.extend(
+        f"    {word_id}," for word_id in signal_word_ids(packed_observed)
+    )
     lines.extend([
         "};",
-        f"inline constexpr std::array<uint32_t, {sum(port_word_count(port) for port in driven)}> "
+        f"inline constexpr std::array<uint32_t, {sum(port_word_count(port) for port in packed_driven)}> "
         "kDrivenSignalWordIds = {",
     ])
-    lines.extend(f"    {word_id}," for word_id in signal_word_ids(driven))
+    lines.extend(f"    {word_id}," for word_id in signal_word_ids(packed_driven))
     lines.extend(["};", ""])
+    lines.extend(cpp_on_demand_helpers(ports, manifest))
     if internals:
         lines.extend(cpp_internal_helpers(internals, manifest))
     lines.append("template <typename MakeSignal>")
@@ -1340,6 +1626,11 @@ def render_cpp_binding(
         root,
         driven_names,
         {internal: index for index, internal in enumerate(internals)},
+        {
+            port: index
+            for index, port in enumerate(ports)
+            if port.transport == "on_demand"
+        },
         4,
     )
     expression[0] = "    return " + expression[0].lstrip()
@@ -1664,6 +1955,68 @@ def sv_internal_export_functions(
     return lines
 
 
+def sv_port_export_functions(
+    ports: list[Port], manifest: dict[str, Any]
+) -> list[str]:
+    lines: list[str] = []
+    for index, port in enumerate(ports):
+        if port.transport != "on_demand":
+            continue
+        index_formals = ", ".join(
+            f"input int index_{rank}" for rank in range(len(port.unpacked))
+        )
+        target = port.name + "".join(
+            f"[index_{rank}]" for rank in range(len(port.unpacked))
+        )
+        value_type = (
+            "int unsigned"
+            if port.width <= 32
+            else (
+                "longint unsigned"
+                if port.width <= 64
+                else f"bit [{port.width - 1}:0]"
+            )
+        )
+        get_name = port_export_name(manifest, index, "get")
+        lines.append(f'  export "DPI-C" function {get_name};')
+        if port.width <= 64:
+            lines.extend(
+                [
+                    f"  function {value_type} {get_name}({index_formals});",
+                    f"    {get_name} = {target};",
+                    "  endfunction",
+                    "",
+                ]
+            )
+        else:
+            separator = ", " if index_formals else ""
+            lines.extend(
+                [
+                    f"  function void {get_name}({index_formals}{separator}"
+                    f"output {value_type} value);",
+                    f"    value = {target};",
+                    "  endfunction",
+                    "",
+                ]
+            )
+
+        if port.direction != "input":
+            continue
+        set_name = port_export_name(manifest, index, "set")
+        separator = ", " if index_formals else ""
+        lines.extend(
+            [
+                f'  export "DPI-C" function {set_name};',
+                f"  function void {set_name}({index_formals}{separator}"
+                f"input {value_type} value);",
+                f"    {target} = value;",
+                "  endfunction",
+                "",
+            ]
+        )
+    return lines
+
+
 def render_sv(
     ports: list[Port],
     internals: list[Internal],
@@ -1678,20 +2031,34 @@ def render_sv(
     compact_input_transport = bool(run.get("compact_input_transport", True))
     observed_ports = [port for port in ports if port.name not in driven_names]
     driven_ports = [port for port in ports if port.name in driven_names]
+    selected_on_demand = on_demand_ports(ports)
+    packed_observed_ports = packed_ports(observed_ports)
+    packed_driven_ports = packed_ports(driven_ports)
+    effective_compact_input_transport = (
+        compact_input_transport or bool(selected_on_demand)
+    )
     all_offsets = signal_word_offsets(ports)
     global_offsets = {
         port.name: offset for port, offset in zip(ports, all_offsets)
     }
     input_offsets = (
-        directional_transport_offsets(observed_ports)
-        if compact_input_transport
-        else {port.name: global_offsets[port.name] for port in observed_ports}
+        directional_transport_offsets(packed_observed_ports)
+        if effective_compact_input_transport
+        else {
+            port.name: global_offsets[port.name]
+            for port in packed_observed_ports
+        }
     )
-    output_offsets = directional_transport_offsets(driven_ports)
-    input_word_count = sum(port_word_count(port) for port in observed_ports)
-    output_word_count = sum(port_word_count(port) for port in driven_ports)
+    output_offsets = directional_transport_offsets(packed_driven_ports)
+    input_word_count = sum(
+        port_word_count(port) for port in packed_observed_ports
+    )
+    output_word_count = sum(port_word_count(port) for port in packed_driven_ports)
     input_storage_count = max(
-        1, input_word_count if compact_input_transport else all_offsets[-1]
+        1,
+        input_word_count
+        if effective_compact_input_transport
+        else all_offsets[-1],
     )
     output_storage_count = max(1, output_word_count)
     primary_clocks = [clock for clock in clocks if clock.get("primary", False)]
@@ -1754,12 +2121,12 @@ def render_sv(
     )
     for port, offset in zip(ports, offsets):
         lines.append(f"  localparam int {sv_signal_constant(port)} = {offset};")
-    for port in observed_ports:
+    for port in packed_observed_ports:
         lines.append(
             f"  localparam int INPUT_{sv_signal_constant(port)} = "
             f"{input_offsets[port.name]};"
         )
-    for port in driven_ports:
+    for port in packed_driven_ports:
         lines.append(
             f"  localparam int OUTPUT_{sv_signal_constant(port)} = "
             f"{output_offsets[port.name]};"
@@ -1812,12 +2179,12 @@ def render_sv(
             "  task automatic pack_inputs();",
         ]
     )
-    for port in observed_ports:
+    for port in packed_observed_ports:
         lines.extend(
             sv_pack_assignments(port, f"INPUT_{sv_signal_constant(port)}")
         )
     lines.extend(["  endtask", "", "  task automatic apply_outputs();"])
-    for port in driven_ports:
+    for port in packed_driven_ports:
         lines.extend(
             sv_output_assignments(port, f"OUTPUT_{sv_signal_constant(port)}")
         )
@@ -2126,6 +2493,7 @@ def render_sv(
         comma = "," if index + 1 < len(ports) else ""
         lines.append(f"      .{port.name}({port.name}){comma}")
     lines.extend(["  );", ""])
+    lines.extend(sv_port_export_functions(ports, manifest))
     lines.extend(sv_internal_export_functions(internals, manifest))
     lines.extend([f"endmodule : {manifest['top_module']}", ""])
     return "\n".join(lines)
@@ -2177,9 +2545,10 @@ def compare_designs(
     def format_port(signature: tuple) -> str:
         name, direction, width, signed, four_state, dimensions = signature
         unpacked = "".join(f"[{left}:{right}]" for left, right in dimensions)
+        transport = getattr(signature, "transport", "packed")
         return (
             f"  {direction} {name}[{width}]{unpacked} "
-            f"signed={signed} four_state={four_state}"
+            f"signed={signed} four_state={four_state} transport={transport}"
         )
 
     primary_ports = "\n".join(
@@ -2205,13 +2574,16 @@ def generate(
     manifest = load_manifest(manifest_path)
     base_dir = manifest_path.parent
     primary_name = frontend_name(manifest, frontend)
-    design = elaborate_design(manifest, base_dir, frontend)
+    design = apply_port_transport(
+        elaborate_design(manifest, base_dir, frontend), manifest
+    )
     if compare_frontend is not None:
         comparison_manifest = manifest
         if compare_frontend == "verilator_json" and manifest.get("internals"):
             comparison_manifest = {**manifest, "internals": []}
-        comparison = elaborate_design(
-            comparison_manifest, base_dir, compare_frontend
+        comparison = apply_port_transport(
+            elaborate_design(comparison_manifest, base_dir, compare_frontend),
+            manifest,
         )
         compare_designs(design, comparison, primary_name, compare_frontend)
 

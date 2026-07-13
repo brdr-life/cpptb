@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <string_view>
+#include <thread>
 #include <utility>
 
 namespace cpptb::conformance {
@@ -34,6 +35,12 @@ Task<void> packed_signal_contract(ConformanceTb tb) {
     tb.expect_true("65-bit driven readback is masked snapshot",
                    tb.dut.packed65_i.get() == packed65);
 
+    const auto superseded137 = Bits<137>::from_words(
+        {0x1111'2222u, 0x3333'4444u, 0x5555'6666u, 0x7777'8888u,
+         0x0000'0011u});
+    tb.dut.packed137_i.set(superseded137);
+    tb.expect_true("137-bit on-demand set is immediately readable",
+                   tb.dut.packed137_i.get() == superseded137);
     const auto packed137 = Bits<137>::from_words(
         {0x0011'2233u, 0x4455'6677u, 0x8899'aabbu, 0xccdd'eeffu,
          0xffff'ffffu});
@@ -92,6 +99,14 @@ Task<void> multidimensional_array_contract(ConformanceTb tb) {
             value.set_word(0, 0x1020'3040u + ordinal);
             value.set_word(1, 0x5060'7080u + ordinal);
             value.set_word(2, ordinal & 1u);
+            if (row == 1 && column == -1) {
+                const auto superseded = Bits<65>::from_words(
+                    {0x1111'2222u, 0x3333'4444u, 1u});
+                tb.dut.matrix65_i.at(row).at(column).set(superseded);
+                tb.expect_true(
+                    "rank-2 on-demand set is immediately readable",
+                    tb.dut.matrix65_i.at(row).at(column).get() == superseded);
+            }
             tb.dut.matrix65_i.at(row).at(column).set(value);
             tb.expect_true("rank-2 wide array driven readback",
                            tb.dut.matrix65_i.at(row).at(column).get() == value);
@@ -1583,6 +1598,19 @@ Task<void> unobserved_edge_violation(ConformanceTb tb) {
     co_await RisingEdge{tb.dut.comb_sum};
 }
 
+Task<void> on_demand_array_bounds_violation(ConformanceTb tb) {
+    static_cast<void>(tb.dut.matrix65_i.at(3));
+    co_return;
+}
+
+Task<void> on_demand_callback_scope_violation(ConformanceTb tb) {
+    std::thread outside_callback([dut = tb.dut] {
+        static_cast<void>(dut.packed137_i.get());
+    });
+    outside_callback.join();
+    co_return;
+}
+
 }  // namespace
 
 void register_user_testbench(ConformanceTb& tb) {
@@ -1636,6 +1664,14 @@ void register_user_testbench(ConformanceTb& tb) {
         }
         if (selected == "unobserved_edge") {
             tb.sequence(unobserved_edge_violation);
+            return;
+        }
+        if (selected == "on_demand_array_bounds") {
+            tb.sequence(on_demand_array_bounds_violation);
+            return;
+        }
+        if (selected == "on_demand_callback_scope") {
+            tb.sequence(on_demand_callback_scope_violation);
             return;
         }
     }

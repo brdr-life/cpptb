@@ -61,33 +61,27 @@ module dpi_authoring_core;
   localparam int INPUT_SIGNAL_REQUESTCOUNT = 5;
   localparam int INPUT_SIGNAL_RESPONSECOUNT = 6;
   localparam int INPUT_SIGNAL_WIDE64O = 7;
-  localparam int INPUT_SIGNAL_WIDE137O = 9;
-  localparam int INPUT_SIGNAL_FIXEDYO = 14;
-  localparam int INPUT_SIGNAL_ARRAYO = 15;
-  localparam int INPUT_SIGNAL_ARRAYWIDEO = 23;
-  localparam int INPUT_SIGNAL_ARRAYMULTIDIMO = 31;
-  localparam int INPUT_SIGNAL_FORCEFANOUTO = 49;
-  localparam int INPUT_SIGNAL_PACKEDVIEWO = 50;
-  localparam int INPUT_SIGNAL_MEMRDATAO = 51;
+  localparam int INPUT_SIGNAL_FIXEDYO = 9;
+  localparam int INPUT_SIGNAL_ARRAYO = 10;
+  localparam int INPUT_SIGNAL_FORCEFANOUTO = 18;
+  localparam int INPUT_SIGNAL_PACKEDVIEWO = 19;
+  localparam int INPUT_SIGNAL_MEMRDATAO = 20;
   localparam int OUTPUT_SIGNAL_RSTN = 0;
   localparam int OUTPUT_SIGNAL_REQVALID = 1;
   localparam int OUTPUT_SIGNAL_REQDATA = 2;
   localparam int OUTPUT_SIGNAL_RSPREADY = 3;
   localparam int OUTPUT_SIGNAL_WIDE64I = 4;
-  localparam int OUTPUT_SIGNAL_WIDE137I = 6;
-  localparam int OUTPUT_SIGNAL_FIXEDAI = 11;
-  localparam int OUTPUT_SIGNAL_FIXEDBI = 12;
-  localparam int OUTPUT_SIGNAL_ARRAYI = 13;
-  localparam int OUTPUT_SIGNAL_ARRAYWIDEI = 21;
-  localparam int OUTPUT_SIGNAL_ARRAYMULTIDIMI = 29;
-  localparam int OUTPUT_SIGNAL_FORCESOURCEI = 47;
-  localparam int OUTPUT_SIGNAL_PACKEDVIEWI = 48;
-  localparam int OUTPUT_SIGNAL_MEMADDRI = 49;
-  localparam int OUTPUT_SIGNAL_MEMWDATAI = 50;
-  localparam int OUTPUT_SIGNAL_MEMWEI = 51;
+  localparam int OUTPUT_SIGNAL_FIXEDAI = 6;
+  localparam int OUTPUT_SIGNAL_FIXEDBI = 7;
+  localparam int OUTPUT_SIGNAL_ARRAYI = 8;
+  localparam int OUTPUT_SIGNAL_FORCESOURCEI = 16;
+  localparam int OUTPUT_SIGNAL_PACKEDVIEWI = 17;
+  localparam int OUTPUT_SIGNAL_MEMADDRI = 18;
+  localparam int OUTPUT_SIGNAL_MEMWDATAI = 19;
+  localparam int OUTPUT_SIGNAL_MEMWEI = 20;
   localparam int SIGNAL_COUNT = 104;
-  localparam int INPUT_WORD_COUNT = 52;
-  localparam int OUTPUT_WORD_COUNT = 52;
+  localparam int INPUT_WORD_COUNT = 21;
+  localparam int OUTPUT_WORD_COUNT = 21;
 
   import "DPI-C" context function void authoring_core_dpi_init(
       input int unsigned iterations,
@@ -165,25 +159,9 @@ module dpi_authoring_core;
     in_words[INPUT_SIGNAL_RESPONSECOUNT] = response_count;
     in_words[INPUT_SIGNAL_WIDE64O + 0] = wide64_o[0 +: 32];
     in_words[INPUT_SIGNAL_WIDE64O + 1] = wide64_o[32 +: 32];
-    in_words[INPUT_SIGNAL_WIDE137O + 0] = wide137_o[0 +: 32];
-    in_words[INPUT_SIGNAL_WIDE137O + 1] = wide137_o[32 +: 32];
-    in_words[INPUT_SIGNAL_WIDE137O + 2] = wide137_o[64 +: 32];
-    in_words[INPUT_SIGNAL_WIDE137O + 3] = wide137_o[96 +: 32];
-    in_words[INPUT_SIGNAL_WIDE137O + 4] = wide137_o[128 +: 9];
     in_words[INPUT_SIGNAL_FIXEDYO] = fixed_y_o;
     for (int cpptb_array_o_index = 1; cpptb_array_o_index <= 8; cpptb_array_o_index++) begin
       in_words[INPUT_SIGNAL_ARRAYO + (cpptb_array_o_index - 1) * 1] = array_o[cpptb_array_o_index];
-    end
-    for (int cpptb_array_wide_o_index = 0; cpptb_array_wide_o_index <= 3; cpptb_array_wide_o_index++) begin
-      in_words[INPUT_SIGNAL_ARRAYWIDEO + (cpptb_array_wide_o_index - 0) * 2] = array_wide_o[cpptb_array_wide_o_index][0 +: 32];
-      in_words[INPUT_SIGNAL_ARRAYWIDEO + (cpptb_array_wide_o_index - 0) * 2 + 1] = array_wide_o[cpptb_array_wide_o_index][32 +: 32];
-    end
-    for (int cpptb_array_multidim_o_index_0 = 1; cpptb_array_multidim_o_index_0 <= 2; cpptb_array_multidim_o_index_0++) begin
-      for (int cpptb_array_multidim_o_index_1 = -1; cpptb_array_multidim_o_index_1 <= 1; cpptb_array_multidim_o_index_1++) begin
-        in_words[INPUT_SIGNAL_ARRAYMULTIDIMO + ((cpptb_array_multidim_o_index_0 - 1) * 3 + (cpptb_array_multidim_o_index_1 - -1)) * 3] = array_multidim_o[cpptb_array_multidim_o_index_0][cpptb_array_multidim_o_index_1][0 +: 32];
-        in_words[INPUT_SIGNAL_ARRAYMULTIDIMO + ((cpptb_array_multidim_o_index_0 - 1) * 3 + (cpptb_array_multidim_o_index_1 - -1)) * 3 + 1] = array_multidim_o[cpptb_array_multidim_o_index_0][cpptb_array_multidim_o_index_1][32 +: 32];
-        in_words[INPUT_SIGNAL_ARRAYMULTIDIMO + ((cpptb_array_multidim_o_index_0 - 1) * 3 + (cpptb_array_multidim_o_index_1 - -1)) * 3 + 2] = array_multidim_o[cpptb_array_multidim_o_index_0][cpptb_array_multidim_o_index_1][64 +: 1];
-      end
     end
     in_words[INPUT_SIGNAL_FORCEFANOUTO] = force_fanout_o;
     in_words[INPUT_SIGNAL_PACKEDVIEWO] = packed_view_o;
@@ -196,19 +174,10 @@ module dpi_authoring_core;
     req_data = out_words[OUTPUT_SIGNAL_REQDATA];
     rsp_ready = out_words[OUTPUT_SIGNAL_RSPREADY][0];
     wide64_i = {out_words[OUTPUT_SIGNAL_WIDE64I + 1], out_words[OUTPUT_SIGNAL_WIDE64I + 0]};
-    wide137_i = {out_words[OUTPUT_SIGNAL_WIDE137I + 4][8:0], out_words[OUTPUT_SIGNAL_WIDE137I + 3], out_words[OUTPUT_SIGNAL_WIDE137I + 2], out_words[OUTPUT_SIGNAL_WIDE137I + 1], out_words[OUTPUT_SIGNAL_WIDE137I + 0]};
     fixed_a_i = out_words[OUTPUT_SIGNAL_FIXEDAI][15:0];
     fixed_b_i = out_words[OUTPUT_SIGNAL_FIXEDBI][15:0];
     for (int cpptb_array_i_index = 1; cpptb_array_i_index <= 8; cpptb_array_i_index++) begin
       array_i[cpptb_array_i_index] = out_words[OUTPUT_SIGNAL_ARRAYI + (cpptb_array_i_index - 1) * 1];
-    end
-    for (int cpptb_array_wide_i_index = 0; cpptb_array_wide_i_index <= 3; cpptb_array_wide_i_index++) begin
-      array_wide_i[cpptb_array_wide_i_index] = {out_words[OUTPUT_SIGNAL_ARRAYWIDEI + (cpptb_array_wide_i_index - 0) * 2 + 1], out_words[OUTPUT_SIGNAL_ARRAYWIDEI + (cpptb_array_wide_i_index - 0) * 2]};
-    end
-    for (int cpptb_array_multidim_i_index_0 = 1; cpptb_array_multidim_i_index_0 <= 2; cpptb_array_multidim_i_index_0++) begin
-      for (int cpptb_array_multidim_i_index_1 = -1; cpptb_array_multidim_i_index_1 <= 1; cpptb_array_multidim_i_index_1++) begin
-        array_multidim_i[cpptb_array_multidim_i_index_0][cpptb_array_multidim_i_index_1] = {out_words[OUTPUT_SIGNAL_ARRAYMULTIDIMI + ((cpptb_array_multidim_i_index_0 - 1) * 3 + (cpptb_array_multidim_i_index_1 - -1)) * 3 + 2][0:0], out_words[OUTPUT_SIGNAL_ARRAYMULTIDIMI + ((cpptb_array_multidim_i_index_0 - 1) * 3 + (cpptb_array_multidim_i_index_1 - -1)) * 3 + 1], out_words[OUTPUT_SIGNAL_ARRAYMULTIDIMI + ((cpptb_array_multidim_i_index_0 - 1) * 3 + (cpptb_array_multidim_i_index_1 - -1)) * 3]};
-      end
     end
     force_source_i = out_words[OUTPUT_SIGNAL_FORCESOURCEI];
     packed_view_i = out_words[OUTPUT_SIGNAL_PACKEDVIEWI][10:0];
@@ -443,6 +412,51 @@ module dpi_authoring_core;
       .mem_we_i(mem_we_i),
       .mem_rdata_o(mem_rdata_o)
   );
+
+  export "DPI-C" function dpi_authoring_core_port_13_get;
+  function void dpi_authoring_core_port_13_get(output bit [136:0] value);
+    value = wide137_i;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_port_13_set;
+  function void dpi_authoring_core_port_13_set(input bit [136:0] value);
+    wide137_i = value;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_port_14_get;
+  function void dpi_authoring_core_port_14_get(output bit [136:0] value);
+    value = wide137_o;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_port_20_get;
+  function longint unsigned dpi_authoring_core_port_20_get(input int index_0);
+    dpi_authoring_core_port_20_get = array_wide_i[index_0];
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_port_20_set;
+  function void dpi_authoring_core_port_20_set(input int index_0, input longint unsigned value);
+    array_wide_i[index_0] = value;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_port_21_get;
+  function longint unsigned dpi_authoring_core_port_21_get(input int index_0);
+    dpi_authoring_core_port_21_get = array_wide_o[index_0];
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_port_22_get;
+  function void dpi_authoring_core_port_22_get(input int index_0, input int index_1, output bit [64:0] value);
+    value = array_multidim_i[index_0][index_1];
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_port_22_set;
+  function void dpi_authoring_core_port_22_set(input int index_0, input int index_1, input bit [64:0] value);
+    array_multidim_i[index_0][index_1] = value;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_port_23_get;
+  function void dpi_authoring_core_port_23_get(input int index_0, input int index_1, output bit [64:0] value);
+    value = array_multidim_o[index_0][index_1];
+  endfunction
 
   export "DPI-C" function dpi_authoring_core_internal_0_get;
   function int unsigned dpi_authoring_core_internal_0_get();
