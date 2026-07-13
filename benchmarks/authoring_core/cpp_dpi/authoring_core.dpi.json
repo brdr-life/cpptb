@@ -47,9 +47,7 @@
     "wide137_i": "on_demand",
     "wide137_o": "on_demand",
     "array_wide_i": "on_demand",
-    "array_wide_o": "on_demand",
-    "array_multidim_i": "on_demand",
-    "array_multidim_o": "on_demand"
+    "array_wide_o": "on_demand"
   },
   "run": {
     "init_function": "authoring_core_dpi_init",
