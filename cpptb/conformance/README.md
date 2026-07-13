@@ -18,6 +18,8 @@ The suite covers:
   awaits;
 - cooperative self-cancellation and cancellation/completion races;
 - deterministic FIFO registration order for same-edge waiters and timer ties;
+- later timer rearming at a coincident clock edge, equal-target arming from a
+  mid-sleep clock callback, chained earlier deadlines, and idle timer rearming;
 - stale edge and timer registration cleanup;
 - sequential and combinational output settling after an explicit delay;
 - typed `Task<T>` value propagation, prompt child-frame reclamation, move-only
@@ -166,9 +168,12 @@ Run the configured backend:
 make cpptb-conformance-run
 ```
 
-The exact positive result contract is 273 checks, eight primary generated-clock
-cycles, and zero failures. These values and all negative diagnostics are
-declared in `scheduler_conformance.dpi.json`.
+The main exact positive result contract is 273 checks, eight primary
+generated-clock cycles, and zero failures. Four isolated timer-dispatch
+contracts additionally freeze R1 at 12 checks/two cycles, R2 at 11 checks/one
+cycle, chained earlier deadlines at 12 checks/three cycles, and idle rearm at
+eight checks/one cycle. These values and all negative diagnostics are declared
+in `scheduler_conformance.dpi.json`.
 
 The simulator and its compile arguments are selected by `simulator` and
 `simulator_options` in `scheduler_conformance.dpi.json`. Verilator is the first

@@ -32,8 +32,8 @@ STATUS_PRECEDENCE = {
 }
 MULTICLOCK_FIELDS = ("iterations", "checks", "sim_cycles", "failures")
 MULTICLOCK_PATTERNS = {
-    "cpp_dpi": re.compile(r"^CPP_DPI_MULTICLOCK_RESULT\s+(?P<fields>.+)$"),
-    "pure_sv": re.compile(r"^PURE_SV_MULTICLOCK_RESULT\s+(?P<fields>.+)$"),
+    "cpp_dpi": re.compile(r"^CPP_DPI_[A-Z0-9_]+_RESULT\s+(?P<fields>.+)$"),
+    "pure_sv": re.compile(r"^PURE_SV_[A-Z0-9_]+_RESULT\s+(?P<fields>.+)$"),
 }
 
 

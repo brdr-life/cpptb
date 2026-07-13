@@ -48,8 +48,8 @@ These ideas remain available if future profiles show a meaningful need:
 2. Track dirty output spans so generated SV applies only ports changed in the
    current scheduler step. Keep this behind a focused benchmark because it
    adds mask transport and generated control logic.
-3. Replace per-deadline generated timer processes with a persistent timer
-   service.
+3. Reduce generated timer process allocation while preserving exact deadline
+   and clock-coincidence semantics.
 4. Add authoring A/A admission checks, randomized pair order, and a secondary
    child-CPU diagnostic alongside the wall-time guard.
 
@@ -268,7 +268,8 @@ Ranked experiments from the review:
    inserts an earlier deadline. This introduces no delayed-NBA token process
    and is therefore distinct from the rejected persistent timer. Expected
    improvement is `1.5-5%`; validate multi-clock, earlier-deadline, equal-time,
-   cancellation, and no-`#0` behavior.
+   cancellation, and no-`#0` behavior. This proposal was superseded by the
+   clock-agnostic E2 owner documented below; no performance claim was measured.
 3. **Opt-in on-demand bulk transport:** keep hot scalars in the per-step packed
    transport while exposing wide and unpacked ports through generated standard
    DPI export getters/setters. This moves infrequently accessed bulk signals
@@ -297,3 +298,30 @@ park/resume/cancel parity, a mixed clock/observer/timer `First`, and at least
 three simultaneous edge registrations to retain spill-path coverage. Measure
 six or more alternating 1,000,000-iteration C++ A/B pairs before running a
 fresh 32-pair exact guard. The existing `1.10x` hard stop remains unchanged.
+
+## Clock-agnostic timer owner (2026-07-12)
+
+Fable's finalized E2 generated-SV architecture replaces steady-state
+per-deadline forks with one persistent timer owner. This change does not modify
+the C++ scheduler or DPI runtime and has not been performance benchmarked. The
+owner sleeps only for a positive interval, parks on `timer_kick` when the
+published deadline is `NO_TIMER`, and re-reads the module variable after every
+wake. A byte-equivalent generation-checked `timer_wakeup` remains as the
+strict-earlier fallback when a clock or observer callback advances the
+deadline beneath the owner's current target.
+
+The retained invariants are I1: `timer_deadline` matches the scheduler's
+earliest live deadline after every timer-change request; I2: owner and fallback
+delivery are exact-once, with stale fallbacks rejected by generation; I3: no
+`#0`, delayed NBA, or `disable fork`; I4: every live deadline has a wake no
+later than itself; I5: fallback is unreachable in a clockless wrapper; and I6:
+next-deadline DPI call count is unchanged at one per timer-change request while
+steady-state per-arm process allocation is zero. Exceptional strict-earlier
+fallbacks may allocate one one-shot process.
+
+The pre-change baseline and post-change wrapper both pass the isolated R1
+later-rearm coincidence contract at 12 checks/two cycles, R2 equal-target
+mid-sleep contract at 11 checks/one cycle, chained earlier deadlines at 12
+checks/three cycles, and idle rearm at eight checks/one cycle. The main suite
+remains 273 checks/eight cycles, and the clockless C++ DPI/pure-SV twin matches
+exactly with zero cycles. No timing benchmark is credited to this change.

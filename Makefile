@@ -17,6 +17,16 @@ CPPTB_MULTICLOCK_GENERATED := \
 	$(CPPTB_MULTICLOCK_DIR)/generated/dual_clock_mailbox_binding.hpp \
 	$(CPPTB_MULTICLOCK_DIR)/generated/dpi_dual_clock_mailbox.sv
 CPPTB_MULTICLOCK_CODEGEN_STAMP := $(CPPTB_BUILD_DIR)/dpi_multiclock.codegen.stamp
+CPPTB_TIMER_ONLY_DIR := cpptb/examples/dpi_timer_only
+CPPTB_TIMER_ONLY_OBJ_DIR := $(CPPTB_BUILD_DIR)/dpi_timer_only_obj
+CPPTB_TIMER_ONLY_SV_OBJ_DIR := $(CPPTB_BUILD_DIR)/dpi_timer_only_sv_obj
+CPPTB_TIMER_ONLY_SV_TB := $(CPPTB_TIMER_ONLY_DIR)/pure_sv/timer_only_probe_sv_tb.sv
+CPPTB_TIMER_ONLY_MANIFEST := $(CPPTB_TIMER_ONLY_DIR)/timer_only_probe.dpi.json
+CPPTB_TIMER_ONLY_GENERATED := \
+	$(CPPTB_TIMER_ONLY_DIR)/generated/timer_only_probe_dut.hpp \
+	$(CPPTB_TIMER_ONLY_DIR)/generated/timer_only_probe_binding.hpp \
+	$(CPPTB_TIMER_ONLY_DIR)/generated/dpi_timer_only_probe.sv
+CPPTB_TIMER_ONLY_CODEGEN_STAMP := $(CPPTB_BUILD_DIR)/dpi_timer_only.codegen.stamp
 CPPTB_CONFORMANCE_DIR := cpptb/conformance
 CPPTB_CONFORMANCE_MANIFEST := $(CPPTB_CONFORMANCE_DIR)/scheduler_conformance.dpi.json
 CPPTB_CONFORMANCE_RUNNER := $(CPPTB_CONFORMANCE_DIR)/run_conformance.py
@@ -100,7 +110,7 @@ SDKROOT := $(shell xcrun --show-sdk-path)
 LIBCXX_INC := $(SDKROOT)/usr/include/c++/v1
 CXX ?= clang++
 
-.PHONY: all run vpi-run cpp-vpi-run cpp-coro-runtime-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpp-dpi-multiclock-codegen cpp-dpi-multiclock-codegen-check cpp-dpi-multiclock-build cpp-dpi-multiclock-run cpp-dpi-multiclock-sv-build cpp-dpi-multiclock-sv-run peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run peripheral-suite-runtime-old-diagnostic-build authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: all run vpi-run cpp-vpi-run cpp-coro-runtime-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpp-dpi-multiclock-codegen cpp-dpi-multiclock-codegen-check cpp-dpi-multiclock-build cpp-dpi-multiclock-run cpp-dpi-multiclock-sv-build cpp-dpi-multiclock-sv-run cpp-dpi-timer-only-codegen cpp-dpi-timer-only-codegen-check cpp-dpi-timer-only-build cpp-dpi-timer-only-run cpp-dpi-timer-only-sv-build cpp-dpi-timer-only-sv-run peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run peripheral-suite-runtime-old-diagnostic-build authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 all: $(BUILD_DIR)/counter_driver
 
@@ -278,6 +288,23 @@ cpp-dpi-multiclock-codegen: $(CPPTB_MULTICLOCK_GENERATED)
 cpp-dpi-multiclock-codegen-check:
 	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) $(CPPTB_MULTICLOCK_MANIFEST) --check
 
+$(CPPTB_TIMER_ONLY_CODEGEN_STAMP): $(CPPTB_CODEGEN_SOURCES) \
+		$(CPPTB_TIMER_ONLY_MANIFEST) $(CPPTB_TIMER_ONLY_DIR)/timer_only_probe.sv
+	mkdir -p $(dir $@)
+	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) $(CPPTB_TIMER_ONLY_MANIFEST)
+	touch $@
+
+$(CPPTB_TIMER_ONLY_GENERATED): $(CPPTB_TIMER_ONLY_CODEGEN_STAMP)
+	@if [ ! -f $@ ]; then \
+		$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) $(CPPTB_TIMER_ONLY_MANIFEST); \
+	fi
+	@touch $@
+
+cpp-dpi-timer-only-codegen: $(CPPTB_TIMER_ONLY_GENERATED)
+
+cpp-dpi-timer-only-codegen-check:
+	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) $(CPPTB_TIMER_ONLY_MANIFEST) --check
+
 cpptb-codegen-test:
 	$(CODEGEN_PYTHON) -m unittest discover -s cpptb/codegen/tests
 
@@ -286,6 +313,8 @@ cpptb-codegen-frontend-check:
 		$(AUTHORING_CORE_DPI_MANIFEST) --check --compare-frontend verilator_json
 	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) \
 		$(CPPTB_MULTICLOCK_MANIFEST) --check --compare-frontend verilator_json
+	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) \
+		$(CPPTB_TIMER_ONLY_MANIFEST) --check --compare-frontend verilator_json
 	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) \
 		$(PERIPHERAL_SUITE_DPI_MANIFEST) --check --compare-frontend verilator_json
 	$(CODEGEN_PYTHON) $(PERIPHERAL_SUITE_DPI_GENERATOR) \
@@ -361,6 +390,49 @@ cpp-dpi-multiclock-sv-build: $(CPPTB_MULTICLOCK_SV_OBJ_DIR)/Vdual_clock_mailbox_
 cpp-dpi-multiclock-sv-run: $(CPPTB_MULTICLOCK_SV_OBJ_DIR)/Vdual_clock_mailbox_sv_tb
 	$(CPPTB_MULTICLOCK_SV_OBJ_DIR)/Vdual_clock_mailbox_sv_tb \
 		+CPPTB_MULTICLOCK_ITERS=$${CPPTB_MULTICLOCK_ITERS:-16}
+
+$(CPPTB_TIMER_ONLY_OBJ_DIR)/Vdpi_timer_only_probe: \
+		$(CPPTB_TIMER_ONLY_DIR)/timer_only_probe.sv \
+		$(CPPTB_TIMER_ONLY_DIR)/framework.cpp \
+		$(CPPTB_TIMER_ONLY_DIR)/framework.hpp \
+		$(CPPTB_TIMER_ONLY_DIR)/testbench.cpp \
+		$(CPPTB_TIMER_ONLY_DIR)/dpi_transport.cpp \
+		$(CPPTB_TIMER_ONLY_GENERATED) cpptb/coro_runtime.hpp cpptb/packed_bits.hpp \
+		cpptb/dpi_runtime.hpp cpptb/test_result.hpp
+	mkdir -p $(CPPTB_TIMER_ONLY_OBJ_DIR)
+	verilator --binary --timing --no-sched-zero-delay \
+		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL \
+		-CFLAGS -I$(CURDIR) \
+		--Mdir $(CPPTB_TIMER_ONLY_OBJ_DIR) \
+		--top-module dpi_timer_only_probe \
+		$(CPPTB_TIMER_ONLY_DIR)/timer_only_probe.sv \
+		$(CPPTB_TIMER_ONLY_DIR)/generated/dpi_timer_only_probe.sv \
+		$(CPPTB_TIMER_ONLY_DIR)/dpi_transport.cpp \
+		$(CPPTB_TIMER_ONLY_DIR)/framework.cpp \
+		$(CPPTB_TIMER_ONLY_DIR)/testbench.cpp
+
+cpp-dpi-timer-only-build: $(CPPTB_TIMER_ONLY_OBJ_DIR)/Vdpi_timer_only_probe
+
+cpp-dpi-timer-only-run: $(CPPTB_TIMER_ONLY_OBJ_DIR)/Vdpi_timer_only_probe
+	$(CPPTB_TIMER_ONLY_OBJ_DIR)/Vdpi_timer_only_probe \
+		+CPPTB_TIMER_ONLY_ITERS=$${CPPTB_TIMER_ONLY_ITERS:-9}
+
+$(CPPTB_TIMER_ONLY_SV_OBJ_DIR)/Vtimer_only_probe_sv_tb: \
+		$(CPPTB_TIMER_ONLY_DIR)/timer_only_probe.sv \
+		$(CPPTB_TIMER_ONLY_SV_TB)
+	mkdir -p $(CPPTB_TIMER_ONLY_SV_OBJ_DIR)
+	verilator --binary --timing --no-sched-zero-delay \
+		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL \
+		--Mdir $(CPPTB_TIMER_ONLY_SV_OBJ_DIR) \
+		--top-module timer_only_probe_sv_tb \
+		$(CPPTB_TIMER_ONLY_DIR)/timer_only_probe.sv \
+		$(CPPTB_TIMER_ONLY_SV_TB)
+
+cpp-dpi-timer-only-sv-build: $(CPPTB_TIMER_ONLY_SV_OBJ_DIR)/Vtimer_only_probe_sv_tb
+
+cpp-dpi-timer-only-sv-run: $(CPPTB_TIMER_ONLY_SV_OBJ_DIR)/Vtimer_only_probe_sv_tb
+	$(CPPTB_TIMER_ONLY_SV_OBJ_DIR)/Vtimer_only_probe_sv_tb \
+		+CPPTB_TIMER_ONLY_ITERS=$${CPPTB_TIMER_ONLY_ITERS:-9}
 
 $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite.mk: $(PERIPHERAL_SUITE_VPI_RTL)
 	mkdir -p $(PERIPHERAL_SUITE_VPI_OBJ_DIR)
