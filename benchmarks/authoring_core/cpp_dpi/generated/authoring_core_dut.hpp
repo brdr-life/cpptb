@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "cpptb/coro_runtime.hpp"
+#include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/probe.hpp"
 
 namespace cpptb::benchmarks::authoring_core {
@@ -303,38 +303,39 @@ struct InternalDut {
 };
 
 struct AuthoringCoreDut {
-    coro::Signal clk;
-    coro::Signal rst_n;
-    coro::Signal req_valid;
-    coro::Signal req_data;
-    coro::Signal req_ready;
-    coro::Signal rsp_valid;
-    coro::Signal rsp_data;
-    coro::Signal rsp_ready;
-    coro::Signal pulse;
-    coro::Signal request_count;
-    coro::Signal response_count;
-    coro::DrivenSignal<64> wide64_i;
-    coro::ObservedSignal<64> wide64_o;
-    coro::DrivenSignal<137> wide137_i;
-    coro::ObservedSignal<137> wide137_o;
-    coro::Signal fixed_a_i;
-    coro::Signal fixed_b_i;
-    coro::Signal fixed_y_o;
-    coro::DrivenArray<32, 1, 8> array_i;
-    coro::ObservedArray<32, 1, 8> array_o;
-    coro::DrivenArray<64, 3, 0> array_wide_i;
-    coro::ObservedArray<64, 3, 0> array_wide_o;
-    coro::DrivenFixedArray<65, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> array_multidim_i;
-    coro::ObservedFixedArray<65, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> array_multidim_o;
-    coro::Signal force_source_i;
-    coro::Signal force_fanout_o;
-    coro::Signal packed_view_i;
-    coro::Signal packed_view_o;
-    coro::Signal mem_addr_i;
-    coro::Signal mem_wdata_i;
-    coro::Signal mem_we_i;
-    coro::Signal mem_rdata_o;
+    static constexpr bool cpptb_static_binding = true;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalClk, 0> clk;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalRstN, 0> rst_n;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalReqValid, 1> req_valid;
+    cpptb::dpi::StaticPackedSignal<32, true, true, kSignalReqData, 2> req_data;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalReqReady, 1> req_ready;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalRspValid, 2> rsp_valid;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalRspData, 3> rsp_data;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalRspReady, 3> rsp_ready;
+    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalPulse, 4> pulse;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalRequestCount, 5> request_count;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalResponseCount, 6> response_count;
+    cpptb::dpi::StaticPackedSignal<64, true, true, kSignalWide64I, 4> wide64_i;
+    cpptb::dpi::StaticPackedSignal<64, false, false, kSignalWide64O, 7> wide64_o;
+    cpptb::dpi::StaticOnDemandSignal<137, true, true, kSignalWide137I> wide137_i;
+    cpptb::dpi::StaticOnDemandSignal<137, false, false, kSignalWide137O> wide137_o;
+    cpptb::dpi::StaticPackedSignal<16, true, true, kSignalFixedAI, 6> fixed_a_i;
+    cpptb::dpi::StaticPackedSignal<16, true, true, kSignalFixedBI, 7> fixed_b_i;
+    cpptb::dpi::StaticPackedSignal<16, false, false, kSignalFixedYO, 9> fixed_y_o;
+    cpptb::dpi::StaticPackedFixedArray<32, true, true, kSignalArrayI, 8, 0, coro::ArrayDimension<1, 8>> array_i;
+    cpptb::dpi::StaticPackedFixedArray<32, false, false, kSignalArrayO, 10, 0, coro::ArrayDimension<1, 8>> array_o;
+    cpptb::dpi::StaticOnDemandFixedArray<64, true, true, kSignalArrayWideI, 0, coro::ArrayDimension<3, 0>> array_wide_i;
+    cpptb::dpi::StaticOnDemandFixedArray<64, false, false, kSignalArrayWideO, 0, coro::ArrayDimension<3, 0>> array_wide_o;
+    cpptb::dpi::StaticPackedFixedArray<65, true, true, kSignalArrayMultidimI, 16, 0, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> array_multidim_i;
+    cpptb::dpi::StaticPackedFixedArray<65, false, false, kSignalArrayMultidimO, 18, 0, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>> array_multidim_o;
+    cpptb::dpi::StaticPackedSignal<32, true, true, kSignalForceSourceI, 34> force_source_i;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalForceFanoutO, 36> force_fanout_o;
+    cpptb::dpi::StaticPackedSignal<11, true, true, kSignalPackedViewI, 35> packed_view_i;
+    cpptb::dpi::StaticPackedSignal<11, false, false, kSignalPackedViewO, 37> packed_view_o;
+    cpptb::dpi::StaticPackedSignal<8, true, true, kSignalMemAddrI, 36> mem_addr_i;
+    cpptb::dpi::StaticPackedSignal<32, true, true, kSignalMemWdataI, 37> mem_wdata_i;
+    cpptb::dpi::StaticPackedSignal<1, true, true, kSignalMemWeI, 38> mem_we_i;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalMemRdataO, 38> mem_rdata_o;
     InternalDut internal;
 };
 

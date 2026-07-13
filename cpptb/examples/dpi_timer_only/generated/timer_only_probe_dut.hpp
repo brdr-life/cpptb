@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "cpptb/coro_runtime.hpp"
+#include "cpptb/dpi_static_binding.hpp"
 
 namespace cpptb::examples::dpi_timer_only {
 
@@ -18,16 +18,17 @@ enum SignalId : uint32_t {
 };
 
 struct FastCadenceProbe {
-    coro::Signal value;
-    coro::Signal echo;
+    cpptb::dpi::StaticPackedSignal<32, true, true, kSignalFastValue, 0> value;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalFastEcho, 0> echo;
 };
 
 struct SlowCadenceProbe {
-    coro::Signal value;
-    coro::Signal echo;
+    cpptb::dpi::StaticPackedSignal<32, true, true, kSignalSlowValue, 1> value;
+    cpptb::dpi::StaticPackedSignal<32, false, false, kSignalSlowEcho, 1> echo;
 };
 
 struct TimerOnlyProbeDut {
+    static constexpr bool cpptb_static_binding = true;
     FastCadenceProbe fast;
     SlowCadenceProbe slow;
 };

@@ -1563,7 +1563,8 @@ Task<void> subprecision_delay_violation(ConformanceTb) {
 }
 
 Task<void> output_write_violation(ConformanceTb tb) {
-    tb.dut.comb_sum.set(0xff);
+    const Signal dynamic_comb_sum = tb.dut.comb_sum;
+    dynamic_comb_sum.set(0xff);
     co_return;
 }
 

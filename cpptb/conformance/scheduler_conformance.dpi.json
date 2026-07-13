@@ -16,6 +16,9 @@
       ]
     }
   },
+  "codegen": {
+    "static_binding": true
+  },
   "sources": [
     "scheduler_conformance.sv"
   ],

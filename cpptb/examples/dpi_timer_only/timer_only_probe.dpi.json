@@ -15,6 +15,9 @@
       ]
     }
   },
+  "codegen": {
+    "static_binding": true
+  },
   "sources": [
     "timer_only_probe.sv"
   ],

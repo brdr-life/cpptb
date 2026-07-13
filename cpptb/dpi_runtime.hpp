@@ -9,9 +9,11 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "cpptb/coro_runtime.hpp"
+#include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/probe.hpp"
 #include "cpptb/test_result.hpp"
 #include "svdpi.h"
@@ -37,8 +39,30 @@ class Runtime {
    public:
     using Dut = typename Adapter::Dut;
     using Result = typename Adapter::Result;
+    static constexpr bool static_binding_enabled = [] {
+        if constexpr (requires { Dut::cpptb_static_binding; }) {
+            return Dut::cpptb_static_binding;
+        } else {
+            return false;
+        }
+    }();
+    using StaticBindingStorage = std::conditional_t<
+        static_binding_enabled, StaticBindingContext, NoStaticBindingContext>;
 
-    Runtime() = default;
+    Runtime() {
+        if constexpr (static_binding_enabled) {
+            static_binding_.inputs = inputs_.data();
+            static_binding_.outputs = outputs_.data();
+            static_binding_.configured_clock = configured_clock_.data();
+            static_binding_.local_edge_capable = local_edge_capable_.data();
+            static_binding_.outputs_dirty = &outputs_dirty_;
+            static_binding_.local_edge_delivery_enabled =
+                &local_edge_delivery_enabled_;
+            static_binding_.dynamic_context = this;
+            static_binding_.dynamic_get = signal_get;
+            static_binding_.dynamic_set = signal_set;
+        }
+    }
     Runtime(const Runtime&) = delete;
     Runtime& operator=(const Runtime&) = delete;
 
@@ -71,6 +95,10 @@ class Runtime {
 
         scheduler_ =
             std::make_unique<coro::Testbench>(coro::SimTime{timeprecision_fs});
+        if constexpr (static_binding_enabled) {
+            static_binding_.scheduler = scheduler_.get();
+            static_binding_.current_inputs = nullptr;
+        }
 
         for (const auto [id, word_count] : Adapter::driven_signal_spans) {
             if (id > driven_.size() || word_count > driven_.size() - id) {
@@ -236,17 +264,22 @@ class Runtime {
    private:
     static constexpr uint32_t kNoTransportOffset =
         std::numeric_limits<uint32_t>::max();
-    using OnDemandGetWordsFn = void (*)(uint32_t, uint32_t*, uint32_t);
-    using OnDemandSetWordsFn = void (*)(uint32_t, const uint32_t*, uint32_t);
-
     class InputViewScope {
        public:
         InputViewScope(Runtime& runtime, const uint32_t* inputs)
             : runtime_(runtime), previous_(runtime.current_inputs_) {
             runtime_.current_inputs_ = inputs;
+            if constexpr (static_binding_enabled) {
+                runtime_.static_binding_.current_inputs = inputs;
+            }
         }
 
-        ~InputViewScope() { runtime_.current_inputs_ = previous_; }
+        ~InputViewScope() {
+            runtime_.current_inputs_ = previous_;
+            if constexpr (static_binding_enabled) {
+                runtime_.static_binding_.current_inputs = previous_;
+            }
+        }
 
        private:
         Runtime& runtime_;
@@ -352,6 +385,136 @@ class Runtime {
 
     static void signal_set(void* context, uint32_t id, uint32_t value) {
         static_cast<Runtime*>(context)->set(id, value);
+    }
+
+    template <bool Driven, uint32_t Id, uint32_t WordCount>
+    void register_static_metadata(const char* name) {
+        static_assert(Id <= Adapter::signal_count);
+        static_assert(WordCount <= Adapter::signal_count - Id);
+        for (uint32_t word = 0; word < WordCount; ++word) {
+            if (driven_[Id + word] != Driven) {
+                std::fprintf(
+                    stderr,
+                    "%s: static signal word %u has inconsistent direction\n",
+                    Adapter::result_name, Id + word);
+                std::abort();
+            }
+            signal_names_[Id + word] = name ? name : "<unnamed>";
+        }
+    }
+
+    template <bool Driven, uint32_t Id, uint32_t WordCount,
+              uint32_t TransportOffset>
+    void validate_static_packed_binding() const {
+        if constexpr (Driven) {
+            static_assert(TransportOffset <=
+                          Adapter::driven_signal_word_ids.size());
+            static_assert(
+                WordCount <= Adapter::driven_signal_word_ids.size() -
+                                 TransportOffset);
+            for (uint32_t word = 0; word < WordCount; ++word) {
+                if (Adapter::driven_signal_word_ids[TransportOffset + word] !=
+                    Id + word) {
+                    std::fprintf(stderr,
+                                 "%s: stale packed static offset for word %u\n",
+                                 Adapter::result_name, Id + word);
+                    std::abort();
+                }
+            }
+        } else {
+            static_assert(TransportOffset <=
+                          Adapter::observed_signal_word_ids.size());
+            static_assert(
+                WordCount <= Adapter::observed_signal_word_ids.size() -
+                                 TransportOffset);
+            for (uint32_t word = 0; word < WordCount; ++word) {
+                if (Adapter::observed_signal_word_ids[TransportOffset + word] !=
+                    Id + word) {
+                    std::fprintf(stderr,
+                                 "%s: stale packed static offset for word %u\n",
+                                 Adapter::result_name, Id + word);
+                    std::abort();
+                }
+            }
+        }
+    }
+
+    template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+              uint32_t TransportOffset>
+    auto make_signal(
+        StaticPackedSignalSpec<Width, Writable, Driven, Id, TransportOffset>,
+        const char* name) {
+        static_assert(static_binding_enabled);
+        constexpr uint32_t word_count = (Width + 31) / 32;
+        register_static_metadata<Driven, Id, word_count>(name);
+        validate_static_packed_binding<Driven, Id, word_count,
+                                       TransportOffset>();
+        if constexpr (Width <= 32) local_edge_capable_[Id] = true;
+        return StaticPackedSignal<Width, Writable, Driven, Id,
+                                  TransportOffset>{&static_binding_, name};
+    }
+
+    template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+              OnDemandGetWordsFn GetWords, OnDemandSetWordsFn SetWords>
+    auto make_signal(
+        StaticOnDemandSignalSpec<Width, Writable, Driven, Id, GetWords,
+                                 SetWords>,
+        const char* name) {
+        static_assert(static_binding_enabled);
+        constexpr uint32_t word_count = (Width + 31) / 32;
+        register_static_metadata<Driven, Id, word_count>(name);
+        register_on_demand(Id, word_count, GetWords, SetWords);
+        if constexpr (Width <= 32) local_edge_capable_[Id] = true;
+        return StaticOnDemandSignal<Width, Writable, Driven, Id>{
+            &static_binding_, name, GetWords, SetWords};
+    }
+
+    template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+              uint32_t TransportOffset, typename... Dimensions>
+    auto make_signal(
+        StaticPackedArraySpec<Width, Writable, Driven, Id, TransportOffset,
+                              Dimensions...>,
+        const char* name) {
+        static_assert(static_binding_enabled);
+        constexpr uint32_t element_count =
+            static_cast<uint32_t>((Dimensions::size * ...));
+        constexpr uint32_t element_words = (Width + 31) / 32;
+        constexpr uint32_t word_count = element_count * element_words;
+        register_static_metadata<Driven, Id, word_count>(name);
+        validate_static_packed_binding<Driven, Id, word_count,
+                                       TransportOffset>();
+        if constexpr (Width <= 32) {
+            for (uint32_t element = 0; element < element_count; ++element) {
+                local_edge_capable_[Id + element] = true;
+            }
+        }
+        return StaticPackedFixedArray<Width, Writable, Driven, Id,
+                                      TransportOffset, 0, Dimensions...>{
+            &static_binding_, name, 0, 0};
+    }
+
+    template <size_t Width, bool Writable, bool Driven, uint32_t Id,
+              OnDemandGetWordsFn GetWords, OnDemandSetWordsFn SetWords,
+              typename... Dimensions>
+    auto make_signal(
+        StaticOnDemandArraySpec<Width, Writable, Driven, Id, GetWords,
+                                SetWords, Dimensions...>,
+        const char* name) {
+        static_assert(static_binding_enabled);
+        constexpr uint32_t element_count =
+            static_cast<uint32_t>((Dimensions::size * ...));
+        constexpr uint32_t element_words = (Width + 31) / 32;
+        constexpr uint32_t word_count = element_count * element_words;
+        register_static_metadata<Driven, Id, word_count>(name);
+        register_on_demand(Id, word_count, GetWords, SetWords);
+        if constexpr (Width <= 32) {
+            for (uint32_t element = 0; element < element_count; ++element) {
+                local_edge_capable_[Id + element] = true;
+            }
+        }
+        return StaticOnDemandFixedArray<Width, Writable, Driven, Id, 0,
+                                        Dimensions...>{
+            &static_binding_, name, GetWords, SetWords, 0, 0};
     }
 
     template <typename Spec>
@@ -666,6 +829,7 @@ class Runtime {
     std::array<OnDemandSetWordsFn, Adapter::signal_count>
         on_demand_set_words_{};
     std::array<uint32_t, Adapter::signal_count> on_demand_base_ids_{};
+    [[no_unique_address]] StaticBindingStorage static_binding_{};
     const uint32_t* current_inputs_ = nullptr;
     std::unique_ptr<coro::Testbench> scheduler_;
     Dut dut_{};
