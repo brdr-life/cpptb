@@ -513,7 +513,7 @@ module dpi_scheduler_conformance;
 
   export "DPI-C" function dpi_scheduler_conformance_port_21_get;
   function int unsigned dpi_scheduler_conformance_port_21_get();
-    dpi_scheduler_conformance_port_21_get = comb_sum;
+    dpi_scheduler_conformance_port_21_get = $unsigned(comb_sum);
   endfunction
 
   export "DPI-C" function dpi_scheduler_conformance_internal_0_get;

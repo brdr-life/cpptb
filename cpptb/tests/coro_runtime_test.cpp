@@ -1076,6 +1076,12 @@ int main() {
         local_edge_capable.at(6) = true;
 
         const StaticPackedScalar packed{&context, "packed_1bit"};
+        outputs.at(3) = 0xffff'ffffu;
+        passed &= expect("static packed normalizes narrow direct read",
+                         packed.get(), 1);
+        passed &= expect("static packed normalizes narrow converted read",
+                         static_cast<Signal>(packed).get(), 1);
+        outputs.at(3) = 0;
         uint32_t packed_direct_wakes = 0;
         const auto packed_direct_waiter = tb.spawn(wait_for_one_rising(
             static_cast<Signal>(packed), packed_direct_wakes));
@@ -1121,6 +1127,15 @@ int main() {
         const StaticOnDemandScalar on_demand{
             &context, "on_demand_1bit", static_on_demand_get,
             static_on_demand_set};
+        static_on_demand_words.at(0) = 0xffff'ffffu;
+        passed &= expect("static on-demand normalizes narrow direct read",
+                         on_demand.get(), 1);
+        passed &= expect("static on-demand normalizes narrow converted read",
+                         static_cast<Signal>(on_demand).get(), 1);
+        on_demand.set(1);
+        passed &= expect("static on-demand compares normalized prior value",
+                         static_on_demand_words.at(0), 0xffff'ffffu);
+        static_on_demand_words.fill(0);
         uint32_t on_demand_direct_wakes = 0;
         const auto on_demand_direct_waiter = tb.spawn(wait_for_one_rising(
             static_cast<Signal>(on_demand), on_demand_direct_wakes));

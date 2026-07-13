@@ -681,14 +681,6 @@ class CodegenTests(unittest.TestCase):
         with self.assertRaisesRegex(CodegenError, "requires a two-state bit port"):
             validate_transport_ports([Port("wide", "input", 33)])
 
-    def test_rejects_signed_narrow_port(self):
-        with self.assertRaisesRegex(
-            CodegenError, "signed transport semantics are not yet supported"
-        ):
-            validate_transport_ports(
-                [Port("signed_narrow", "input", 8, signed=True)]
-            )
-
     def test_can_generate_sparse_input_transport_diagnostic(self):
         config = manifest()
         del config["clock"]
@@ -1185,6 +1177,45 @@ class CodegenTests(unittest.TestCase):
         )
         self.assertNotIn("in_words[INPUT_SIGNAL_U64O", wrapper)
         self.assertNotIn("out_words[OUTPUT_SIGNAL_MATRIXI", wrapper)
+
+    def test_zero_extends_signed_on_demand_scalar_and_array_getters(self):
+        config = manifest()
+        del config["clock"]
+        config["clocks"] = []
+        ports = map_ports(
+            [
+                Port(
+                    "signed_narrow_o", "output", 17, signed=True,
+                    transport="on_demand"
+                ),
+                Port(
+                    "signed64_o", "output", 64, signed=True,
+                    four_state=False, transport="on_demand"
+                ),
+                Port(
+                    "signed_array_o", "output", 8, signed=True,
+                    unpacked=(UnpackedRange(3, 0),),
+                    transport="on_demand",
+                ),
+            ],
+            config,
+        )
+
+        validate_transport_ports(ports)
+        wrapper = render_sv(ports, [], config, "sample.json")
+
+        self.assertIn(
+            "dpi_sample_dut_port_0_get = $unsigned(signed_narrow_o);",
+            wrapper,
+        )
+        self.assertIn(
+            "dpi_sample_dut_port_1_get = $unsigned(signed64_o);", wrapper
+        )
+        self.assertIn(
+            "dpi_sample_dut_port_2_get = "
+            "$unsigned(signed_array_o[index_0]);",
+            wrapper,
+        )
 
     def test_check_detects_stale_generated_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:

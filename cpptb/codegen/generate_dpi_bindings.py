@@ -271,11 +271,6 @@ def validate_transport_ports(ports: list[Port]) -> None:
                 f"{port.type_kind!r}; only scalar and packed integral ports "
                 "are supported"
             )
-        if port.signed:
-            raise CodegenError(
-                f"port {port.name!r} is signed; signed transport semantics "
-                "are not yet supported"
-            )
         if port.packed_type is not None:
             union_path = packed_union_path(port.packed_type, (port.name,))
             if union_path is not None:
@@ -2125,7 +2120,7 @@ def sv_port_export_functions(
             lines.extend(
                 [
                     f"  function {value_type} {get_name}({index_formals});",
-                    f"    {get_name} = {target};",
+                    f"    {get_name} = $unsigned({target});",
                     "  endfunction",
                     "",
                 ]
