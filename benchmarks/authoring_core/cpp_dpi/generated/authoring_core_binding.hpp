@@ -19,9 +19,6 @@ extern "C" {
     unsigned long long dpi_authoring_core_port_20_get(int index_0);
     void dpi_authoring_core_port_20_set(int index_0, unsigned long long value);
     unsigned long long dpi_authoring_core_port_21_get(int index_0);
-    void dpi_authoring_core_port_22_get(int index_0, int index_1, svBitVecVal* value);
-    void dpi_authoring_core_port_22_set(int index_0, int index_1, const svBitVecVal* value);
-    void dpi_authoring_core_port_23_get(int index_0, int index_1, svBitVecVal* value);
     unsigned int dpi_authoring_core_internal_0_get();
     unsigned int dpi_authoring_core_internal_1_get();
     void dpi_authoring_core_internal_1_deposit(unsigned int value);
@@ -59,7 +56,7 @@ inline constexpr std::array<std::pair<uint32_t, uint32_t>, 16> kDrivenSignalSpan
     {kSignalMemWdataI, 1},
     {kSignalMemWeI, 1},
 }};
-inline constexpr std::array<uint32_t, 21> kObservedSignalWordIds = {
+inline constexpr std::array<uint32_t, 39> kObservedSignalWordIds = {
     kSignalClk,
     kSignalReqReady,
     kSignalRspValid,
@@ -78,11 +75,29 @@ inline constexpr std::array<uint32_t, 21> kObservedSignalWordIds = {
     kSignalArrayO + 5,
     kSignalArrayO + 6,
     kSignalArrayO + 7,
+    kSignalArrayMultidimO,
+    kSignalArrayMultidimO + 1,
+    kSignalArrayMultidimO + 2,
+    kSignalArrayMultidimO + 3,
+    kSignalArrayMultidimO + 4,
+    kSignalArrayMultidimO + 5,
+    kSignalArrayMultidimO + 6,
+    kSignalArrayMultidimO + 7,
+    kSignalArrayMultidimO + 8,
+    kSignalArrayMultidimO + 9,
+    kSignalArrayMultidimO + 10,
+    kSignalArrayMultidimO + 11,
+    kSignalArrayMultidimO + 12,
+    kSignalArrayMultidimO + 13,
+    kSignalArrayMultidimO + 14,
+    kSignalArrayMultidimO + 15,
+    kSignalArrayMultidimO + 16,
+    kSignalArrayMultidimO + 17,
     kSignalForceFanoutO,
     kSignalPackedViewO,
     kSignalMemRdataO,
 };
-inline constexpr std::array<uint32_t, 21> kDrivenSignalWordIds = {
+inline constexpr std::array<uint32_t, 39> kDrivenSignalWordIds = {
     kSignalRstN,
     kSignalReqValid,
     kSignalReqData,
@@ -99,6 +114,24 @@ inline constexpr std::array<uint32_t, 21> kDrivenSignalWordIds = {
     kSignalArrayI + 5,
     kSignalArrayI + 6,
     kSignalArrayI + 7,
+    kSignalArrayMultidimI,
+    kSignalArrayMultidimI + 1,
+    kSignalArrayMultidimI + 2,
+    kSignalArrayMultidimI + 3,
+    kSignalArrayMultidimI + 4,
+    kSignalArrayMultidimI + 5,
+    kSignalArrayMultidimI + 6,
+    kSignalArrayMultidimI + 7,
+    kSignalArrayMultidimI + 8,
+    kSignalArrayMultidimI + 9,
+    kSignalArrayMultidimI + 10,
+    kSignalArrayMultidimI + 11,
+    kSignalArrayMultidimI + 12,
+    kSignalArrayMultidimI + 13,
+    kSignalArrayMultidimI + 14,
+    kSignalArrayMultidimI + 15,
+    kSignalArrayMultidimI + 16,
+    kSignalArrayMultidimI + 17,
     kSignalForceSourceI,
     kSignalPackedViewI,
     kSignalMemAddrI,
@@ -214,60 +247,6 @@ inline void on_demand_port_21_get_words(
     words[1] = static_cast<uint32_t>(value >> 32);
 }
 
-inline void on_demand_port_22_get_words(
-    uint32_t word_offset, uint32_t* words, uint32_t word_count) {
-    probe::detail::require_signal_callback("array_multidim_i");
-    constexpr uint32_t kElementWords = 3;
-    constexpr uint32_t kElementCount = 6;
-    const uint32_t element = word_offset / kElementWords;
-    if (!words || (word_offset % kElementWords) != 0 ||
-        word_count != kElementWords || element >= kElementCount) {
-        std::fprintf(stderr, "cpptb: invalid on-demand get for array_multidim_i\n");
-        std::abort();
-    }
-    uint32_t remaining = element;
-    const int index_1 = static_cast<int>(remaining % 3) + -1;
-    remaining /= 3;
-    const int index_0 = static_cast<int>(remaining % 2) + 1;
-    dpi_authoring_core_port_22_get(index_0, index_1, reinterpret_cast<svBitVecVal*>(words));
-}
-
-inline void on_demand_port_22_set_words(
-    uint32_t word_offset, const uint32_t* words, uint32_t word_count) {
-    probe::detail::require_signal_callback("array_multidim_i");
-    constexpr uint32_t kElementWords = 3;
-    constexpr uint32_t kElementCount = 6;
-    const uint32_t element = word_offset / kElementWords;
-    if (!words || (word_offset % kElementWords) != 0 ||
-        word_count != kElementWords || element >= kElementCount) {
-        std::fprintf(stderr, "cpptb: invalid on-demand set for array_multidim_i\n");
-        std::abort();
-    }
-    uint32_t remaining = element;
-    const int index_1 = static_cast<int>(remaining % 3) + -1;
-    remaining /= 3;
-    const int index_0 = static_cast<int>(remaining % 2) + 1;
-    dpi_authoring_core_port_22_set(index_0, index_1, reinterpret_cast<const svBitVecVal*>(words));
-}
-
-inline void on_demand_port_23_get_words(
-    uint32_t word_offset, uint32_t* words, uint32_t word_count) {
-    probe::detail::require_signal_callback("array_multidim_o");
-    constexpr uint32_t kElementWords = 3;
-    constexpr uint32_t kElementCount = 6;
-    const uint32_t element = word_offset / kElementWords;
-    if (!words || (word_offset % kElementWords) != 0 ||
-        word_count != kElementWords || element >= kElementCount) {
-        std::fprintf(stderr, "cpptb: invalid on-demand get for array_multidim_o\n");
-        std::abort();
-    }
-    uint32_t remaining = element;
-    const int index_1 = static_cast<int>(remaining % 3) + -1;
-    remaining /= 3;
-    const int index_0 = static_cast<int>(remaining % 2) + 1;
-    dpi_authoring_core_port_23_get(index_0, index_1, reinterpret_cast<svBitVecVal*>(words));
-}
-
 inline probe::Value<32> internal_0_get(int32_t index) {
     return dpi_authoring_core_internal_0_get();
 }
@@ -345,8 +324,8 @@ AuthoringCoreDut bind_dut(MakeSignal&& make_signal) {
         make_signal(coro::ArraySpec<32, 1, 8, false>{}, kSignalArrayO, "array_o"),
         make_signal(OnDemandSpec{coro::ArraySpec<64, 3, 0, true>{}, 8, on_demand_port_20_get_words, on_demand_port_20_set_words}, kSignalArrayWideI, "array_wide_i"),
         make_signal(OnDemandSpec{coro::ArraySpec<64, 3, 0, false>{}, 8, on_demand_port_21_get_words, nullptr}, kSignalArrayWideO, "array_wide_o"),
-        coro::reshape_fixed_array(coro::FixedArraySpec<65, true, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(OnDemandSpec{coro::ArraySpec<288, 2, 1, true>{}, 18, on_demand_port_22_get_words, on_demand_port_22_set_words}, kSignalArrayMultidimI, "array_multidim_i")),
-        coro::reshape_fixed_array(coro::FixedArraySpec<65, false, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(OnDemandSpec{coro::ArraySpec<288, 2, 1, false>{}, 18, on_demand_port_23_get_words, nullptr}, kSignalArrayMultidimO, "array_multidim_o")),
+        coro::reshape_fixed_array(coro::FixedArraySpec<65, true, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(coro::ArraySpec<288, 2, 1, true>{}, kSignalArrayMultidimI, "array_multidim_i")),
+        coro::reshape_fixed_array(coro::FixedArraySpec<65, false, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(coro::ArraySpec<288, 2, 1, false>{}, kSignalArrayMultidimO, "array_multidim_o")),
         make_signal(kSignalForceSourceI, "force_source_i"),
         make_signal(kSignalForceFanoutO, "force_fanout_o"),
         make_signal(kSignalPackedViewI, "packed_view_i"),
