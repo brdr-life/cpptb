@@ -48,8 +48,9 @@ CPP_DPI_BINARY = (
     / "cpp_dpi_obj"
     / "Vdpi_peripheral_suite"
 )
-COCOTB_RUNNER = BENCH_DIR / "cocotb" / "run_cocotb.py"
+COCOTB_RUNNER = BENCH_DIR / "testbenches" / "cocotb" / "run_cocotb.py"
 COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "/opt/homebrew/bin/python3.12")
+UV_CACHE_DIR = REPO / "build" / "uv-cache"
 
 RESULT_RE = re.compile(r"(?P<name>[A-Z_]+_RESULT)\s+(?P<fields>.*)")
 
@@ -1142,23 +1143,30 @@ def run_cpp_vpi_sample(run, iters):
     }
 
 
+def cocotb_command(iters, mode):
+    if mode not in {"--build-only", "--no-build"}:
+        raise ValueError(f"unsupported cocotb runner mode: {mode}")
+    return [
+        "uv",
+        "run",
+        "--cache-dir",
+        str(UV_CACHE_DIR),
+        "--no-project",
+        "--python",
+        COCOTB_PYTHON,
+        "--with",
+        "cocotb",
+        "python",
+        str(COCOTB_RUNNER),
+        "--iters",
+        str(iters),
+        mode,
+    ]
+
+
 def run_cocotb_sample(run, iters):
     output, measurement = run_command(
-        [
-            "uv",
-            "run",
-            "--no-project",
-            "--python",
-            COCOTB_PYTHON,
-            "--with",
-            "cocotb",
-            "python",
-            str(COCOTB_RUNNER),
-            "--iters",
-            str(iters),
-            "--no-build",
-        ],
-        include_resources=True,
+        cocotb_command(iters, "--no-build"), include_resources=True
     )
     result = parse_result(output, "COCOTB_PERIPHERAL_RESULT")
     return {
@@ -1255,20 +1263,7 @@ def main(argv=None):
     build_commands = [
         ["make", "peripheral-suite-build"],
         *semantic_build_commands,
-        [
-            "uv",
-            "run",
-            "--no-project",
-            "--python",
-            COCOTB_PYTHON,
-            "--with",
-            "cocotb",
-            "python",
-            str(COCOTB_RUNNER),
-            "--iters",
-            str(args.iters),
-            "--build-only",
-        ],
+        cocotb_command(args.iters, "--build-only"),
     ]
     if args.semantic_only:
         try:

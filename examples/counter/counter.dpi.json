@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "module": "counter",
+  "top_module": "dpi_counter",
+  "namespace": "cpptb::examples::counter",
+  "root_type": "CounterDut",
+  "frontend": "slang",
+  "frontend_options": {
+    "slang": {
+      "standard": "1800-2023"
+    },
+    "verilator_json": {
+      "args": ["-Wno-TIMESCALEMOD"]
+    }
+  },
+  "codegen": {
+    "static_binding": true
+  },
+  "sources": ["counter.sv"],
+  "clocks": [
+    {
+      "port": "clk",
+      "source": "generated",
+      "half_period": "5ns",
+      "primary": true
+    }
+  ],
+  "run": {
+    "init_function": "cpptb_dpi_init",
+    "step_function": "cpptb_dpi_step",
+    "next_deadline_function": "cpptb_dpi_next_timer_deadline",
+    "iteration_plusarg": "CPPTB_COUNTER_ITERS",
+    "default_iterations": 8,
+    "timeprecision": "1ps"
+  },
+  "outputs": {
+    "cpp_dut": "generated/counter_dut.hpp",
+    "cpp_binding": "generated/counter_binding.hpp",
+    "sv_wrapper": "generated/dpi_counter.sv",
+    "cpp_include": "examples/counter/generated/counter_dut.hpp"
+  }
+}

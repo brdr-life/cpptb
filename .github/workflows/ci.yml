@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  VERILATOR_VERSION: "5.050"
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install Verilator (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf bison flex help2man
+          git clone --depth 1 --branch "v${VERILATOR_VERSION}" \
+            https://github.com/verilator/verilator.git build/verilator-source
+          cd build/verilator-source
+          autoconf
+          ./configure
+          make -j2
+          sudo make install
+
+      - name: Install Verilator (macOS)
+        if: runner.os == 'macOS'
+        run: brew install verilator
+
+      - name: Report tool versions
+        run: |
+          verilator --version
+          cmake --version
+          uv --version
+
+      - name: Sync Python tools
+        run: uv sync --frozen
+
+      - name: Configure CMake
+        run: cmake -S . -B build/cmake -DBUILD_TESTING=ON
+
+      - name: Build CMake tests
+        run: cmake --build build/cmake --parallel 2
+
+      - name: Run CMake tests
+        run: ctest --test-dir build/cmake --output-on-failure
+
+      - name: Verify installed CMake package
+        run: |
+          cmake --install build/cmake --prefix build/install
+          cmake -S tests/cmake/consumer -B build/cmake-consumer \
+            -DCMAKE_PREFIX_PATH="$PWD/build/install"
+          cmake --build build/cmake-consumer
+          build/cmake-consumer/cpptb_package_consumer
+
+      - name: Run framework regression
+        run: make test

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "date": "2026-07-13",
+  "purpose": "publication_validation",
+  "status": "passed",
+  "registry_entries": 29,
+  "environment": {
+    "os": "macOS",
+    "architecture": "arm64",
+    "verilator": "5.050",
+    "compiler": "Apple clang 21.0.0",
+    "samples_normalized": false
+  },
+  "authoring": {
+    "iterations": 100000,
+    "measured_pairs": 16,
+    "max_cpp_dpi_over_systemverilog": 1.1,
+    "worst_feature": "mem_probe_deposit",
+    "worst_ratio": 1.0570588741567508,
+    "paired_ratios": {
+      "control": 0.985033302643783,
+      "task_value": 0.9537105945023223,
+      "clock_cycles": 0.9649818296653727,
+      "timeout": 0.8027134082848484,
+      "task_timeout": 0.7577143995648599,
+      "wait_until": 0.9437710528221039,
+      "event": 0.9491415949852873,
+      "channel": 0.9536547989675243,
+      "all": 0.923647027467036,
+      "wide64": 1.005803037219196,
+      "wide_echo_137": 1.037007901379125,
+      "wide_slice": 1.0213883756389488,
+      "fixed_mac": 1.0238051937352575,
+      "array_index": 1.0263775022983208,
+      "array_wide": 1.0357377837974542,
+      "mem_rw": 1.0063471478992332,
+      "hier_probe": 0.9963875416871358,
+      "mem_backdoor": 1.0419152435952832,
+      "mem_probe_read": 1.043597729413035,
+      "mem_probe_deposit": 1.0570588741567508,
+      "mem_probe_read_deposit": 1.0335229009996292,
+      "signal_edge": 0.9570075712006479,
+      "array_multidim": 1.016789501065736,
+      "force_release": 1.0176432569114269,
+      "packed_view": 0.9859381584946327
+    }
+  },
+  "peripheral_suite": {
+    "iterations": 10000,
+    "cpp_dpi_over_systemverilog": 0.9752466940701766,
+    "cpp_vpi_over_systemverilog": 7.75831518559073,
+    "cocotb_over_systemverilog": 24.684713119594704,
+    "cpp_dpi_upper_median_bound": 0.9878484641167313,
+    "environment_valid": true,
+    "guard_status": "passed"
+  },
+  "equivalence": {
+    "counter": "passed",
+    "multiclock": "passed",
+    "timer_only": "passed"
+  }
+}

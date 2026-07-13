@@ -15,11 +15,11 @@ that same module, then layers its own testbench/framework around it.
 ## Layout
 
 - `rtl/`: shared peripheral-suite DUT and underlying RTL.
-- `cocotb/`: cocotb top-level wrapper, runner, and Python testbench.
-- `cpp_vpi/`: C++ coroutine testbench plus a VPI transport/framework.
-- `cpp_dpi/`: C++ coroutine testbench, binding manifest, generated DUT adapter,
+- `testbenches/cocotb/`: cocotb top-level wrapper, runner, and Python testbench.
+- `testbenches/cpp_vpi/`: C++ coroutine testbench plus a VPI transport/framework.
+- `testbenches/cpp_dpi/`: C++ coroutine testbench, binding manifest, generated DUT adapter,
   and a DPI batched transport/framework.
-- `pure_sv/`: pure SystemVerilog testbench baseline.
+- `testbenches/systemverilog/`: pure SystemVerilog testbench baseline.
 
 ## Testbench Shape
 
@@ -37,23 +37,23 @@ All four implementations run the same logical workload:
 
 For the C++ DPI framework, the file to read and edit is:
 
-- `cpp_dpi/testbench.cpp`
+- `testbenches/cpp_dpi/testbench.cpp`
 
 That file contains the actual reset, stimulus, APB programming, waits, and
 checks. It should read like the cocotb version: explicit values are written to
 the DUT, APB transactions are visible, and the transport details are absent. Its
 only framework include is:
 
-- `cpp_dpi/framework/peripheral_suite.hpp`
+- `testbenches/cpp_dpi/framework/peripheral_suite.hpp`
 
 The DPI framework hides the scheduler and transport mechanics:
 
-- `cpp_dpi/framework/peripheral_suite_fixture.hpp`
-- `cpp_dpi/framework/peripheral_suite_fixture.cpp`
-- `cpp_dpi/framework/dpi_transport.cpp`
+- `testbenches/cpp_dpi/framework/peripheral_suite_fixture.hpp`
+- `testbenches/cpp_dpi/framework/peripheral_suite_fixture.cpp`
+- `testbenches/cpp_dpi/framework/dpi_transport.cpp`
 
 The design-specific transport wiring is generated from
-`cpp_dpi/peripheral_suite.dpi.json` into `cpp_dpi/generated/`. Regenerate it with:
+`testbenches/cpp_dpi/peripheral_suite.dpi.json` into `testbenches/cpp_dpi/generated/`. Regenerate it with:
 
 ```sh
 make peripheral-suite-dpi-codegen
@@ -64,19 +64,19 @@ match the manifest and elaborated SystemVerilog ports.
 
 The C++ VPI implementation has the same user-facing sequence shape in:
 
-- `cpp_vpi/testbench.cpp`
-- `cpp_vpi/framework/peripheral_suite.hpp`
-- `cpp_vpi/framework/verilator_suite_host.cpp`
+- `testbenches/cpp_vpi/testbench.cpp`
+- `testbenches/cpp_vpi/framework/peripheral_suite.hpp`
+- `testbenches/cpp_vpi/framework/verilator_suite_host.cpp`
 
 The cocotb implementation lives in:
 
-- `cocotb/test_peripheral_suite.py`
-- `cocotb/run_cocotb.py`
-- `cocotb/peripheral_suite_cocotb_top.sv`
+- `testbenches/cocotb/test_peripheral_suite.py`
+- `testbenches/cocotb/run_cocotb.py`
+- `testbenches/cocotb/peripheral_suite_cocotb_top.sv`
 
 The pure SystemVerilog implementation lives in:
 
-- `pure_sv/peripheral_suite_sv_tb.sv`
+- `testbenches/systemverilog/peripheral_suite_sv_tb.sv`
 
 ## Run
 
@@ -104,8 +104,9 @@ PERIPHERAL_SUITE_ITERS=1000 make peripheral-suite-sv-run
 Run the cocotb version directly:
 
 ```sh
-uv run --no-project --python /opt/homebrew/bin/python3.12 --with cocotb \
-  python benchmarks/peripheral_suite/cocotb/run_cocotb.py --iters 1000
+uv run --cache-dir build/uv-cache --no-project \
+  --python /opt/homebrew/bin/python3.12 --with cocotb \
+  python benchmarks/peripheral_suite/testbenches/cocotb/run_cocotb.py --iters 1000
 ```
 
 Run the comparison harness:
@@ -159,6 +160,9 @@ status. The Markdown result is a compact rendering of that data. Wall-time
 ratios near one are noise-sensitive and must not be described as proving that
 one implementation is faster.
 
+The raw result directory is ignored by Git. Accepted publication summaries are
+reviewed separately under `benchmarks/baselines/`.
+
 ## C++ DPI A/A Diagnostic
 
 Run the environment diagnostic separately from the benchmark guard:
@@ -197,42 +201,6 @@ The tool warms both modes, measures adjacent pairs, alternates which mode runs
 first, and writes every raw sample plus uncertainty and environment metadata to
 `benchmarks/peripheral_suite/results/spawn_ab.json`. It reports a direction only
 when the two-sided median confidence interval excludes `1.0x`.
-
-## Reconstructed Old/Current Runtime Diagnostic
-
-The E3 isolation diagnostic builds a separate executable from the corroborated
-pre-feature runtime and fixture snapshot without rebuilding the current DPI
-binary or regenerating its wrapper:
-
-```sh
-make peripheral-suite-runtime-old-diagnostic-build
-python3 benchmarks/peripheral_suite/tools/run_runtime_ab.py \
-  --iters 10000 --skip-build
-```
-
-Run two consecutive passing A/A diagnostics immediately before old/new A/B.
-The runtime tool machine-checks `results/aa_latest.json` (or `--aa-artifact`)
-before any warmup or sample: it must be a passing A/A result for the selected
-current binary and iteration count, contain at least 20 measured pairs, and
-have a parseable timestamp no more than 30 minutes old. A missing, malformed,
-stale, or mismatched artifact halts the run and is persisted as an invalid
-environment. After old/new A/B, run one trailing A/A diagnostic. Any failure
-or inconclusive result in the two leading A/A runs, old/new A/B, or trailing
-A/A run invalidates the performance conclusion and halts the sequence.
-
-The runner performs one warmup per binary followed by 16 adjacent old/new
-pairs, alternating the first slot exactly. It compares checks, simulation
-cycles, failures, and result identity before evaluating the paired new/old
-ratio, exact two-sided 95% median CI, both order strata, independent medians,
-slot effect, and half-split drift. An inconclusive material classification gets
-exactly one additional 16-pair batch. Workload disagreement or a diagnostic
-disagreement above 5% is an invalid environment; a confirmed regression or a
-final inconclusive result exits nonzero.
-
-Raw samples are durably appended to `results/runtime_ab_latest.jsonl`; final
-JSON and Markdown are atomically replaced at `results/runtime_ab_latest.json`
-and `results/runtime_ab_latest.md`. Source and binary hashes, full commands,
-tool metadata, and reconstruction/build provenance are included in the JSON.
 
 The I2C RTL includes old-style `#1` simulation delay annotations. This benchmark
 uses Verilator `--no-timing` for cocotb and C++ VPI so those annotations do not

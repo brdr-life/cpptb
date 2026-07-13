@@ -1,0 +1,15 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(verilator REQUIRED HINTS $ENV{VERILATOR_ROOT})
+
+include("${CMAKE_CURRENT_LIST_DIR}/cpptbTargets.cmake")
+set_property(
+    TARGET cpptb::cpptb
+    APPEND
+    PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+        "${VERILATOR_ROOT}/include"
+        "${VERILATOR_ROOT}/include/vltstd"
+)
+
+check_required_components(cpptb)
