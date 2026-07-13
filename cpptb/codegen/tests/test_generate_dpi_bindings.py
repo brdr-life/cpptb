@@ -681,6 +681,14 @@ class CodegenTests(unittest.TestCase):
         with self.assertRaisesRegex(CodegenError, "requires a two-state bit port"):
             validate_transport_ports([Port("wide", "input", 33)])
 
+    def test_rejects_signed_narrow_port(self):
+        with self.assertRaisesRegex(
+            CodegenError, "signed transport semantics are not yet supported"
+        ):
+            validate_transport_ports(
+                [Port("signed_narrow", "input", 8, signed=True)]
+            )
+
     def test_can_generate_sparse_input_transport_diagnostic(self):
         config = manifest()
         del config["clock"]

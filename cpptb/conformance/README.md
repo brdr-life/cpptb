@@ -168,7 +168,7 @@ Run the configured backend:
 make cpptb-conformance-run
 ```
 
-The main exact positive result contract is 273 checks, eight primary
+The main exact positive result contract is 275 checks, eight primary
 generated-clock cycles, and zero failures. Four isolated timer-dispatch
 contracts additionally freeze R1 at 12 checks/two cycles, R2 at 11 checks/one
 cycle, chained earlier deadlines at 12 checks/three cycles, and idle rearm at
