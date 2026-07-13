@@ -1,5 +1,5 @@
 # Feature regression: wait_until
 
-- Status: `passed_inconclusive`
+- Status: `passed`
 - Adapter: `runner`
 - Load settle: `settled`

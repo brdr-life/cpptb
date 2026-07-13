@@ -10,7 +10,7 @@
 
 | Kernel | Paired median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |
 |---|---:|---:|---:|---:|---:|---|---:|
-| `hier_probe` | 1.008x | 1.004x | 1.015x | 1.004x | 0.44% | `passed` | `False` |
+| `hier_probe` | 0.996x | 0.995x | 0.996x | 0.998x | 0.22% | `passed` | `False` |
 
 The paired median is the guard. A value above `1.10x` is a valid
 failure only when both order strata exceed `1.05x` and the independent

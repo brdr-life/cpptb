@@ -1,5 +1,5 @@
 # Feature regression: fixed_mac
 
-- Status: `passed_inconclusive`
+- Status: `passed`
 - Adapter: `runner`
 - Load settle: `settled`

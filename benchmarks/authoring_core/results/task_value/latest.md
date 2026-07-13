@@ -2,7 +2,7 @@
 
 - Result status: `success`
 - Iterations per sample: `100000`
-- Initial adjacent warmed pairs: `32`
+- Initial adjacent warmed pairs: `16`
 - Conditional extra pairs: `16`
 - Absolute hard guard: `C++ DPI / pure SV <= 1.10x`
 - Peripheral preflight: `skipped`
@@ -10,7 +10,7 @@
 
 | Kernel | Paired median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |
 |---|---:|---:|---:|---:|---:|---|---:|
-| `task_value` | 0.912x | 0.905x | 0.922x | 0.916x | 0.45% | `passed` | `False` |
+| `task_value` | 0.957x | 0.955x | 0.961x | 0.955x | 0.21% | `passed` | `False` |
 
 The paired median is the guard. A value above `1.10x` is a valid
 failure only when both order strata exceed `1.05x` and the independent
