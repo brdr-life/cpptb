@@ -1,6 +1,21 @@
-# Authoring-core C++ DPI vs pure SystemVerilog semantic check
+# Authoring-core C++ DPI vs pure SystemVerilog benchmark
 
-- Example: `packed_view`
 - Result status: `success`
-- Iterations: `100000`
-- Exact workload match: `true`
+- Iterations per sample: `100000`
+- Initial adjacent warmed pairs: `16`
+- Conditional extra pairs: `16`
+- Absolute hard guard: `C++ DPI / pure SV <= 1.10x`
+- Peripheral preflight: `skipped`
+- Measurement environment: `valid`
+
+| Kernel | Paired median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |
+|---|---:|---:|---:|---:|---:|---|---:|
+| `packed_view` | 0.977x | 0.976x | 0.985x | 0.982x | 0.43% | `passed` | `False` |
+
+The paired median is the guard. A value above `1.10x` is a valid
+failure only when both order strata exceed `1.05x` and the independent
+median ratio is within 5% relative of the paired median. Other hard-limit
+crossings are classified as `invalid_environment`.
+
+Raw execution order and every completed sample are preserved in
+`latest.jsonl` and `latest.json`.

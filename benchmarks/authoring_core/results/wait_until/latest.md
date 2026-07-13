@@ -1,16 +1,16 @@
 # Authoring-core C++ DPI vs pure SystemVerilog benchmark
 
-- Result status: `passed_inconclusive`
+- Result status: `success`
 - Iterations per sample: `100000`
 - Initial adjacent warmed pairs: `16`
 - Conditional extra pairs: `16`
 - Absolute hard guard: `C++ DPI / pure SV <= 1.10x`
 - Peripheral preflight: `skipped`
-- Measurement environment: `invalid`
+- Measurement environment: `valid`
 
 | Kernel | Paired median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |
 |---|---:|---:|---:|---:|---:|---|---:|
-| `wait_until` | 0.834x | 0.950x | 0.790x | 0.912x | 9.34% | `passed_inconclusive` | `False` |
+| `wait_until` | 0.957x | 0.948x | 0.969x | 0.947x | 0.99% | `passed` | `False` |
 
 The paired median is the guard. A value above `1.10x` is a valid
 failure only when both order strata exceed `1.05x` and the independent

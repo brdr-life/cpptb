@@ -10,11 +10,11 @@
   ],
   "workload": "shared deterministic authoring_core_dut request/response contract",
   "metadata": {
-    "timestamp_utc": "2026-07-12T19:30:10.962324+00:00",
+    "timestamp_utc": "2026-07-13T03:33:06.541951+00:00",
     "git": {
-      "commit": "2d6b2e7f6bcec02ebeaa5f45ce1637208944e3f1",
+      "commit": "eb3bc072c0b0a9c4d0a0f6e0105ac2b1c04d9ce7",
       "dirty": true,
-      "porcelain": "M Makefile\n M benchmarks/authoring_core/OPTIMIZATION_NOTES.md\n M benchmarks/authoring_core/README.md\n M benchmarks/authoring_core/cpp_dpi/authoring_core.dpi.json\n M benchmarks/authoring_core/cpp_dpi/framework/authoring_core.hpp\n M benchmarks/authoring_core/cpp_dpi/framework/dpi_transport.cpp\n M benchmarks/authoring_core/cpp_dpi/generated/authoring_core_binding.hpp\n M benchmarks/authoring_core/cpp_dpi/generated/authoring_core_dut.hpp\n M benchmarks/authoring_core/cpp_dpi/generated/dpi_authoring_core.sv\n M benchmarks/authoring_core/cpp_dpi/testbench.cpp\n M benchmarks/authoring_core/pure_sv/authoring_core_sv_tb.sv\n M benchmarks/authoring_core/results/all/latest.json\n M benchmarks/authoring_core/results/all/latest.jsonl\n M benchmarks/authoring_core/results/all/latest.md\n M benchmarks/authoring_core/results/channel/latest.json\n M benchmarks/authoring_core/results/channel/latest.jsonl\n M benchmarks/authoring_core/results/channel/latest.md\n M benchmarks/authoring_core/results/clock_cycles/latest.json\n M benchmarks/authoring_core/results/clock_cycles/latest.jsonl\n M benchmarks/authoring_core/results/clock_cycles/latest.md\n M benchmarks/authoring_core/results/control/latest.json\n M benchmarks/authoring_core/results/control/latest.jsonl\n M benchmarks/authoring_core/results/control/latest.md\n M benchmarks/authoring_core/results/event/latest.json\n M benchmarks/authoring_core/results/event/latest.jsonl\n M benchmarks/authoring_core/results/event/latest.md\n M benchmarks/authoring_core/results/task_timeout/latest.json\n M benchmarks/authoring_core/results/task_timeout/latest.jsonl\n M benchmarks/authoring_core/results/task_timeout/latest.md\n M benchmarks/authoring_core/results/task_value/latest.json\n M benchmarks/authoring_core/results/task_value/latest.jsonl\n M benchmarks/authoring_core/results/task_value/latest.md\n M benchmarks/authoring_core/results/timeout/latest.json\n M benchmarks/authoring_core/results/timeout/latest.jsonl\n M benchmarks/authoring_core/results/timeout/latest.md\n M benchmarks/authoring_core/results/wait_until/latest.json\n M benchmarks/authoring_core/results/wait_until/latest.jsonl\n M benchmarks/authoring_core/results/wait_until/latest.md\n M benchmarks/authoring_core/rtl/authoring_core_dut.sv\n M benchmarks/authoring_core/tests/test_contract.py\n M benchmarks/authoring_core/workload.py\n M benchmarks/diagnostics/runtime_old/README.md\n M benchmarks/diagnostics/runtime_old/build_provenance.json\n M benchmarks/peripheral_suite/cpp_dpi/framework/dpi_transport.cpp\n M benchmarks/peripheral_suite/cpp_dpi/generated/dpi_peripheral_suite.sv\n M benchmarks/peripheral_suite/cpp_dpi/generated/peripheral_suite_binding.hpp\n M benchmarks/peripheral_suite/results/latest.json\n M benchmarks/peripheral_suite/results/latest.jsonl\n M benchmarks/peripheral_suite/results/latest.md\n M benchmarks/peripheral_suite/tests/test_runtime_ab.py\n M benchmarks/registry.py\n M benchmarks/results/regression/entries/all/latest.json\n M benchmarks/results/regression/entries/control/latest.json\n M benchmarks/results/regression/entries/task_value/latest.json\n M benchmarks/results/regression/latest.json\n M benchmarks/results/regression/latest.md\n M cpptb/README.md\n M cpptb/codegen/README.md\n M cpptb/codegen/design_ir.py\n M cpptb/codegen/frontends/slang.py\n M cpptb/codegen/frontends/verilator_json.py\n M cpptb/codegen/generate_dpi_bindings.py\n M cpptb/codegen/tests/test_frontends.py\n M cpptb/codegen/tests/test_generate_dpi_bindings.py\n M cpptb/conformance/dpi_transport.cpp\n M cpptb/conformance/generated/dpi_scheduler_conformance.sv\n M cpptb/conformance/generated/scheduler_conformance_binding.hpp\n M cpptb/conformance/generated/scheduler_conformance_dut.hpp\n M cpptb/conformance/scheduler_conformance.dpi.json\n M cpptb/conformance/scheduler_conformance.sv\n M cpptb/conformance/testbench.cpp\n M cpptb/coro_runtime.hpp\n M cpptb/dpi_runtime.hpp\n M cpptb/examples/dpi_multiclock/dpi_transport.cpp\n M cpptb/examples/dpi_multiclock/generated/dpi_dual_clock_mailbox.sv\n M cpptb/examples/dpi_multiclock/generated/dual_clock_mailbox_binding.hpp\n M cpptb/tests/coro_runtime_test.cpp\n?? benchmarks/authoring_core/results/array_index/\n?? benchmarks/authoring_core/results/array_multidim/\n?? benchmarks/authoring_core/results/array_wide/\n?? benchmarks/authoring_core/results/fixed_mac/\n?? benchmarks/authoring_core/results/force_release/\n?? benchmarks/authoring_core/results/hier_probe/\n?? benchmarks/authoring_core/results/mem_backdoor/\n?? benchmarks/authoring_core/results/mem_probe_deposit/\n?? benchmarks/authoring_core/results/mem_probe_read/\n?? benchmarks/authoring_core/results/mem_probe_read_deposit/\n?? benchmarks/authoring_core/results/mem_rw/\n?? benchmarks/authoring_core/results/packed_view/\n?? benchmarks/authoring_core/results/signal_edge/\n?? benchmarks/authoring_core/results/wide64/\n?? benchmarks/authoring_core/results/wide_echo_137/\n?? benchmarks/authoring_core/results/wide_slice/\n?? benchmarks/results/regression/entries/array_index/\n?? benchmarks/results/regression/entries/array_wide/\n?? benchmarks/results/regression/entries/fixed_mac/\n?? benchmarks/results/regression/entries/hier_probe/\n?? benchmarks/results/regression/entries/mem_backdoor/\n?? benchmarks/results/regression/entries/mem_probe_deposit/\n?? benchmarks/results/regression/entries/mem_probe_read/\n?? benchmarks/results/regression/entries/mem_probe_read_deposit/\n?? benchmarks/results/regression/entries/mem_rw/\n?? benchmarks/results/regression/entries/signal_edge/\n?? benchmarks/results/regression/entries/wide64/\n?? benchmarks/results/regression/entries/wide_echo_137/\n?? benchmarks/results/regression/entries/wide_slice/\n?? cpptb/FEATURE_ROADMAP.md\n?? cpptb/fixed.hpp\n?? cpptb/packed_bits.hpp\n?? cpptb/probe.hpp\n?? cpptb/tests/packed_value_test.cpp\n?? obj_dir/"
+      "porcelain": "M benchmarks/authoring_core/results/all/latest.json\n M benchmarks/authoring_core/results/all/latest.jsonl\n M benchmarks/authoring_core/results/all/latest.md\n M benchmarks/authoring_core/results/array_index/latest.json\n M benchmarks/authoring_core/results/array_index/latest.jsonl\n M benchmarks/authoring_core/results/array_index/latest.md\n M benchmarks/authoring_core/results/array_multidim/latest.json\n M benchmarks/authoring_core/results/array_multidim/latest.jsonl\n M benchmarks/authoring_core/results/array_multidim/latest.md\n M benchmarks/authoring_core/results/array_wide/latest.json\n M benchmarks/authoring_core/results/array_wide/latest.jsonl\n M benchmarks/authoring_core/results/array_wide/latest.md\n M benchmarks/authoring_core/results/channel/latest.json\n M benchmarks/authoring_core/results/channel/latest.jsonl\n M benchmarks/authoring_core/results/channel/latest.md\n M benchmarks/authoring_core/results/clock_cycles/latest.json\n M benchmarks/authoring_core/results/clock_cycles/latest.jsonl\n M benchmarks/authoring_core/results/clock_cycles/latest.md\n M benchmarks/authoring_core/results/control/latest.json\n M benchmarks/authoring_core/results/control/latest.jsonl\n M benchmarks/authoring_core/results/control/latest.md\n M benchmarks/authoring_core/results/event/latest.json\n M benchmarks/authoring_core/results/event/latest.jsonl\n M benchmarks/authoring_core/results/event/latest.md\n M benchmarks/authoring_core/results/fixed_mac/latest.json\n M benchmarks/authoring_core/results/fixed_mac/latest.jsonl\n M benchmarks/authoring_core/results/fixed_mac/latest.md\n M benchmarks/authoring_core/results/force_release/latest.json\n M benchmarks/authoring_core/results/force_release/latest.jsonl\n M benchmarks/authoring_core/results/force_release/latest.md\n M benchmarks/authoring_core/results/hier_probe/latest.json\n M benchmarks/authoring_core/results/hier_probe/latest.jsonl\n M benchmarks/authoring_core/results/hier_probe/latest.md\n M benchmarks/authoring_core/results/mem_backdoor/latest.json\n M benchmarks/authoring_core/results/mem_backdoor/latest.jsonl\n M benchmarks/authoring_core/results/mem_backdoor/latest.md\n M benchmarks/authoring_core/results/mem_probe_deposit/latest.json\n M benchmarks/authoring_core/results/mem_probe_deposit/latest.jsonl\n M benchmarks/authoring_core/results/mem_probe_deposit/latest.md\n M benchmarks/authoring_core/results/mem_probe_read/latest.json\n M benchmarks/authoring_core/results/mem_probe_read/latest.jsonl\n M benchmarks/authoring_core/results/mem_probe_read/latest.md\n M benchmarks/authoring_core/results/mem_probe_read_deposit/latest.json\n M benchmarks/authoring_core/results/mem_probe_read_deposit/latest.jsonl\n M benchmarks/authoring_core/results/mem_probe_read_deposit/latest.md\n M benchmarks/authoring_core/results/mem_rw/latest.json\n M benchmarks/authoring_core/results/mem_rw/latest.jsonl\n M benchmarks/authoring_core/results/mem_rw/latest.md\n M benchmarks/authoring_core/results/packed_view/latest.json\n M benchmarks/authoring_core/results/packed_view/latest.jsonl\n M benchmarks/authoring_core/results/packed_view/latest.md\n M benchmarks/authoring_core/results/signal_edge/latest.json\n M benchmarks/authoring_core/results/signal_edge/latest.jsonl\n M benchmarks/authoring_core/results/signal_edge/latest.md\n M benchmarks/authoring_core/results/task_timeout/latest.json\n M benchmarks/authoring_core/results/task_timeout/latest.jsonl\n M benchmarks/authoring_core/results/task_timeout/latest.md\n M benchmarks/authoring_core/results/task_value/latest.json\n M benchmarks/authoring_core/results/task_value/latest.jsonl\n M benchmarks/authoring_core/results/task_value/latest.md\n M benchmarks/authoring_core/results/timeout/latest.json\n M benchmarks/authoring_core/results/timeout/latest.jsonl\n M benchmarks/authoring_core/results/timeout/latest.md\n M benchmarks/authoring_core/results/wait_until/latest.json\n M benchmarks/authoring_core/results/wait_until/latest.jsonl\n M benchmarks/authoring_core/results/wait_until/latest.md\n M benchmarks/authoring_core/results/wide64/latest.json\n M benchmarks/authoring_core/results/wide64/latest.jsonl\n M benchmarks/authoring_core/results/wide64/latest.md\n M benchmarks/authoring_core/results/wide_echo_137/latest.json\n M benchmarks/authoring_core/results/wide_echo_137/latest.jsonl\n M benchmarks/authoring_core/results/wide_echo_137/latest.md\n M benchmarks/authoring_core/results/wide_slice/latest.json\n M benchmarks/authoring_core/results/wide_slice/latest.jsonl\n M benchmarks/authoring_core/results/wide_slice/latest.md\n M benchmarks/peripheral_suite/results/latest.json\n M benchmarks/peripheral_suite/results/latest.jsonl\n M benchmarks/peripheral_suite/results/latest.md\n M benchmarks/results/regression/entries/all/latest.json\n M benchmarks/results/regression/entries/array_index/latest.json\n M benchmarks/results/regression/entries/array_multidim/latest.json\n M benchmarks/results/regression/entries/array_multidim/latest.md\n M benchmarks/results/regression/entries/array_wide/latest.json\n M benchmarks/results/regression/entries/channel/latest.json\n M benchmarks/results/regression/entries/channel/latest.md\n M benchmarks/results/regression/entries/clock_cycles/latest.json\n M benchmarks/results/regression/entries/clock_cycles/latest.md\n M benchmarks/results/regression/entries/control/latest.json\n M benchmarks/results/regression/entries/dpi_multiclock/latest.json\n M benchmarks/results/regression/entries/event/latest.json\n M benchmarks/results/regression/entries/fixed_mac/latest.json\n M benchmarks/results/regression/entries/fixed_mac/latest.md\n M benchmarks/results/regression/entries/hier_probe/latest.json\n M benchmarks/results/regression/entries/mem_backdoor/latest.json\n M benchmarks/results/regression/entries/mem_backdoor/latest.md\n M benchmarks/results/regression/entries/mem_probe_deposit/latest.json\n M benchmarks/results/regression/entries/mem_probe_deposit/latest.md\n M benchmarks/results/regression/entries/mem_probe_read/latest.json\n M benchmarks/results/regression/entries/mem_probe_read/latest.md\n M benchmarks/results/regression/entries/mem_probe_read_deposit/latest.json\n M benchmarks/results/regression/entries/mem_rw/latest.json\n M benchmarks/results/regression/entries/peripheral_suite/latest.json\n M benchmarks/results/regression/entries/peripheral_suite/latest.md\n M benchmarks/results/regression/entries/signal_edge/latest.json\n M benchmarks/results/regression/entries/task_timeout/latest.json\n M benchmarks/results/regression/entries/task_value/latest.json\n M benchmarks/results/regression/entries/timeout/latest.json\n M benchmarks/results/regression/entries/wait_until/latest.json\n M benchmarks/results/regression/entries/wait_until/latest.md\n M benchmarks/results/regression/entries/wide64/latest.json\n M benchmarks/results/regression/entries/wide64/latest.md\n M benchmarks/results/regression/entries/wide_echo_137/latest.json\n M benchmarks/results/regression/entries/wide_echo_137/latest.md\n M benchmarks/results/regression/entries/wide_slice/latest.json\n M benchmarks/results/regression/latest.json\n M benchmarks/results/regression/latest.md\n?? benchmarks/results/regression/entries/dpi_timer_only/\n?? benchmarks/results/regression/entries/force_release/\n?? benchmarks/results/regression/entries/packed_view/\n?? e1_e6_array_multidim_cpp_ab.json\n?? e1_e6_e2_array_multidim_cpp_ab.json\n?? e1_e6_e2_e3_array_multidim_cpp_ab.json\n?? e1_e6_e2_e3_e5_array_multidim_cpp_ab.json\n?? e1_e6_e2_e3_e5_array_wide_cpp_ab.json\n?? e1_e6_e2_e3_e5_signal_edge_cpp_ab.json\n?? e1_e6_e2_e3_e5_wide_echo_137_cpp_ab.json"
     },
     "host": {
       "hostname": "bike-trainer.local",
@@ -69,12 +69,12 @@
     },
     "starting_load": {
       "logical_cpu_count": 8,
-      "load_average_1m": 6.603515625,
-      "load_average_5m": 12.3759765625,
-      "load_average_15m": 15.21240234375,
-      "normalized_load_1m": 0.825439453125,
-      "normalized_load_5m": 1.5469970703125,
-      "normalized_load_15m": 1.90155029296875
+      "load_average_1m": 2.8681640625,
+      "load_average_5m": 3.11767578125,
+      "load_average_15m": 3.7265625,
+      "normalized_load_1m": 0.3585205078125,
+      "normalized_load_5m": 0.38970947265625,
+      "normalized_load_15m": 0.4658203125
     },
     "captured_before_result_writes": true
   },
@@ -86,16 +86,16 @@
         "pair": 1,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:11.531647+00:00",
-        "monotonic_ns": 2700687645882541,
+        "timestamp_utc": "2026-07-13T03:33:07.105874+00:00",
+        "monotonic_ns": 2729662910341166,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.603515625,
-          "load_average_5m": 12.3759765625,
-          "load_average_15m": 15.21240234375,
-          "normalized_load_1m": 0.825439453125,
-          "normalized_load_5m": 1.5469970703125,
-          "normalized_load_15m": 1.90155029296875
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -104,7 +104,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -122,16 +122,16 @@
         "pair": 1,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:12.094204+00:00",
-        "monotonic_ns": 2700688208415458,
+        "timestamp_utc": "2026-07-13T03:33:07.651102+00:00",
+        "monotonic_ns": 2729663455571083,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.603515625,
-          "load_average_5m": 12.3759765625,
-          "load_average_15m": 15.21240234375,
-          "normalized_load_1m": 0.825439453125,
-          "normalized_load_5m": 1.5469970703125,
-          "normalized_load_15m": 1.90155029296875
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -140,7 +140,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -158,16 +158,16 @@
         "pair": 2,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:12.113090+00:00",
-        "monotonic_ns": 2700688227313958,
+        "timestamp_utc": "2026-07-13T03:33:07.670390+00:00",
+        "monotonic_ns": 2729663474867708,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.603515625,
-          "load_average_5m": 12.3759765625,
-          "load_average_15m": 15.21240234375,
-          "normalized_load_1m": 0.825439453125,
-          "normalized_load_5m": 1.5469970703125,
-          "normalized_load_15m": 1.90155029296875
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -176,7 +176,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -194,16 +194,16 @@
         "pair": 2,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:12.649234+00:00",
-        "monotonic_ns": 2700688763449250,
+        "timestamp_utc": "2026-07-13T03:33:08.217039+00:00",
+        "monotonic_ns": 2729664021532791,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -212,7 +212,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -230,16 +230,16 @@
         "pair": 3,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:12.664723+00:00",
-        "monotonic_ns": 2700688778943791,
+        "timestamp_utc": "2026-07-13T03:33:08.237284+00:00",
+        "monotonic_ns": 2729664041773833,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -248,7 +248,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -266,16 +266,16 @@
         "pair": 3,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:13.220758+00:00",
-        "monotonic_ns": 2700689334968583,
+        "timestamp_utc": "2026-07-13T03:33:08.774571+00:00",
+        "monotonic_ns": 2729664579064500,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -284,7 +284,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -302,16 +302,16 @@
         "pair": 4,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:13.239996+00:00",
-        "monotonic_ns": 2700689354209125,
+        "timestamp_utc": "2026-07-13T03:33:08.793084+00:00",
+        "monotonic_ns": 2729664597582458,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -320,7 +320,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -338,16 +338,16 @@
         "pair": 4,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:13.796447+00:00",
-        "monotonic_ns": 2700689910656708,
+        "timestamp_utc": "2026-07-13T03:33:09.345717+00:00",
+        "monotonic_ns": 2729665150217083,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -356,7 +356,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -374,16 +374,16 @@
         "pair": 5,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:13.813531+00:00",
-        "monotonic_ns": 2700689927738291,
+        "timestamp_utc": "2026-07-13T03:33:09.366879+00:00",
+        "monotonic_ns": 2729665171389083,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -392,7 +392,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -410,16 +410,16 @@
         "pair": 5,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:14.375669+00:00",
-        "monotonic_ns": 2700690489872833,
+        "timestamp_utc": "2026-07-13T03:33:09.923755+00:00",
+        "monotonic_ns": 2729665728277125,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -428,7 +428,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -446,16 +446,16 @@
         "pair": 6,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:14.393823+00:00",
-        "monotonic_ns": 2700690508022875,
+        "timestamp_utc": "2026-07-13T03:33:09.944453+00:00",
+        "monotonic_ns": 2729665748979000,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -464,7 +464,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -482,16 +482,16 @@
         "pair": 6,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:14.950756+00:00",
-        "monotonic_ns": 2700691064950666,
+        "timestamp_utc": "2026-07-13T03:33:10.500109+00:00",
+        "monotonic_ns": 2729666304636541,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -500,7 +500,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -518,16 +518,16 @@
         "pair": 7,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:14.968845+00:00",
-        "monotonic_ns": 2700691083041583,
+        "timestamp_utc": "2026-07-13T03:33:10.521600+00:00",
+        "monotonic_ns": 2729666326128208,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -536,7 +536,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -554,16 +554,16 @@
         "pair": 7,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:15.521853+00:00",
-        "monotonic_ns": 2700691636039833,
+        "timestamp_utc": "2026-07-13T03:33:11.071773+00:00",
+        "monotonic_ns": 2729666876292125,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -572,7 +572,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -590,16 +590,16 @@
         "pair": 8,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:15.537467+00:00",
-        "monotonic_ns": 2700691651653458,
+        "timestamp_utc": "2026-07-13T03:33:11.090775+00:00",
+        "monotonic_ns": 2729666895300166,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -608,7 +608,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -626,16 +626,16 @@
         "pair": 8,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:16.082039+00:00",
-        "monotonic_ns": 2700692196223291,
+        "timestamp_utc": "2026-07-13T03:33:11.613779+00:00",
+        "monotonic_ns": 2729667418309833,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -644,7 +644,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -662,16 +662,16 @@
         "pair": 9,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:16.097200+00:00",
-        "monotonic_ns": 2700692211392166,
+        "timestamp_utc": "2026-07-13T03:33:11.633604+00:00",
+        "monotonic_ns": 2729667438133916,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.95849609375,
+          "load_average_5m": 3.1318359375,
+          "load_average_15m": 3.72802734375,
+          "normalized_load_1m": 0.36981201171875,
+          "normalized_load_5m": 0.3914794921875,
+          "normalized_load_15m": 0.46600341796875
         },
         "power": {
           "command": [
@@ -680,7 +680,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -698,16 +698,16 @@
         "pair": 9,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:16.661205+00:00",
-        "monotonic_ns": 2700692775387875,
+        "timestamp_utc": "2026-07-13T03:33:12.178269+00:00",
+        "monotonic_ns": 2729667982802791,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -716,7 +716,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -734,16 +734,16 @@
         "pair": 10,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:16.680728+00:00",
-        "monotonic_ns": 2700692794911750,
+        "timestamp_utc": "2026-07-13T03:33:12.197417+00:00",
+        "monotonic_ns": 2729668001966125,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -752,7 +752,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -770,16 +770,16 @@
         "pair": 10,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:17.242093+00:00",
-        "monotonic_ns": 2700693356274333,
+        "timestamp_utc": "2026-07-13T03:33:12.758514+00:00",
+        "monotonic_ns": 2729668563056916,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -788,7 +788,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -806,16 +806,16 @@
         "pair": 11,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:17.260526+00:00",
-        "monotonic_ns": 2700693374711833,
+        "timestamp_utc": "2026-07-13T03:33:12.779319+00:00",
+        "monotonic_ns": 2729668583857458,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.31494140625,
-          "load_average_5m": 12.22021484375,
-          "load_average_15m": 15.140625,
-          "normalized_load_1m": 0.78936767578125,
-          "normalized_load_5m": 1.52752685546875,
-          "normalized_load_15m": 1.892578125
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -824,7 +824,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -842,16 +842,16 @@
         "pair": 11,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:17.818552+00:00",
-        "monotonic_ns": 2700693932719666,
+        "timestamp_utc": "2026-07-13T03:33:13.334841+00:00",
+        "monotonic_ns": 2729669139388708,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -860,7 +860,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -878,16 +878,16 @@
         "pair": 12,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:17.836700+00:00",
-        "monotonic_ns": 2700693950871250,
+        "timestamp_utc": "2026-07-13T03:33:13.355527+00:00",
+        "monotonic_ns": 2729669160063416,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -896,7 +896,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -914,16 +914,16 @@
         "pair": 12,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:18.396044+00:00",
-        "monotonic_ns": 2700694510212416,
+        "timestamp_utc": "2026-07-13T03:33:13.907495+00:00",
+        "monotonic_ns": 2729669712056500,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -932,7 +932,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -950,16 +950,16 @@
         "pair": 13,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:18.412788+00:00",
-        "monotonic_ns": 2700694526952833,
+        "timestamp_utc": "2026-07-13T03:33:13.928283+00:00",
+        "monotonic_ns": 2729669732825458,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -968,7 +968,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -986,16 +986,16 @@
         "pair": 13,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:18.967379+00:00",
-        "monotonic_ns": 2700695081542458,
+        "timestamp_utc": "2026-07-13T03:33:14.475434+00:00",
+        "monotonic_ns": 2729670279995250,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -1004,7 +1004,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -1022,16 +1022,16 @@
         "pair": 14,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:18.982299+00:00",
-        "monotonic_ns": 2700695096454208,
+        "timestamp_utc": "2026-07-13T03:33:14.494712+00:00",
+        "monotonic_ns": 2729670299274458,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -1040,7 +1040,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -1058,16 +1058,16 @@
         "pair": 14,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:19.538399+00:00",
-        "monotonic_ns": 2700695652553833,
+        "timestamp_utc": "2026-07-13T03:33:15.019290+00:00",
+        "monotonic_ns": 2729670823856458,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -1076,7 +1076,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -1094,16 +1094,16 @@
         "pair": 15,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:19.555631+00:00",
-        "monotonic_ns": 2700695669784375,
+        "timestamp_utc": "2026-07-13T03:33:15.037281+00:00",
+        "monotonic_ns": 2729670841840333,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -1112,7 +1112,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -1130,16 +1130,16 @@
         "pair": 15,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:20.119071+00:00",
-        "monotonic_ns": 2700696233230000,
+        "timestamp_utc": "2026-07-13T03:33:15.587264+00:00",
+        "monotonic_ns": 2729671391833250,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -1148,7 +1148,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -1166,16 +1166,16 @@
         "pair": 16,
         "batch": "initial",
         "phase": "before",
-        "timestamp_utc": "2026-07-12T19:30:20.136910+00:00",
-        "monotonic_ns": 2700696251059125,
+        "timestamp_utc": "2026-07-13T03:33:15.608604+00:00",
+        "monotonic_ns": 2729671413188083,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -1184,7 +1184,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -1202,16 +1202,16 @@
         "pair": 16,
         "batch": "initial",
         "phase": "after",
-        "timestamp_utc": "2026-07-12T19:30:20.697689+00:00",
-        "monotonic_ns": 2700696811832916,
+        "timestamp_utc": "2026-07-13T03:33:16.160017+00:00",
+        "monotonic_ns": 2729671964601375,
         "load": {
           "logical_cpu_count": 8,
-          "load_average_1m": 6.20947265625,
-          "load_average_5m": 12.10009765625,
-          "load_average_15m": 15.0810546875,
-          "normalized_load_1m": 0.77618408203125,
-          "normalized_load_5m": 1.51251220703125,
-          "normalized_load_15m": 1.8851318359375
+          "load_average_1m": 2.88134765625,
+          "load_average_5m": 3.11279296875,
+          "load_average_15m": 3.7177734375,
+          "normalized_load_1m": 0.36016845703125,
+          "normalized_load_5m": 0.38909912109375,
+          "normalized_load_15m": 0.4647216796875
         },
         "power": {
           "command": [
@@ -1220,7 +1220,7 @@
             "ps"
           ],
           "returncode": 0,
-          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t80%; AC attached; not charging present: true"
+          "output": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=8650851)\t79%; AC attached; not charging present: true"
         },
         "thermal": {
           "command": [
@@ -1238,7 +1238,7 @@
       "status": "valid",
       "reasons": [],
       "probe_count": 32,
-      "maximum_normalized_load_1m": 0.825439453125,
+      "maximum_normalized_load_1m": 0.36981201171875,
       "observed_power_sources": [
         "AC Power"
       ],
@@ -1248,13 +1248,13 @@
   "binaries": {
     "cpp_dpi": {
       "signal_edge": {
-        "path": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-        "sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a"
+        "path": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+        "sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5"
       }
     },
     "pure_sv": {
       "signal_edge": {
-        "path": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+        "path": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
         "sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441"
       }
     }
@@ -1300,16 +1300,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 231.99,
+      "wall_ms": 221.431,
       "pair": 0,
-      "process_wall_ms": 235.98066670820117,
-      "child_user_cpu_ms": 231.176,
-      "child_system_cpu_ms": 1.8999999999999955,
-      "child_cpu_ms": 233.076,
-      "child_cpu_utilization": 0.9876910818639524,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 225.36629205569625,
+      "child_user_cpu_ms": 217.701,
+      "child_system_cpu_ms": 6.0480000000000045,
+      "child_cpu_ms": 223.749,
+      "child_cpu_utilization": 0.9928237180416646,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -1357,13 +1357,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 0,
-      "process_wall_ms": 240.32045807689428,
-      "child_user_cpu_ms": 233.98000000000002,
-      "child_system_cpu_ms": 2.6110000000000024,
-      "child_cpu_ms": 236.591,
-      "child_cpu_utilization": 0.984481312549342,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 244.0455830655992,
+      "child_user_cpu_ms": 232.93399999999997,
+      "child_system_cpu_ms": 7.993999999999994,
+      "child_cpu_ms": 240.92799999999997,
+      "child_cpu_utilization": 0.9872254067193618,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -1411,16 +1411,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 236.55,
+      "wall_ms": 221.745,
       "pair": 1,
-      "process_wall_ms": 241.0502079874277,
-      "child_user_cpu_ms": 233.27399999999997,
-      "child_system_cpu_ms": 3.1019999999999937,
-      "child_cpu_ms": 236.37599999999998,
-      "child_cpu_utilization": 0.9806089858770355,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 226.26775037497282,
+      "child_user_cpu_ms": 214.36600000000004,
+      "child_system_cpu_ms": 9.600999999999992,
+      "child_cpu_ms": 223.96700000000004,
+      "child_cpu_utilization": 0.9898317353172957,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -1468,13 +1468,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 1,
-      "process_wall_ms": 243.39104117825627,
-      "child_user_cpu_ms": 235.63699999999997,
-      "child_system_cpu_ms": 3.049000000000003,
-      "child_cpu_ms": 238.68599999999998,
-      "child_cpu_utilization": 0.9806687988371339,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 238.88183385133743,
+      "child_user_cpu_ms": 227.31199999999995,
+      "child_system_cpu_ms": 10.025000000000006,
+      "child_cpu_ms": 237.33699999999996,
+      "child_cpu_utilization": 0.9935330626593445,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -1523,13 +1523,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 2,
-      "process_wall_ms": 234.0862499549985,
-      "child_user_cpu_ms": 230.24,
-      "child_system_cpu_ms": 1.4809999999999963,
-      "child_cpu_ms": 231.721,
-      "child_cpu_utilization": 0.9898958185051314,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 239.27837470546365,
+      "child_user_cpu_ms": 231.093,
+      "child_system_cpu_ms": 6.615999999999997,
+      "child_cpu_ms": 237.70899999999997,
+      "child_cpu_utilization": 0.9934412179646595,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "pure_sv",
@@ -1577,16 +1577,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 224.417,
+      "wall_ms": 223.344,
       "pair": 2,
-      "process_wall_ms": 228.24858268722892,
-      "child_user_cpu_ms": 225.83200000000002,
-      "child_system_cpu_ms": 1.0179999999999911,
-      "child_cpu_ms": 226.85000000000002,
-      "child_cpu_utilization": 0.9938725460164395,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 227.7344590984285,
+      "child_user_cpu_ms": 217.036,
+      "child_system_cpu_ms": 7.672999999999999,
+      "child_cpu_ms": 224.709,
+      "child_cpu_utilization": 0.9867149700998,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "pure_sv",
         "cpp_dpi"
@@ -1633,16 +1633,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 230.765,
+      "wall_ms": 217.43,
       "pair": 3,
-      "process_wall_ms": 235.03324994817376,
-      "child_user_cpu_ms": 230.42800000000008,
-      "child_system_cpu_ms": 1.6329999999999956,
-      "child_cpu_ms": 232.0610000000001,
-      "child_cpu_utilization": 0.9873539171635117,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 221.475875005126,
+      "child_user_cpu_ms": 213.01800000000014,
+      "child_system_cpu_ms": 6.946999999999995,
+      "child_cpu_ms": 219.96500000000015,
+      "child_cpu_utilization": 0.9931781508704237,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -1690,13 +1690,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 3,
-      "process_wall_ms": 240.94749987125397,
-      "child_user_cpu_ms": 234.54500000000002,
-      "child_system_cpu_ms": 2.486000000000002,
-      "child_cpu_ms": 237.031,
-      "child_cpu_utilization": 0.9837454222461463,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 237.08808282390237,
+      "child_user_cpu_ms": 230.1369999999998,
+      "child_system_cpu_ms": 4.857000000000014,
+      "child_cpu_ms": 234.99399999999983,
+      "child_cpu_utilization": 0.991167490162473,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -1745,13 +1745,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 4,
-      "process_wall_ms": 239.38599973917007,
-      "child_user_cpu_ms": 234.0460000000002,
-      "child_system_cpu_ms": 2.236000000000002,
-      "child_cpu_ms": 236.28200000000018,
-      "child_cpu_utilization": 0.9870334950976584,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 238.1014167331159,
+      "child_user_cpu_ms": 232.35099999999997,
+      "child_system_cpu_ms": 4.1240000000000165,
+      "child_cpu_ms": 236.475,
+      "child_cpu_utilization": 0.9931692269813793,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "pure_sv",
@@ -1799,16 +1799,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 234.612,
+      "wall_ms": 229.503,
       "pair": 4,
-      "process_wall_ms": 238.82566671818495,
-      "child_user_cpu_ms": 232.44599999999994,
-      "child_system_cpu_ms": 2.7489999999999877,
-      "child_cpu_ms": 235.19499999999994,
-      "child_cpu_utilization": 0.984797836982617,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 233.76670898869634,
+      "child_user_cpu_ms": 219.3480000000001,
+      "child_system_cpu_ms": 9.902999999999995,
+      "child_cpu_ms": 229.2510000000001,
+      "child_cpu_utilization": 0.9806828397070234,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "pure_sv",
         "cpp_dpi"
@@ -1855,16 +1855,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 233.732,
+      "wall_ms": 223.229,
       "pair": 5,
-      "process_wall_ms": 238.2282498292625,
-      "child_user_cpu_ms": 231.73299999999975,
-      "child_system_cpu_ms": 2.9030000000000027,
-      "child_cpu_ms": 234.63599999999974,
-      "child_cpu_utilization": 0.9849209746038209,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 227.66808280721307,
+      "child_user_cpu_ms": 217.53500000000025,
+      "child_system_cpu_ms": 7.807000000000008,
+      "child_cpu_ms": 225.34200000000027,
+      "child_cpu_utilization": 0.9897830087620033,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -1912,13 +1912,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 5,
-      "process_wall_ms": 245.12470792979002,
-      "child_user_cpu_ms": 237.26800000000026,
-      "child_system_cpu_ms": 3.187999999999996,
-      "child_cpu_ms": 240.45600000000024,
-      "child_cpu_utilization": 0.9809537440382101,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 245.0213748961687,
+      "child_user_cpu_ms": 233.047,
+      "child_system_cpu_ms": 8.626999999999995,
+      "child_cpu_ms": 241.67399999999998,
+      "child_cpu_utilization": 0.9863384372176214,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -1967,13 +1967,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 6,
-      "process_wall_ms": 240.09458301588893,
-      "child_user_cpu_ms": 234.4949999999999,
-      "child_system_cpu_ms": 2.4000000000000132,
-      "child_cpu_ms": 236.8949999999999,
-      "child_cpu_utilization": 0.9866736559580052,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 244.38841734081507,
+      "child_user_cpu_ms": 233.12100000000012,
+      "child_system_cpu_ms": 9.00200000000001,
+      "child_cpu_ms": 242.12300000000013,
+      "child_cpu_utilization": 0.9907302589645414,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "pure_sv",
@@ -2021,16 +2021,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 235.857,
+      "wall_ms": 226.284,
       "pair": 6,
-      "process_wall_ms": 239.90558413788676,
-      "child_user_cpu_ms": 231.846,
-      "child_system_cpu_ms": 3.4309999999999894,
-      "child_cpu_ms": 235.277,
-      "child_cpu_utilization": 0.9807066427631527,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 230.78691586852074,
+      "child_user_cpu_ms": 219.70299999999997,
+      "child_system_cpu_ms": 7.110000000000005,
+      "child_cpu_ms": 226.813,
+      "child_cpu_utilization": 0.9827810174872103,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "pure_sv",
         "cpp_dpi"
@@ -2077,16 +2077,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 231.258,
+      "wall_ms": 224.279,
       "pair": 7,
-      "process_wall_ms": 235.66087475046515,
-      "child_user_cpu_ms": 230.51200000000006,
-      "child_system_cpu_ms": 2.1619999999999973,
-      "child_cpu_ms": 232.67400000000006,
-      "child_cpu_utilization": 0.987325538218307,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 228.76954125240445,
+      "child_user_cpu_ms": 217.9789999999997,
+      "child_system_cpu_ms": 6.954999999999989,
+      "child_cpu_ms": 224.93399999999968,
+      "child_cpu_utilization": 0.98323403879989,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -2134,13 +2134,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 7,
-      "process_wall_ms": 240.53166713565588,
-      "child_user_cpu_ms": 237.42899999999966,
-      "child_system_cpu_ms": 1.4389999999999958,
-      "child_cpu_ms": 238.86799999999965,
-      "child_cpu_utilization": 0.9930833758587058,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 241.803125012666,
+      "child_user_cpu_ms": 230.53999999999996,
+      "child_system_cpu_ms": 8.499000000000006,
+      "child_cpu_ms": 239.03899999999996,
+      "child_cpu_utilization": 0.9885686960723885,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -2189,13 +2189,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 8,
-      "process_wall_ms": 229.45466730743647,
-      "child_user_cpu_ms": 227.33000000000027,
-      "child_system_cpu_ms": 0.9510000000000074,
-      "child_cpu_ms": 228.28100000000026,
-      "child_cpu_utilization": 0.9948849708693716,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 231.41041724011302,
+      "child_user_cpu_ms": 224.85399999999967,
+      "child_system_cpu_ms": 4.974999999999952,
+      "child_cpu_ms": 229.8289999999996,
+      "child_cpu_utilization": 0.9931661795567633,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "pure_sv",
@@ -2243,16 +2243,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 236.581,
+      "wall_ms": 209.98,
       "pair": 8,
-      "process_wall_ms": 240.6525411643088,
-      "child_user_cpu_ms": 233.45500000000018,
-      "child_system_cpu_ms": 2.6349999999999985,
-      "child_cpu_ms": 236.09000000000017,
-      "child_cpu_utilization": 0.9810409599573126,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 213.91633292660117,
+      "child_user_cpu_ms": 208.87499999999991,
+      "child_system_cpu_ms": 3.5640000000000116,
+      "child_cpu_ms": 212.43899999999994,
+      "child_cpu_utilization": 0.9930938750380125,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "pure_sv",
         "cpp_dpi"
@@ -2299,16 +2299,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 237.152,
+      "wall_ms": 216.901,
       "pair": 9,
-      "process_wall_ms": 241.59799981862307,
-      "child_user_cpu_ms": 231.69899999999987,
-      "child_system_cpu_ms": 3.8910000000000053,
-      "child_cpu_ms": 235.58999999999986,
-      "child_cpu_utilization": 0.9751322452042912,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 220.99445899948478,
+      "child_user_cpu_ms": 216.0769999999994,
+      "child_system_cpu_ms": 3.524000000000027,
+      "child_cpu_ms": 219.60099999999943,
+      "child_cpu_utilization": 0.9936945975668621,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -2356,13 +2356,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 9,
-      "process_wall_ms": 243.33287496119738,
-      "child_user_cpu_ms": 236.3059999999999,
-      "child_system_cpu_ms": 3.1150000000000064,
-      "child_cpu_ms": 239.4209999999999,
-      "child_cpu_utilization": 0.983923771246194,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 240.8602088689804,
+      "child_user_cpu_ms": 233.1890000000003,
+      "child_system_cpu_ms": 5.979000000000012,
+      "child_cpu_ms": 239.16800000000032,
+      "child_cpu_utilization": 0.992974311211776,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -2411,13 +2411,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 10,
-      "process_wall_ms": 240.63566699624062,
-      "child_user_cpu_ms": 235.14799999999968,
-      "child_system_cpu_ms": 2.5429999999999895,
-      "child_cpu_ms": 237.69099999999966,
-      "child_cpu_utilization": 0.9877629653450876,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 247.9497087188065,
+      "child_user_cpu_ms": 235.30099999999976,
+      "child_system_cpu_ms": 8.187,
+      "child_cpu_ms": 243.48799999999977,
+      "child_cpu_utilization": 0.9820055899970157,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "pure_sv",
@@ -2465,16 +2465,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 237.433,
+      "wall_ms": 225.627,
       "pair": 10,
-      "process_wall_ms": 241.631040815264,
-      "child_user_cpu_ms": 234.80900000000025,
-      "child_system_cpu_ms": 2.7419999999999947,
-      "child_cpu_ms": 237.55100000000024,
-      "child_cpu_utilization": 0.9831145832857497,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 229.72820792347193,
+      "child_user_cpu_ms": 218.8100000000004,
+      "child_system_cpu_ms": 7.551999999999948,
+      "child_cpu_ms": 226.36200000000034,
+      "child_cpu_utilization": 0.9853469978549915,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "pure_sv",
         "cpp_dpi"
@@ -2521,16 +2521,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 233.362,
+      "wall_ms": 224.648,
       "pair": 11,
-      "process_wall_ms": 237.6683745533228,
-      "child_user_cpu_ms": 231.92199999999997,
-      "child_system_cpu_ms": 2.3029999999999995,
-      "child_cpu_ms": 234.22499999999997,
-      "child_cpu_utilization": 0.985511852135168,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 229.2548748664558,
+      "child_user_cpu_ms": 217.66500000000022,
+      "child_system_cpu_ms": 8.915000000000006,
+      "child_cpu_ms": 226.5800000000002,
+      "child_cpu_utilization": 0.9883323097578024,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -2578,13 +2578,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 11,
-      "process_wall_ms": 243.6925838701427,
-      "child_user_cpu_ms": 235.82899999999984,
-      "child_system_cpu_ms": 3.2310000000000114,
-      "child_cpu_ms": 239.05999999999986,
-      "child_cpu_utilization": 0.9809900498547325,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 245.17054203897715,
+      "child_user_cpu_ms": 233.02800000000002,
+      "child_system_cpu_ms": 8.84299999999999,
+      "child_cpu_ms": 241.871,
+      "child_cpu_utilization": 0.9865418495568992,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -2633,13 +2633,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 12,
-      "process_wall_ms": 242.48533276841044,
-      "child_user_cpu_ms": 234.9560000000004,
-      "child_system_cpu_ms": 3.4250000000000114,
-      "child_cpu_ms": 238.3810000000004,
-      "child_cpu_utilization": 0.9830738926699127,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 240.16333417966962,
+      "child_user_cpu_ms": 231.93100000000032,
+      "child_system_cpu_ms": 6.112000000000006,
+      "child_cpu_ms": 238.04300000000032,
+      "child_cpu_utilization": 0.9911712827151081,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "pure_sv",
@@ -2687,16 +2687,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 236.811,
+      "wall_ms": 226.174,
       "pair": 12,
-      "process_wall_ms": 241.15704093128443,
-      "child_user_cpu_ms": 233.82699999999977,
-      "child_system_cpu_ms": 3.066000000000013,
-      "child_cpu_ms": 236.89299999999977,
-      "child_cpu_utilization": 0.9823184058204643,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 230.37704173475504,
+      "child_user_cpu_ms": 218.27499999999932,
+      "child_system_cpu_ms": 7.738999999999995,
+      "child_cpu_ms": 226.01399999999933,
+      "child_cpu_utilization": 0.9810612997636322,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "pure_sv",
         "cpp_dpi"
@@ -2743,16 +2743,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 241.4,
+      "wall_ms": 224.88,
       "pair": 13,
-      "process_wall_ms": 245.33029180020094,
-      "child_user_cpu_ms": 242.55699999999968,
-      "child_system_cpu_ms": 1.1970000000000036,
-      "child_cpu_ms": 243.75399999999968,
-      "child_cpu_utilization": 0.9935748178969884,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 229.2555831372738,
+      "child_user_cpu_ms": 220.21099999999993,
+      "child_system_cpu_ms": 6.72600000000001,
+      "child_cpu_ms": 226.93699999999993,
+      "child_cpu_utilization": 0.989886470350929,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -2800,13 +2800,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 13,
-      "process_wall_ms": 234.95787475258112,
-      "child_user_cpu_ms": 231.78400000000022,
-      "child_system_cpu_ms": 1.222999999999974,
-      "child_cpu_ms": 233.0070000000002,
-      "child_cpu_utilization": 0.9916969169276184,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 239.74050022661686,
+      "child_user_cpu_ms": 231.0370000000006,
+      "child_system_cpu_ms": 5.859999999999976,
+      "child_cpu_ms": 236.8970000000006,
+      "child_cpu_utilization": 0.9881392579729815,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -2855,13 +2855,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 14,
-      "process_wall_ms": 238.15995827317238,
-      "child_user_cpu_ms": 233.36500000000004,
-      "child_system_cpu_ms": 1.8559999999999688,
-      "child_cpu_ms": 235.221,
-      "child_cpu_utilization": 0.9876597296435475,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 232.94970812276006,
+      "child_user_cpu_ms": 226.19599999999986,
+      "child_system_cpu_ms": 5.245999999999973,
+      "child_cpu_ms": 231.44199999999984,
+      "child_cpu_utilization": 0.9935277526857184,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "pure_sv",
@@ -2909,16 +2909,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 235.972,
+      "wall_ms": 209.809,
       "pair": 14,
-      "process_wall_ms": 240.95704220235348,
-      "child_user_cpu_ms": 231.58299999999966,
-      "child_system_cpu_ms": 4.097000000000017,
-      "child_cpu_ms": 235.67999999999967,
-      "child_cpu_utilization": 0.9780996556310556,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 213.7212916277349,
+      "child_user_cpu_ms": 210.39600000000024,
+      "child_system_cpu_ms": 1.9180000000000308,
+      "child_cpu_ms": 212.31400000000028,
+      "child_cpu_utilization": 0.9934152951396819,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "pure_sv",
         "cpp_dpi"
@@ -2965,16 +2965,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 231.925,
+      "wall_ms": 218.762,
       "pair": 15,
-      "process_wall_ms": 236.32895899936557,
-      "child_user_cpu_ms": 231.89500000000064,
-      "child_system_cpu_ms": 2.0120000000000138,
-      "child_cpu_ms": 233.90700000000064,
-      "child_cpu_utilization": 0.9897517468463464,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 222.58225036785007,
+      "child_user_cpu_ms": 218.03799999999995,
+      "child_system_cpu_ms": 3.1039999999999957,
+      "child_cpu_ms": 221.14199999999994,
+      "child_cpu_utilization": 0.9935293566065133,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "cpp_dpi",
         "pure_sv"
@@ -3022,13 +3022,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 15,
-      "process_wall_ms": 249.51937468722463,
-      "child_user_cpu_ms": 239.9610000000001,
-      "child_system_cpu_ms": 3.4259999999999846,
-      "child_cpu_ms": 243.38700000000009,
-      "child_cpu_utilization": 0.9754232524231373,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 246.7217082157731,
+      "child_user_cpu_ms": 234.7710000000003,
+      "child_system_cpu_ms": 7.616999999999985,
+      "child_cpu_ms": 242.3880000000003,
+      "child_cpu_utilization": 0.9824348321551717,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "cpp_dpi",
@@ -3077,13 +3077,13 @@
       "force_release": 0,
       "packed_view": 0,
       "pair": 16,
-      "process_wall_ms": 241.91174982115626,
-      "child_user_cpu_ms": 236.05199999999994,
-      "child_system_cpu_ms": 2.620000000000011,
-      "child_cpu_ms": 238.67199999999994,
-      "child_cpu_utilization": 0.9866077202800135,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+      "process_wall_ms": 242.0448330231011,
+      "child_user_cpu_ms": 232.65099999999973,
+      "child_system_cpu_ms": 7.5230000000000015,
+      "child_cpu_ms": 240.17399999999972,
+      "child_cpu_utilization": 0.9922707169587759,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
       "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
       "pair_order": [
         "pure_sv",
@@ -3131,16 +3131,16 @@
       "signal_edges": 100000,
       "force_release": 0,
       "packed_view": 0,
-      "wall_ms": 235.991,
+      "wall_ms": 223.984,
       "pair": 16,
-      "process_wall_ms": 240.1011660695076,
-      "child_user_cpu_ms": 233.68400000000022,
-      "child_system_cpu_ms": 2.724000000000004,
-      "child_cpu_ms": 236.40800000000024,
-      "child_cpu_utilization": 0.9846182918227135,
-      "child_max_rss": 17711104.0,
-      "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-      "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+      "process_wall_ms": 228.36108272895217,
+      "child_user_cpu_ms": 218.31699999999987,
+      "child_system_cpu_ms": 7.097999999999994,
+      "child_cpu_ms": 225.41499999999985,
+      "child_cpu_utilization": 0.9870990157615905,
+      "child_max_rss": 17645568.0,
+      "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+      "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
       "pair_order": [
         "pure_sv",
         "cpp_dpi"
@@ -3191,16 +3191,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 236.55,
+          "wall_ms": 221.745,
           "pair": 1,
-          "process_wall_ms": 241.0502079874277,
-          "child_user_cpu_ms": 233.27399999999997,
-          "child_system_cpu_ms": 3.1019999999999937,
-          "child_cpu_ms": 236.37599999999998,
-          "child_cpu_utilization": 0.9806089858770355,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 226.26775037497282,
+          "child_user_cpu_ms": 214.36600000000004,
+          "child_system_cpu_ms": 9.600999999999992,
+          "child_cpu_ms": 223.96700000000004,
+          "child_cpu_utilization": 0.9898317353172957,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -3247,16 +3247,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 224.417,
+          "wall_ms": 223.344,
           "pair": 2,
-          "process_wall_ms": 228.24858268722892,
-          "child_user_cpu_ms": 225.83200000000002,
-          "child_system_cpu_ms": 1.0179999999999911,
-          "child_cpu_ms": 226.85000000000002,
-          "child_cpu_utilization": 0.9938725460164395,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 227.7344590984285,
+          "child_user_cpu_ms": 217.036,
+          "child_system_cpu_ms": 7.672999999999999,
+          "child_cpu_ms": 224.709,
+          "child_cpu_utilization": 0.9867149700998,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "pure_sv",
             "cpp_dpi"
@@ -3303,16 +3303,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 230.765,
+          "wall_ms": 217.43,
           "pair": 3,
-          "process_wall_ms": 235.03324994817376,
-          "child_user_cpu_ms": 230.42800000000008,
-          "child_system_cpu_ms": 1.6329999999999956,
-          "child_cpu_ms": 232.0610000000001,
-          "child_cpu_utilization": 0.9873539171635117,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 221.475875005126,
+          "child_user_cpu_ms": 213.01800000000014,
+          "child_system_cpu_ms": 6.946999999999995,
+          "child_cpu_ms": 219.96500000000015,
+          "child_cpu_utilization": 0.9931781508704237,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -3359,16 +3359,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 234.612,
+          "wall_ms": 229.503,
           "pair": 4,
-          "process_wall_ms": 238.82566671818495,
-          "child_user_cpu_ms": 232.44599999999994,
-          "child_system_cpu_ms": 2.7489999999999877,
-          "child_cpu_ms": 235.19499999999994,
-          "child_cpu_utilization": 0.984797836982617,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 233.76670898869634,
+          "child_user_cpu_ms": 219.3480000000001,
+          "child_system_cpu_ms": 9.902999999999995,
+          "child_cpu_ms": 229.2510000000001,
+          "child_cpu_utilization": 0.9806828397070234,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "pure_sv",
             "cpp_dpi"
@@ -3415,16 +3415,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 233.732,
+          "wall_ms": 223.229,
           "pair": 5,
-          "process_wall_ms": 238.2282498292625,
-          "child_user_cpu_ms": 231.73299999999975,
-          "child_system_cpu_ms": 2.9030000000000027,
-          "child_cpu_ms": 234.63599999999974,
-          "child_cpu_utilization": 0.9849209746038209,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 227.66808280721307,
+          "child_user_cpu_ms": 217.53500000000025,
+          "child_system_cpu_ms": 7.807000000000008,
+          "child_cpu_ms": 225.34200000000027,
+          "child_cpu_utilization": 0.9897830087620033,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -3471,16 +3471,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 235.857,
+          "wall_ms": 226.284,
           "pair": 6,
-          "process_wall_ms": 239.90558413788676,
-          "child_user_cpu_ms": 231.846,
-          "child_system_cpu_ms": 3.4309999999999894,
-          "child_cpu_ms": 235.277,
-          "child_cpu_utilization": 0.9807066427631527,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 230.78691586852074,
+          "child_user_cpu_ms": 219.70299999999997,
+          "child_system_cpu_ms": 7.110000000000005,
+          "child_cpu_ms": 226.813,
+          "child_cpu_utilization": 0.9827810174872103,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "pure_sv",
             "cpp_dpi"
@@ -3527,16 +3527,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 231.258,
+          "wall_ms": 224.279,
           "pair": 7,
-          "process_wall_ms": 235.66087475046515,
-          "child_user_cpu_ms": 230.51200000000006,
-          "child_system_cpu_ms": 2.1619999999999973,
-          "child_cpu_ms": 232.67400000000006,
-          "child_cpu_utilization": 0.987325538218307,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 228.76954125240445,
+          "child_user_cpu_ms": 217.9789999999997,
+          "child_system_cpu_ms": 6.954999999999989,
+          "child_cpu_ms": 224.93399999999968,
+          "child_cpu_utilization": 0.98323403879989,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -3583,16 +3583,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 236.581,
+          "wall_ms": 209.98,
           "pair": 8,
-          "process_wall_ms": 240.6525411643088,
-          "child_user_cpu_ms": 233.45500000000018,
-          "child_system_cpu_ms": 2.6349999999999985,
-          "child_cpu_ms": 236.09000000000017,
-          "child_cpu_utilization": 0.9810409599573126,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 213.91633292660117,
+          "child_user_cpu_ms": 208.87499999999991,
+          "child_system_cpu_ms": 3.5640000000000116,
+          "child_cpu_ms": 212.43899999999994,
+          "child_cpu_utilization": 0.9930938750380125,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "pure_sv",
             "cpp_dpi"
@@ -3639,16 +3639,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 237.152,
+          "wall_ms": 216.901,
           "pair": 9,
-          "process_wall_ms": 241.59799981862307,
-          "child_user_cpu_ms": 231.69899999999987,
-          "child_system_cpu_ms": 3.8910000000000053,
-          "child_cpu_ms": 235.58999999999986,
-          "child_cpu_utilization": 0.9751322452042912,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 220.99445899948478,
+          "child_user_cpu_ms": 216.0769999999994,
+          "child_system_cpu_ms": 3.524000000000027,
+          "child_cpu_ms": 219.60099999999943,
+          "child_cpu_utilization": 0.9936945975668621,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -3695,16 +3695,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 237.433,
+          "wall_ms": 225.627,
           "pair": 10,
-          "process_wall_ms": 241.631040815264,
-          "child_user_cpu_ms": 234.80900000000025,
-          "child_system_cpu_ms": 2.7419999999999947,
-          "child_cpu_ms": 237.55100000000024,
-          "child_cpu_utilization": 0.9831145832857497,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 229.72820792347193,
+          "child_user_cpu_ms": 218.8100000000004,
+          "child_system_cpu_ms": 7.551999999999948,
+          "child_cpu_ms": 226.36200000000034,
+          "child_cpu_utilization": 0.9853469978549915,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "pure_sv",
             "cpp_dpi"
@@ -3751,16 +3751,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 233.362,
+          "wall_ms": 224.648,
           "pair": 11,
-          "process_wall_ms": 237.6683745533228,
-          "child_user_cpu_ms": 231.92199999999997,
-          "child_system_cpu_ms": 2.3029999999999995,
-          "child_cpu_ms": 234.22499999999997,
-          "child_cpu_utilization": 0.985511852135168,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 229.2548748664558,
+          "child_user_cpu_ms": 217.66500000000022,
+          "child_system_cpu_ms": 8.915000000000006,
+          "child_cpu_ms": 226.5800000000002,
+          "child_cpu_utilization": 0.9883323097578024,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -3807,16 +3807,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 236.811,
+          "wall_ms": 226.174,
           "pair": 12,
-          "process_wall_ms": 241.15704093128443,
-          "child_user_cpu_ms": 233.82699999999977,
-          "child_system_cpu_ms": 3.066000000000013,
-          "child_cpu_ms": 236.89299999999977,
-          "child_cpu_utilization": 0.9823184058204643,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 230.37704173475504,
+          "child_user_cpu_ms": 218.27499999999932,
+          "child_system_cpu_ms": 7.738999999999995,
+          "child_cpu_ms": 226.01399999999933,
+          "child_cpu_utilization": 0.9810612997636322,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "pure_sv",
             "cpp_dpi"
@@ -3863,16 +3863,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 241.4,
+          "wall_ms": 224.88,
           "pair": 13,
-          "process_wall_ms": 245.33029180020094,
-          "child_user_cpu_ms": 242.55699999999968,
-          "child_system_cpu_ms": 1.1970000000000036,
-          "child_cpu_ms": 243.75399999999968,
-          "child_cpu_utilization": 0.9935748178969884,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 229.2555831372738,
+          "child_user_cpu_ms": 220.21099999999993,
+          "child_system_cpu_ms": 6.72600000000001,
+          "child_cpu_ms": 226.93699999999993,
+          "child_cpu_utilization": 0.989886470350929,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -3919,16 +3919,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 235.972,
+          "wall_ms": 209.809,
           "pair": 14,
-          "process_wall_ms": 240.95704220235348,
-          "child_user_cpu_ms": 231.58299999999966,
-          "child_system_cpu_ms": 4.097000000000017,
-          "child_cpu_ms": 235.67999999999967,
-          "child_cpu_utilization": 0.9780996556310556,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 213.7212916277349,
+          "child_user_cpu_ms": 210.39600000000024,
+          "child_system_cpu_ms": 1.9180000000000308,
+          "child_cpu_ms": 212.31400000000028,
+          "child_cpu_utilization": 0.9934152951396819,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "pure_sv",
             "cpp_dpi"
@@ -3975,16 +3975,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 231.925,
+          "wall_ms": 218.762,
           "pair": 15,
-          "process_wall_ms": 236.32895899936557,
-          "child_user_cpu_ms": 231.89500000000064,
-          "child_system_cpu_ms": 2.0120000000000138,
-          "child_cpu_ms": 233.90700000000064,
-          "child_cpu_utilization": 0.9897517468463464,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 222.58225036785007,
+          "child_user_cpu_ms": 218.03799999999995,
+          "child_system_cpu_ms": 3.1039999999999957,
+          "child_cpu_ms": 221.14199999999994,
+          "child_cpu_utilization": 0.9935293566065133,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -4031,16 +4031,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 235.991,
+          "wall_ms": 223.984,
           "pair": 16,
-          "process_wall_ms": 240.1011660695076,
-          "child_user_cpu_ms": 233.68400000000022,
-          "child_system_cpu_ms": 2.724000000000004,
-          "child_cpu_ms": 236.40800000000024,
-          "child_cpu_utilization": 0.9846182918227135,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 228.36108272895217,
+          "child_user_cpu_ms": 218.31699999999987,
+          "child_system_cpu_ms": 7.097999999999994,
+          "child_cpu_ms": 225.41499999999985,
+          "child_cpu_utilization": 0.9870990157615905,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "pure_sv",
             "cpp_dpi"
@@ -4090,13 +4090,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 1,
-          "process_wall_ms": 243.39104117825627,
-          "child_user_cpu_ms": 235.63699999999997,
-          "child_system_cpu_ms": 3.049000000000003,
-          "child_cpu_ms": 238.68599999999998,
-          "child_cpu_utilization": 0.9806687988371339,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 238.88183385133743,
+          "child_user_cpu_ms": 227.31199999999995,
+          "child_system_cpu_ms": 10.025000000000006,
+          "child_cpu_ms": 237.33699999999996,
+          "child_cpu_utilization": 0.9935330626593445,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -4145,13 +4145,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 2,
-          "process_wall_ms": 234.0862499549985,
-          "child_user_cpu_ms": 230.24,
-          "child_system_cpu_ms": 1.4809999999999963,
-          "child_cpu_ms": 231.721,
-          "child_cpu_utilization": 0.9898958185051314,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 239.27837470546365,
+          "child_user_cpu_ms": 231.093,
+          "child_system_cpu_ms": 6.615999999999997,
+          "child_cpu_ms": 237.70899999999997,
+          "child_cpu_utilization": 0.9934412179646595,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "pure_sv",
@@ -4200,13 +4200,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 3,
-          "process_wall_ms": 240.94749987125397,
-          "child_user_cpu_ms": 234.54500000000002,
-          "child_system_cpu_ms": 2.486000000000002,
-          "child_cpu_ms": 237.031,
-          "child_cpu_utilization": 0.9837454222461463,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 237.08808282390237,
+          "child_user_cpu_ms": 230.1369999999998,
+          "child_system_cpu_ms": 4.857000000000014,
+          "child_cpu_ms": 234.99399999999983,
+          "child_cpu_utilization": 0.991167490162473,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -4255,13 +4255,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 4,
-          "process_wall_ms": 239.38599973917007,
-          "child_user_cpu_ms": 234.0460000000002,
-          "child_system_cpu_ms": 2.236000000000002,
-          "child_cpu_ms": 236.28200000000018,
-          "child_cpu_utilization": 0.9870334950976584,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 238.1014167331159,
+          "child_user_cpu_ms": 232.35099999999997,
+          "child_system_cpu_ms": 4.1240000000000165,
+          "child_cpu_ms": 236.475,
+          "child_cpu_utilization": 0.9931692269813793,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "pure_sv",
@@ -4310,13 +4310,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 5,
-          "process_wall_ms": 245.12470792979002,
-          "child_user_cpu_ms": 237.26800000000026,
-          "child_system_cpu_ms": 3.187999999999996,
-          "child_cpu_ms": 240.45600000000024,
-          "child_cpu_utilization": 0.9809537440382101,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 245.0213748961687,
+          "child_user_cpu_ms": 233.047,
+          "child_system_cpu_ms": 8.626999999999995,
+          "child_cpu_ms": 241.67399999999998,
+          "child_cpu_utilization": 0.9863384372176214,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -4365,13 +4365,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 6,
-          "process_wall_ms": 240.09458301588893,
-          "child_user_cpu_ms": 234.4949999999999,
-          "child_system_cpu_ms": 2.4000000000000132,
-          "child_cpu_ms": 236.8949999999999,
-          "child_cpu_utilization": 0.9866736559580052,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 244.38841734081507,
+          "child_user_cpu_ms": 233.12100000000012,
+          "child_system_cpu_ms": 9.00200000000001,
+          "child_cpu_ms": 242.12300000000013,
+          "child_cpu_utilization": 0.9907302589645414,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "pure_sv",
@@ -4420,13 +4420,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 7,
-          "process_wall_ms": 240.53166713565588,
-          "child_user_cpu_ms": 237.42899999999966,
-          "child_system_cpu_ms": 1.4389999999999958,
-          "child_cpu_ms": 238.86799999999965,
-          "child_cpu_utilization": 0.9930833758587058,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 241.803125012666,
+          "child_user_cpu_ms": 230.53999999999996,
+          "child_system_cpu_ms": 8.499000000000006,
+          "child_cpu_ms": 239.03899999999996,
+          "child_cpu_utilization": 0.9885686960723885,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -4475,13 +4475,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 8,
-          "process_wall_ms": 229.45466730743647,
-          "child_user_cpu_ms": 227.33000000000027,
-          "child_system_cpu_ms": 0.9510000000000074,
-          "child_cpu_ms": 228.28100000000026,
-          "child_cpu_utilization": 0.9948849708693716,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 231.41041724011302,
+          "child_user_cpu_ms": 224.85399999999967,
+          "child_system_cpu_ms": 4.974999999999952,
+          "child_cpu_ms": 229.8289999999996,
+          "child_cpu_utilization": 0.9931661795567633,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "pure_sv",
@@ -4530,13 +4530,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 9,
-          "process_wall_ms": 243.33287496119738,
-          "child_user_cpu_ms": 236.3059999999999,
-          "child_system_cpu_ms": 3.1150000000000064,
-          "child_cpu_ms": 239.4209999999999,
-          "child_cpu_utilization": 0.983923771246194,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 240.8602088689804,
+          "child_user_cpu_ms": 233.1890000000003,
+          "child_system_cpu_ms": 5.979000000000012,
+          "child_cpu_ms": 239.16800000000032,
+          "child_cpu_utilization": 0.992974311211776,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -4585,13 +4585,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 10,
-          "process_wall_ms": 240.63566699624062,
-          "child_user_cpu_ms": 235.14799999999968,
-          "child_system_cpu_ms": 2.5429999999999895,
-          "child_cpu_ms": 237.69099999999966,
-          "child_cpu_utilization": 0.9877629653450876,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 247.9497087188065,
+          "child_user_cpu_ms": 235.30099999999976,
+          "child_system_cpu_ms": 8.187,
+          "child_cpu_ms": 243.48799999999977,
+          "child_cpu_utilization": 0.9820055899970157,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "pure_sv",
@@ -4640,13 +4640,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 11,
-          "process_wall_ms": 243.6925838701427,
-          "child_user_cpu_ms": 235.82899999999984,
-          "child_system_cpu_ms": 3.2310000000000114,
-          "child_cpu_ms": 239.05999999999986,
-          "child_cpu_utilization": 0.9809900498547325,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 245.17054203897715,
+          "child_user_cpu_ms": 233.02800000000002,
+          "child_system_cpu_ms": 8.84299999999999,
+          "child_cpu_ms": 241.871,
+          "child_cpu_utilization": 0.9865418495568992,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -4695,13 +4695,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 12,
-          "process_wall_ms": 242.48533276841044,
-          "child_user_cpu_ms": 234.9560000000004,
-          "child_system_cpu_ms": 3.4250000000000114,
-          "child_cpu_ms": 238.3810000000004,
-          "child_cpu_utilization": 0.9830738926699127,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 240.16333417966962,
+          "child_user_cpu_ms": 231.93100000000032,
+          "child_system_cpu_ms": 6.112000000000006,
+          "child_cpu_ms": 238.04300000000032,
+          "child_cpu_utilization": 0.9911712827151081,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "pure_sv",
@@ -4750,13 +4750,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 13,
-          "process_wall_ms": 234.95787475258112,
-          "child_user_cpu_ms": 231.78400000000022,
-          "child_system_cpu_ms": 1.222999999999974,
-          "child_cpu_ms": 233.0070000000002,
-          "child_cpu_utilization": 0.9916969169276184,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 239.74050022661686,
+          "child_user_cpu_ms": 231.0370000000006,
+          "child_system_cpu_ms": 5.859999999999976,
+          "child_cpu_ms": 236.8970000000006,
+          "child_cpu_utilization": 0.9881392579729815,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -4805,13 +4805,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 14,
-          "process_wall_ms": 238.15995827317238,
-          "child_user_cpu_ms": 233.36500000000004,
-          "child_system_cpu_ms": 1.8559999999999688,
-          "child_cpu_ms": 235.221,
-          "child_cpu_utilization": 0.9876597296435475,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 232.94970812276006,
+          "child_user_cpu_ms": 226.19599999999986,
+          "child_system_cpu_ms": 5.245999999999973,
+          "child_cpu_ms": 231.44199999999984,
+          "child_cpu_utilization": 0.9935277526857184,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "pure_sv",
@@ -4860,13 +4860,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 15,
-          "process_wall_ms": 249.51937468722463,
-          "child_user_cpu_ms": 239.9610000000001,
-          "child_system_cpu_ms": 3.4259999999999846,
-          "child_cpu_ms": 243.38700000000009,
-          "child_cpu_utilization": 0.9754232524231373,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 246.7217082157731,
+          "child_user_cpu_ms": 234.7710000000003,
+          "child_system_cpu_ms": 7.616999999999985,
+          "child_cpu_ms": 242.3880000000003,
+          "child_cpu_utilization": 0.9824348321551717,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -4915,13 +4915,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 16,
-          "process_wall_ms": 241.91174982115626,
-          "child_user_cpu_ms": 236.05199999999994,
-          "child_system_cpu_ms": 2.620000000000011,
-          "child_cpu_ms": 238.67199999999994,
-          "child_cpu_utilization": 0.9866077202800135,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 242.0448330231011,
+          "child_user_cpu_ms": 232.65099999999973,
+          "child_system_cpu_ms": 7.5230000000000015,
+          "child_cpu_ms": 240.17399999999972,
+          "child_cpu_utilization": 0.9922707169587759,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "pure_sv",
@@ -4971,16 +4971,16 @@
           "signal_edges": 100000,
           "force_release": 0,
           "packed_view": 0,
-          "wall_ms": 231.99,
+          "wall_ms": 221.431,
           "pair": 0,
-          "process_wall_ms": 235.98066670820117,
-          "child_user_cpu_ms": 231.176,
-          "child_system_cpu_ms": 1.8999999999999955,
-          "child_cpu_ms": 233.076,
-          "child_cpu_utilization": 0.9876910818639524,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
-          "binary_sha256": "9b3e76856ac2a7becbbc47ac040eb6bb8f22c1afbbec21b6c481a938594d516a",
+          "process_wall_ms": 225.36629205569625,
+          "child_user_cpu_ms": 217.701,
+          "child_system_cpu_ms": 6.0480000000000045,
+          "child_cpu_ms": 223.749,
+          "child_cpu_utilization": 0.9928237180416646,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/cpp_dpi_signal_edge/Vdpi_authoring_core",
+          "binary_sha256": "82055393bc940805a32218e9aa6a21432dc07e7136b4ed70549f1f8e6ccab1e5",
           "pair_order": [
             "cpp_dpi",
             "pure_sv"
@@ -5028,13 +5028,13 @@
           "force_release": 0,
           "packed_view": 0,
           "pair": 0,
-          "process_wall_ms": 240.32045807689428,
-          "child_user_cpu_ms": 233.98000000000002,
-          "child_system_cpu_ms": 2.6110000000000024,
-          "child_cpu_ms": 236.591,
-          "child_cpu_utilization": 0.984481312549342,
-          "child_max_rss": 17711104.0,
-          "binary": "/Users/amann/Documents/mojo-hdl-sim/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+          "process_wall_ms": 244.0455830655992,
+          "child_user_cpu_ms": 232.93399999999997,
+          "child_system_cpu_ms": 7.993999999999994,
+          "child_cpu_ms": 240.92799999999997,
+          "child_cpu_utilization": 0.9872254067193618,
+          "child_max_rss": 17645568.0,
+          "binary": "/private/tmp/mojo-hdl-integration/build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
           "binary_sha256": "d69dbb5477e6856c7d36e157f1b8adbe0d46faba3953cb87f755c990d36f4441",
           "pair_order": [
             "cpp_dpi",
@@ -5048,76 +5048,76 @@
       },
       "guard": {
         "metric": "median(cpp_dpi_process_wall_ms / pure_sv_process_wall_ms by adjacent pair)",
-        "ratio": 0.9926929411448084,
-        "overhead_percent": -0.7307058855191562,
+        "ratio": 0.9392746659248877,
+        "overhead_percent": -6.0725334075112265,
         "paired_ratios": [
-          0.9903824184345628,
-          0.9750618959084875,
-          0.9754541967597075,
-          0.9976592907622182,
-          0.9718655122171411,
-          0.9992128149014105,
-          0.9797498913835587,
-          1.048802118467561,
-          0.9928703626961587,
-          1.0041364350989537,
-          0.975279472107243,
-          0.9945221765705944,
-          1.044145858309888,
-          1.011744560040495,
-          0.9471367075026002,
-          0.9925155195934583
+          0.9471953004002193,
+          0.9517552907936416,
+          0.9341501789848612,
+          0.9817946999060561,
+          0.9291764153380114,
+          0.9443447376913686,
+          0.9460983651076519,
+          0.9244023474735804,
+          0.9175216613703847,
+          0.926511303887035,
+          0.9350832810493559,
+          0.9592515132322683,
+          0.9562655576365607,
+          0.9174567907812439,
+          0.9021591653912691,
+          0.9434660508004196
         ],
         "order_strata": {
           "cpp_dpi_first": [
-            0.9903824184345628,
-            0.9754541967597075,
-            0.9718655122171411,
-            0.9797498913835587,
-            0.9928703626961587,
-            0.975279472107243,
-            1.044145858309888,
-            0.9471367075026002
+            0.9471953004002193,
+            0.9341501789848612,
+            0.9291764153380114,
+            0.9460983651076519,
+            0.9175216613703847,
+            0.9350832810493559,
+            0.9562655576365607,
+            0.9021591653912691
           ],
           "pure_sv_first": [
-            0.9750618959084875,
-            0.9976592907622182,
-            0.9992128149014105,
-            1.048802118467561,
-            1.0041364350989537,
-            0.9945221765705944,
-            1.011744560040495,
-            0.9925155195934583
+            0.9517552907936416,
+            0.9817946999060561,
+            0.9443447376913686,
+            0.9244023474735804,
+            0.926511303887035,
+            0.9592515132322683,
+            0.9174567907812439,
+            0.9434660508004196
           ]
         },
         "order_stratified_paired_medians": {
-          "cpp_dpi_first": 0.9776020440716331,
-          "pure_sv_first": 0.9984360528318144
+          "cpp_dpi_first": 0.9346167300171085,
+          "pure_sv_first": 0.9439053942458941
         },
         "order_stratum_medians": {
-          "cpp_dpi_first": 0.9776020440716331,
-          "pure_sv_first": 0.9984360528318144
+          "cpp_dpi_first": 0.9346167300171085,
+          "pure_sv_first": 0.9439053942458941
         },
-        "dpi_first_paired_median": 0.9776020440716331,
-        "sv_first_paired_median": 0.9984360528318144,
-        "independent_median_ratio": 0.9967265951790754,
-        "relative_disagreement": 0.004063345136327019,
-        "independent_paired_relative_disagreement": 0.004063345136327019,
-        "stratum_gap": 0.02098736466903326,
-        "order_stratum_gap": 0.02098736466903326,
-        "relative_stratum_gap": 0.02098736466903326,
-        "absolute_order_stratum_gap": 0.020834008760181266,
+        "dpi_first_paired_median": 0.9346167300171085,
+        "sv_first_paired_median": 0.9439053942458941,
+        "independent_median_ratio": 0.9481771701582844,
+        "relative_disagreement": 0.009478062760939607,
+        "independent_paired_relative_disagreement": 0.009478062760939607,
+        "stratum_gap": 0.009889188504450095,
+        "order_stratum_gap": 0.009889188504450095,
+        "relative_stratum_gap": 0.009889188504450095,
+        "absolute_order_stratum_gap": 0.009288664228785604,
         "one_sided_95_upper_median_bound": {
           "confidence": 0.95,
-          "bound": 0.9992128149014105,
+          "bound": 0.9471953004002193,
           "order_statistic": 12,
           "coverage": 0.9615936279296875,
           "method": "exact binomial order-statistic bound"
         },
         "two_sided_95_median_ci": {
           "confidence": 0.95,
-          "lower": 0.975279472107243,
-          "upper": 1.0041364350989537,
+          "lower": 0.9244023474735804,
+          "upper": 0.9517552907936416,
           "lower_order_statistic": 4,
           "upper_order_statistic": 13,
           "coverage": 0.978729248046875,

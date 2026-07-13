@@ -1,5 +1,5 @@
 # Feature regression: array_multidim
 
-- Status: `failed`
+- Status: `passed`
 - Adapter: `runner`
 - Load settle: `settled`

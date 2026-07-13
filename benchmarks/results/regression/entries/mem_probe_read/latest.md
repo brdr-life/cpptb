@@ -1,5 +1,5 @@
 # Feature regression: mem_probe_read
 
-- Status: `failed`
+- Status: `passed`
 - Adapter: `runner`
 - Load settle: `settled`

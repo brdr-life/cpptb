@@ -1,5 +1,5 @@
 # Feature regression: mem_backdoor
 
-- Status: `passed_inconclusive`
+- Status: `passed`
 - Adapter: `runner`
 - Load settle: `settled`
