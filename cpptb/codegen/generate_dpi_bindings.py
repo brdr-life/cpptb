@@ -2084,15 +2084,21 @@ def render_sv(
             "    service_requests(initial_requests);",
         ]
     )
-    lines.extend(["    fork", "      timer_owner();"])
+    lines.extend(
+        [
+            "    if (status == 0) begin",
+            "      fork",
+            "        timer_owner();",
+        ]
+    )
     for index, clock in enumerate(clocks):
         if clock_source(clock) == "generated":
-            lines.append(f"      drive_clock_{index}();")
+            lines.append(f"        drive_clock_{index}();")
         else:
-            lines.append(f"      observe_clock_{index}();")
+            lines.append(f"        observe_clock_{index}();")
     for index, _ in enumerate(edge_observers):
-        lines.append(f"      observe_signal_{index}();")
-    lines.append("    join_none")
+        lines.append(f"        observe_signal_{index}();")
+    lines.extend(["      join_none", "    end"])
     lines.extend(
         [
             "",
