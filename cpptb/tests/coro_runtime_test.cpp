@@ -182,6 +182,16 @@ Task<void> fast_path_cancelled_falling(Signal signal, uint32_t& wakes) {
     ++wakes;
 }
 
+Task<void> generic_first_three_edges(Signal rising_signal,
+                                     Signal falling_signal,
+                                     Signal any_signal, uint32_t& winner,
+                                     uint32_t& completions) {
+    winner = static_cast<uint32_t>(
+        co_await First{RisingEdge{rising_signal}, FallingEdge{falling_signal},
+                       Edge{any_signal}});
+    ++completions;
+}
+
 Task<void> generic_first_path(Signal signal, uint32_t& winner) {
     winner = static_cast<uint32_t>(
         co_await First{RisingEdge{signal}, Delay{10_ns}});
@@ -536,6 +546,15 @@ struct TimeoutProbe {
     uint32_t resumes = 0;
     uint32_t frame_destructions = 0;
 };
+
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+Task<uint32_t> timed_fast_path_falling(Signal signal, TimeoutProbe& probe) {
+    DestructionCounter counter{&probe.frame_destructions};
+    co_await FallingEdge{signal};
+    ++probe.resumes;
+    co_return 47;
+}
+#endif
 
 struct NonDefaultMoveOnly {
     explicit NonDefaultMoveOnly(uint32_t value) : value(value) {}
@@ -1716,6 +1735,11 @@ int main() {
                          tb.has_edge_interest(cancelled_signal.id,
                                               EdgeKind::Falling),
                          0);
+        tb.notify_edge(cancelled_signal.id, EdgeKind::Falling);
+        passed &= expect("cancelled fast FallingEdge stale re-notify skipped",
+                         cancelled_wakes, 0);
+        passed &= expect("cancelled fast FallingEdge remains cancelled",
+                         cancelled.cancelled() ? 1 : 0, 1);
 
         tb.notify_edge(any_signal.id, EdgeKind::Rising);
         passed &= expect("Any fast path wakes", any_wakes, 1);
@@ -1758,6 +1782,106 @@ int main() {
         passed &= expect("generic edge timeout completes",
                          timed.done() ? 1 : 0, 1);
         passed &= expect("fast-path diagnostics test drains scheduler",
+                         tb.done() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        const Signal rising_signal{nullptr, 44, "first_rising_loser"};
+        const Signal falling_signal{nullptr, 45, "first_falling_winner"};
+        const Signal any_signal{nullptr, 46, "first_any_loser"};
+        uint32_t winner = 99;
+        uint32_t completions = 0;
+
+        const auto first = tb.spawn(generic_first_three_edges(
+            rising_signal, falling_signal, any_signal, winner, completions));
+        passed &= expect("three-edge First uses compound path",
+                         tb.compound_wait_park_count(), 1);
+        passed &= expect("three-edge First registers rising loser",
+                         tb.has_edge_interest(rising_signal.id,
+                                              EdgeKind::Rising),
+                         1);
+        passed &= expect("three-edge First registers falling winner",
+                         tb.has_edge_interest(falling_signal.id,
+                                              EdgeKind::Falling),
+                         1);
+        passed &= expect("three-edge First registers any-edge loser",
+                         tb.has_edge_interest(any_signal.id, EdgeKind::Any), 1);
+        passed &= expect("three-edge First adds falling accounting",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 1);
+
+        tb.notify_edge(falling_signal.id, EdgeKind::Falling);
+        passed &= expect("three-edge First selects falling winner", winner, 1);
+        passed &= expect("three-edge First resumes exactly once", completions,
+                         1);
+        passed &= expect("three-edge First completes", first.done() ? 1 : 0,
+                         1);
+        passed &= expect("three-edge First cleans rising loser",
+                         tb.has_edge_interest(rising_signal.id,
+                                              EdgeKind::Rising),
+                         0);
+        passed &= expect("three-edge First cleans falling registration",
+                         tb.has_edge_interest(falling_signal.id,
+                                              EdgeKind::Falling),
+                         0);
+        passed &= expect("three-edge First cleans any-edge loser",
+                         tb.has_edge_interest(any_signal.id, EdgeKind::Any), 0);
+        passed &= expect("three-edge First restores falling accounting",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+
+        tb.notify_edge(rising_signal.id, EdgeKind::Rising);
+        tb.notify_edge(any_signal.id, EdgeKind::Falling);
+        tb.notify_edge(falling_signal.id, EdgeKind::Falling);
+        passed &= expect("three-edge First stale re-notifies are skipped",
+                         completions, 1);
+        passed &= expect("three-edge First re-notify keeps winner", winner, 1);
+        passed &= expect("three-edge First re-notify keeps falling accounting",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+        passed &= expect("three-edge First drains scheduler",
+                         tb.done() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        const Signal signal{nullptr, 47, "timed_fast_falling"};
+        TimeoutProbe probe;
+        uint32_t completed = 0;
+        uint32_t timed_out = 0;
+        uint32_t value = 0;
+        uint32_t continuations = 0;
+
+        tb.spawn_detached(collect_timed_value(
+            timed_fast_path_falling(signal, probe), 2_ns, completed, timed_out,
+            value, continuations));
+        passed &= expect("timed child selects single-edge fast path",
+                         tb.single_edge_park_count(EdgeKind::Falling), 1);
+        passed &= expect("timed fast child registers falling interest",
+                         tb.has_edge_interest(signal.id, EdgeKind::Falling), 1);
+        passed &= expect("timed fast child updates falling accounting",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 1);
+
+        tb.set_time(2);
+        passed &= expect("timed fast child reports timeout", timed_out, 1);
+        passed &= expect("timed fast child has no value", completed, 0);
+        passed &= expect("timed fast child parent resumes exactly once",
+                         continuations, 1);
+        passed &= expect("timed fast child cancel_awaited prevents resume",
+                         probe.resumes, 0);
+        passed &= expect("timed fast child cancel_state destroys frame",
+                         probe.frame_destructions, 1);
+        passed &= expect("timed fast child cancel_state clears interest",
+                         tb.has_edge_interest(signal.id, EdgeKind::Falling), 0);
+        passed &= expect("timed fast child restores falling accounting",
+                         tb.has_falling_edge_waiters() ? 1 : 0, 0);
+
+        tb.notify_edge(signal.id, EdgeKind::Falling);
+        passed &= expect("timed fast child stale edge never wakes",
+                         probe.resumes, 0);
+        passed &= expect("timed fast child continuation stays exactly once",
+                         continuations, 1);
+        passed &= expect("timed fast child frame stays destroyed once",
+                         probe.frame_destructions, 1);
+        passed &= expect("timed fast child drains scheduler",
                          tb.done() ? 1 : 0, 1);
     }
 #endif
