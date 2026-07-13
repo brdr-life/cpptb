@@ -444,7 +444,7 @@ module dpi_authoring_core;
 
   export "DPI-C" function dpi_authoring_core_port_20_get;
   function longint unsigned dpi_authoring_core_port_20_get(input int index_0);
-    dpi_authoring_core_port_20_get = array_wide_i[index_0];
+    dpi_authoring_core_port_20_get = $unsigned(array_wide_i[index_0]);
   endfunction
 
   export "DPI-C" function dpi_authoring_core_port_20_set;
@@ -454,7 +454,7 @@ module dpi_authoring_core;
 
   export "DPI-C" function dpi_authoring_core_port_21_get;
   function longint unsigned dpi_authoring_core_port_21_get(input int index_0);
-    dpi_authoring_core_port_21_get = array_wide_o[index_0];
+    dpi_authoring_core_port_21_get = $unsigned(array_wide_o[index_0]);
   endfunction
 
   export "DPI-C" function dpi_authoring_core_internal_0_get;
