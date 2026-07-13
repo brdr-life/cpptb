@@ -44,10 +44,11 @@ The atomic aggregate index is
 `benchmarks/results/regression/latest.json` and `latest.md`. Authoring and
 peripheral runners retain their own result directories and raw journals.
 
-The multiclock entry is `equivalence_only`: the adapter requires one
-`CPP_DPI_MULTICLOCK_RESULT` and one `PURE_SV_MULTICLOCK_RESULT`, with an exact
-match of `iterations`, `checks`, `sim_cycles`, and `failures`, and zero
-failures. It does not interpret elapsed time as a performance result.
+The multiclock and clockless timer-only entries are `equivalence_only`. The
+adapter requires one C++ DPI result and one pure-SV result, with an exact match
+of `iterations`, `checks`, `sim_cycles`, and `failures`, and zero failures. The
+timer-only pair additionally requires `sim_cycles=0`. Neither entry interprets
+elapsed time as a performance result.
 
 The peripheral suite is an independently selected registry entry. Its
 diagnostics are not a universal preflight or gate for authoring features.

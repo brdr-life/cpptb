@@ -111,8 +111,7 @@ def parse_result(output: str) -> dict[str, int | float]:
     }
 
 
-def validate_result(manifest: dict[str, Any], result: dict[str, int | float]) -> None:
-    contract = manifest["conformance"]
+def validate_result(contract: dict[str, Any], result: dict[str, int | float]) -> None:
     expected = {
         "iterations": int(contract["expected_iterations"]),
         "checks": int(contract["expected_checks"]),
@@ -147,12 +146,41 @@ def run(manifest: dict[str, Any], simulator: str, binary: Path) -> None:
             f"{simulator} conformance simulation failed with {completed.returncode}"
         )
     result = parse_result(completed.stdout)
-    validate_result(manifest, result)
+    validate_result(manifest["conformance"], result)
     print(
         "CPPTB_CONFORMANCE_PASS "
         f"simulator={simulator} checks={result['checks']} "
         f"sim_cycles={result['sim_cycles']}"
     )
+
+    for positive_case in manifest["conformance"].get("positive_cases", []):
+        case_name = str(positive_case["case"])
+        case_iterations = int(positive_case["expected_iterations"])
+        environment = os.environ.copy()
+        environment["CPPTB_CONFORMANCE_POSITIVE_CASE"] = case_name
+        case_run = subprocess.run(
+            [str(binary), f"+{plusarg}={case_iterations}"],
+            cwd=REPO,
+            env=environment,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+        print(case_run.stdout, end="")
+        if case_run.returncode != 0:
+            raise SystemExit(
+                f"positive conformance case {case_name!r} failed with "
+                f"{case_run.returncode}"
+            )
+        case_result = parse_result(case_run.stdout)
+        validate_result(positive_case, case_result)
+        print(
+            "CPPTB_CONFORMANCE_CASE_PASS "
+            f"simulator={simulator} case={case_name} "
+            f"checks={case_result['checks']} "
+            f"sim_cycles={case_result['sim_cycles']}"
+        )
 
     for violation in manifest["conformance"].get("negative_cases", []):
         violation_iterations = int(violation["iterations"])
