@@ -824,6 +824,14 @@ void trigger_late_static_edge_source_configuration() {
     tb.configure_static_edge_source(37);
 }
 
+void trigger_late_static_source_after_edge_wait() {
+    Testbench tb;
+    Results results;
+    const Signal signal{nullptr, 38, "late_static_after_edge"};
+    tb.spawn_detached(wait_for_change(signal, results));
+    tb.configure_static_edge_source(signal.id);
+}
+
 void trigger_invalid_timed_task() {
     Testbench tb;
     tb.spawn_detached(invalid_timed_task());
@@ -2566,6 +2574,10 @@ int main() {
         "late static edge source configuration abort",
         trigger_late_static_edge_source_configuration,
         "static edge source 37 must be configured before registering any waits");
+    passed &= expect_abort(
+        "late static source after fast edge wait abort",
+        trigger_late_static_source_after_edge_wait,
+        "static edge source 38 must be configured before registering any waits");
     passed &= expect_abort("invalid timed Task abort",
                            trigger_invalid_timed_task,
                            "with_timeout received an invalid task");
