@@ -428,3 +428,15 @@ the multiclock and clockless timer equivalence cases, and the peripheral
 suite. Authoring paired C++ DPI/pure-SV ratios ranged from `0.740x` to
 `1.058x`; the peripheral suite passed at `0.986x`. No measured feature
 crossed the `1.10x` hard stop.
+
+## Follow-up portability work
+
+The integrated branch is approved, with these non-blocking follow-ups retained:
+
+1. Run the frozen equal-time timer/clock contracts on a second simulator.
+2. Zero-extend and width-normalize signed narrow internal-probe getters, as is
+   now done for transport ports. No current manifest exposes a signed internal.
+3. Add a defensive generated `timer_owner` invariant guard so a future
+   scheduler regression cannot become a zero-time loop.
+4. Reject or explicitly diagnose `compact_input_transport: false` when static
+   binding or on-demand transport necessarily enables compact transport.
