@@ -1353,6 +1353,7 @@ class Scheduler {
 
     void register_edge_wait(uint32_t signal_id, EdgeKind edge,
                             WaitRegistration registration) {
+        wait_registered_ = true;
         const size_t queue_index = edge_queue_index(signal_id, edge);
         if (queue_index >= edge_waiters_.size()) {
             edge_waiters_.resize(queue_index + 1);
