@@ -394,3 +394,22 @@ Transactions, checks, scheduler cycles, checksums, and failures matched for
 every workload. The final exact `array_multidim` C++ DPI/pure-SV guard passed
 at `1.012x` in a valid environment, leaving substantially more margin than
 the required `1.10x` limit.
+
+An independent post-integration review found that static packed scalar writes
+narrower than 32 bits were not normalized before updating the C++ cache. That
+could make a value such as `2` appear nonzero in a one-bit C++ signal even
+though SystemVerilog stored zero, including a false local edge. Static packed
+and on-demand bindings now normalize before comparison, storage, callbacks,
+and edge delivery. Dedicated one-bit tests cover zero-equivalent and
+one-equivalent out-of-range writes. The fix also exposed and corrected a
+conformance predicate that had relied on writing `7` to a one-bit signal.
+
+Post-fix six-pair C++ A/B ratios remained `0.9070x` for
+`array_multidim` and `0.9513x` for `signal_edge`; the exact
+`array_multidim` guard passed at `1.006x`.
+
+Equal-time timer and clock callbacks are covered by the R1/R2 Verilator
+contracts, but their sibling active-region process ordering has not yet been
+validated on a second simulator. Treat that exact coincidence ordering as a
+backend conformance requirement, not a proven portable SystemVerilog
+guarantee, until another supported simulator runs the same cases.
