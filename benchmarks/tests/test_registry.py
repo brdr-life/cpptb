@@ -19,7 +19,19 @@ EXPECTED_NAMES = (
     "dpi_counter",
     "dpi_multiclock",
     "dpi_timer_only",
+    "dpi_fifo_scoreboard",
+    "dpi_apb_regfile",
+    "dpi_watchdog_timeout",
     "peripheral_suite",
+)
+
+EXAMPLE_NAMES = (
+    "dpi_counter",
+    "dpi_multiclock",
+    "dpi_timer_only",
+    "dpi_fifo_scoreboard",
+    "dpi_apb_regfile",
+    "dpi_watchdog_timeout",
 )
 
 
@@ -43,18 +55,18 @@ class RegistryTests(unittest.TestCase):
                     entry.binary_paths, tuple(binary.path for binary in entry.binaries)
                 )
 
-        self.assertEqual(
-            registry.get_benchmark("dpi_counter").gate_policy,
-            registry.GatePolicy.EQUIVALENCE_ONLY,
-        )
-        self.assertEqual(
-            registry.get_benchmark("dpi_multiclock").gate_policy,
-            registry.GatePolicy.EQUIVALENCE_ONLY,
-        )
-        self.assertEqual(
-            registry.get_benchmark("dpi_timer_only").gate_policy,
-            registry.GatePolicy.EQUIVALENCE_ONLY,
-        )
+        for name in EXAMPLE_NAMES:
+            with self.subTest(example=name):
+                entry = registry.get_benchmark(name)
+                self.assertEqual(
+                    entry.gate_policy,
+                    registry.GatePolicy.EQUIVALENCE_ONLY,
+                )
+                self.assertEqual(
+                    tuple(binary.adapter for binary in entry.binaries),
+                    ("cpp_dpi", "pure_sv"),
+                )
+                self.assertIsNotNone(entry.runner.iterations_environment)
         self.assertEqual(
             registry.get_benchmark("peripheral_suite").gate_policy,
             registry.GatePolicy.DIAGNOSTIC,
@@ -84,6 +96,9 @@ class RegistryTests(unittest.TestCase):
                 "dpi_counter",
                 "dpi_multiclock",
                 "dpi_timer_only",
+                "dpi_fifo_scoreboard",
+                "dpi_apb_regfile",
+                "dpi_watchdog_timeout",
                 "peripheral_suite",
             ),
         )
@@ -92,7 +107,7 @@ class RegistryTests(unittest.TestCase):
                 entry.name
                 for entry in registry.list_benchmarks(gate_policy="equivalence_only")
             ),
-            ("dpi_counter", "dpi_multiclock", "dpi_timer_only"),
+            EXAMPLE_NAMES,
         )
         with self.assertRaises(KeyError):
             registry.get_benchmark("missing")

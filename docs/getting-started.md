@@ -8,7 +8,10 @@ uv sync --frozen
 make test
 ```
 
-Use `examples/multiclock` as the complete project template. A design supplies:
+Use `examples/counter` as the smallest complete project template. For a more
+realistic starting point, copy `examples/apb_regfile` for a transaction-based
+testbench or `examples/fifo_scoreboard` for concurrent verification
+components. A design supplies:
 
 1. RTL sources and a top module.
 2. A `.dpi.json` manifest describing sources, generated outputs, clocks,
@@ -28,4 +31,5 @@ advances only when a coroutine awaits a scheduling primitive; writing a signal
 or depositing an internal value does not insert a delay.
 
 Continue with [testbench authoring](testbench-authoring.md) and
-[scheduling](scheduling.md).
+[scheduling](scheduling.md). The [example guide](../examples/README.md) maps
+common DUT styles to a checked C++/SystemVerilog pair.
