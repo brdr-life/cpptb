@@ -16,6 +16,7 @@ from cpptb.codegen.design_ir import (
 from cpptb.codegen.generate_dpi_bindings import (
     CodegenError,
     Port,
+    apply_port_transport,
     build_tree,
     compare_designs,
     discover_ports,
@@ -845,6 +846,172 @@ class CodegenTests(unittest.TestCase):
 
         with self.assertRaisesRegex(CodegenError, r"array_i\[73\]\[7:4\]"):
             compare_designs(primary, comparison, "slang", "verilator_json")
+
+    def test_applies_and_validates_port_transport(self):
+        design = DesignIR(
+            "sample_dut",
+            (
+                Port("clk", "input", 1),
+                Port("data_i", "input", 8),
+                Port("event_o", "output", 1),
+            ),
+        )
+        config = manifest()
+        config["edge_observers"] = ["event_o"]
+        config["port_transport"] = {"data_i": "on_demand"}
+        applied = apply_port_transport(design, config)
+        self.assertEqual(applied.ports[0].transport, "packed")
+        self.assertEqual(applied.ports[1].transport, "on_demand")
+
+        cases = [
+            ([], "must be an object"),
+            ({"missing": "on_demand"}, "was not found"),
+            ({"data_i": "lazy"}, "invalid transport"),
+            ({"data_i": []}, "invalid transport"),
+            ({"clk": "on_demand"}, "configured clock"),
+            ({"event_o": "on_demand"}, "edge observer"),
+        ]
+        for mapping, message in cases:
+            with self.subTest(mapping=mapping):
+                config["port_transport"] = mapping
+                with self.assertRaisesRegex(CodegenError, message):
+                    apply_port_transport(design, config)
+
+    def test_transport_mode_participates_in_frontend_signature(self):
+        primary = DesignIR(
+            "sample_dut", (Port("data_i", "input", 32),)
+        )
+        comparison = DesignIR(
+            "sample_dut",
+            (Port("data_i", "input", 32, transport="on_demand"),),
+        )
+
+        with self.assertRaisesRegex(CodegenError, "transport=on_demand"):
+            compare_designs(primary, comparison, "slang", "verilator_json")
+
+    def test_explicit_packed_transport_is_byte_identical(self):
+        design = DesignIR(
+            "sample_dut",
+            (Port("clk", "input", 1), Port("data_o", "output", 17)),
+        )
+        default_config = manifest()
+        explicit_config = manifest()
+        explicit_config["port_transport"] = {
+            "clk": "packed",
+            "data_o": "packed",
+        }
+
+        outputs = []
+        for config in (default_config, explicit_config):
+            ports = map_ports(
+                list(apply_port_transport(design, config).ports), config
+            )
+            tree = build_tree(ports)
+            outputs.append(
+                (
+                    render_cpp_dut(ports, [], tree, config, "sample.json"),
+                    render_cpp_binding(ports, [], tree, config, "sample.json"),
+                    render_sv(ports, [], config, "sample.json"),
+                )
+            )
+        self.assertEqual(outputs[0], outputs[1])
+
+    def test_generates_on_demand_abi_for_all_widths_and_shapes(self):
+        config = manifest()
+        del config["clock"]
+        config["clocks"] = []
+        ports = map_ports(
+            [
+                Port("hot_i", "input", 32),
+                Port("hot_o", "output", 32),
+                Port("narrow_i", "input", 17, transport="on_demand"),
+                Port(
+                    "u64_o", "output", 64, four_state=False,
+                    transport="on_demand"
+                ),
+                Port(
+                    "wide_i", "input", 137, four_state=False,
+                    transport="on_demand"
+                ),
+                Port(
+                    "array_o", "output", 32,
+                    unpacked=(UnpackedRange(3, 0),),
+                    transport="on_demand",
+                ),
+                Port(
+                    "matrix_i", "input", 65, four_state=False,
+                    unpacked=(UnpackedRange(2, 1), UnpackedRange(-1, 1)),
+                    transport="on_demand",
+                ),
+            ],
+            config,
+        )
+        tree = build_tree(ports)
+        binding = render_cpp_binding(ports, [], tree, config, "sample.json")
+        wrapper = render_sv(ports, [], config, "sample.json")
+
+        self.assertIn("unsigned int dpi_sample_dut_port_2_get();", binding)
+        self.assertIn(
+            "void dpi_sample_dut_port_2_set(unsigned int value);", binding
+        )
+        self.assertIn(
+            "unsigned long long dpi_sample_dut_port_3_get();", binding
+        )
+        self.assertIn(
+            "void dpi_sample_dut_port_4_get(svBitVecVal* value);", binding
+        )
+        self.assertIn(
+            "unsigned int dpi_sample_dut_port_5_get(int index_0);", binding
+        )
+        self.assertIn(
+            "dpi_sample_dut_port_6_get(int index_0, int index_1, "
+            "svBitVecVal* value)",
+            binding,
+        )
+        self.assertIn("remaining % 3", binding)
+        self.assertIn("remaining /= 3", binding)
+        self.assertIn("+ -1", binding)
+        self.assertIn("OnDemandSpec{coro::SignalSpec<17, true>", binding)
+        self.assertIn("OnDemandSpec{coro::ArraySpec<288, 2, 1, true>", binding)
+
+        observed_table = binding.split("kObservedSignalWordIds = {", 1)[1].split(
+            "};", 1
+        )[0]
+        driven_table = binding.split("kDrivenSignalWordIds = {", 1)[1].split(
+            "};", 1
+        )[0]
+        self.assertIn("kSignalHotO", observed_table)
+        self.assertNotIn("kSignalU64O", observed_table)
+        self.assertNotIn("kSignalArrayO", observed_table)
+        self.assertIn("kSignalHotI", driven_table)
+        self.assertNotIn("kSignalNarrowI", driven_table)
+        self.assertNotIn("kSignalWideI", driven_table)
+        self.assertNotIn("kSignalMatrixI", driven_table)
+
+        self.assertIn("localparam int SIGNAL_COUNT = 32", wrapper)
+        self.assertIn("localparam int INPUT_WORD_COUNT = 1", wrapper)
+        self.assertIn("localparam int OUTPUT_WORD_COUNT = 1", wrapper)
+        self.assertNotIn("INPUT_SIGNAL_U64O", wrapper)
+        self.assertNotIn("OUTPUT_SIGNAL_WIDEI", wrapper)
+        self.assertIn(
+            'export "DPI-C" function dpi_sample_dut_port_2_get;', wrapper
+        )
+        self.assertIn(
+            "function longint unsigned dpi_sample_dut_port_3_get();", wrapper
+        )
+        self.assertIn(
+            "function void dpi_sample_dut_port_4_get(output bit [136:0] value);",
+            wrapper,
+        )
+        self.assertIn(
+            "function int unsigned dpi_sample_dut_port_5_get(input int index_0);",
+            wrapper,
+        )
+        self.assertIn(
+            "matrix_i[index_0][index_1] = value;", wrapper
+        )
+        self.assertNotIn("in_words[INPUT_SIGNAL_U64O", wrapper)
+        self.assertNotIn("out_words[OUTPUT_SIGNAL_MATRIXI", wrapper)
 
     def test_check_detects_stale_generated_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:

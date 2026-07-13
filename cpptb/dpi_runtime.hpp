@@ -52,6 +52,9 @@ class Runtime {
         edge_observer_.fill(false);
         local_edge_capable_.fill(false);
         observed_transport_offsets_.fill(kNoTransportOffset);
+        on_demand_get_words_.fill(nullptr);
+        on_demand_set_words_.fill(nullptr);
+        on_demand_base_ids_.fill(0);
         current_inputs_ = nullptr;
         signal_names_.fill("<unknown>");
         result_ = Result{};
@@ -77,30 +80,6 @@ class Runtime {
             }
             for (uint32_t word = 0; word < word_count; ++word) {
                 driven_[id + word] = true;
-            }
-        }
-
-        if constexpr (requires {
-                          Adapter::observed_signal_word_ids;
-                          Adapter::driven_signal_word_ids;
-                      }) {
-            std::array<bool, Adapter::signal_count> transport_seen{};
-            for (size_t word = 0;
-                 word < Adapter::observed_signal_word_ids.size(); ++word) {
-                const auto id = Adapter::observed_signal_word_ids[word];
-                validate_transport_word(id, false, transport_seen);
-                observed_transport_offsets_[id] = static_cast<uint32_t>(word);
-            }
-            for (const auto id : Adapter::driven_signal_word_ids) {
-                validate_transport_word(id, true, transport_seen);
-            }
-            for (uint32_t id = 0; id < transport_seen.size(); ++id) {
-                if (!transport_seen[id]) {
-                    std::fprintf(stderr,
-                                 "%s: signal word %u is missing from DPI transport\n",
-                                 Adapter::result_name, id);
-                    std::abort();
-                }
             }
         }
 
@@ -134,6 +113,7 @@ class Runtime {
         dut_ = Adapter::bind_dut([this](auto&&... args) {
             return make_signal(std::forward<decltype(args)>(args)...);
         });
+        validate_transport_completeness();
         start_ = std::chrono::steady_clock::now();
         Adapter::register_testbench(*scheduler_, dut_, iterations_, result_);
     }
@@ -256,6 +236,8 @@ class Runtime {
    private:
     static constexpr uint32_t kNoTransportOffset =
         std::numeric_limits<uint32_t>::max();
+    using OnDemandGetWordsFn = void (*)(uint32_t, uint32_t*, uint32_t);
+    using OnDemandSetWordsFn = void (*)(uint32_t, const uint32_t*, uint32_t);
 
     class InputViewScope {
        public:
@@ -281,6 +263,61 @@ class Runtime {
             std::abort();
         }
         transport_seen[id] = true;
+    }
+
+    void register_on_demand(uint32_t id, uint32_t word_count,
+                            OnDemandGetWordsFn get_words,
+                            OnDemandSetWordsFn set_words) {
+        if (!get_words || id > on_demand_get_words_.size() ||
+            word_count > on_demand_get_words_.size() - id) {
+            std::fprintf(stderr, "%s: invalid on-demand signal span %u+%u\n",
+                         Adapter::result_name, id, word_count);
+            std::abort();
+        }
+        for (uint32_t word = 0; word < word_count; ++word) {
+            const uint32_t word_id = id + word;
+            if (on_demand_get_words_[word_id] ||
+                driven_[word_id] != (set_words != nullptr)) {
+                std::fprintf(stderr,
+                             "%s: invalid on-demand signal word %u\n",
+                             Adapter::result_name, word_id);
+                std::abort();
+            }
+            on_demand_get_words_[word_id] = get_words;
+            on_demand_set_words_[word_id] = set_words;
+            on_demand_base_ids_[word_id] = id;
+        }
+    }
+
+    void validate_transport_completeness() {
+        if constexpr (requires {
+                          Adapter::observed_signal_word_ids;
+                          Adapter::driven_signal_word_ids;
+                      }) {
+            std::array<bool, Adapter::signal_count> transport_seen{};
+            for (size_t word = 0;
+                 word < Adapter::observed_signal_word_ids.size(); ++word) {
+                const auto id = Adapter::observed_signal_word_ids[word];
+                validate_transport_word(id, false, transport_seen);
+                observed_transport_offsets_[id] = static_cast<uint32_t>(word);
+            }
+            for (const auto id : Adapter::driven_signal_word_ids) {
+                validate_transport_word(id, true, transport_seen);
+            }
+            for (uint32_t id = 0; id < transport_seen.size(); ++id) {
+                if (on_demand_get_words_[id]) {
+                    validate_transport_word(id, driven_[id], transport_seen);
+                }
+            }
+            for (uint32_t id = 0; id < transport_seen.size(); ++id) {
+                if (!transport_seen[id]) {
+                    std::fprintf(stderr,
+                                 "%s: signal word %u is missing from DPI transport\n",
+                                 Adapter::result_name, id);
+                    std::abort();
+                }
+            }
+        }
     }
 
     bool sync_edge_interest_changes() {
@@ -315,6 +352,15 @@ class Runtime {
 
     static void signal_set(void* context, uint32_t id, uint32_t value) {
         static_cast<Runtime*>(context)->set(id, value);
+    }
+
+    template <typename Spec>
+    auto make_signal(Spec spec, uint32_t id, const char* name)
+        requires(Spec::on_demand)
+    {
+        register_on_demand(id, spec.word_count, spec.get_words_fn,
+                           spec.set_words_fn);
+        return make_signal(spec.transport_spec, id, name);
     }
 
 #ifdef CPPTB_CORO_PACKED_SIGNAL_API
@@ -397,6 +443,11 @@ class Runtime {
                          Adapter::result_name, id);
             std::abort();
         }
+        if (on_demand_get_words_[id]) {
+            uint32_t value = 0;
+            on_demand_get_words_[id](id - on_demand_base_ids_[id], &value, 1);
+            return value;
+        }
         if (driven_[id]) return outputs_[id];
         if constexpr (requires {
                           Adapter::compact_input_transport;
@@ -427,6 +478,13 @@ class Runtime {
                          "%s: cannot drive DUT output signal '%s'\n",
                          Adapter::result_name, signal_names_[id]);
             access_violation_ = true;
+            return;
+        }
+        if (on_demand_set_words_[id]) {
+            const uint32_t previous = get(id);
+            if (previous == value) return;
+            on_demand_set_words_[id](id - on_demand_base_ids_[id], &value, 1);
+            deliver_local_edge(id, previous, value);
             return;
         }
         const uint32_t previous = outputs_[id];
@@ -460,6 +518,11 @@ class Runtime {
             std::fprintf(stderr, "%s: invalid packed get id %u\n",
                          Adapter::result_name, id);
             std::abort();
+        }
+        if (on_demand_get_words_[id]) {
+            on_demand_get_words_[id](id - on_demand_base_ids_[id], words,
+                                     word_count);
+            return;
         }
         if (driven_[id]) {
             for (uint32_t word = 0; word < word_count; ++word) {
@@ -504,6 +567,12 @@ class Runtime {
                          "%s: cannot drive DUT output signal '%s'\n",
                          Adapter::result_name, signal_names_[id]);
             access_violation_ = true;
+            return;
+        }
+
+        if (on_demand_set_words_[id]) {
+            on_demand_set_words_[id](id - on_demand_base_ids_[id], words,
+                                     word_count);
             return;
         }
 
@@ -592,6 +661,11 @@ class Runtime {
     std::array<bool, Adapter::signal_count> local_edge_capable_{};
     std::array<const char*, Adapter::signal_count> signal_names_{};
     std::array<uint32_t, Adapter::signal_count> observed_transport_offsets_{};
+    std::array<OnDemandGetWordsFn, Adapter::signal_count>
+        on_demand_get_words_{};
+    std::array<OnDemandSetWordsFn, Adapter::signal_count>
+        on_demand_set_words_{};
+    std::array<uint32_t, Adapter::signal_count> on_demand_base_ids_{};
     const uint32_t* current_inputs_ = nullptr;
     std::unique_ptr<coro::Testbench> scheduler_;
     Dut dut_{};

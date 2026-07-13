@@ -6,10 +6,20 @@
 #include <cstdint>
 #include <utility>
 #include "svdpi.h"
+#include "cpptb/probe.hpp"
+#include <cstdio>
+#include <cstdlib>
 
 #include "cpptb/conformance/generated/scheduler_conformance_dut.hpp"
 
 extern "C" {
+    void dpi_scheduler_conformance_port_13_get(svBitVecVal* value);
+    void dpi_scheduler_conformance_port_13_set(const svBitVecVal* value);
+    void dpi_scheduler_conformance_port_14_get(svBitVecVal* value);
+    void dpi_scheduler_conformance_port_17_get(int index_0, int index_1, svBitVecVal* value);
+    void dpi_scheduler_conformance_port_17_set(int index_0, int index_1, const svBitVecVal* value);
+    void dpi_scheduler_conformance_port_18_get(int index_0, int index_1, svBitVecVal* value);
+    unsigned int dpi_scheduler_conformance_port_21_get();
     void dpi_scheduler_conformance_internal_0_get(svBitVecVal* value);
     void dpi_scheduler_conformance_internal_0_deposit(const svBitVecVal* value);
     unsigned long long dpi_scheduler_conformance_internal_1_get();
@@ -60,17 +70,12 @@ inline constexpr std::array<std::pair<uint32_t, uint32_t>, 13> kDrivenSignalSpan
     {kSignalArray73I, 12},
     {kSignalMatrix65I, 18},
 }};
-inline constexpr std::array<uint32_t, 56> kObservedSignalWordIds = {
+inline constexpr std::array<uint32_t, 32> kObservedSignalWordIds = {
     kSignalClkA,
     kSignalClkB,
     kSignalPacked65O,
     kSignalPacked65O + 1,
     kSignalPacked65O + 2,
-    kSignalPacked137O,
-    kSignalPacked137O + 1,
-    kSignalPacked137O + 2,
-    kSignalPacked137O + 3,
-    kSignalPacked137O + 4,
     kSignalArray73O,
     kSignalArray73O + 1,
     kSignalArray73O + 2,
@@ -83,27 +88,8 @@ inline constexpr std::array<uint32_t, 56> kObservedSignalWordIds = {
     kSignalArray73O + 9,
     kSignalArray73O + 10,
     kSignalArray73O + 11,
-    kSignalMatrix65O,
-    kSignalMatrix65O + 1,
-    kSignalMatrix65O + 2,
-    kSignalMatrix65O + 3,
-    kSignalMatrix65O + 4,
-    kSignalMatrix65O + 5,
-    kSignalMatrix65O + 6,
-    kSignalMatrix65O + 7,
-    kSignalMatrix65O + 8,
-    kSignalMatrix65O + 9,
-    kSignalMatrix65O + 10,
-    kSignalMatrix65O + 11,
-    kSignalMatrix65O + 12,
-    kSignalMatrix65O + 13,
-    kSignalMatrix65O + 14,
-    kSignalMatrix65O + 15,
-    kSignalMatrix65O + 16,
-    kSignalMatrix65O + 17,
     kSignalDerivedClk,
     kSignalEventObserved,
-    kSignalCombSum,
     kSignalSampledA,
     kSignalSampledB,
     kSignalSampledManual,
@@ -118,7 +104,7 @@ inline constexpr std::array<uint32_t, 56> kObservedSignalWordIds = {
     kSignalInternalClockedFanout + 1,
     kSignalInternalNetFanout,
 };
-inline constexpr std::array<uint32_t, 47> kDrivenSignalWordIds = {
+inline constexpr std::array<uint32_t, 24> kDrivenSignalWordIds = {
     kSignalRstN,
     kSignalManualClk,
     kSignalDerivedGate,
@@ -131,11 +117,6 @@ inline constexpr std::array<uint32_t, 47> kDrivenSignalWordIds = {
     kSignalPacked65I,
     kSignalPacked65I + 1,
     kSignalPacked65I + 2,
-    kSignalPacked137I,
-    kSignalPacked137I + 1,
-    kSignalPacked137I + 2,
-    kSignalPacked137I + 3,
-    kSignalPacked137I + 4,
     kSignalArray73I,
     kSignalArray73I + 1,
     kSignalArray73I + 2,
@@ -148,25 +129,129 @@ inline constexpr std::array<uint32_t, 47> kDrivenSignalWordIds = {
     kSignalArray73I + 9,
     kSignalArray73I + 10,
     kSignalArray73I + 11,
-    kSignalMatrix65I,
-    kSignalMatrix65I + 1,
-    kSignalMatrix65I + 2,
-    kSignalMatrix65I + 3,
-    kSignalMatrix65I + 4,
-    kSignalMatrix65I + 5,
-    kSignalMatrix65I + 6,
-    kSignalMatrix65I + 7,
-    kSignalMatrix65I + 8,
-    kSignalMatrix65I + 9,
-    kSignalMatrix65I + 10,
-    kSignalMatrix65I + 11,
-    kSignalMatrix65I + 12,
-    kSignalMatrix65I + 13,
-    kSignalMatrix65I + 14,
-    kSignalMatrix65I + 15,
-    kSignalMatrix65I + 16,
-    kSignalMatrix65I + 17,
 };
+
+using OnDemandGetWordsFn = void (*)(uint32_t, uint32_t*, uint32_t);
+using OnDemandSetWordsFn = void (*)(uint32_t, const uint32_t*, uint32_t);
+
+template <typename TransportSpec>
+struct OnDemandSpec {
+    static constexpr bool on_demand = true;
+    TransportSpec transport_spec;
+    uint32_t word_count;
+    OnDemandGetWordsFn get_words_fn;
+    OnDemandSetWordsFn set_words_fn;
+};
+
+inline void on_demand_port_13_get_words(
+    uint32_t word_offset, uint32_t* words, uint32_t word_count) {
+    probe::detail::require_signal_callback("packed137_i");
+    constexpr uint32_t kElementWords = 5;
+    constexpr uint32_t kElementCount = 1;
+    const uint32_t element = word_offset / kElementWords;
+    if (!words || (word_offset % kElementWords) != 0 ||
+        word_count != kElementWords || element >= kElementCount) {
+        std::fprintf(stderr, "cpptb: invalid on-demand get for packed137_i\n");
+        std::abort();
+    }
+    dpi_scheduler_conformance_port_13_get(reinterpret_cast<svBitVecVal*>(words));
+}
+
+inline void on_demand_port_13_set_words(
+    uint32_t word_offset, const uint32_t* words, uint32_t word_count) {
+    probe::detail::require_signal_callback("packed137_i");
+    constexpr uint32_t kElementWords = 5;
+    constexpr uint32_t kElementCount = 1;
+    const uint32_t element = word_offset / kElementWords;
+    if (!words || (word_offset % kElementWords) != 0 ||
+        word_count != kElementWords || element >= kElementCount) {
+        std::fprintf(stderr, "cpptb: invalid on-demand set for packed137_i\n");
+        std::abort();
+    }
+    dpi_scheduler_conformance_port_13_set(reinterpret_cast<const svBitVecVal*>(words));
+}
+
+inline void on_demand_port_14_get_words(
+    uint32_t word_offset, uint32_t* words, uint32_t word_count) {
+    probe::detail::require_signal_callback("packed137_o");
+    constexpr uint32_t kElementWords = 5;
+    constexpr uint32_t kElementCount = 1;
+    const uint32_t element = word_offset / kElementWords;
+    if (!words || (word_offset % kElementWords) != 0 ||
+        word_count != kElementWords || element >= kElementCount) {
+        std::fprintf(stderr, "cpptb: invalid on-demand get for packed137_o\n");
+        std::abort();
+    }
+    dpi_scheduler_conformance_port_14_get(reinterpret_cast<svBitVecVal*>(words));
+}
+
+inline void on_demand_port_17_get_words(
+    uint32_t word_offset, uint32_t* words, uint32_t word_count) {
+    probe::detail::require_signal_callback("matrix65_i");
+    constexpr uint32_t kElementWords = 3;
+    constexpr uint32_t kElementCount = 6;
+    const uint32_t element = word_offset / kElementWords;
+    if (!words || (word_offset % kElementWords) != 0 ||
+        word_count != kElementWords || element >= kElementCount) {
+        std::fprintf(stderr, "cpptb: invalid on-demand get for matrix65_i\n");
+        std::abort();
+    }
+    uint32_t remaining = element;
+    const int index_1 = static_cast<int>(remaining % 3) + -1;
+    remaining /= 3;
+    const int index_0 = static_cast<int>(remaining % 2) + 1;
+    dpi_scheduler_conformance_port_17_get(index_0, index_1, reinterpret_cast<svBitVecVal*>(words));
+}
+
+inline void on_demand_port_17_set_words(
+    uint32_t word_offset, const uint32_t* words, uint32_t word_count) {
+    probe::detail::require_signal_callback("matrix65_i");
+    constexpr uint32_t kElementWords = 3;
+    constexpr uint32_t kElementCount = 6;
+    const uint32_t element = word_offset / kElementWords;
+    if (!words || (word_offset % kElementWords) != 0 ||
+        word_count != kElementWords || element >= kElementCount) {
+        std::fprintf(stderr, "cpptb: invalid on-demand set for matrix65_i\n");
+        std::abort();
+    }
+    uint32_t remaining = element;
+    const int index_1 = static_cast<int>(remaining % 3) + -1;
+    remaining /= 3;
+    const int index_0 = static_cast<int>(remaining % 2) + 1;
+    dpi_scheduler_conformance_port_17_set(index_0, index_1, reinterpret_cast<const svBitVecVal*>(words));
+}
+
+inline void on_demand_port_18_get_words(
+    uint32_t word_offset, uint32_t* words, uint32_t word_count) {
+    probe::detail::require_signal_callback("matrix65_o");
+    constexpr uint32_t kElementWords = 3;
+    constexpr uint32_t kElementCount = 6;
+    const uint32_t element = word_offset / kElementWords;
+    if (!words || (word_offset % kElementWords) != 0 ||
+        word_count != kElementWords || element >= kElementCount) {
+        std::fprintf(stderr, "cpptb: invalid on-demand get for matrix65_o\n");
+        std::abort();
+    }
+    uint32_t remaining = element;
+    const int index_1 = static_cast<int>(remaining % 3) + -1;
+    remaining /= 3;
+    const int index_0 = static_cast<int>(remaining % 2) + 1;
+    dpi_scheduler_conformance_port_18_get(index_0, index_1, reinterpret_cast<svBitVecVal*>(words));
+}
+
+inline void on_demand_port_21_get_words(
+    uint32_t word_offset, uint32_t* words, uint32_t word_count) {
+    probe::detail::require_signal_callback("comb_sum");
+    constexpr uint32_t kElementWords = 1;
+    constexpr uint32_t kElementCount = 1;
+    const uint32_t element = word_offset / kElementWords;
+    if (!words || (word_offset % kElementWords) != 0 ||
+        word_count != kElementWords || element >= kElementCount) {
+        std::fprintf(stderr, "cpptb: invalid on-demand get for comb_sum\n");
+        std::abort();
+    }
+    words[0] = dpi_scheduler_conformance_port_21_get();
+}
 
 inline probe::Value<73> internal_0_get(int32_t index) {
     probe::Value<73>::word_array words{};
@@ -319,14 +404,14 @@ SchedulerConformanceDut bind_dut(MakeSignal&& make_signal) {
         make_signal(kSignalAddend, "addend"),
         make_signal(coro::SignalSpec<65, true>{}, kSignalPacked65I, "packed65_i"),
         make_signal(coro::SignalSpec<65, false>{}, kSignalPacked65O, "packed65_o"),
-        make_signal(coro::SignalSpec<137, true>{}, kSignalPacked137I, "packed137_i"),
-        make_signal(coro::SignalSpec<137, false>{}, kSignalPacked137O, "packed137_o"),
+        make_signal(OnDemandSpec{coro::SignalSpec<137, true>{}, 5, on_demand_port_13_get_words, on_demand_port_13_set_words}, kSignalPacked137I, "packed137_i"),
+        make_signal(OnDemandSpec{coro::SignalSpec<137, false>{}, 5, on_demand_port_14_get_words, nullptr}, kSignalPacked137O, "packed137_o"),
         make_signal(coro::ArraySpec<73, 7, 4, true>{}, kSignalArray73I, "array73_i"),
         make_signal(coro::ArraySpec<73, 7, 4, false>{}, kSignalArray73O, "array73_o"),
-        coro::reshape_fixed_array(coro::FixedArraySpec<65, true, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(coro::ArraySpec<288, 2, 1, true>{}, kSignalMatrix65I, "matrix65_i")),
-        coro::reshape_fixed_array(coro::FixedArraySpec<65, false, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(coro::ArraySpec<288, 2, 1, false>{}, kSignalMatrix65O, "matrix65_o")),
+        coro::reshape_fixed_array(coro::FixedArraySpec<65, true, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(OnDemandSpec{coro::ArraySpec<288, 2, 1, true>{}, 18, on_demand_port_17_get_words, on_demand_port_17_set_words}, kSignalMatrix65I, "matrix65_i")),
+        coro::reshape_fixed_array(coro::FixedArraySpec<65, false, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, make_signal(OnDemandSpec{coro::ArraySpec<288, 2, 1, false>{}, 18, on_demand_port_18_get_words, nullptr}, kSignalMatrix65O, "matrix65_o")),
         make_signal(kSignalEventObserved, "event_observed"),
-        make_signal(kSignalCombSum, "comb_sum"),
+        make_signal(OnDemandSpec{coro::SignalSpec<8, false>{}, 1, on_demand_port_21_get_words, nullptr}, kSignalCombSum, "comb_sum"),
         {
             make_signal(kSignalSampledA, "sampled_a"),
             make_signal(kSignalSampledB, "sampled_b"),
