@@ -155,19 +155,27 @@ class TransportPortSignature(tuple):
     """Legacy six-item signature with recursive packed layout equality."""
 
     packed_type_signature: tuple | None
+    transport: str
 
     def __new__(
-        cls, values: tuple, packed_type_signature: tuple | None
+        cls,
+        values: tuple,
+        packed_type_signature: tuple | None,
+        transport: str = "packed",
     ) -> TransportPortSignature:
         result = super().__new__(cls, values)
         result.packed_type_signature = packed_type_signature
+        result.transport = transport
         return result
 
     def __eq__(self, other: object) -> bool:
         if not tuple.__eq__(self, other):
             return False
         if isinstance(other, TransportPortSignature):
-            return self.packed_type_signature == other.packed_type_signature
+            return (
+                self.packed_type_signature == other.packed_type_signature
+                and self.transport == other.transport
+            )
         return True
 
     __hash__ = tuple.__hash__
@@ -184,6 +192,7 @@ class Port:
     four_state: bool = True
     unpacked: tuple[UnpackedRange, ...] = ()
     packed_type: PackedType | None = field(default=None, compare=False)
+    transport: str = "packed"
 
 
 @dataclass(frozen=True)
@@ -233,6 +242,7 @@ class DesignIR:
                     if port.packed_type is not None
                     else None
                 ),
+                port.transport,
             )
             for port in self.ports
         )

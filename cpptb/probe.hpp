@@ -30,6 +30,14 @@ inline void require_callback(const char* name) {
     std::abort();
 }
 
+inline void require_signal_callback(const char* name) {
+    if (dpi_callback_depth != 0) return;
+    std::fprintf(stderr,
+                 "cpptb: on-demand signal '%s' used outside a DPI callback\n",
+                 name ? name : "<unnamed>");
+    std::abort();
+}
+
 }  // namespace detail
 
 template <size_t Width>
