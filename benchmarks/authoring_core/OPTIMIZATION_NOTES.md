@@ -408,6 +408,15 @@ Post-fix six-pair C++ A/B ratios remained `0.9070x` for
 `array_multidim` and `0.9513x` for `signal_edge`; the exact
 `array_multidim` guard passed at `1.006x`.
 
+The same review then found that implicit conversion to generic `coro::Signal`
+could bypass the typed setter and lose width metadata. Static scalar
+conversions now use width-specialized get/set thunks. Unit tests exercise
+direct and converted packed/on-demand writes with live rising-edge waiters,
+proving that zero-equivalent masked writes do not wake and one-equivalent
+writes wake exactly once. Final six-pair ratios were `0.9151x` for
+`array_multidim` and `0.9534x` for `signal_edge`; the exact guard passed
+at `1.013x`.
+
 Equal-time timer and clock callbacks are covered by the R1/R2 Verilator
 contracts, but their sibling active-region process ordering has not yet been
 validated on a second simulator. Treat that exact coincidence ordering as a

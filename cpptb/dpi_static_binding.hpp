@@ -53,9 +53,6 @@ struct StaticBindingContext {
         deliver_local_edge(id, previous, value);
     }
 
-    coro::Signal dynamic_signal(uint32_t id, const char* name) const {
-        return {nullptr, id, name, dynamic_context, dynamic_get, dynamic_set};
-    }
 };
 
 struct StaticPackedBindingSpan {
@@ -167,6 +164,28 @@ constexpr uint32_t normalize_scalar(uint32_t value) {
     return value;
 }
 
+template <size_t Width>
+uint32_t static_dynamic_get(void* opaque, uint32_t id) {
+    auto* context = static_cast<StaticBindingContext*>(opaque);
+    return normalize_scalar<Width>(
+        context->dynamic_get(context->dynamic_context, id));
+}
+
+template <size_t Width>
+void static_dynamic_set(void* opaque, uint32_t id, uint32_t value) {
+    auto* context = static_cast<StaticBindingContext*>(opaque);
+    context->dynamic_set(context->dynamic_context, id,
+                         normalize_scalar<Width>(value));
+}
+
+template <size_t Width>
+coro::Signal static_dynamic_signal(StaticBindingContext* context, uint32_t id,
+                                   const char* name) {
+    static_assert(Width > 0 && Width <= 32);
+    return {nullptr, id, name, context, static_dynamic_get<Width>,
+            static_dynamic_set<Width>};
+}
+
 }  // namespace detail
 
 template <size_t Width, bool Writable, bool Driven>
@@ -215,7 +234,7 @@ class StaticPackedRef {
     }
 
     operator coro::Signal() const requires(Width <= 32) {
-        return context->dynamic_signal(id, name);
+        return detail::static_dynamic_signal<Width>(context, id, name);
     }
 };
 
@@ -261,7 +280,7 @@ class StaticOnDemandRef {
     }
 
     operator coro::Signal() const requires(Width <= 32) {
-        return context->dynamic_signal(id, name);
+        return detail::static_dynamic_signal<Width>(context, id, name);
     }
 };
 
@@ -292,7 +311,7 @@ class StaticPackedSignal {
     }
 
     operator coro::Signal() const requires(Width <= 32) {
-        return context->dynamic_signal(Id, name);
+        return detail::static_dynamic_signal<Width>(context, Id, name);
     }
 };
 
@@ -323,7 +342,7 @@ class StaticOnDemandSignal {
     }
 
     operator coro::Signal() const requires(Width <= 32) {
-        return context->dynamic_signal(Id, name);
+        return detail::static_dynamic_signal<Width>(context, Id, name);
     }
 };
 
