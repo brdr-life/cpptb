@@ -95,7 +95,10 @@ uv run --frozen cpptb-codegen \
 
 Start with [the examples](examples/README.md). The generated wrapper and
 transport adapter are kept beside each example, while `testbench.cpp` contains
-the user-authored sequence.
+the user-authored sequence. The examples progress from a counter and clockless
+delays through a ready/valid scoreboard, multiple clocks, APB transactions,
+and expected timeout/cancellation paths. Every example includes an equivalent
+pure-SystemVerilog testbench and runs under `make examples-test`.
 
 ## Benchmarks
 
