@@ -367,6 +367,46 @@ def _gate_policy(entry: object) -> str:
     return str(getattr(value, "value", value))
 
 
+def _waiver_metadata(entry: object) -> dict[str, object] | None:
+    waiver = _entry_value(entry, "waiver")
+    if waiver is None:
+        return None
+    max_ratio = _entry_value(waiver, "max_ratio")
+    approved_on = _entry_value(waiver, "approved_on")
+    rationale = _entry_value(waiver, "rationale")
+    if not isinstance(max_ratio, (int, float)) or not math.isfinite(max_ratio):
+        raise ValueError(f"{feature_id(entry)} waiver max_ratio must be finite")
+    if max_ratio <= 1.10:
+        raise ValueError(f"{feature_id(entry)} waiver max_ratio must exceed 1.10")
+    if not isinstance(approved_on, str) or not approved_on:
+        raise ValueError(f"{feature_id(entry)} waiver approved_on is required")
+    if not isinstance(rationale, str) or not rationale.strip():
+        raise ValueError(f"{feature_id(entry)} waiver rationale is required")
+    return {
+        "approved_on": approved_on,
+        "max_ratio": float(max_ratio),
+        "rationale": rationale,
+    }
+
+
+def _authoring_guard_ratio(
+    payload: Mapping[str, object], feature: str
+) -> float | None:
+    kernels = payload.get("kernels")
+    if not isinstance(kernels, Mapping):
+        return None
+    summary = kernels.get(feature)
+    if not isinstance(summary, Mapping):
+        return None
+    guard = summary.get("guard")
+    if not isinstance(guard, Mapping):
+        return None
+    ratio = guard.get("ratio")
+    if not isinstance(ratio, (int, float)) or not math.isfinite(ratio):
+        return None
+    return float(ratio)
+
+
 def _registry_runner_commands(entry: object) -> list[tuple[str, list[str]]] | None:
     runner = _entry_value(entry, "runner")
     commands = _entry_value(runner, "commands") if runner is not None else None
@@ -647,16 +687,25 @@ def _render_entry_markdown(result: Mapping[str, object]) -> str:
         if isinstance(settle, Mapping)
         else "not_run"
     )
-    return "\n".join(
-        [
-            f"# Feature regression: {result['feature']}",
-            "",
-            f"- Status: `{result['status']}`",
-            f"- Adapter: `{result.get('adapter', 'runner')}`",
-            f"- Load settle: `{settle_status}`",
-            "",
-        ]
-    )
+    lines = [
+        f"# Feature regression: {result['feature']}",
+        "",
+        f"- Status: `{result['status']}`",
+        f"- Adapter: `{result.get('adapter', 'runner')}`",
+        f"- Gate policy: `{result.get('gate_policy', 'hard_1_10')}`",
+        f"- Load settle: `{settle_status}`",
+    ]
+    waiver = result.get("waiver")
+    if isinstance(waiver, Mapping):
+        lines.extend(
+            [
+                f"- Waiver diagnostic: `{result.get('diagnostic_status', '-')}`",
+                f"- Measured ratio: `{waiver.get('measured_ratio', '-')}`",
+                f"- Waiver ceiling: `{waiver.get('max_ratio', '-')}`",
+            ]
+        )
+    lines.extend(["", ""])
+    return "\n".join(lines)
 
 
 def _persist_entry(result_dir: Path, result: Mapping[str, object]) -> None:
@@ -779,8 +828,10 @@ def _measure_entry(
             status = _status_from_runner(outputs["runner"])  # type: ignore[arg-type]
         else:
             status = "failed"
+    policy = _gate_policy(entry)
     diagnostic_status = None
-    if _gate_policy(entry) == "diagnostic":
+    waiver_evidence = None
+    if policy == "diagnostic":
         diagnostic_status = status
         runner_result = outputs.get("runner_result")
         missing_expected_result = result_path is not None and runner_result is None
@@ -794,6 +845,31 @@ def _measure_entry(
             )
             else "passed"
         )
+    elif policy == "waived_hard_1_10":
+        diagnostic_status = status
+        waiver = _waiver_metadata(entry)
+        runner_result = outputs.get("runner_result")
+        missing_expected_result = result_path is not None and runner_result is None
+        result_error = (
+            isinstance(runner_result, Mapping)
+            and runner_result.get("status")
+            in {"command_error", "workload_error", "error"}
+        )
+        ratio = (
+            _authoring_guard_ratio(runner_result, feature_id(entry))
+            if isinstance(runner_result, Mapping)
+            else None
+        )
+        waiver_evidence = dict(waiver or {})
+        waiver_evidence["measured_ratio"] = ratio
+        waiver_evidence["original_status"] = diagnostic_status
+        if missing_expected_result or result_error or waiver is None or ratio is None:
+            status = "failed"
+        elif diagnostic_status == "invalid_environment":
+            status = "invalid_environment"
+        else:
+            status = "passed" if ratio <= float(waiver["max_ratio"]) else "failed"
+        waiver_evidence["status"] = status
     return {
         "feature": feature_id(entry),
         "status": status,
@@ -801,6 +877,8 @@ def _measure_entry(
         "runner_outputs": outputs,
         "comparison": comparison,
         "diagnostic_status": diagnostic_status,
+        "gate_policy": policy,
+        "waiver": waiver_evidence,
     }
 
 
@@ -941,14 +1019,16 @@ def _render_index(result: Mapping[str, object]) -> str:
         "- Execution: `serial`",
         "- Samples normalized: `false`",
         "",
-        "| Feature | Adapter | Settle | Status | Diagnostic |",
-        "|---|---|---|---|---|",
+        "| Feature | Adapter | Policy | Settle | Status | Diagnostic | Waiver |",
+        "|---|---|---|---|---|---|---|",
     ]
     for entry in result["entries"]:  # type: ignore[index]
         lines.append(
             f"| `{entry['feature']}` | `{entry.get('adapter', 'runner')}` | "
+            f"`{entry.get('gate_policy', 'hard_1_10')}` | "
             f"`{entry.get('settle', {}).get('status', 'not_run')}` | `{entry['status']}` | "
-            f"`{entry.get('diagnostic_status') or '-'}` |"
+            f"`{entry.get('diagnostic_status') or '-'}` | "
+            f"`{entry.get('waiver', {}).get('status', '-') if isinstance(entry.get('waiver'), Mapping) else '-'}` |"
         )
     lines.append("")
     return "\n".join(lines)

@@ -12,17 +12,19 @@ except ModuleNotFoundError:
 
 
 REPO = Path(__file__).resolve().parents[2]
-BENCH_DIR = REPO / "benchmarks" / "cocotb_cpp_compare"
-TEST_DIR = BENCH_DIR / "cocotb"
-BUILD_DIR = REPO / "build" / "benchmarks" / "cocotb_cpp_compare" / "cocotb"
+EXPERIMENT_DIR = Path(__file__).resolve().parent
+TEST_DIR = EXPERIMENT_DIR / "cocotb"
+BUILD_DIR = REPO / "build" / "experiments" / "cocotb_cpp_comparison" / "cocotb"
+
+RTL_DIR = REPO / "experiments" / "cpp_vpi" / "rggen_apb_event" / "rtl"
 
 SOURCES = [
-    REPO / "cpptb" / "rggen_apb_event" / "rtl" / "apb_event_service_unit_regs_core_pkg.sv",
-    REPO / "cpptb" / "rggen_apb_event" / "rtl" / "apb_event_service_unit_regs_core.sv",
-    REPO / "cpptb" / "rggen_apb_event" / "rtl" / "apb_event_sleep_unit_regs_core_pkg.sv",
-    REPO / "cpptb" / "rggen_apb_event" / "rtl" / "apb_event_sleep_unit_regs_core.sv",
-    REPO / "cpptb" / "rggen_apb_event" / "rtl" / "apb_event_unit_peakrdl.sv",
-    REPO / "cpptb" / "rggen_apb_event" / "rtl" / "vpi_apb_event_unit.sv",
+    RTL_DIR / "apb_event_service_unit_regs_core_pkg.sv",
+    RTL_DIR / "apb_event_service_unit_regs_core.sv",
+    RTL_DIR / "apb_event_sleep_unit_regs_core_pkg.sv",
+    RTL_DIR / "apb_event_sleep_unit_regs_core.sv",
+    RTL_DIR / "apb_event_unit_peakrdl.sv",
+    RTL_DIR / "vpi_apb_event_unit.sv",
 ]
 
 

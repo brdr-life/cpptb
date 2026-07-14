@@ -34,6 +34,17 @@ if(BUILD_TESTING)
     add_executable(cpptb_packed_value_test tests/unit/packed_value_test.cpp)
     target_link_libraries(cpptb_packed_value_test PRIVATE cpptb::cpptb)
     add_test(NAME cpptb.packed_value COMMAND cpptb_packed_value_test)
+
+    add_executable(cpptb_test_api_test tests/unit/test_api_test.cpp)
+    target_link_libraries(cpptb_test_api_test PRIVATE cpptb::cpptb)
+    add_test(NAME cpptb.test_api COMMAND cpptb_test_api_test)
+
+    add_executable(cpptb_hierarchy_test tests/unit/hierarchy_test.cpp)
+    target_compile_definitions(cpptb_hierarchy_test
+                               PRIVATE CPPTB_HIERARCHY_DISCOVERY)
+    target_link_libraries(cpptb_hierarchy_test PRIVATE cpptb::cpptb)
+    add_test(NAME cpptb.hierarchy COMMAND cpptb_hierarchy_test)
+
 endif()
 
 install(TARGETS cpptb EXPORT cpptbTargets)

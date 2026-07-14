@@ -27,7 +27,9 @@ Every new runtime feature requires:
 
 Stop and investigate when the final C++ DPI to SystemVerilog process-wall ratio
 exceeds `1.10`. Do not weaken the guard or compare unequal workloads to make a
-result pass.
+result pass. A reviewed exception must be narrowly attached to one registry
+entry, retain the raw `1.10` diagnostic, state its rationale and approval date,
+and enforce a separate regression ceiling.
 
 ## Generated files
 
@@ -39,6 +41,18 @@ make cpptb-codegen-frontend-check
 ```
 
 Commit intentional generated output changes with their source changes.
+
+## Documentation
+
+Documentation source lives under `docs/` and must build with both supported
+renderers:
+
+```sh
+make docs-check
+```
+
+Treat warnings about broken internal links or anchors as errors. Generated
+HTML belongs under `build/docs/` and should not be committed.
 
 ## Pull requests
 

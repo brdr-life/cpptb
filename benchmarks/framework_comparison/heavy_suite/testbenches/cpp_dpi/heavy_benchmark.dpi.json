@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "module": "heavy_benchmark_dut",
+  "top_module": "dpi_heavy_benchmark",
+  "namespace": "cpptb::benchmarks::heavy",
+  "root_type": "Dut",
+  "frontend": "slang",
+  "frontend_options": {
+    "slang": {
+      "standard": "1800-2023",
+      "args": ["--timescale=1ns/1ps"]
+    }
+  },
+  "codegen": {"static_binding": true},
+  "sources": ["../../rtl/heavy_benchmark_dut.sv"],
+  "clocks": [],
+  "edge_observers": ["fir_out_valid", "crc_out_valid", "mat_out_valid"],
+  "auto_edge_observers": true,
+  "run": {
+    "init_function": "heavy_dpi_init",
+    "step_function": "heavy_dpi_step",
+    "pull_outputs_function": "heavy_dpi_pull_outputs",
+    "next_deadline_function": "heavy_dpi_next_timer_deadline",
+    "edge_interest_function": "heavy_dpi_edge_interest",
+    "clock_config_function": "heavy_dpi_clock_config",
+    "dynamic_clocks": true,
+    "iteration_plusarg": "HEAVY_BENCH_ITERS",
+    "default_iterations": 1000,
+    "timeprecision": "1ps"
+  },
+  "outputs": {
+    "cpp_dut": "generated/heavy_benchmark_dut.hpp",
+    "cpp_binding": "generated/heavy_benchmark_binding.hpp",
+    "sv_wrapper": "generated/dpi_heavy_benchmark.sv",
+    "cpp_include": "benchmarks/framework_comparison/heavy_suite/testbenches/cpp_dpi/generated/heavy_benchmark_dut.hpp"
+  }
+}

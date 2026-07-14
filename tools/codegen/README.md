@@ -1,13 +1,15 @@
 # C++ DPI binding generator
 
-`cpptb-codegen` turns a SystemVerilog top module and a small JSON
-manifest into the design-specific part of the C++ DPI framework:
+`cpptb-codegen` turns SystemVerilog sources into the design-specific part of
+the C++ DPI framework. Ordinary targets use the source-first CLI; JSON
+manifests remain an advanced compatibility path:
 
 - a typed C++ DUT hierarchy containing `coro::Signal` members;
 - stable signal IDs, driven-input metadata, and the C++ binding function;
 - a complete SystemVerilog DPI wrapper with batched input/output transport,
   multiple clock generators, edge and delay callbacks, parameter wiring, and
-  DUT instantiation.
+  DUT instantiation;
+- a C++ DPI adapter that selects the registered test and owns result policy.
 
 The generator elaborates RTL through Slang's typed Python API. Port order,
 directions, parameter-resolved widths, signedness, and two-state/four-state
@@ -24,15 +26,20 @@ transport.
 
 ```sh
 uv run --frozen cpptb-codegen \
-  benchmarks/peripheral_suite/testbenches/cpp_dpi/peripheral_suite.dpi.json
+  examples/counter/counter.sv
 ```
 
-Use `--check` in CI to verify that checked-in generated files match their RTL
-and manifest:
+Source root inference succeeds only when exactly one module is unambiguous;
+otherwise pass `--top`. The source-first generator does not assign clock roles
+or timing. C++ test code registers any input clocks with
+`TestContext::start_clock()` and directly awaits DUT-produced clocks.
+
+Use `--check` in CI to verify that checked-in generated files match their
+inputs:
 
 ```sh
 uv run --frozen cpptb-codegen \
-  benchmarks/peripheral_suite/testbenches/cpp_dpi/peripheral_suite.dpi.json --check
+  examples/counter/counter.sv --check
 ```
 
 To run the frontend tests and compare both checked-in designs against
@@ -43,9 +50,12 @@ make cpptb-codegen-test
 make cpptb-codegen-frontend-check
 ```
 
-## Frontend configuration
+## Advanced manifest compatibility
 
-Compilation inputs are simulator-neutral manifest fields: `sources`,
+Version-1 manifests remain supported for targets that need explicit source,
+build, port-grouping, or frontend metadata. They are not the normal onboarding
+workflow and are never required to expose internal RTL objects. Compilation
+inputs are simulator-neutral manifest fields: `sources`,
 `include_dirs`, `defines`, and `parameters`. `frontend` selects the compiler;
 backend-specific dialect or diagnostic switches live under
 `frontend_options`, keeping them out of the shared project description:
@@ -69,64 +79,42 @@ The locked `pyslang` dependency is installed by `uv` on first use. A command
 line `--frontend slang|verilator_json` override is also available for focused
 debugging and migration checks.
 
-## Internal probes
+## Source-inferred hierarchy
 
-The optional `internals` manifest list exposes elaborated variables, nets, and
-one-dimensional fixed memories below `dut.internal`. Read-only entries provide
-`get()`; `read_write` variables also provide `deposit(value)`. An independent
-`force` capability adds immediate `force(value)` and `release()` primitives:
-
-```json
-"internals": [
-  {"path": "cycle_count", "access": "read"},
-  {"path": "memory", "access": "read_write", "force": true},
-  {"path": "resolved_status", "access": "read", "force": true}
-]
-```
-
-Values up to 32 and 64 bits cross DPI as native unsigned values. Wider packed
-values use `svBitVecVal` words and `Bits<W>`. A deposit performs an immediate
-SystemVerilog blocking assignment and never advances time. A same-callback
-`get()` therefore observes the deposited value. The testbench still explicitly
-awaits `Delay` or another trigger when downstream RTL must evaluate before
-observation.
-
-Internal probes currently use two-state transport: X/Z information is not
-preserved. A probe deposit that races a DUT nonblocking assignment to the same
-variable in the same time slot also has the usual SystemVerilog indeterminate
-ordering and is outside the supported deterministic contract.
-
-Verilator reports `BLKANDNBLK` when RTL also writes a deposited variable with a
-nonblocking assignment. Such designs must compile with `-Wno-BLKANDNBLK`; the
-testbench must avoid depositing in the same time slot as the RTL write. An
-NBA-scheduled backdoor operation is intentionally not part of `deposit()`.
-
-A testbench uses scalar and memory probes directly and chooses every scheduling
-boundary explicitly:
+Slang supplies the complete elaborated instance, generate, signal, memory,
+packed-type, and parameter catalog. The generated `Dut` mirrors that hierarchy
+directly; users do not name internal probes in a manifest:
 
 ```cpp
-check(dut.internal.status.get(), expected_status);
-dut.internal.pending_data.deposit(0x1234'5678u);
-dut.internal.memory.at(address).deposit(expected);
-
-// Immediate readback observes the deposited values in the same callback.
-check(dut.internal.pending_data.get(), 0x1234'5678u);
-
-// Delay only when dependent RTL needs time to evaluate.
-co_await Delay{1_ps};
-check(dut.read_data.get(), expected);
+check(dut.core.status.get(), expected_status);
+dut.core.pending_data.deposit(0x1234'5678u);
+dut.core.memory.at(address).force(expected);
+dut.core.memory.at(address).release();
 ```
 
-Read-only probes expose only `get()`, and `.at(index)` enforces the elaborated
-SystemVerilog memory range.
+Values up to 64 bits use native integer transport. Wider packed values use
+`Bits<W>`, while four-state operations use `LogicBits<W>`. Generated packed
+enum and struct value types preserve the elaborated type shape. Fixed memories,
+multidimensional arrays, instance arrays, and generate arrays preserve their
+SystemVerilog ranges.
 
-Force and release call direct generated DPI exports and never schedule a delay
-or evaluation phase. The generated wrapper keeps force RHS values in
-module-lifetime shadow storage. Fixed memory force uses constant-index dispatch
-and is capped at 1024 generated elements. A released variable retains its
-forced value until RTL assigns it again; a released net returns to its resolved
-drivers, following SystemVerilog semantics. The testbench explicitly awaits an
-edge or `Delay` before checking dependent logic.
+`deposit()` performs an immediate blocking assignment. `force()` and
+`release()` call immediate generated DPI exports and add no delay or evaluation
+phase. A same-callback `get()` of the same object sees the new value. The
+testbench explicitly awaits an edge or `Delay` only when dependent RTL must
+execute before observation. A deposit that races an RTL assignment in the same
+time slot has the usual SystemVerilog ordering ambiguity.
+
+The whole hierarchy is present in the stateless C++ type. A discovery compile
+records which path/operation pairs the testbench uses, and the final wrapper
+emits only those DPI exports and edge observers. Unused hierarchy therefore
+adds no simulator callbacks or runtime transport. See the
+[hierarchy guide](../../docs/hierarchy.md) for API examples and inspection
+commands.
+
+The old `internals` manifest field remains accepted solely to compile existing
+projects during migration. New projects should use the source-inferred natural
+path and should not create an `internals` list.
 
 ## Manifest hierarchy
 
@@ -151,8 +139,9 @@ This maps `spi_PADDR` to `dut.spi.apb.PADDR` and `spi_status` to
 `dut.spi.status`. `type_names` can assign the same type, such as `ApbBus`, to
 compatible hierarchy nodes.
 
-## Clock configuration
+## Legacy manifest clock configuration
 
+Version-1 manifests can still describe clocks statically for compatibility.
 The `clocks` list is independent of the DUT hierarchy and may contain zero,
 one, or many clock domains. An empty list supports combinational or purely
 timer-driven DUTs. Each entry names a one-bit DUT port, its source, and the
@@ -204,7 +193,7 @@ when a `First` explicitly waits on simultaneous domains, its winner follows
 the simulator's process ordering and should not be used to infer hardware
 priority.
 
-Non-clock one-bit DUT outputs can opt into the same trigger API through
+In a version-1 manifest, non-clock one-bit DUT outputs can opt into the same trigger API through
 `"edge_observers": ["rsp_valid"]`. Generated SV processes remain attached to
 those signals, but cross-language callbacks occur only while the C++ scheduler
 has a matching rising, falling, or change waiter. Testbench-driven scalar
@@ -245,7 +234,7 @@ Ports wider than 32 bits and wide array elements must be two-state `bit` and
 use `uint64_t` through 64 bits or `Bits<W>` above 64 bits. Four-state X/Z value
 propagation, dynamic arrays, interfaces, and `inout` ports remain explicit
 validation errors. Generated, testbench-driven, and
-DUT-generated clocks may be mixed independently of those data-port shapes.
+DUT-produced clocks may be mixed independently of those data-port shapes.
 Signedness is retained in the elaborated contract but values cross the current
 C++ API as raw bits; scalar `.get()` returns a zero-extended `uint32_t`, so a
 testbench that needs a signed numeric interpretation must sign-extend it.

@@ -31,6 +31,8 @@ KERNELS = (
     "array_multidim",
     "force_release",
     "packed_view",
+    "force_direct",
+    "hier_data",
 )
 
 FEATURE_FIELDS = (
@@ -62,6 +64,8 @@ FEATURE_FIELDS = (
     "signal_edges",
     "force_release",
     "packed_view",
+    "hier_data_reads",
+    "hier_data_deposits",
 )
 
 RESULT_FIELDS = (
@@ -110,6 +114,8 @@ class ExpectedCounts:
     signal_edges: int = 0
     force_release: int = 0
     packed_view: int = 0
+    hier_data_reads: int = 0
+    hier_data_deposits: int = 0
 
     def fields(self) -> dict[str, int]:
         return asdict(self)
@@ -219,13 +225,30 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
 
     signal_edges = iterations if kernel == "signal_edge" else 0
 
-    force_release = iterations if kernel == "force_release" else 0
+    force_release = (
+        iterations if kernel in ("force_release", "force_direct") else 0
+    )
     if force_release:
-        feature_checks += 2 * iterations
+        feature_checks += (
+            iterations if kernel == "force_direct" else 2 * iterations
+        )
 
     packed_view = iterations if kernel == "packed_view" else 0
     if packed_view:
         feature_checks += 4 * iterations
+
+    hier_data_reads = 2 * iterations if kernel == "hier_data" else 0
+    hier_data_deposits = 2 * iterations if kernel == "hier_data" else 0
+    if hier_data_reads:
+        feature_checks += 2 * iterations
+
+    if kernel == "force_direct":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=iterations,
+            force_release=force_release,
+        )
 
     return ExpectedCounts(
         iterations=iterations,
@@ -259,6 +282,8 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
         signal_edges=signal_edges,
         force_release=force_release,
         packed_view=packed_view,
+        hier_data_reads=hier_data_reads,
+        hier_data_deposits=hier_data_deposits,
     )
 
 
@@ -270,9 +295,11 @@ def response(iteration: int) -> int:
     return ((stimulus(iteration) ^ 0xA5A55A5A) + iteration) & 0xFFFFFFFF
 
 
-def expected_checksum(iterations: int) -> int:
+def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
     if iterations <= 0:
         raise ValueError("iterations must be greater than zero")
+    if kernel == "force_direct":
+        return 0x811C9DC5
     checksum = 0x811C9DC5
     for iteration in range(iterations):
         checksum = ((checksum ^ response(iteration)) * 0x01000193) & 0xFFFFFFFF

@@ -20,6 +20,8 @@ module dpi_scheduler_conformance;
   localparam int STEP_FALLING_EDGES = 16;
   localparam int STEP_OUTPUTS_CHANGED = 32;
   localparam int STEP_EDGE_INTEREST_CHANGED = 64;
+  localparam int STEP_NEXT_TICK_TIMER = 128;
+  localparam int STEP_TIMER_IDLE = 256;
 
   localparam int SIGNAL_RSTN = 0;
   localparam int SIGNAL_CLKA = 1;
@@ -101,8 +103,8 @@ module dpi_scheduler_conformance;
   import "DPI-C" function void cpptb_dpi_pull_outputs(
       output int unsigned out_words[]
   );
-  import "DPI-C" context function longint unsigned cpptb_dpi_next_timer_deadline();
-  import "DPI-C" context function int unsigned cpptb_dpi_edge_interest(
+  import "DPI-C" function longint unsigned cpptb_dpi_next_timer_deadline();
+  import "DPI-C" function int unsigned cpptb_dpi_edge_interest(
       input int unsigned signal_id
   );
 
@@ -148,10 +150,13 @@ module dpi_scheduler_conformance;
   event timer_kick;
   int status;
   bit track_falling_edges;
+  bit clock_drivers_active;
   int initial_requests;
   int unsigned in_words[0:INPUT_WORD_COUNT-1];
   int unsigned out_words[0:OUTPUT_WORD_COUNT-1];
   int unsigned edge_interest[0:CPPTB_SIGNAL_COUNT-1];
+  bit registered_clock[0:CPPTB_SIGNAL_COUNT-1];
+  bit primary_clock[0:CPPTB_SIGNAL_COUNT-1];
 
   task automatic pack_inputs();
     in_words[INPUT_SIGNAL_CLKA] = clk_a;
@@ -281,11 +286,27 @@ module dpi_scheduler_conformance;
       input int initial_requests
   );
     int requests;
+    longint unsigned generation;
     requests = initial_requests;
     if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
       edge_interest[SIGNAL_EVENTOBSERVED] = cpptb_dpi_edge_interest(SIGNAL_EVENTOBSERVED);
     end
-    if ((requests & STEP_TIMER_CHANGED) != 0) begin
+    if ((requests & STEP_TIMER_IDLE) != 0) begin
+      timer_deadline = NO_TIMER;
+      timer_generation++;
+    end
+    if ((requests & STEP_NEXT_TICK_TIMER) != 0) begin
+      timer_deadline = $time + 1;
+      timer_generation++;
+      generation = timer_generation;
+      if (timer_owner_target == NO_TIMER) begin
+        -> timer_kick;
+      end else if (timer_deadline < timer_owner_target) begin
+        fork
+          timer_wakeup(timer_deadline, generation);
+        join_none
+      end
+    end else if ((requests & STEP_TIMER_CHANGED) != 0) begin
       update_timer_schedule();
     end
   endtask
@@ -378,9 +399,9 @@ module dpi_scheduler_conformance;
       @(event_observed);
       if (status == 0) begin
         event_edge = event_observed ? EDGE_RISING : EDGE_FALLING;
-        if ((status == 0) &&
-            (((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_EVENTOBSERVED] & 1) != 0)) ||
-             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_EVENTOBSERVED] & 2) != 0)))) begin
+        if (
+            ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_EVENTOBSERVED] & 1) != 0)) ||
+            ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_EVENTOBSERVED] & 2) != 0))) begin
           run_step(PHASE_EDGE, SIGNAL_EVENTOBSERVED, event_edge, requests);
           service_requests(requests);
         end
@@ -411,6 +432,7 @@ module dpi_scheduler_conformance;
     iterations = 1;
     status = 0;
     track_falling_edges = 1'b0;
+    clock_drivers_active = 1'b0;
     void'($value$plusargs("CPPTB_CONFORMANCE_ITERS=%d", iterations));
 
     for (int i = 0; i < INPUT_WORD_COUNT; i++) begin
@@ -421,11 +443,14 @@ module dpi_scheduler_conformance;
     end
     for (int i = 0; i < CPPTB_SIGNAL_COUNT; i++) begin
       edge_interest[i] = '0;
+      registered_clock[i] = 1'b0;
+      primary_clock[i] = 1'b0;
     end
 
     cpptb_dpi_init(iterations, TIMEPRECISION_FS);
     run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);
     service_requests(initial_requests);
+    clock_drivers_active = 1'b1;
     if (status == 0) begin
       fork
         timer_owner();

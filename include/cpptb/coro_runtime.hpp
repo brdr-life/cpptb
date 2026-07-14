@@ -51,6 +51,35 @@ struct EdgeInterestChange {
     uint8_t interest = kEdgeInterestNone;
 };
 
+namespace detail {
+
+template <typename>
+inline constexpr bool unsupported_port_operation_v = false;
+
+template <typename Value>
+void unsupported_port_force() {
+    static_assert(
+        unsupported_port_operation_v<Value>,
+        "cpptb: force() is not supported on ordinary DUT ports. "
+        "Scheduler-owned clocks must remain controlled by "
+        "TestContext::start_clock(); coherent clock pause/override is not "
+        "yet supported. Use force() only on inferred hierarchical objects, "
+        "for example dut.block.signal.force(value).");
+}
+
+template <typename Port>
+void unsupported_port_release() {
+    static_assert(
+        unsupported_port_operation_v<Port>,
+        "cpptb: release() is not supported on ordinary DUT ports. "
+        "Scheduler-owned clocks must remain controlled by "
+        "TestContext::start_clock(); coherent clock pause/override is not "
+        "yet supported. Use release() only on an inferred hierarchical "
+        "object that was previously forced.");
+}
+
+}  // namespace detail
+
 struct Signal {
     using GetFn = uint32_t (*)(void* context, uint32_t id);
     using SetFn = void (*)(void* context, uint32_t id, uint32_t data);
@@ -76,6 +105,16 @@ struct Signal {
             std::abort();
         }
         set_fn(context, id, data);
+    }
+
+    template <typename Value>
+    void force(Value&&) const {
+        detail::unsupported_port_force<Value>();
+    }
+
+    template <typename Port = Signal>
+    void release() const {
+        detail::unsupported_port_release<Port>();
     }
 };
 
@@ -180,6 +219,16 @@ class PackedSignal {
         }
         set_words_fn(context, id, bits.words().data(),
                      static_cast<uint32_t>(word_count));
+    }
+
+    template <typename Value>
+    void force(Value&&) const {
+        detail::unsupported_port_force<Value>();
+    }
+
+    template <typename Port = PackedSignal>
+    void release() const {
+        detail::unsupported_port_release<Port>();
     }
 };
 
@@ -359,6 +408,25 @@ struct SimTime {
     friend constexpr SimTime operator+(SimTime left, SimTime right) {
         return SimTime{left.femtoseconds + right.femtoseconds};
     }
+};
+
+struct ClockRegistrar {
+    using StartFn = void (*)(void* context, Signal signal, SimTime period,
+                             SimTime phase);
+
+    void* context = nullptr;
+    StartFn start_fn = nullptr;
+
+    void start(Signal signal, SimTime period, SimTime phase = {}) const {
+        if (!start_fn) {
+            std::fprintf(stderr,
+                         "cpptb: this simulator adapter cannot start clocks\n");
+            std::abort();
+        }
+        start_fn(context, signal, period, phase);
+    }
+
+    explicit operator bool() const { return start_fn != nullptr; }
 };
 
 constexpr SimTime operator""_fs(unsigned long long value) {
@@ -1090,6 +1158,12 @@ class Scheduler {
             edge == EdgeKind::Any
                 ? false
                 : resume_edge_queue(edge_queue_index(signal_id, EdgeKind::Any));
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        ++edge_notification_count_;
+        if (resumed_specific || resumed_any) {
+            ++edge_notification_resume_count_;
+        }
+#endif
         if (resumed_specific || resumed_any) {
             drain_ready();
         } else {
@@ -1099,13 +1173,15 @@ class Scheduler {
 
     void advance_time(uint64_t time) {
         now_ = time;
+        if (!next_timer_ || next_timer_->deadline > now_) return;
+
         bool popped = false;
         bool resumed = false;
         while (true) {
             discard_stale_timers();
-            if (timer_waiters_.empty() || timer_waiters_.top().deadline > now_) break;
-            const auto registration = timer_waiters_.top();
-            timer_waiters_.pop();
+            if (!next_timer_ || next_timer_->deadline > now_) break;
+            const auto registration = *next_timer_;
+            next_timer_.reset();
             popped = true;
             resumed |= resume_registration(registration.wait);
         }
@@ -1177,8 +1253,8 @@ class Scheduler {
 
     uint64_t next_timer_deadline() {
         discard_stale_timers();
-        if (timer_waiters_.empty()) return std::numeric_limits<uint64_t>::max();
-        return timer_waiters_.top().deadline;
+        if (!next_timer_) return std::numeric_limits<uint64_t>::max();
+        return next_timer_->deadline;
     }
 
     uint64_t now() const { return now_; }
@@ -1196,6 +1272,14 @@ class Scheduler {
 #ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
     uint64_t single_edge_park_count(EdgeKind edge) const {
         return single_edge_park_counts_[static_cast<size_t>(edge)];
+    }
+
+    uint64_t edge_notification_count() const {
+        return edge_notification_count_;
+    }
+
+    uint64_t edge_notification_resume_count() const {
+        return edge_notification_resume_count_;
     }
 
     uint64_t compound_wait_park_count() const { return compound_wait_parks_; }
@@ -1385,7 +1469,7 @@ class Scheduler {
                     delay_ticks > max_time - now_ ? max_time
                                                   : now_ + delay_ticks;
                 const uint64_t previous_deadline = next_timer_deadline();
-                timer_waiters_.push(TimerRegistration{
+                push_timer(TimerRegistration{
                     deadline, next_timer_sequence_++, registration});
                 if (deadline < previous_deadline) timer_schedule_changed_ = true;
                 break;
@@ -1466,10 +1550,30 @@ class Scheduler {
     }
 
     void discard_stale_timers() {
-        while (!timer_waiters_.empty() &&
-               !registration_valid(timer_waiters_.top().wait)) {
+        while (true) {
+            if (next_timer_ && registration_valid(next_timer_->wait)) return;
+            if (next_timer_) {
+                next_timer_.reset();
+                timer_schedule_changed_ = true;
+            }
+            if (timer_waiters_.empty()) return;
+            next_timer_ = timer_waiters_.top();
             timer_waiters_.pop();
-            timer_schedule_changed_ = true;
+        }
+    }
+
+    void push_timer(TimerRegistration registration) {
+        if (!next_timer_) {
+            next_timer_ = registration;
+            return;
+        }
+
+        TimerRegistrationLater later;
+        if (later(*next_timer_, registration)) {
+            timer_waiters_.push(*next_timer_);
+            next_timer_ = registration;
+        } else {
+            timer_waiters_.push(registration);
         }
     }
 
@@ -1580,6 +1684,7 @@ class Scheduler {
     std::priority_queue<TimerRegistration, std::vector<TimerRegistration>,
                         TimerRegistrationLater>
         timer_waiters_;
+    std::optional<TimerRegistration> next_timer_;
     std::vector<size_t> ready_;
     uint64_t now_ = 0;
     uint64_t next_wait_generation_ = 0;
@@ -1593,6 +1698,8 @@ class Scheduler {
 #ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
     std::array<uint64_t, 3> single_edge_park_counts_{};
     uint64_t compound_wait_parks_ = 0;
+    uint64_t edge_notification_count_ = 0;
+    uint64_t edge_notification_resume_count_ = 0;
 #endif
     bool timer_schedule_changed_ = false;
     bool draining_ = false;
@@ -2443,6 +2550,14 @@ class Testbench {
 #ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
     uint64_t single_edge_park_count(EdgeKind edge) const {
         return scheduler_.single_edge_park_count(edge);
+    }
+
+    uint64_t edge_notification_count() const {
+        return scheduler_.edge_notification_count();
+    }
+
+    uint64_t edge_notification_resume_count() const {
+        return scheduler_.edge_notification_resume_count();
     }
 
     uint64_t compound_wait_park_count() const {

@@ -11,7 +11,8 @@ module stream_fifo_sv_tb;
   logic out_ready;
   logic [31:0] out_data;
 
-  int unsigned iterations;
+  localparam int unsigned kWordCount = 24;
+
   longint unsigned checks;
   int unsigned failures;
   longint unsigned sim_cycles;
@@ -49,7 +50,7 @@ module stream_fifo_sv_tb;
     @reset_done;
     state = 32'h3141_5926;
 
-    for (int unsigned index = 0; index < iterations; index++) begin
+    for (int unsigned index = 0; index < kWordCount; index++) begin
       state = state * 32'd1664525 + 32'd1013904223;
       word = state;
       forever begin
@@ -78,7 +79,7 @@ module stream_fifo_sv_tb;
     cycle = 0;
     accepted = 0;
 
-    while (accepted < iterations) begin
+    while (accepted < kWordCount) begin
       @(negedge clk);
       ready = !((cycle % 5 == 1) || (cycle % 5 == 2));
       out_ready = ready;
@@ -97,7 +98,7 @@ module stream_fifo_sv_tb;
     @reset_done;
     observed = 0;
 
-    while (observed < iterations) begin
+    while (observed < kWordCount) begin
       @(negedge clk);
       #1ps;
       if (!out_valid || !out_ready) continue;
@@ -109,7 +110,7 @@ module stream_fifo_sv_tb;
   task automatic scoreboard();
     logic [31:0] expected;
     logic [31:0] actual;
-    for (int unsigned index = 0; index < iterations; index++) begin
+    for (int unsigned index = 0; index < kWordCount; index++) begin
       expected_words.get(expected);
       observed_words.get(actual);
       expect_eq("FIFO payload", actual, expected);
@@ -129,8 +130,6 @@ module stream_fifo_sv_tb;
     checks = 0;
     failures = 0;
     input_stalls = 0;
-    iterations = 24;
-    void'($value$plusargs("CPPTB_FIFO_SCOREBOARD_ITERS=%d", iterations));
     expected_words = new();
     observed_words = new();
 
@@ -145,13 +144,11 @@ module stream_fifo_sv_tb;
     #1ps;
     expect_eq("FIFO drained", out_valid, 0);
     expect_eq("FIFO accepts after drain", in_ready, 1);
-    if (iterations > 4) begin
-      expect_eq("input backpressure observed", input_stalls != 0, 1);
-    end
+    expect_eq("input backpressure observed", input_stalls != 0, 1);
 
     $display(
         "PURE_SV_FIFO_SCOREBOARD_RESULT iterations=%0d checks=%0d sim_cycles=%0d failures=%0d",
-        iterations, checks, sim_cycles, failures);
+        1, checks, sim_cycles, failures);
     if (failures != 0) $fatal(1, "FIFO scoreboard pure-SV testbench failed");
     $finish;
   end

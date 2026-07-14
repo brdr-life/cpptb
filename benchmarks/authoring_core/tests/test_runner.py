@@ -240,6 +240,16 @@ class GuardDecisionTests(unittest.TestCase):
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_force_direct_uses_the_isolated_pure_sv_binary(self):
+        self.assertEqual(
+            runner._binary("pure_sv", "force_direct").name,
+            "Vforce_direct_sv_tb",
+        )
+        self.assertEqual(
+            runner._binary("pure_sv", "control").name,
+            "Vauthoring_core_sv_tb",
+        )
+
     @staticmethod
     def fake_runner(ratio_for_pair, calls):
         def run(mode, kernel, pair, iterations):

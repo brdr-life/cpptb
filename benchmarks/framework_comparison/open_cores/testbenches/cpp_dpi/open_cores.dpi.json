@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "module": "open_cores_benchmark_dut",
+  "top_module": "dpi_open_cores_benchmark",
+  "namespace": "cpptb::benchmarks::open_cores",
+  "root_type": "Dut",
+  "frontend": "slang",
+  "frontend_options": {
+    "slang": {
+      "standard": "1800-2023",
+      "args": ["--timescale=1ns/1ps"]
+    }
+  },
+  "codegen": {"static_binding": true},
+  "sources": [
+    "../../third_party/picorv32/picorv32.v",
+    "../../third_party/secworks_aes/aes_sbox.v",
+    "../../third_party/secworks_aes/aes_inv_sbox.v",
+    "../../third_party/secworks_aes/aes_key_mem.v",
+    "../../third_party/secworks_aes/aes_encipher_block.v",
+    "../../third_party/secworks_aes/aes_decipher_block.v",
+    "../../third_party/secworks_aes/aes_core.v",
+    "../../third_party/secworks_aes/aes.v",
+    "../../third_party/verilog_ethernet/lfsr.v",
+    "../../third_party/verilog_ethernet/axis_eth_fcs.v",
+    "../../rtl/open_cores_benchmark_dut.sv"
+  ],
+  "clocks": [],
+  "edge_observers": ["cpu_done", "fcs_valid"],
+  "auto_edge_observers": true,
+  "run": {
+    "init_function": "open_cores_dpi_init",
+    "step_function": "open_cores_dpi_step",
+    "pull_outputs_function": "open_cores_dpi_pull_outputs",
+    "next_deadline_function": "open_cores_dpi_next_timer_deadline",
+    "edge_interest_function": "open_cores_dpi_edge_interest",
+    "clock_config_function": "open_cores_dpi_clock_config",
+    "dynamic_clocks": true,
+    "iteration_plusarg": "OPEN_CORE_BENCH_ITERS",
+    "default_iterations": 100,
+    "timeprecision": "1ps"
+  },
+  "outputs": {
+    "cpp_dut": "generated/open_cores_dut.hpp",
+    "cpp_binding": "generated/open_cores_binding.hpp",
+    "sv_wrapper": "generated/dpi_open_cores_benchmark.sv",
+    "cpp_include": "benchmarks/framework_comparison/open_cores/testbenches/cpp_dpi/generated/open_cores_dut.hpp"
+  }
+}

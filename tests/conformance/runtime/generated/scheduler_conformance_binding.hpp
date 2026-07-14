@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include <utility>
+#include "cpptb/dpi_static_binding.hpp"
 #include "svdpi.h"
 #include "cpptb/probe.hpp"
 #include <cstdio>
@@ -52,8 +53,12 @@ inline constexpr std::array<uint32_t, 4> kClockSignalIds = {
     kSignalManualClk,
     kSignalDerivedClk,
 };
+inline constexpr std::array<cpptb::dpi::RegisteredClockConfig, 0> kRegisteredClockConfigs = {{
+}};
 inline constexpr std::array<uint32_t, 1> kEdgeObserverSignalIds = {
     kSignalEventObserved,
+};
+inline constexpr std::array<uint32_t, 0> kTransportlessEdgeSignalIds = {
 };
 inline constexpr std::array<std::pair<uint32_t, uint32_t>, 13> kDrivenSignalSpans = {{
     {kSignalRstN, 1},
@@ -470,6 +475,61 @@ SchedulerConformanceDut bind_dut(MakeSignal&& make_signal) {
             make_internal_5(),
             make_internal_6(),
             make_internal_7()
+        }
+    };
+}
+
+template <typename MakeSignal>
+SchedulerConformanceDut bind_dut_for_clock_discovery(MakeSignal&& make_signal) {
+    return {
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalRstN, 0>{}, "rst_n"),
+        {
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalClkA, 0>{}, "clk_a"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalClkB, 1>{}, "clk_b"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalManualClk, 1>{}, "manual_clk"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalDerivedClk, 17>{}, "derived_clk")
+        },
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalDerivedGate, 2>{}, "derived_gate"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalStableSignal, 3>{}, "stable_signal"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalPredicateSignal, 4>{}, "predicate_signal"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalEventDrive, 5>{}, "event_drive"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalForceNetSource, 6>{}, "force_net_source"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalDriveValue, 7>{}, "drive_value"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalAddend, 8>{}, "addend"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<65, true, true, kSignalPacked65I, 9>{}, "packed65_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<65, false, false, kSignalPacked65O, 2>{}, "packed65_o"),
+        make_signal(cpptb::dpi::StaticOnDemandSignalSpec<137, true, true, kSignalPacked137I, on_demand_port_13_get_words, on_demand_port_13_set_words>{}, "packed137_i"),
+        make_signal(cpptb::dpi::StaticOnDemandSignalSpec<137, false, false, kSignalPacked137O, on_demand_port_14_get_words, nullptr>{}, "packed137_o"),
+        make_signal(cpptb::dpi::StaticPackedArraySpec<73, true, true, kSignalArray73I, 12, coro::ArrayDimension<7, 4>>{}, "array73_i"),
+        make_signal(cpptb::dpi::StaticPackedArraySpec<73, false, false, kSignalArray73O, 5, coro::ArrayDimension<7, 4>>{}, "array73_o"),
+        make_signal(cpptb::dpi::StaticOnDemandArraySpec<65, true, true, kSignalMatrix65I, on_demand_port_17_get_words, on_demand_port_17_set_words, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, "matrix65_i"),
+        make_signal(cpptb::dpi::StaticOnDemandArraySpec<65, false, false, kSignalMatrix65O, on_demand_port_18_get_words, nullptr, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, "matrix65_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalEventObserved, 18>{}, "event_observed"),
+        make_signal(cpptb::dpi::StaticOnDemandSignalSpec<8, false, false, kSignalCombSum, on_demand_port_21_get_words, nullptr>{}, "comb_sum"),
+        {
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalSampledA, 19>{}, "sampled_a"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalSampledB, 20>{}, "sampled_b"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalSampledManual, 21>{}, "sampled_manual"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalSampledDerived, 22>{}, "sampled_derived")
+        },
+        {
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalCountA, 23>{}, "count_a"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalCountB, 24>{}, "count_b"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalCountManual, 25>{}, "count_manual"),
+            make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalCountDerived, 26>{}, "count_derived")
+        },
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<64, false, false, kSignalInternalCombFanout, 27>{}, "internal_comb_fanout"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<64, false, false, kSignalInternalClockedFanout, 29>{}, "internal_clocked_fanout"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<8, false, false, kSignalInternalNetFanout, 31>{}, "internal_net_fanout"),
+        {
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
         }
     };
 }

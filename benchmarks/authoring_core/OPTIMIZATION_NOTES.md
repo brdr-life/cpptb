@@ -440,3 +440,143 @@ The integrated branch is approved, with these non-blocking follow-ups retained:
    scheduler regression cannot become a zero-time loop.
 4. Reject or explicitly diagnose `compact_input_transport: false` when static
    binding or on-demand transport necessarily enables compact transport.
+
+## Edge callback and generated-observer profile (2026-07-13)
+
+The 100,000-iteration aggregate workload reported 4,050,007 scheduler steps,
+2,700,005 edge notifications (1,500,005 rising and 1,200,000 falling), and
+1,350,001 timer notifications. Edge-path telemetry showed that 2,550,005 of
+the 2,700,005 edge callbacks resumed a waiting coroutine. Only 150,000
+callbacks, or 5.6%, did not resume C++ work. The simulator owns and toggles
+the clock waveform, but generated wrappers currently call DPI on every rising
+edge of each configured clock and gate falling clock callbacks with a global
+waiter summary. This dense workload deliberately awaits almost every relevant
+edge, so that policy is mostly productive here, but it is not fully
+demand-gated.
+
+The unexpected regression came from generated automatic signal observers.
+Each one waited on a dynamic expression containing `edge_interest[signal]`
+before waiting on the signal itself. Verilator lowered those dormant dynamic
+wait processes with substantial scheduling overhead. A historical checkout
+measured about 1.196 seconds for the C++ aggregate, while the regressed wrapper
+measured about 1.800 seconds. Removing automatic observers restored roughly
+1.18 to 1.21 seconds, isolating the generated process shape as the cause.
+
+Automatic observers now wait directly on the SystemVerilog signal and inspect
+the interest mask only after a transition. A signal transition can wake the
+small SystemVerilog process, but no DPI callback occurs without active C++
+interest. This preserves generic dynamic edge waits while avoiding the costly
+dynamic wait expression. The implementation also keeps explicit observer and
+clock-source behavior unchanged.
+
+The first formal 16-pair aggregate guard improved from `1.366x` to `1.044x`.
+After regenerating every checked-in wrapper and rebuilding the complete
+benchmark matrix, the repeated guard passed at `1.052x`, with `0.03%`
+disagreement between paired and independent ratios. Both results are below
+the `1.10x` hard limit.
+
+Additional experiments did not justify integration: per-element on-demand
+transport regressed its dedicated comparison, changing the probe guard from
+thread-local to global was neutral, and the coroutine frame pool recorded only
+13 system allocations while reusing cached frames 1,999,989 times. Global and
+alternate thread-local frame pools were neutral or slower. Lazy task adoption
+was parked because cancellation through unadopted intermediate tasks requires
+a more invasive lifetime design for an estimated sub-percent benefit. An
+inline one-tick timer delay was rejected because it could block unrelated
+clock progress; next-tick timers continue through the persistent timer owner.
+
+An independent high-effort review found no blocker in the observer fix or its
+generic one-bit output contract. It identified the global falling-edge summary
+as the clearest residual leak: a falling or any-edge wait on a non-clock signal
+can temporarily enable falling callbacks for every configured clock. The next
+contained experiment should count only static clock-source registrations for
+that summary, add a directed non-clock waiter test, and compare the no-resume
+callback count before and after. Fully demand-gating rising clocks is a larger
+policy change because the existing static-clock fast path intentionally avoids
+publishing per-wait clock interest; it should be evaluated separately against
+clock-dense and clock-idle workloads.
+
+## Batched force/release probe-command experiment (2026-07-13)
+
+The exact `force_release` pair established a fresh valid baseline of `1.204x`
+C++ DPI/pure SV at 100,000 iterations (32 paired samples after the confirming
+batch). A portable generated transport then replaced nested exported-DPI
+force/release calls with a deterministic C++ FIFO, a generated SV batch pull,
+and generated endpoint dispatch. It supported wide values, multiple commands,
+and batches spilling beyond 64 commands without advancing simulation time.
+
+The transport remained semantically exact and passed the existing 275-check
+conformance suite, but its formal paired ratio regressed to `1.292x`; the
+DPI-first and SV-first strata measured `1.279x` and `1.297x`, and the
+independent ratio was `1.289x`. The five-open-array batch marshalling and SV
+dispatch cost more than the two direct exported-DPI calls in this workload.
+The experiment was rejected under the unchanged `1.10x` hard guard.
+
+The separately measured specialized Delay callback kept the exact explicit
+`1 ps` boundaries and passed the 100,000-iteration semantic comparison. Its
+32-pair guard measured `1.214x` (DPI-first `1.207x`, SV-first `1.220x`, and
+independent `1.213x` with `0.11%` disagreement), slightly slower than the
+`1.204x` baseline. It was also rejected and removed.
+
+## Force/release isolation and build experiments (2026-07-13)
+
+A standalone `force_direct` C++/SV pair now isolates one force, immediate
+readback of the exact forced net, and release per iteration. It performs no
+clock edge, delay, scheduler resumption, protocol transaction, or simulated
+time advance. At 1,000,000 iterations its 32-pair guard measured `1.652x`
+(DPI-first `1.661x`, SV-first `1.650x`, independent `1.660x`). This confirms
+that direct exported-DPI probe calls have a visible microbenchmark cost, while
+the complete propagated workload remains dominated by other work.
+
+The exact 1,000,000-iteration `force_release` workload established a fresh
+portable `-O3` baseline of `1.212x` (DPI-first `1.204x`, SV-first `1.226x`,
+independent `1.221x`). Whole-program LTO applied only to C++ DPI produced a
+diagnostic `0.943x`, but that comparison intentionally did not optimize the SV
+side equally and is not an acceptable guard result. Applying `-flto` to both
+binaries improved the fair paired ratio to `1.138x` (DPI-first `1.117x`,
+SV-first `1.146x`, independent `1.142x`). The improvement is real but remains
+above the `1.10x` hard limit, so LTO is exposed through optional benchmark
+compiler/linker flags rather than enabled as a claimed fix.
+
+A Verilator-specific direct callback prototype bypassed exported-DPI scope and
+callback lookup. Its serial million-iteration C++ runtime was about `3.194 s`
+against the equal-LTO normal-path median of `3.217 s`, only about `0.7%`
+faster. The backend coupling cannot close the remaining gap and was removed.
+
+Profile-guided optimization trained each implementation independently on the
+same workload and then rebuilt both with LTO plus its own profile. A
+million-iteration serial viability check measured approximately `2.336 s` for
+C++ DPI and `2.070 s` for pure SV, or `1.129x`. The 100,000-iteration paired
+screen was order-sensitive at `1.118x` and classified as an invalid
+environment. PGO improves both binaries but does not clear the guard, so it
+was also rejected as a framework solution.
+
+These experiments narrow the remaining issue: batching regresses, direct
+probe lookup is too small, and compiler optimization benefits both sides. The
+two explicit propagation boundaries and their generic scheduler/simulator
+round trips remain the meaningful difference in `force_release`; force and
+release themselves do not insert a delay.
+
+## Immediate force-read cache and scoped waiver (2026-07-14)
+
+A final generic optimization caches the value of a successful generated force
+for an immediate matching read in the same outer DPI callback. The cache is
+emitted only when compiled usage selects both operations for a path. Release,
+the alternate two-state/four-state force mode, and the next outer callback
+invalidate or bypass it, so later HDL activity remains observable. A directed
+transport test covers cache hits, release invalidation, and callback-epoch
+refresh. Unused hierarchy bindings emit no cache.
+
+The exact `force_direct` semantics continued to match at 100,000 and 1,000,000
+iterations. The million-iteration 32-pair guard improved from the historical
+`1.652x` result to `1.135x` (DPI-first `1.146x`, SV-first `1.107x`, independent
+median ratio `1.131x`, and `0.36%` paired/independent disagreement). The
+remaining workload is two direct exported-DPI operations against equivalent
+in-process SystemVerilog, with no scheduler work or time advance left to trim.
+
+The registry now grants only `force_direct` a reviewed `1.20x` ceiling while
+retaining its raw `1.10x` failure as a diagnostic. The waiver does not cover
+semantic failures, invalid environments, missing results, or any other
+feature. This records the transport limit without allowing the isolated
+microbenchmark to block unrelated hierarchy work, and still catches future
+regressions in the force path.

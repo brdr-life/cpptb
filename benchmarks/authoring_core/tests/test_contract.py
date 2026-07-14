@@ -19,7 +19,7 @@ def result_line(kernel="control", iterations=1, **overrides):
         "kernel": kernel,
         **expected,
         "sim_cycles": 7,
-        "checksum": workload.expected_checksum(iterations),
+        "checksum": workload.expected_checksum(iterations, kernel=kernel),
         "failures": 0,
         "internal_wall_ms": 1.25,
     }
@@ -93,10 +93,14 @@ class ContractTests(unittest.TestCase):
             "$(eval $(call AUTHORING_CORE_DPI_template,force_release,23))",
             makefile,
         )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,force_direct,25))",
+            makefile,
+        )
         self.assertIn("AUTHORING_CORE_OPT_FAST ?= -O3", makefile)
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)"'),
-            1,
+            2,
         )
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)"'),
@@ -240,14 +244,19 @@ class ContractTests(unittest.TestCase):
             )
         )
         self.assertEqual(manifest["edge_observers"], ["rsp_valid"])
+        self.assertEqual(manifest["clocks"], [])
+        self.assertTrue(manifest["auto_edge_observers"])
+        self.assertTrue(manifest["run"]["dynamic_clocks"])
 
         cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
         sv = (BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv").read_text(
             encoding="utf-8"
         )
         self.assertIn("co_await RisingEdge{context.dut.rsp_valid};", cpp)
+        self.assertIn("clocks.start(dut.clk, 2_ns);", cpp)
         self.assertIn("task automatic run_signal_edge();", sv)
         self.assertIn("@(posedge rsp_valid);", sv)
+        self.assertIn("always #1ns clk = ~clk;", sv)
 
     def test_array_multidim_has_exact_isolated_counts(self):
         counts = workload.expected_counts("array_multidim", 5)
@@ -298,20 +307,6 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(workload.expected_counts("all", 5).force_release, 0)
 
     def test_force_release_uses_dedicated_net_and_exact_delays(self):
-        manifest = json.loads(
-            (BENCH_DIR / "testbenches/cpp_dpi/authoring_core.dpi.json").read_text(
-                encoding="utf-8"
-            )
-        )
-        internal = next(
-            item for item in manifest["internals"]
-            if item["path"] == "force_target"
-        )
-        self.assertEqual(
-            internal,
-            {"path": "force_target", "access": "read", "force": True},
-        )
-
         cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(encoding="utf-8")
         sv = (BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv").read_text(
             encoding="utf-8"
@@ -322,8 +317,8 @@ class ContractTests(unittest.TestCase):
         self.assertIn("input  bit [31:0] force_source_i", rtl)
         self.assertIn("wire [31:0] force_target = force_source_i", rtl)
         self.assertIn("assign force_fanout_o = force_target;", rtl)
-        self.assertIn("context.dut.internal.force_target.force(forced);", cpp)
-        self.assertIn("context.dut.internal.force_target.release();", cpp)
+        self.assertIn("context.dut.force_target.force(forced);", cpp)
+        self.assertIn("context.dut.force_target.release();", cpp)
         self.assertIn("force i_dut.force_target = value;", sv)
         self.assertIn("release i_dut.force_target;", sv)
 
@@ -337,6 +332,35 @@ class ContractTests(unittest.TestCase):
         ]
         self.assertEqual(cpp_feature.count("co_await Delay{1_ps};"), 2)
         self.assertEqual(sv_feature.count("#1ps;"), 2)
+
+    def test_force_direct_is_an_exact_zero_time_twin(self):
+        counts = workload.expected_counts("force_direct", 5)
+        self.assertEqual(counts.transactions, 0)
+        self.assertEqual(counts.checks, 5)
+        self.assertEqual(counts.force_release, 5)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="force_direct"),
+            0x811C9DC5,
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/force_direct_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        cpp_feature = cpp[
+            cpp.index("Task<void> run_force_direct"):
+            cpp.index("Task<void> run(Context context)")
+        ]
+        self.assertIn("force_target.force(forced);", cpp_feature)
+        self.assertIn("force_target.get(), forced", cpp_feature)
+        self.assertIn("force_target.release();", cpp_feature)
+        self.assertNotIn("co_await", cpp_feature)
+        self.assertIn("force i_dut.force_target = value;", sv)
+        self.assertIn("if (i_dut.force_target != value)", sv)
+        self.assertIn("release i_dut.force_target;", sv)
+        self.assertNotIn("#1", sv)
 
     def test_packed_view_has_exact_isolated_counts_and_twin(self):
         counts = workload.expected_counts("packed_view", 5)
@@ -354,6 +378,33 @@ class ContractTests(unittest.TestCase):
         self.assertIn("set_state(StateT::StateRun)", cpp)
         self.assertIn("task automatic packed_view_feature", sv)
         self.assertIn("value.state = STATE_RUN;", sv)
+
+    def test_hier_data_has_exact_isolated_counts_and_twin(self):
+        counts = workload.expected_counts("hier_data", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 17)
+        self.assertEqual(counts.hier_data_reads, 10)
+        self.assertEqual(counts.hier_data_deposits, 10)
+        self.assertEqual(workload.expected_counts("all", 5).hier_data_reads, 0)
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("context.dut.hierarchy_wide.deposit(wide);", cpp)
+        self.assertIn("context.dut.hierarchy_logic.deposit_logic(logic);", cpp)
+        self.assertIn("context.dut.hierarchy_logic.get_logic()", cpp)
+        self.assertIn("i_dut.hierarchy_wide = wide;", sv)
+        self.assertIn("i_dut.hierarchy_logic = logic_value;", sv)
+
+    def test_force_direct_result_keeps_complete_feature_schema(self):
+        source = (
+            BENCH_DIR / "testbenches/systemverilog/force_direct_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        for field in workload.FEATURE_FIELDS:
+            self.assertIn(f"{field}=", source)
 
     def test_expected_checksum_is_stable(self):
         self.assertEqual(workload.expected_checksum(1), 1_407_418_725)

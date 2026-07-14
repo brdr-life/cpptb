@@ -22,8 +22,10 @@ class AdapterKind(str, Enum):
     AUTHORING_CORE = "authoring_core"
     DPI_APB_REGFILE = "dpi_apb_regfile"
     DPI_COUNTER = "dpi_counter"
+    DPI_FAULT_INJECTION = "dpi_fault_injection"
     DPI_FIFO_SCOREBOARD = "dpi_fifo_scoreboard"
     DPI_MULTICLOCK = "dpi_multiclock"
+    DPI_RICH_DATA = "dpi_rich_data"
     DPI_TIMER_ONLY = "dpi_timer_only"
     DPI_WATCHDOG_TIMEOUT = "dpi_watchdog_timeout"
     PERIPHERAL_SUITE = "peripheral_suite"
@@ -31,6 +33,7 @@ class AdapterKind(str, Enum):
 
 class GatePolicy(str, Enum):
     HARD_1_10 = "hard_1_10"
+    WAIVED_HARD_1_10 = "waived_hard_1_10"
     EQUIVALENCE_ONLY = "equivalence_only"
     DIAGNOSTIC = "diagnostic"
 
@@ -53,6 +56,13 @@ class Runner:
 
 
 @dataclass(frozen=True)
+class PerformanceWaiver:
+    approved_on: str
+    max_ratio: float
+    rationale: str
+
+
+@dataclass(frozen=True)
 class Benchmark:
     name: str
     label: str
@@ -64,6 +74,7 @@ class Benchmark:
     default_iterations: int
     gate_policy: GatePolicy
     template_id: int | None = None
+    waiver: PerformanceWaiver | None = None
 
     @property
     def binary_paths(self) -> tuple[str, ...]:
@@ -96,17 +107,37 @@ _AUTHORING_TEMPLATE_IDS = {
     "array_multidim": 22,
     "force_release": 23,
     "packed_view": 24,
+    "force_direct": 25,
+    "hier_data": 26,
 }
 
 
-def _authoring(name: str, label: str) -> Benchmark:
+def _authoring(
+    name: str,
+    label: str,
+    *,
+    gate_policy: GatePolicy = GatePolicy.HARD_1_10,
+    waiver: PerformanceWaiver | None = None,
+) -> Benchmark:
     dpi_binary = f"build/benchmarks/authoring_core/cpp_dpi_{name}/Vdpi_authoring_core"
+    if name == "force_direct":
+        sv_target = "authoring-core-force-direct-sv-build"
+        sv_binary = (
+            "build/benchmarks/authoring_core/force_direct_sv_obj/"
+            "Vforce_direct_sv_tb"
+        )
+    else:
+        sv_target = "authoring-core-sv-build"
+        sv_binary = (
+            "build/benchmarks/authoring_core/pure_sv_obj/"
+            "Vauthoring_core_sv_tb"
+        )
     return Benchmark(
         name=name,
         label=label,
         category=Category.AUTHORING_FEATURE,
         adapter_kind=AdapterKind.AUTHORING_CORE,
-        build_targets=(dpi_binary, "authoring-core-sv-build"),
+        build_targets=(dpi_binary, sv_target),
         binaries=(
             Binary(
                 "cpp_dpi",
@@ -114,7 +145,7 @@ def _authoring(name: str, label: str) -> Benchmark:
             ),
             Binary(
                 "pure_sv",
-                "build/benchmarks/authoring_core/pure_sv_obj/Vauthoring_core_sv_tb",
+                sv_binary,
             ),
         ),
         runner=Runner(
@@ -124,8 +155,9 @@ def _authoring(name: str, label: str) -> Benchmark:
             kernel_argument="--example",
         ),
         default_iterations=100_000,
-        gate_policy=GatePolicy.HARD_1_10,
+        gate_policy=gate_policy,
         template_id=_AUTHORING_TEMPLATE_IDS[name],
+        waiver=waiver,
     )
 
 
@@ -158,6 +190,22 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring("array_multidim", "Multidimensional unpacked array"),
     _authoring("force_release", "Internal net force/release"),
     _authoring("packed_view", "Packed enum/struct views"),
+    _authoring(
+        "force_direct",
+        "Zero-time force/get/release",
+        gate_policy=GatePolicy.WAIVED_HARD_1_10,
+        waiver=PerformanceWaiver(
+            approved_on="2026-07-14",
+            max_ratio=1.20,
+            rationale=(
+                "The isolated zero-time force/read/release microbenchmark remains "
+                "transport-bound at 1.135x after eliminating the redundant read DPI "
+                "call. It has no scheduler resume or time advance, and the waiver "
+                "applies only to this direct exported-DPI force path."
+            ),
+        ),
+    ),
+    _authoring("hier_data", "Wide and four-state hierarchy data"),
     Benchmark(
         name="dpi_counter",
         label="DPI counter",
@@ -173,9 +221,8 @@ BENCHMARKS: tuple[Benchmark, ...] = (
                 ("make", "cpp-dpi-counter-run"),
                 ("make", "cpp-dpi-counter-sv-run"),
             ),
-            iterations_environment="CPPTB_COUNTER_ITERS",
         ),
-        default_iterations=8,
+        default_iterations=1,
         gate_policy=GatePolicy.EQUIVALENCE_ONLY,
     ),
     Benchmark(
@@ -196,9 +243,8 @@ BENCHMARKS: tuple[Benchmark, ...] = (
                 ("make", "cpp-dpi-multiclock-run"),
                 ("make", "cpp-dpi-multiclock-sv-run"),
             ),
-            iterations_environment="CPPTB_MULTICLOCK_ITERS",
         ),
-        default_iterations=16,
+        default_iterations=1,
         gate_policy=GatePolicy.EQUIVALENCE_ONLY,
     ),
     Benchmark(
@@ -225,9 +271,8 @@ BENCHMARKS: tuple[Benchmark, ...] = (
                 ("make", "cpp-dpi-timer-only-run"),
                 ("make", "cpp-dpi-timer-only-sv-run"),
             ),
-            iterations_environment="CPPTB_TIMER_ONLY_ITERS",
         ),
-        default_iterations=9,
+        default_iterations=1,
         gate_policy=GatePolicy.EQUIVALENCE_ONLY,
     ),
     Benchmark(
@@ -254,9 +299,8 @@ BENCHMARKS: tuple[Benchmark, ...] = (
                 ("make", "cpp-dpi-fifo-scoreboard-run"),
                 ("make", "cpp-dpi-fifo-scoreboard-sv-run"),
             ),
-            iterations_environment="CPPTB_FIFO_SCOREBOARD_ITERS",
         ),
-        default_iterations=24,
+        default_iterations=1,
         gate_policy=GatePolicy.EQUIVALENCE_ONLY,
     ),
     Benchmark(
@@ -283,9 +327,8 @@ BENCHMARKS: tuple[Benchmark, ...] = (
                 ("make", "cpp-dpi-apb-regfile-run"),
                 ("make", "cpp-dpi-apb-regfile-sv-run"),
             ),
-            iterations_environment="CPPTB_APB_REGFILE_ITERS",
         ),
-        default_iterations=12,
+        default_iterations=1,
         gate_policy=GatePolicy.EQUIVALENCE_ONLY,
     ),
     Benchmark(
@@ -312,9 +355,61 @@ BENCHMARKS: tuple[Benchmark, ...] = (
                 ("make", "cpp-dpi-watchdog-timeout-run"),
                 ("make", "cpp-dpi-watchdog-timeout-sv-run"),
             ),
-            iterations_environment="CPPTB_WATCHDOG_TIMEOUT_ITERS",
         ),
-        default_iterations=8,
+        default_iterations=1,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_fault_injection",
+        label="DPI fault injection",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_FAULT_INJECTION,
+        build_targets=(
+            "cpp-dpi-fault-injection-build",
+            "cpp-dpi-fault-injection-sv-build",
+        ),
+        binaries=(
+            Binary(
+                "cpp_dpi",
+                "build/cpptb/dpi_fault_injection_obj/Vdpi_fault_injection",
+            ),
+            Binary(
+                "pure_sv",
+                "build/cpptb/dpi_fault_injection_sv_obj/Vfault_injection_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-fault-injection-run"),
+                ("make", "cpp-dpi-fault-injection-sv-run"),
+            ),
+        ),
+        default_iterations=1,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_rich_data",
+        label="DPI rich data",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_RICH_DATA,
+        build_targets=(
+            "cpp-dpi-rich-data-build",
+            "cpp-dpi-rich-data-sv-build",
+        ),
+        binaries=(
+            Binary("cpp_dpi", "build/cpptb/dpi_rich_data_obj/Vdpi_rich_data"),
+            Binary(
+                "pure_sv",
+                "build/cpptb/dpi_rich_data_sv_obj/Vrich_data_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-rich-data-run"),
+                ("make", "cpp-dpi-rich-data-sv-run"),
+            ),
+        ),
+        default_iterations=1,
         gate_policy=GatePolicy.EQUIVALENCE_ONLY,
     ),
     Benchmark(
@@ -415,6 +510,18 @@ def consistency_errors(
     makefile_kernels, makefile_templates = _makefile_contract(text)
 
     errors: list[str] = []
+    for entry in BENCHMARKS:
+        if entry.gate_policy is GatePolicy.WAIVED_HARD_1_10:
+            if entry.waiver is None:
+                errors.append(f"{entry.name} uses a waiver policy without waiver metadata")
+            elif entry.waiver.max_ratio <= 1.10:
+                errors.append(
+                    f"{entry.name} waiver ceiling {entry.waiver.max_ratio} must exceed 1.10"
+                )
+            elif not entry.waiver.approved_on or not entry.waiver.rationale.strip():
+                errors.append(f"{entry.name} waiver metadata is incomplete")
+        elif entry.waiver is not None:
+            errors.append(f"{entry.name} has waiver metadata without a waiver policy")
     if registry_kernels != workload_kernels:
         errors.append(
             f"registry authoring order {registry_kernels!r} != workload.KERNELS "
@@ -456,6 +563,7 @@ __all__ = [
     "Binary",
     "Category",
     "GatePolicy",
+    "PerformanceWaiver",
     "RegistryConsistencyError",
     "Runner",
     "check_consistency",

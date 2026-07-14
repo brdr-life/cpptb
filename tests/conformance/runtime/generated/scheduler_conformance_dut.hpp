@@ -2,11 +2,13 @@
 // Do not edit by hand.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
 #include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/probe.hpp"
+#include "cpptb/hierarchy.hpp"
 
 namespace cpptb::conformance {
 
@@ -45,6 +47,127 @@ enum SignalId : uint32_t {
     kSignalInternalClockedFanout = 100,
     kSignalInternalNetFanout = 102,
     kCpptbSignalCount = 103,
+};
+
+extern "C" {
+}  // extern "C"
+
+struct HierarchyTransport {
+    template <std::size_t Width>
+    static cpptb::probe::Value<Width> get(std::uint32_t id,
+                                           std::int32_t index) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("get", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit(std::uint32_t id, std::int32_t index,
+                        cpptb::probe::Value<Width> value) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("deposit", id);
+    }
+
+    template <std::size_t Width>
+    static void force(std::uint32_t id, std::int32_t index,
+                        cpptb::probe::Value<Width> value) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("force", id);
+    }
+
+    template <std::size_t Width>
+    static cpptb::LogicBits<Width> get_logic(
+        std::uint32_t id, std::int32_t index) {
+        switch (id) {
+            default: break;
+        }
+        fail("get_logic", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit_logic(
+        std::uint32_t id, std::int32_t index,
+        cpptb::LogicBits<Width> value) {
+        switch (id) {
+            default: break;
+        }
+        fail("deposit_logic", id);
+    }
+
+    template <std::size_t Width>
+    static void force_logic(
+        std::uint32_t id, std::int32_t index,
+        cpptb::LogicBits<Width> value) {
+        switch (id) {
+            default: break;
+        }
+        fail("force_logic", id);
+    }
+
+    static void release(std::uint32_t id, std::int32_t index) {
+        switch (id) {
+            default: break;
+        }
+        fail("release", id);
+    }
+
+    static cpptb::coro::Signal signal(std::uint32_t id,
+                                      const char* name) {
+        switch (id) {
+            default: break;
+        }
+        fail("edge", id);
+    }
+
+private:
+    [[noreturn]] static void fail(const char* operation,
+                                  std::uint32_t id) {
+        std::fprintf(stderr,
+                     "cpptb: hierarchy %s was not selected for signal %u\n",
+                     operation, id);
+        std::abort();
+    }
 };
 
 struct ConformanceClocks {
@@ -106,6 +229,19 @@ struct SchedulerConformanceDut {
     cpptb::dpi::StaticPackedSignal<64, false, false, kSignalInternalClockedFanout, 29> internal_clocked_fanout;
     cpptb::dpi::StaticPackedSignal<8, false, false, kSignalInternalNetFanout, 31> internal_net_fanout;
     InternalDut internal;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 0, "column", 32, true, cpptb::probe::Value<32>, false> column;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 1, "force_counter", 32, true, cpptb::probe::Value<32>, true> force_counter;
+    [[no_unique_address]] cpptb::hierarchy::Memory<HierarchyTransport, 2, "force_memory", 73, 7, 4, true, cpptb::probe::Value<73>, false> force_memory;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 3, "force_variable_u64", 64, true, cpptb::probe::Value<64>, false> force_variable_u64;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 4, "force_variable_wide", 73, true, cpptb::probe::Value<73>, false> force_variable_wide;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 5, "index", 32, true, cpptb::probe::Value<32>, false> index;
+    [[no_unique_address]] cpptb::hierarchy::Memory<HierarchyTransport, 6, "internal_memory", 73, 7, 4, true, cpptb::probe::Value<73>, false> internal_memory;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 7, "internal_net", 8, false, cpptb::probe::Value<8>, true> internal_net;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 8, "internal_u64", 64, true, cpptb::probe::Value<64>, false> internal_u64;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 9, "internal_wide", 73, true, cpptb::probe::Value<73>, false> internal_wide;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 10, "row", 32, true, cpptb::probe::Value<32>, false> row;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 11, "unused_predicate", 1, true, cpptb::probe::Value<1>, true> unused_predicate;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 12, "unused_stable", 1, true, cpptb::probe::Value<1>, true> unused_stable;
 };
 
 }  // namespace cpptb::conformance

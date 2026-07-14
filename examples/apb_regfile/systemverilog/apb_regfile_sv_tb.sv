@@ -13,7 +13,8 @@ module apb_regfile_sv_tb;
   logic apb_ready;
   logic apb_error;
 
-  int unsigned iterations;
+  localparam int unsigned kRegisterTransactions = 12;
+
   longint unsigned checks;
   int unsigned failures;
   longint unsigned sim_cycles;
@@ -133,12 +134,10 @@ module apb_regfile_sv_tb;
 
     checks = 0;
     failures = 0;
-    iterations = 12;
-    void'($value$plusargs("CPPTB_APB_REGFILE_ITERS=%d", iterations));
     reset_dut();
 
     state = 32'h1020_3040;
-    for (int unsigned index = 0; index < iterations; index++) begin
+    for (int unsigned index = 0; index < kRegisterTransactions; index++) begin
       state = state * 32'd1664525 + 32'd1013904223;
       value = state;
       address = (index % 4) * 4;
@@ -151,7 +150,7 @@ module apb_regfile_sv_tb;
 
     $display(
         "PURE_SV_APB_REGFILE_RESULT iterations=%0d checks=%0d sim_cycles=%0d failures=%0d",
-        iterations, checks, sim_cycles, failures);
+        1, checks, sim_cycles, failures);
     if (failures != 0) $fatal(1, "APB regfile pure-SV testbench failed");
     $finish;
   end

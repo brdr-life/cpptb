@@ -181,7 +181,7 @@ def validate_contract(result: dict[str, object]) -> None:
             raise ValueError(
                 f"{kernel} contract mismatch for {field}: {result[field]} != {value}"
             )
-    checksum = expected_checksum(iterations)
+    checksum = expected_checksum(iterations, kernel=kernel)
     if int(result["checksum"]) != checksum:
         raise ValueError(
             f"{kernel} checksum mismatch: {result['checksum']} != {checksum}"
@@ -494,6 +494,15 @@ def _binary(mode: str, kernel: str) -> Path:
     if mode == "cpp_dpi":
         return REPO / "build" / "benchmarks" / "authoring_core" / f"cpp_dpi_{kernel}" / "Vdpi_authoring_core"
     if mode == "pure_sv":
+        if kernel == "force_direct":
+            return (
+                REPO
+                / "build"
+                / "benchmarks"
+                / "authoring_core"
+                / "force_direct_sv_obj"
+                / "Vforce_direct_sv_tb"
+            )
         return REPO / "build" / "benchmarks" / "authoring_core" / "pure_sv_obj" / "Vauthoring_core_sv_tb"
     raise ValueError(f"unknown mode: {mode}")
 

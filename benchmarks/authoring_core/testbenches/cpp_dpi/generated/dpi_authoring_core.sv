@@ -20,6 +20,8 @@ module dpi_authoring_core;
   localparam int STEP_FALLING_EDGES = 16;
   localparam int STEP_OUTPUTS_CHANGED = 32;
   localparam int STEP_EDGE_INTEREST_CHANGED = 64;
+  localparam int STEP_NEXT_TICK_TIMER = 128;
+  localparam int STEP_TIMER_IDLE = 256;
 
   localparam int SIGNAL_CLK = 0;
   localparam int SIGNAL_RSTN = 1;
@@ -100,8 +102,8 @@ module dpi_authoring_core;
   import "DPI-C" function void authoring_core_dpi_pull_outputs(
       output int unsigned out_words[]
   );
-  import "DPI-C" context function longint unsigned authoring_core_dpi_next_timer_deadline();
-  import "DPI-C" context function int unsigned authoring_core_dpi_edge_interest(
+  import "DPI-C" function longint unsigned authoring_core_dpi_next_timer_deadline();
+  import "DPI-C" function int unsigned authoring_core_dpi_edge_interest(
       input int unsigned signal_id
   );
 
@@ -146,10 +148,13 @@ module dpi_authoring_core;
   event timer_kick;
   int status;
   bit track_falling_edges;
+  bit clock_drivers_active;
   int initial_requests;
   int unsigned in_words[0:INPUT_WORD_COUNT-1];
   int unsigned out_words[0:OUTPUT_WORD_COUNT-1];
   int unsigned edge_interest[0:CPPTB_SIGNAL_COUNT-1];
+  bit registered_clock[0:CPPTB_SIGNAL_COUNT-1];
+  bit primary_clock[0:CPPTB_SIGNAL_COUNT-1];
 
   task automatic pack_inputs();
     in_words[INPUT_SIGNAL_CLK] = clk;
@@ -284,11 +289,27 @@ module dpi_authoring_core;
       input int initial_requests
   );
     int requests;
+    longint unsigned generation;
     requests = initial_requests;
     if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
       edge_interest[SIGNAL_RSPVALID] = authoring_core_dpi_edge_interest(SIGNAL_RSPVALID);
     end
-    if ((requests & STEP_TIMER_CHANGED) != 0) begin
+    if ((requests & STEP_TIMER_IDLE) != 0) begin
+      timer_deadline = NO_TIMER;
+      timer_generation++;
+    end
+    if ((requests & STEP_NEXT_TICK_TIMER) != 0) begin
+      timer_deadline = $time + 1;
+      timer_generation++;
+      generation = timer_generation;
+      if (timer_owner_target == NO_TIMER) begin
+        -> timer_kick;
+      end else if (timer_deadline < timer_owner_target) begin
+        fork
+          timer_wakeup(timer_deadline, generation);
+        join_none
+      end
+    end else if ((requests & STEP_TIMER_CHANGED) != 0) begin
       update_timer_schedule();
     end
   endtask
@@ -326,9 +347,9 @@ module dpi_authoring_core;
       @(rsp_valid);
       if (status == 0) begin
         event_edge = rsp_valid ? EDGE_RISING : EDGE_FALLING;
-        if ((status == 0) &&
-            (((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_RSPVALID] & 1) != 0)) ||
-             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_RSPVALID] & 2) != 0)))) begin
+        if (
+            ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_RSPVALID] & 1) != 0)) ||
+            ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_RSPVALID] & 2) != 0))) begin
           run_step(PHASE_EDGE, SIGNAL_RSPVALID, event_edge, requests);
           service_requests(requests);
         end
@@ -361,6 +382,7 @@ module dpi_authoring_core;
     iterations = 10000;
     status = 0;
     track_falling_edges = 1'b0;
+    clock_drivers_active = 1'b0;
     void'($value$plusargs("AUTHORING_CORE_ITERS=%d", iterations));
 
     for (int i = 0; i < INPUT_WORD_COUNT; i++) begin
@@ -371,11 +393,14 @@ module dpi_authoring_core;
     end
     for (int i = 0; i < CPPTB_SIGNAL_COUNT; i++) begin
       edge_interest[i] = '0;
+      registered_clock[i] = 1'b0;
+      primary_clock[i] = 1'b0;
     end
 
     authoring_core_dpi_init(iterations, TIMEPRECISION_FS);
     run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);
     service_requests(initial_requests);
+    clock_drivers_active = 1'b1;
     if (status == 0) begin
       fork
         timer_owner();
@@ -457,47 +482,67 @@ module dpi_authoring_core;
     dpi_authoring_core_port_21_get = $unsigned(array_wide_o[index_0]);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_internal_0_get;
-  function int unsigned dpi_authoring_core_internal_0_get();
-    dpi_authoring_core_internal_0_get = i_dut.cycle_count;
+  export "DPI-C" function dpi_authoring_core_hierarchy_1_get;
+  function int unsigned dpi_authoring_core_hierarchy_1_get(input int index);
+    dpi_authoring_core_hierarchy_1_get = $unsigned(i_dut.cycle_count);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_internal_1_get;
-  function int unsigned dpi_authoring_core_internal_1_get();
-    dpi_authoring_core_internal_1_get = i_dut.pending_data;
+  bit [31:0] hierarchy_8_force_shadow;
+
+  export "DPI-C" function dpi_authoring_core_hierarchy_8_get;
+  function int unsigned dpi_authoring_core_hierarchy_8_get(input int index);
+    dpi_authoring_core_hierarchy_8_get = $unsigned(i_dut.force_target);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_internal_1_deposit;
-  function void dpi_authoring_core_internal_1_deposit(input int unsigned value);
-    i_dut.pending_data = value;
+  export "DPI-C" function dpi_authoring_core_hierarchy_8_force;
+  function void dpi_authoring_core_hierarchy_8_force(input int index, input int unsigned value);
+    hierarchy_8_force_shadow = value;
+    force i_dut.force_target = hierarchy_8_force_shadow;
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_internal_2_get;
-  function int unsigned dpi_authoring_core_internal_2_get(input int index);
-    dpi_authoring_core_internal_2_get = i_dut.memory[index];
+  export "DPI-C" function dpi_authoring_core_hierarchy_8_release;
+  function void dpi_authoring_core_hierarchy_8_release(input int index);
+    release i_dut.force_target;
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_internal_2_deposit;
-  function void dpi_authoring_core_internal_2_deposit(input int index, input int unsigned value);
+  export "DPI-C" function dpi_authoring_core_hierarchy_9_get_logic;
+  function void dpi_authoring_core_hierarchy_9_get_logic(input int index, output logic [3:0] value);
+    value = i_dut.hierarchy_logic;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_hierarchy_9_deposit_logic;
+  function void dpi_authoring_core_hierarchy_9_deposit_logic(input int index, input logic [3:0] value);
+    i_dut.hierarchy_logic = value;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_hierarchy_10_get;
+  function void dpi_authoring_core_hierarchy_10_get(input int index, output bit [136:0] value);
+    value = $unsigned(i_dut.hierarchy_wide);
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_hierarchy_10_deposit;
+  function void dpi_authoring_core_hierarchy_10_deposit(input int index, input bit [136:0] value);
+    i_dut.hierarchy_wide = value;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_hierarchy_12_get;
+  function int unsigned dpi_authoring_core_hierarchy_12_get(input int index);
+    dpi_authoring_core_hierarchy_12_get = $unsigned(i_dut.memory[index]);
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_hierarchy_12_deposit;
+  function void dpi_authoring_core_hierarchy_12_deposit(input int index, input int unsigned value);
     i_dut.memory[index] = value;
   endfunction
 
-  bit [31:0] internal_3_force_shadow;
-
-  export "DPI-C" function dpi_authoring_core_internal_3_get;
-  function int unsigned dpi_authoring_core_internal_3_get();
-    dpi_authoring_core_internal_3_get = i_dut.force_target;
+  export "DPI-C" function dpi_authoring_core_hierarchy_14_get;
+  function int unsigned dpi_authoring_core_hierarchy_14_get(input int index);
+    dpi_authoring_core_hierarchy_14_get = $unsigned(i_dut.pending_data);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_internal_3_force;
-  function void dpi_authoring_core_internal_3_force(input int unsigned value);
-    internal_3_force_shadow = value;
-    force i_dut.force_target = internal_3_force_shadow;
-  endfunction
-
-  export "DPI-C" function dpi_authoring_core_internal_3_release;
-  function void dpi_authoring_core_internal_3_release();
-    release i_dut.force_target;
+  export "DPI-C" function dpi_authoring_core_hierarchy_14_deposit;
+  function void dpi_authoring_core_hierarchy_14_deposit(input int index, input int unsigned value);
+    i_dut.pending_data = value;
   endfunction
 
 endmodule : dpi_authoring_core

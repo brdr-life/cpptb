@@ -18,4 +18,5 @@ benchmarks/uvm-sim-compare/work/
 benchmarks/uvm-sim-compare/results/*.log
 benchmarks/authoring_core/results/
 benchmarks/peripheral_suite/results/
+benchmarks/framework_comparison/**/results/
 benchmarks/results/

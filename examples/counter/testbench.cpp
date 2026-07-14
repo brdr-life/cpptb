@@ -1,40 +1,47 @@
-#include "examples/counter/framework.hpp"
+#include <cstdint>
+
+#include "cpptb/cpptb.hpp"
+#include "examples/counter/generated/counter_dut.hpp"
 
 namespace cpptb::examples::counter {
 namespace {
 
+using cpptb::generated::counter::Dut;
 using coro::Delay;
 using coro::FallingEdge;
 using coro::RisingEdge;
 using coro::Task;
 using namespace coro;
 
-Task<void> counter_sequence(CounterTb tb) {
-    tb.dut.rst_n.set(0);
-    tb.dut.enable.set(0);
+constexpr uint32_t kCountCycles = 8;
 
-    co_await clock_cycles(tb.dut.clk, 2);
-    co_await FallingEdge{tb.dut.clk};
+Task<void> counter_sequence(Dut dut, TestContext& test) {
+    dut.clk.set(0);
+    test.start_clock(dut.clk, 10_ns);
 
-    tb.dut.rst_n.set(1);
-    tb.dut.enable.set(1);
+    dut.rst_n.set(0);
+    dut.enable.set(0);
 
-    for (uint32_t expected = 1; expected <= tb.iterations(); ++expected) {
-        co_await RisingEdge{tb.dut.clk};
+    co_await clock_cycles(dut.clk, 2);
+    co_await FallingEdge{dut.clk};
+
+    dut.rst_n.set(1);
+    dut.enable.set(1);
+
+    for (uint32_t expected = 1; expected <= kCountCycles; ++expected) {
+        co_await RisingEdge{dut.clk};
         co_await Delay{1_ps};
-        tb.expect_eq("enabled count", tb.dut.count.get(), expected);
+        test.expect_eq("enabled count", dut.count.get(), expected);
     }
 
-    tb.dut.enable.set(0);
-    co_await RisingEdge{tb.dut.clk};
+    dut.enable.set(0);
+    co_await RisingEdge{dut.clk};
     co_await Delay{1_ps};
-    tb.expect_eq("disabled count", tb.dut.count.get(), tb.iterations());
+    test.expect_eq("disabled count", dut.count.get(), kCountCycles);
 }
+
+CPPTB_REGISTER_TEST(counter_sequence);
 
 }  // namespace
-
-void register_user_testbench(CounterTb& tb) {
-    tb.run(counter_sequence(tb));
-}
 
 }  // namespace cpptb::examples::counter

@@ -1,0 +1,53 @@
+[project]
+site_name = "cpptb"
+site_description = "A C++20 coroutine testbench framework for SystemVerilog simulators."
+docs_dir = "docs"
+site_dir = "build/docs/zensical"
+extra_css = ["_zensical/extra.css", "_assets/code-tabs.css"]
+extra_javascript = ["_assets/code-tabs.js"]
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = "getting-started.md" },
+  { "Guides" = [
+    { "Testbench authoring" = "testbench-authoring.md" },
+    { "Hierarchical DUT access" = "hierarchy.md" },
+    { "Examples" = [
+      { "Overview" = "examples.md" },
+      { "Counter" = "examples/counter.md" },
+      { "Clockless timers" = "examples/timer-only.md" },
+      { "FIFO scoreboard" = "examples/fifo-scoreboard.md" },
+      { "Multiple clocks" = "examples/multiclock.md" },
+      { "APB register file" = "examples/apb-regfile.md" },
+      { "Watchdogs and timeouts" = "examples/watchdog-timeout.md" },
+      { "Fault injection" = "examples/fault-injection.md" },
+      { "Rich data" = "examples/rich-data.md" },
+      { "Heavy benchmarks" = "examples/heavy-benchmarks.md" },
+      { "Open-source cores" = "examples/open-source-cores.md" },
+    ] },
+    { "Clocking" = "clocking.md" },
+    { "Scheduling" = "scheduling.md" },
+    { "Code generation" = "code-generation.md" },
+  ] },
+  { "Internals" = [
+    { "Architecture" = "architecture.md" },
+    { "Performance" = "performance.md" },
+  ] },
+  { "Project" = [
+    { "Roadmap" = "roadmap.md" },
+  ] },
+]
+
+[project.theme]
+variant = "modern"
+features = [
+  "navigation.sections",
+  "navigation.path",
+  "navigation.top",
+  "toc.follow",
+  "search.highlight",
+  "content.code.copy",
+]
+
+[project.validation]
+invalid_links = true
+invalid_link_anchors = true

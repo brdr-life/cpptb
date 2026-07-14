@@ -215,10 +215,56 @@ class Internal:
 
 
 @dataclass(frozen=True)
+class HierarchyScope:
+    """One elaborated module, interface, or generate scope below the DUT."""
+
+    hdl_path: str
+    cpp_path: tuple[str, ...]
+    symbol_kind: str
+
+
+@dataclass(frozen=True)
+class HierarchySignal:
+    """One elaborated variable or net available for on-demand access."""
+
+    hdl_path: str
+    cpp_path: tuple[str, ...]
+    symbol_kind: str
+    width: int
+    type_kind: str = "integral"
+    signed: bool = False
+    four_state: bool = True
+    unpacked: tuple[UnpackedRange, ...] = ()
+    packed_type: PackedType | None = field(default=None, compare=False)
+
+    @property
+    def depositable(self) -> bool:
+        return self.symbol_kind == "variable"
+
+
+@dataclass(frozen=True)
+class HierarchyParameter:
+    """An elaborated integral parameter exposed as a C++ constant."""
+
+    hdl_path: str
+    cpp_path: tuple[str, ...]
+    value: int
+    local: bool = False
+
+
+@dataclass(frozen=True)
+class HierarchyCatalog:
+    scopes: tuple[HierarchyScope, ...] = ()
+    signals: tuple[HierarchySignal, ...] = ()
+    parameters: tuple[HierarchyParameter, ...] = ()
+
+
+@dataclass(frozen=True)
 class DesignIR:
     module: str
     ports: tuple[Port, ...]
     internals: tuple[Internal, ...] = ()
+    hierarchy: HierarchyCatalog = field(default_factory=HierarchyCatalog)
 
     def transport_signature(
         self,

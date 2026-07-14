@@ -265,18 +265,36 @@ Task<void> hier_probe_feature(Context& context, uint32_t iteration,
 
     co_await FallingEdge{context.dut.clk};
     ++context.result.features.hier_probe_reads;
-    const uint32_t cycle_count = context.dut.internal.cycle_count.get();
+    const uint32_t cycle_count = context.dut.cycle_count.get();
     check(context, "hierarchical cycle count",
           iteration == 0 || cycle_count > previous_cycle_count, 1);
     previous_cycle_count = cycle_count;
 
     ++context.result.features.hier_probe_deposits;
-    context.dut.internal.pending_data.deposit(value);
+    context.dut.pending_data.deposit(value);
     co_await Delay{1_ps};
 
     ++context.result.features.hier_probe_reads;
     check(context, "hierarchical deposit",
-          context.dut.internal.pending_data.get(), value);
+          context.dut.pending_data.get(), value);
+}
+
+Task<void> hier_data_feature(Context& context, uint32_t iteration) {
+    const auto wide = wide137_stimulus(iteration);
+    const auto logic = LogicBits<4>::from_uint(stimulus(iteration) & 0xfu);
+
+    co_await FallingEdge{context.dut.clk};
+    ++context.result.features.hier_data_deposits;
+    context.dut.hierarchy_wide.deposit(wide);
+    ++context.result.features.hier_data_reads;
+    check137(context, "hierarchy wide data", context.dut.hierarchy_wide.get(),
+             wide);
+
+    ++context.result.features.hier_data_deposits;
+    context.dut.hierarchy_logic.deposit_logic(logic);
+    ++context.result.features.hier_data_reads;
+    check(context, "hierarchy four-state data",
+          context.dut.hierarchy_logic.get_logic() == logic, 1);
 }
 
 Task<void> mem_backdoor_feature(Context& context, uint32_t iteration) {
@@ -285,12 +303,12 @@ Task<void> mem_backdoor_feature(Context& context, uint32_t iteration) {
 
     co_await FallingEdge{context.dut.clk};
     ++context.result.features.mem_backdoor_deposits;
-    context.dut.internal.memory.at(address).deposit(value);
+    context.dut.memory.at(address).deposit(value);
     co_await Delay{1_ps};
 
     ++context.result.features.mem_backdoor_reads;
     check(context, "memory backdoor read",
-          context.dut.internal.memory.at(address).get(), value);
+          context.dut.memory.at(address).get(), value);
 
     context.dut.mem_addr_i.set(static_cast<uint32_t>(address));
     context.dut.mem_we_i.set(0);
@@ -328,7 +346,7 @@ Task<void> mem_probe_read_feature(Context& context, uint32_t iteration) {
     co_await FallingEdge{context.dut.clk};
     context.dut.mem_addr_i.set(static_cast<uint32_t>(address));
     ++context.result.features.probe_diag_reads;
-    const uint32_t internal = context.dut.internal.memory.at(address).get();
+    const uint32_t internal = context.dut.memory.at(address).get();
 
     // The testbench, not deposit/get, chooses its observation boundaries.
     co_await Delay{1_ps};
@@ -346,7 +364,7 @@ Task<void> mem_probe_deposit_feature(Context& context, uint32_t iteration) {
     co_await FallingEdge{context.dut.clk};
     context.dut.mem_addr_i.set(static_cast<uint32_t>(address));
     ++context.result.features.probe_diag_deposits;
-    context.dut.internal.memory.at(address).deposit(value);
+    context.dut.memory.at(address).deposit(value);
 
     co_await Delay{1_ps};
     co_await RisingEdge{context.dut.clk};
@@ -366,9 +384,9 @@ Task<void> mem_probe_read_deposit_feature(Context& context,
     co_await FallingEdge{context.dut.clk};
     context.dut.mem_addr_i.set(static_cast<uint32_t>(address));
     ++context.result.features.probe_diag_reads;
-    const uint32_t internal = context.dut.internal.memory.at(address).get();
+    const uint32_t internal = context.dut.memory.at(address).get();
     ++context.result.features.probe_diag_deposits;
-    context.dut.internal.memory.at(address).deposit(value);
+    context.dut.memory.at(address).deposit(value);
 
     co_await Delay{1_ps};
     check(context, "memory probe read before deposit", internal,
@@ -386,12 +404,12 @@ Task<void> force_release_feature(Context& context, uint32_t iteration) {
 
     ++context.result.features.force_release;
     context.dut.force_source_i.set(source);
-    context.dut.internal.force_target.force(forced);
+    context.dut.force_target.force(forced);
     co_await Delay{1_ps};
     check(context, "forced internal net fanout",
           context.dut.force_fanout_o.get(), forced);
 
-    context.dut.internal.force_target.release();
+    context.dut.force_target.release();
     co_await Delay{1_ps};
     check(context, "released internal net driver",
           context.dut.force_fanout_o.get(), source ^ driver_mask);
@@ -553,7 +571,7 @@ void report(Context& context) {
         "hier_probe_deposits=%llu mem_backdoor_reads=%llu "
         "mem_backdoor_deposits=%llu probe_diag_reads=%llu "
         "probe_diag_deposits=%llu signal_edges=%llu force_release=%llu "
-        "packed_view=%llu "
+        "packed_view=%llu hier_data_reads=%llu hier_data_deposits=%llu "
         "wall_ms=%.3f\n",
         kernel_name(), context.iterations,
         static_cast<unsigned long long>(context.result.transactions),
@@ -588,7 +606,22 @@ void report(Context& context) {
         static_cast<unsigned long long>(feature.signal_edges),
         static_cast<unsigned long long>(feature.force_release),
         static_cast<unsigned long long>(feature.packed_view),
+        static_cast<unsigned long long>(feature.hier_data_reads),
+        static_cast<unsigned long long>(feature.hier_data_deposits),
         static_cast<double>(elapsed_us) / 1000.0);
+}
+
+Task<void> run_force_direct(Context context) {
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t forced = stimulus(iteration) ^ 0xa5a5'5a5au;
+        ++context.result.features.force_release;
+        context.dut.force_target.force(forced);
+        check(context, "direct forced net readback",
+              context.dut.force_target.get(), forced);
+        context.dut.force_target.release();
+    }
+    report(context);
+    co_return;
 }
 
 Task<void> run(Context context) {
@@ -727,6 +760,10 @@ Task<void> run(Context context) {
         co_await hier_probe_feature(context, iteration, previous_cycle_count);
 #endif
 
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_HIER_DATA
+        co_await hier_data_feature(context, iteration);
+#endif
+
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEM_BACKDOOR || \
     AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ALL
         co_await mem_backdoor_feature(context, iteration);
@@ -766,10 +803,18 @@ Task<void> run(Context context) {
 }  // namespace
 
 void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
-                        uint32_t iterations, BenchResult& result) {
+                        uint32_t iterations, BenchResult& result,
+                        coro::ClockRegistrar clocks) {
     result = BenchResult{};
     result.start = std::chrono::steady_clock::now();
+    dut.clk.set(0);
+    clocks.start(dut.clk, 2_ns);
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_FORCE_DIRECT
+    scheduler.spawn_detached(
+        run_force_direct(Context{scheduler, dut, iterations, result}));
+#else
     scheduler.spawn_detached(run(Context{scheduler, dut, iterations, result}));
+#endif
 }
 
 }  // namespace cpptb::benchmarks::authoring_core

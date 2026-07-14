@@ -1,0 +1,13 @@
+/* Keep the reading column close to Furo while leaving room for wide tables. */
+.md-grid {
+  max-width: 72rem;
+}
+
+.md-typeset__table {
+  width: 100%;
+}
+
+.md-typeset__table table:not([class]) {
+  display: table;
+  width: 100%;
+}

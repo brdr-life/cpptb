@@ -102,7 +102,7 @@ using StaticOnDemandMatrix = cpptb::dpi::StaticOnDemandFixedArray<
 
 static_assert(ValidStaticPackedSpec<true, true>);
 static_assert(ValidStaticPackedSpec<false, false>);
-static_assert(!ValidStaticPackedSpec<true, false>);
+static_assert(ValidStaticPackedSpec<true, false>);
 static_assert(!ValidStaticPackedSpec<false, true>);
 static_assert(ValidStaticOnDemandSpec<true, true, static_on_demand_set>);
 static_assert(ValidStaticOnDemandSpec<false, false, nullptr>);
@@ -1055,6 +1055,7 @@ int main() {
         std::array<uint32_t, 8> inputs{};
         std::array<uint32_t, 8> outputs{};
         std::array<bool, 8> configured_clock{};
+        std::array<bool, 8> edge_observer{};
         std::array<bool, 8> local_edge_capable{};
         bool outputs_dirty = false;
         bool local_edge_delivery_enabled = true;
@@ -1063,6 +1064,7 @@ int main() {
             .outputs = outputs.data(),
             .current_inputs = nullptr,
             .configured_clock = configured_clock.data(),
+            .edge_observer = edge_observer.data(),
             .local_edge_capable = local_edge_capable.data(),
             .outputs_dirty = &outputs_dirty,
             .local_edge_delivery_enabled = &local_edge_delivery_enabled,
@@ -1175,6 +1177,30 @@ int main() {
             on_demand_dynamic_wakes, 1);
         passed &= expect("dynamic on-demand rising waiter completes",
                          on_demand_dynamic_waiter.done() ? 1 : 0, 1);
+    }
+    {
+        const auto before =
+            cpptb::probe::detail::current_callback_epoch();
+        uint64_t first = 0;
+        {
+            cpptb::probe::detail::DpiCallbackScope outer;
+            first = cpptb::probe::detail::current_callback_epoch();
+            passed &= expect("callback epoch advances on outer entry",
+                             first != before, 1);
+            {
+                cpptb::probe::detail::DpiCallbackScope nested;
+                passed &= expect(
+                    "nested callback scope keeps callback epoch",
+                    cpptb::probe::detail::current_callback_epoch() == first,
+                    1);
+            }
+        }
+        {
+            cpptb::probe::detail::DpiCallbackScope next;
+            passed &= expect(
+                "next callback receives a new epoch",
+                cpptb::probe::detail::current_callback_epoch() != first, 1);
+        }
     }
     {
         narrow_probe_value = 0xffff'ffffu;
