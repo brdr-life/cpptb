@@ -7,7 +7,8 @@ module timer_only_probe_sv_tb;
   logic [31:0] slow_value;
   logic [31:0] slow_echo;
 
-  int unsigned iterations;
+  localparam int unsigned kCadenceSamples = 9;
+
   longint unsigned checks;
   int unsigned failures;
   longint unsigned sim_cycles;
@@ -28,7 +29,7 @@ module timer_only_probe_sv_tb;
     logic [31:0] value;
     longint unsigned expected_time_ps;
 
-    for (int unsigned index = 0; index < iterations; index++) begin
+    for (int unsigned index = 0; index < kCadenceSamples; index++) begin
       if (index == 0) #7ns;
       else #6999ps;
       value = 32'h1000 + index * 17;
@@ -46,7 +47,7 @@ module timer_only_probe_sv_tb;
     logic [31:0] value;
     longint unsigned expected_time_ps;
 
-    for (int unsigned index = 0; index < iterations; index++) begin
+    for (int unsigned index = 0; index < kCadenceSamples; index++) begin
       if (index == 0) #11ns;
       else #10999ps;
       value = 32'h2000 + index * 29;
@@ -68,17 +69,14 @@ module timer_only_probe_sv_tb;
     checks = 0;
     failures = 0;
     sim_cycles = 0;
-    iterations = 9;
-    void'($value$plusargs("CPPTB_TIMER_ONLY_ITERS=%d", iterations));
-
     fork
       fast_cadence();
       slow_cadence();
     join
 
-    last = iterations - 1;
+    last = kCadenceSamples - 1;
     expect_eq("timer-only final absolute time", $time,
-              longint'(iterations) * 11000 + 1);
+              longint'(kCadenceSamples) * 11000 + 1);
     expect_eq("timer-only final fast value", fast_echo,
               (32'h1000 + last * 17) ^ 32'h1357_9bdf);
     expect_eq("timer-only final slow value", slow_echo,
@@ -86,7 +84,7 @@ module timer_only_probe_sv_tb;
 
     $display(
         "PURE_SV_TIMER_ONLY_RESULT iterations=%0d checks=%0d sim_cycles=%0d failures=%0d",
-        iterations, checks, sim_cycles, failures);
+        1, checks, sim_cycles, failures);
     if (failures != 0) begin
       $fatal(1, "timer_only_probe pure-SV testbench failed");
     end

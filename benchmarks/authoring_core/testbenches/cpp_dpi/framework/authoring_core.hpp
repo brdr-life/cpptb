@@ -33,6 +33,8 @@
 #define AUTHORING_CORE_KERNEL_ARRAY_MULTIDIM 22
 #define AUTHORING_CORE_KERNEL_FORCE_RELEASE 23
 #define AUTHORING_CORE_KERNEL_PACKED_VIEW 24
+#define AUTHORING_CORE_KERNEL_FORCE_DIRECT 25
+#define AUTHORING_CORE_KERNEL_HIER_DATA 26
 
 #ifndef AUTHORING_CORE_KERNEL
 #define AUTHORING_CORE_KERNEL AUTHORING_CORE_KERNEL_CONTROL
@@ -69,6 +71,8 @@ struct FeatureCounts {
     uint64_t signal_edges = 0;
     uint64_t force_release = 0;
     uint64_t packed_view = 0;
+    uint64_t hier_data_reads = 0;
+    uint64_t hier_data_deposits = 0;
 };
 
 struct BenchResult : cpptb::TestResult {
@@ -129,12 +133,17 @@ constexpr const char* kernel_name() {
     return "force_release";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_PACKED_VIEW
     return "packed_view";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_FORCE_DIRECT
+    return "force_direct";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_HIER_DATA
+    return "hier_data";
 #else
 #error "Unknown AUTHORING_CORE_KERNEL"
 #endif
 }
 
 void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
-                        uint32_t iterations, BenchResult& result);
+                        uint32_t iterations, BenchResult& result,
+                        coro::ClockRegistrar clocks);
 
 }  // namespace cpptb::benchmarks::authoring_core

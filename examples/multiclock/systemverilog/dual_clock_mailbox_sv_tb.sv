@@ -18,8 +18,10 @@ module dual_clock_mailbox_sv_tb;
 
   logic [7:0] probe_in;
   logic [7:0] probe_echo;
+  logic output_clk;
 
-  int unsigned iterations;
+  localparam int unsigned kTransferCount = 16;
+
   longint unsigned checks;
   int unsigned failures;
   longint unsigned sim_cycles;
@@ -63,7 +65,7 @@ module dual_clock_mailbox_sv_tb;
   task automatic producer();
     wait_reset_write();
 
-    for (int unsigned value = 0; value < iterations; value++) begin
+    for (int unsigned value = 0; value < kTransferCount; value++) begin
       forever begin
         @(posedge write_clk);
         // The edge sample point is already safe for a read-only observation.
@@ -86,7 +88,7 @@ module dual_clock_mailbox_sv_tb;
 
     wait_reset_read();
 
-    for (int unsigned expected = 0; expected < iterations; expected++) begin
+    for (int unsigned expected = 0; expected < kTransferCount; expected++) begin
       forever begin
         @(posedge read_clk);
         #1ps;
@@ -109,8 +111,8 @@ module dual_clock_mailbox_sv_tb;
       consumer();
     join
 
-    expect_eq("write count", write_count, iterations);
-    expect_eq("read count", read_count, iterations);
+    expect_eq("write count", write_count, kTransferCount);
+    expect_eq("read count", read_count, kTransferCount);
   endtask
 
   task automatic trigger_and_phase_probe();
@@ -146,6 +148,11 @@ module dual_clock_mailbox_sv_tb;
               8'h3c);
   endtask
 
+  task automatic output_clock_probe();
+    @(posedge output_clk);
+    expect_eq("DUT output clock edge", $time, 22);
+  endtask
+
   initial begin
     write_clk = 1'b0;
     sim_cycles = 0;
@@ -171,18 +178,16 @@ module dual_clock_mailbox_sv_tb;
     probe_in = '0;
     checks = 0;
     failures = 0;
-    iterations = 16;
-    void'($value$plusargs("CPPTB_MULTICLOCK_ITERS=%d", iterations));
-
     fork
       reset_dut();
       traffic();
       trigger_and_phase_probe();
+      output_clock_probe();
     join
 
     $display(
         "PURE_SV_MULTICLOCK_RESULT iterations=%0d checks=%0d sim_cycles=%0d failures=%0d",
-        iterations, checks, sim_cycles, failures);
+        1, checks, sim_cycles, failures);
     if (failures != 0) begin
       $fatal(1, "dual_clock_mailbox pure-SV testbench failed");
     end
@@ -207,6 +212,7 @@ module dual_clock_mailbox_sv_tb;
       .read_ready(read_ready),
       .read_count(read_count),
       .probe_in(probe_in),
-      .probe_echo(probe_echo)
+      .probe_echo(probe_echo),
+      .output_clk(output_clk)
   );
 endmodule : dual_clock_mailbox_sv_tb

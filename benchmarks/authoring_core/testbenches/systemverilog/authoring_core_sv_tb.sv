@@ -71,6 +71,8 @@ module authoring_core_sv_tb;
   longint unsigned signal_edges;
   longint unsigned force_release_count;
   longint unsigned packed_view_count;
+  longint unsigned hier_data_reads;
+  longint unsigned hier_data_deposits;
   event authored_event;
   bit authored_event_set;
   event channel_available;
@@ -481,6 +483,24 @@ module authoring_core_sv_tb;
     check32(i_dut.pending_data, value, "hierarchical deposit");
   endtask
 
+  task automatic hier_data_feature(input int unsigned iteration);
+    bit [136:0] wide;
+    logic [3:0] logic_value;
+    wide = wide137_stimulus(iteration);
+    logic_value = stimulus(iteration)[3:0];
+
+    @(negedge clk);
+    hier_data_deposits++;
+    i_dut.hierarchy_wide = wide;
+    hier_data_reads++;
+    check137(i_dut.hierarchy_wide, wide, "hierarchy wide data");
+
+    hier_data_deposits++;
+    i_dut.hierarchy_logic = logic_value;
+    hier_data_reads++;
+    check32(i_dut.hierarchy_logic, logic_value, "hierarchy four-state data");
+  endtask
+
   task automatic mem_backdoor_feature(input int unsigned iteration);
     logic [7:0] address;
     logic [31:0] value;
@@ -746,6 +766,13 @@ module authoring_core_sv_tb;
     end
   endtask
 
+  task automatic run_hier_data();
+    for (int unsigned i = 0; i < iterations; i++) begin
+      hier_data_feature(i);
+      transact(i, stimulus(i), 1'b0);
+    end
+  endtask
+
   task automatic run_mem_backdoor();
     for (int unsigned i = 0; i < iterations; i++) begin
       mem_backdoor_feature(i);
@@ -869,6 +896,8 @@ module authoring_core_sv_tb;
     signal_edges = 0;
     force_release_count = 0;
     packed_view_count = 0;
+    hier_data_reads = 0;
+    hier_data_deposits = 0;
     wide64_i = '0;
     wide137_i = '0;
     fixed_a_i = '0;
@@ -912,6 +941,7 @@ module authoring_core_sv_tb;
       "array_multidim": run_array_multidim();
       "force_release": run_force_release();
       "packed_view": run_packed_view();
+      "hier_data": run_hier_data();
       default: $fatal(1, "unknown AUTHORING_CORE_KERNEL=%s", kernel);
     endcase
 
@@ -921,7 +951,7 @@ module authoring_core_sv_tb;
     end
     check32(request_count, iterations, "request count");
     check32(response_count, iterations, "response count");
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d channel_send=%0d channel_receive=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d",
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d channel_send=%0d channel_receive=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d",
              kernel, iterations, transactions, checks, sim_cycles, checksum,
              failures, task_value_count, clock_cycles_count, timeout_count,
              timeout_hits, task_timeout_count, task_timeout_hits,
@@ -932,7 +962,8 @@ module authoring_core_sv_tb;
              mem_rw_count,
              hier_probe_reads, hier_probe_deposits, mem_backdoor_reads,
              mem_backdoor_deposits, probe_diag_reads, probe_diag_deposits,
-             signal_edges, force_release_count, packed_view_count);
+             signal_edges, force_release_count, packed_view_count,
+             hier_data_reads, hier_data_deposits);
     $finish;
   end
 

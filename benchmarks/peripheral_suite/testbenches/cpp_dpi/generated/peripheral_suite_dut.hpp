@@ -2,10 +2,12 @@
 // Do not edit by hand.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
 #include "cpptb/coro_runtime.hpp"
+#include "cpptb/hierarchy.hpp"
 
 namespace cpptb::benchmarks::peripheral_suite {
 
@@ -76,6 +78,653 @@ enum SignalId : uint32_t {
     kCpptbSignalCount,
 };
 
+extern "C" {
+}  // extern "C"
+
+struct HierarchyTransport {
+    template <std::size_t Width>
+    static cpptb::probe::Value<Width> get(std::uint32_t id,
+                                           std::int32_t index) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("get", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit(std::uint32_t id, std::int32_t index,
+                        cpptb::probe::Value<Width> value) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("deposit", id);
+    }
+
+    template <std::size_t Width>
+    static void force(std::uint32_t id, std::int32_t index,
+                        cpptb::probe::Value<Width> value) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("force", id);
+    }
+
+    template <std::size_t Width>
+    static cpptb::LogicBits<Width> get_logic(
+        std::uint32_t id, std::int32_t index) {
+        switch (id) {
+            default: break;
+        }
+        fail("get_logic", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit_logic(
+        std::uint32_t id, std::int32_t index,
+        cpptb::LogicBits<Width> value) {
+        switch (id) {
+            default: break;
+        }
+        fail("deposit_logic", id);
+    }
+
+    template <std::size_t Width>
+    static void force_logic(
+        std::uint32_t id, std::int32_t index,
+        cpptb::LogicBits<Width> value) {
+        switch (id) {
+            default: break;
+        }
+        fail("force_logic", id);
+    }
+
+    static void release(std::uint32_t id, std::int32_t index) {
+        switch (id) {
+            default: break;
+        }
+        fail("release", id);
+    }
+
+    static cpptb::coro::Signal signal(std::uint32_t id,
+                                      const char* name) {
+        switch (id) {
+            default: break;
+        }
+        fail("edge", id);
+    }
+
+private:
+    [[noreturn]] static void fail(const char* operation,
+                                  std::uint32_t id) {
+        std::fprintf(stderr,
+                     "cpptb: hierarchy %s was not selected for signal %u\n",
+                     operation, id);
+        std::abort();
+    }
+};
+
+struct HierarchyITimerTimerGen0TimerIIRegsScope {
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 286, "i_timer.TIMER_GEN[0].timer_i.i_regs.arst_n", 1, false, cpptb::probe::Value<1>, true> arst_n;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 287, "i_timer.TIMER_GEN[0].timer_i.i_regs.clk", 1, false, cpptb::probe::Value<1>, true> clk;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 288, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_addr", 4, true, cpptb::probe::Value<4>, true> cpuif_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 289, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_ack", 1, true, cpptb::probe::Value<1>, true> cpuif_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 290, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_data", 32, true, cpptb::probe::Value<32>, true> cpuif_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 291, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_err", 1, true, cpptb::probe::Value<1>, true> cpuif_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 292, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req", 1, true, cpptb::probe::Value<1>, true> cpuif_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 293, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_is_wr", 1, true, cpptb::probe::Value<1>, true> cpuif_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 294, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_masked", 1, true, cpptb::probe::Value<1>, true> cpuif_req_masked;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 295, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_stall_rd", 1, true, cpptb::probe::Value<1>, true> cpuif_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 296, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_stall_wr", 1, true, cpptb::probe::Value<1>, true> cpuif_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 297, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_ack", 1, true, cpptb::probe::Value<1>, true> cpuif_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 298, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_biten", 32, true, cpptb::probe::Value<32>, true> cpuif_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 299, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_data", 32, true, cpptb::probe::Value<32>, true> cpuif_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 300, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_err", 1, true, cpptb::probe::Value<1>, true> cpuif_wr_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 301, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_addr", 4, true, cpptb::probe::Value<4>, true> decoded_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 302, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_err", 1, true, cpptb::probe::Value<1>, true> decoded_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 303, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_req", 1, true, cpptb::probe::Value<1>, true> decoded_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 304, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_req_is_wr", 1, true, cpptb::probe::Value<1>, true> decoded_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 305, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_wr_biten", 32, true, cpptb::probe::Value<32>, true> decoded_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 306, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_wr_data", 32, true, cpptb::probe::Value<32>, true> decoded_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 307, "i_timer.TIMER_GEN[0].timer_i.i_regs.is_valid_addr", 1, true, cpptb::probe::Value<1>, true> is_valid_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 308, "i_timer.TIMER_GEN[0].timer_i.i_regs.is_valid_rw", 1, true, cpptb::probe::Value<1>, true> is_valid_rw;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 309, "i_timer.TIMER_GEN[0].timer_i.i_regs.load_next_c", 1, true, cpptb::probe::Value<1>, true> load_next_c;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 310, "i_timer.TIMER_GEN[0].timer_i.i_regs.next_c", 32, true, cpptb::probe::Value<32>, true> next_c;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 311, "i_timer.TIMER_GEN[0].timer_i.i_regs.rd_mux_addr", 4, true, cpptb::probe::Value<4>, true> rd_mux_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 312, "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_data", 32, true, cpptb::probe::Value<32>, true> readback_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 313, "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_data_var", 32, true, cpptb::probe::Value<32>, true> readback_data_var;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 314, "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_done", 1, true, cpptb::probe::Value<1>, true> readback_done;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 315, "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_err", 1, true, cpptb::probe::Value<1>, true> readback_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 316, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_addr", 4, false, cpptb::probe::Value<4>, true> s_cpuif_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 317, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_ack", 1, false, cpptb::probe::Value<1>, true> s_cpuif_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 318, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_data", 32, false, cpptb::probe::Value<32>, true> s_cpuif_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 319, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_err", 1, false, cpptb::probe::Value<1>, true> s_cpuif_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 320, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 321, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_is_wr", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 322, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_stall_rd", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 323, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_stall_wr", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 324, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_ack", 1, false, cpptb::probe::Value<1>, true> s_cpuif_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 325, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_biten", 32, false, cpptb::probe::Value<32>, true> s_cpuif_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 326, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_data", 32, false, cpptb::probe::Value<32>, true> s_cpuif_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 327, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_err", 1, false, cpptb::probe::Value<1>, true> s_cpuif_wr_err;
+};
+
+struct HierarchyITimerTimerGen1TimerIIRegsScope {
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 355, "i_timer.TIMER_GEN[1].timer_i.i_regs.arst_n", 1, false, cpptb::probe::Value<1>, true> arst_n;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 356, "i_timer.TIMER_GEN[1].timer_i.i_regs.clk", 1, false, cpptb::probe::Value<1>, true> clk;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 357, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_addr", 4, true, cpptb::probe::Value<4>, true> cpuif_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 358, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_ack", 1, true, cpptb::probe::Value<1>, true> cpuif_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 359, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_data", 32, true, cpptb::probe::Value<32>, true> cpuif_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 360, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_err", 1, true, cpptb::probe::Value<1>, true> cpuif_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 361, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req", 1, true, cpptb::probe::Value<1>, true> cpuif_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 362, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_is_wr", 1, true, cpptb::probe::Value<1>, true> cpuif_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 363, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_masked", 1, true, cpptb::probe::Value<1>, true> cpuif_req_masked;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 364, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_stall_rd", 1, true, cpptb::probe::Value<1>, true> cpuif_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 365, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_stall_wr", 1, true, cpptb::probe::Value<1>, true> cpuif_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 366, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_ack", 1, true, cpptb::probe::Value<1>, true> cpuif_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 367, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_biten", 32, true, cpptb::probe::Value<32>, true> cpuif_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 368, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_data", 32, true, cpptb::probe::Value<32>, true> cpuif_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 369, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_err", 1, true, cpptb::probe::Value<1>, true> cpuif_wr_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 370, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_addr", 4, true, cpptb::probe::Value<4>, true> decoded_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 371, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_err", 1, true, cpptb::probe::Value<1>, true> decoded_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 372, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_req", 1, true, cpptb::probe::Value<1>, true> decoded_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 373, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_req_is_wr", 1, true, cpptb::probe::Value<1>, true> decoded_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 374, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_wr_biten", 32, true, cpptb::probe::Value<32>, true> decoded_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 375, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_wr_data", 32, true, cpptb::probe::Value<32>, true> decoded_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 376, "i_timer.TIMER_GEN[1].timer_i.i_regs.is_valid_addr", 1, true, cpptb::probe::Value<1>, true> is_valid_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 377, "i_timer.TIMER_GEN[1].timer_i.i_regs.is_valid_rw", 1, true, cpptb::probe::Value<1>, true> is_valid_rw;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 378, "i_timer.TIMER_GEN[1].timer_i.i_regs.load_next_c", 1, true, cpptb::probe::Value<1>, true> load_next_c;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 379, "i_timer.TIMER_GEN[1].timer_i.i_regs.next_c", 32, true, cpptb::probe::Value<32>, true> next_c;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 380, "i_timer.TIMER_GEN[1].timer_i.i_regs.rd_mux_addr", 4, true, cpptb::probe::Value<4>, true> rd_mux_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 381, "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_data", 32, true, cpptb::probe::Value<32>, true> readback_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 382, "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_data_var", 32, true, cpptb::probe::Value<32>, true> readback_data_var;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 383, "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_done", 1, true, cpptb::probe::Value<1>, true> readback_done;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 384, "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_err", 1, true, cpptb::probe::Value<1>, true> readback_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 385, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_addr", 4, false, cpptb::probe::Value<4>, true> s_cpuif_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 386, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_ack", 1, false, cpptb::probe::Value<1>, true> s_cpuif_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 387, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_data", 32, false, cpptb::probe::Value<32>, true> s_cpuif_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 388, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_err", 1, false, cpptb::probe::Value<1>, true> s_cpuif_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 389, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 390, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_is_wr", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 391, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_stall_rd", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 392, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_stall_wr", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 393, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_ack", 1, false, cpptb::probe::Value<1>, true> s_cpuif_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 394, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_biten", 32, false, cpptb::probe::Value<32>, true> s_cpuif_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 395, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_data", 32, false, cpptb::probe::Value<32>, true> s_cpuif_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 396, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_err", 1, false, cpptb::probe::Value<1>, true> s_cpuif_wr_err;
+};
+
+struct HierarchyII2CByteControllerBitControllerScope {
+    static constexpr std::int64_t idle = 0;
+    static constexpr std::int64_t rd_a = 512;
+    static constexpr std::int64_t rd_b = 1024;
+    static constexpr std::int64_t rd_c = 2048;
+    static constexpr std::int64_t rd_d = 4096;
+    static constexpr std::int64_t start_a = 1;
+    static constexpr std::int64_t start_b = 2;
+    static constexpr std::int64_t start_c = 4;
+    static constexpr std::int64_t start_d = 8;
+    static constexpr std::int64_t start_e = 16;
+    static constexpr std::int64_t stop_a = 32;
+    static constexpr std::int64_t stop_b = 64;
+    static constexpr std::int64_t stop_c = 128;
+    static constexpr std::int64_t stop_d = 256;
+    static constexpr std::int64_t wr_a = 8192;
+    static constexpr std::int64_t wr_b = 16384;
+    static constexpr std::int64_t wr_c = 32768;
+    static constexpr std::int64_t wr_d = 65536;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 16, "i_i2c.byte_controller.bit_controller.al", 1, true, cpptb::probe::Value<1>, true> al;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 17, "i_i2c.byte_controller.bit_controller.busy", 1, true, cpptb::probe::Value<1>, true> busy;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 18, "i_i2c.byte_controller.bit_controller.cSCL", 2, true, cpptb::probe::Value<2>, true> cSCL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 19, "i_i2c.byte_controller.bit_controller.cSDA", 2, true, cpptb::probe::Value<2>, true> cSDA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 20, "i_i2c.byte_controller.bit_controller.c_state", 18, true, cpptb::probe::Value<18>, true> c_state;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 21, "i_i2c.byte_controller.bit_controller.clk", 1, false, cpptb::probe::Value<1>, true> clk;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 22, "i_i2c.byte_controller.bit_controller.clk_cnt", 16, false, cpptb::probe::Value<16>, true> clk_cnt;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 23, "i_i2c.byte_controller.bit_controller.clk_en", 1, true, cpptb::probe::Value<1>, true> clk_en;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 24, "i_i2c.byte_controller.bit_controller.cmd", 4, false, cpptb::probe::Value<4>, true> cmd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 25, "i_i2c.byte_controller.bit_controller.cmd_ack", 1, true, cpptb::probe::Value<1>, true> cmd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 26, "i_i2c.byte_controller.bit_controller.cmd_stop", 1, true, cpptb::probe::Value<1>, true> cmd_stop;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 27, "i_i2c.byte_controller.bit_controller.cnt", 16, true, cpptb::probe::Value<16>, true> cnt;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 28, "i_i2c.byte_controller.bit_controller.dSCL", 1, true, cpptb::probe::Value<1>, true> dSCL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 29, "i_i2c.byte_controller.bit_controller.dSDA", 1, true, cpptb::probe::Value<1>, true> dSDA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 30, "i_i2c.byte_controller.bit_controller.din", 1, false, cpptb::probe::Value<1>, true> din;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 31, "i_i2c.byte_controller.bit_controller.dout", 1, true, cpptb::probe::Value<1>, true> dout;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 32, "i_i2c.byte_controller.bit_controller.dscl_oen", 1, true, cpptb::probe::Value<1>, true> dscl_oen;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 33, "i_i2c.byte_controller.bit_controller.ena", 1, false, cpptb::probe::Value<1>, true> ena;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 34, "i_i2c.byte_controller.bit_controller.fSCL", 3, true, cpptb::probe::Value<3>, true> fSCL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 35, "i_i2c.byte_controller.bit_controller.fSDA", 3, true, cpptb::probe::Value<3>, true> fSDA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 36, "i_i2c.byte_controller.bit_controller.filter_cnt", 14, true, cpptb::probe::Value<14>, true> filter_cnt;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 37, "i_i2c.byte_controller.bit_controller.nReset", 1, false, cpptb::probe::Value<1>, true> nReset;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 38, "i_i2c.byte_controller.bit_controller.sSCL", 1, true, cpptb::probe::Value<1>, true> sSCL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 39, "i_i2c.byte_controller.bit_controller.sSDA", 1, true, cpptb::probe::Value<1>, true> sSDA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 40, "i_i2c.byte_controller.bit_controller.scl_i", 1, false, cpptb::probe::Value<1>, true> scl_i;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 41, "i_i2c.byte_controller.bit_controller.scl_o", 1, false, cpptb::probe::Value<1>, true> scl_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 42, "i_i2c.byte_controller.bit_controller.scl_oen", 1, true, cpptb::probe::Value<1>, true> scl_oen;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 43, "i_i2c.byte_controller.bit_controller.scl_sync", 1, false, cpptb::probe::Value<1>, true> scl_sync;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 44, "i_i2c.byte_controller.bit_controller.sda_chk", 1, true, cpptb::probe::Value<1>, true> sda_chk;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 45, "i_i2c.byte_controller.bit_controller.sda_i", 1, false, cpptb::probe::Value<1>, true> sda_i;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 46, "i_i2c.byte_controller.bit_controller.sda_o", 1, false, cpptb::probe::Value<1>, true> sda_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 47, "i_i2c.byte_controller.bit_controller.sda_oen", 1, true, cpptb::probe::Value<1>, true> sda_oen;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 48, "i_i2c.byte_controller.bit_controller.slave_wait", 1, true, cpptb::probe::Value<1>, true> slave_wait;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 49, "i_i2c.byte_controller.bit_controller.sta_condition", 1, true, cpptb::probe::Value<1>, true> sta_condition;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 50, "i_i2c.byte_controller.bit_controller.sto_condition", 1, true, cpptb::probe::Value<1>, true> sto_condition;
+};
+
+struct HierarchyITimerTimerGen0TimerIScope {
+    [[no_unique_address]] HierarchyITimerTimerGen0TimerIIRegsScope i_regs;
+    static constexpr std::int64_t APB_ADDR_WIDTH = 12;
+    static constexpr std::int64_t EnableBit = 0;
+    static constexpr std::int64_t PrescalerStartBit = 3;
+    static constexpr std::int64_t PrescalerStopBit = 5;
+    static constexpr std::int64_t RegCmp = 2;
+    static constexpr std::int64_t RegTimer = 0;
+    static constexpr std::int64_t RegTimerCtrl = 1;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 271, "i_timer.TIMER_GEN[0].timer_i.HCLK", 1, true, cpptb::probe::Value<1>, true> HCLK;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 272, "i_timer.TIMER_GEN[0].timer_i.HRESETn", 1, true, cpptb::probe::Value<1>, true> HRESETn;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 273, "i_timer.TIMER_GEN[0].timer_i.PADDR", 12, true, cpptb::probe::Value<12>, true> PADDR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 274, "i_timer.TIMER_GEN[0].timer_i.PENABLE", 1, true, cpptb::probe::Value<1>, true> PENABLE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 275, "i_timer.TIMER_GEN[0].timer_i.PRDATA", 32, true, cpptb::probe::Value<32>, true> PRDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 276, "i_timer.TIMER_GEN[0].timer_i.PREADY", 1, true, cpptb::probe::Value<1>, true> PREADY;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 277, "i_timer.TIMER_GEN[0].timer_i.PSEL", 1, true, cpptb::probe::Value<1>, true> PSEL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 278, "i_timer.TIMER_GEN[0].timer_i.PSLVERR", 1, true, cpptb::probe::Value<1>, true> PSLVERR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 279, "i_timer.TIMER_GEN[0].timer_i.PWDATA", 32, true, cpptb::probe::Value<32>, true> PWDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 280, "i_timer.TIMER_GEN[0].timer_i.PWRITE", 1, true, cpptb::probe::Value<1>, true> PWRITE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 281, "i_timer.TIMER_GEN[0].timer_i.apb_write", 1, true, cpptb::probe::Value<1>, true> apb_write;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 282, "i_timer.TIMER_GEN[0].timer_i.cmp_write", 1, true, cpptb::probe::Value<1>, true> cmp_write;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 283, "i_timer.TIMER_GEN[0].timer_i.core_addr", 4, true, cpptb::probe::Value<4>, true> core_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 284, "i_timer.TIMER_GEN[0].timer_i.cycle_counter_n", 32, true, cpptb::probe::Value<32>, true> cycle_counter_n;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 285, "i_timer.TIMER_GEN[0].timer_i.cycle_counter_q", 32, true, cpptb::probe::Value<32>, true> cycle_counter_q;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 328, "i_timer.TIMER_GEN[0].timer_i.irq_o", 2, true, cpptb::probe::Value<2>, true> irq_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 329, "i_timer.TIMER_GEN[0].timer_i.prescaler_int", 3, true, cpptb::probe::Value<3>, true> prescaler_int;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 330, "i_timer.TIMER_GEN[0].timer_i.register_adr", 2, true, cpptb::probe::Value<2>, true> register_adr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 331, "i_timer.TIMER_GEN[0].timer_i.timer_next", 32, true, cpptb::probe::Value<32>, true> timer_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 332, "i_timer.TIMER_GEN[0].timer_i.timer_we", 1, true, cpptb::probe::Value<1>, true> timer_we;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 333, "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_ack", 1, true, cpptb::probe::Value<1>, true> unused_core_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 334, "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_data", 32, true, cpptb::probe::Value<32>, true> unused_core_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 335, "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_err", 1, true, cpptb::probe::Value<1>, true> unused_core_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 336, "i_timer.TIMER_GEN[0].timer_i.unused_core_req_stall_rd", 1, true, cpptb::probe::Value<1>, true> unused_core_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 337, "i_timer.TIMER_GEN[0].timer_i.unused_core_req_stall_wr", 1, true, cpptb::probe::Value<1>, true> unused_core_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 338, "i_timer.TIMER_GEN[0].timer_i.unused_core_wr_ack", 1, true, cpptb::probe::Value<1>, true> unused_core_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 339, "i_timer.TIMER_GEN[0].timer_i.unused_core_wr_err", 1, true, cpptb::probe::Value<1>, true> unused_core_wr_err;
+};
+
+struct HierarchyITimerTimerGen1TimerIScope {
+    [[no_unique_address]] HierarchyITimerTimerGen1TimerIIRegsScope i_regs;
+    static constexpr std::int64_t APB_ADDR_WIDTH = 12;
+    static constexpr std::int64_t EnableBit = 0;
+    static constexpr std::int64_t PrescalerStartBit = 3;
+    static constexpr std::int64_t PrescalerStopBit = 5;
+    static constexpr std::int64_t RegCmp = 2;
+    static constexpr std::int64_t RegTimer = 0;
+    static constexpr std::int64_t RegTimerCtrl = 1;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 340, "i_timer.TIMER_GEN[1].timer_i.HCLK", 1, true, cpptb::probe::Value<1>, true> HCLK;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 341, "i_timer.TIMER_GEN[1].timer_i.HRESETn", 1, true, cpptb::probe::Value<1>, true> HRESETn;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 342, "i_timer.TIMER_GEN[1].timer_i.PADDR", 12, true, cpptb::probe::Value<12>, true> PADDR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 343, "i_timer.TIMER_GEN[1].timer_i.PENABLE", 1, true, cpptb::probe::Value<1>, true> PENABLE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 344, "i_timer.TIMER_GEN[1].timer_i.PRDATA", 32, true, cpptb::probe::Value<32>, true> PRDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 345, "i_timer.TIMER_GEN[1].timer_i.PREADY", 1, true, cpptb::probe::Value<1>, true> PREADY;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 346, "i_timer.TIMER_GEN[1].timer_i.PSEL", 1, true, cpptb::probe::Value<1>, true> PSEL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 347, "i_timer.TIMER_GEN[1].timer_i.PSLVERR", 1, true, cpptb::probe::Value<1>, true> PSLVERR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 348, "i_timer.TIMER_GEN[1].timer_i.PWDATA", 32, true, cpptb::probe::Value<32>, true> PWDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 349, "i_timer.TIMER_GEN[1].timer_i.PWRITE", 1, true, cpptb::probe::Value<1>, true> PWRITE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 350, "i_timer.TIMER_GEN[1].timer_i.apb_write", 1, true, cpptb::probe::Value<1>, true> apb_write;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 351, "i_timer.TIMER_GEN[1].timer_i.cmp_write", 1, true, cpptb::probe::Value<1>, true> cmp_write;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 352, "i_timer.TIMER_GEN[1].timer_i.core_addr", 4, true, cpptb::probe::Value<4>, true> core_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 353, "i_timer.TIMER_GEN[1].timer_i.cycle_counter_n", 32, true, cpptb::probe::Value<32>, true> cycle_counter_n;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 354, "i_timer.TIMER_GEN[1].timer_i.cycle_counter_q", 32, true, cpptb::probe::Value<32>, true> cycle_counter_q;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 397, "i_timer.TIMER_GEN[1].timer_i.irq_o", 2, true, cpptb::probe::Value<2>, true> irq_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 398, "i_timer.TIMER_GEN[1].timer_i.prescaler_int", 3, true, cpptb::probe::Value<3>, true> prescaler_int;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 399, "i_timer.TIMER_GEN[1].timer_i.register_adr", 2, true, cpptb::probe::Value<2>, true> register_adr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 400, "i_timer.TIMER_GEN[1].timer_i.timer_next", 32, true, cpptb::probe::Value<32>, true> timer_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 401, "i_timer.TIMER_GEN[1].timer_i.timer_we", 1, true, cpptb::probe::Value<1>, true> timer_we;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 402, "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_ack", 1, true, cpptb::probe::Value<1>, true> unused_core_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 403, "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_data", 32, true, cpptb::probe::Value<32>, true> unused_core_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 404, "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_err", 1, true, cpptb::probe::Value<1>, true> unused_core_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 405, "i_timer.TIMER_GEN[1].timer_i.unused_core_req_stall_rd", 1, true, cpptb::probe::Value<1>, true> unused_core_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 406, "i_timer.TIMER_GEN[1].timer_i.unused_core_req_stall_wr", 1, true, cpptb::probe::Value<1>, true> unused_core_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 407, "i_timer.TIMER_GEN[1].timer_i.unused_core_wr_ack", 1, true, cpptb::probe::Value<1>, true> unused_core_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 408, "i_timer.TIMER_GEN[1].timer_i.unused_core_wr_err", 1, true, cpptb::probe::Value<1>, true> unused_core_wr_err;
+};
+
+struct HierarchyII2CByteControllerScope {
+    [[no_unique_address]] HierarchyII2CByteControllerBitControllerScope bit_controller;
+    static constexpr std::int64_t ST_ACK = 8;
+    static constexpr std::int64_t ST_IDLE = 0;
+    static constexpr std::int64_t ST_READ = 2;
+    static constexpr std::int64_t ST_START = 1;
+    static constexpr std::int64_t ST_STOP = 16;
+    static constexpr std::int64_t ST_WRITE = 4;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 14, "i_i2c.byte_controller.ack_in", 1, false, cpptb::probe::Value<1>, true> ack_in;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 15, "i_i2c.byte_controller.ack_out", 1, true, cpptb::probe::Value<1>, true> ack_out;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 51, "i_i2c.byte_controller.c_state", 5, true, cpptb::probe::Value<5>, true> c_state;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 52, "i_i2c.byte_controller.clk", 1, false, cpptb::probe::Value<1>, true> clk;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 53, "i_i2c.byte_controller.clk_cnt", 16, false, cpptb::probe::Value<16>, true> clk_cnt;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 54, "i_i2c.byte_controller.cmd_ack", 1, true, cpptb::probe::Value<1>, true> cmd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 55, "i_i2c.byte_controller.cnt_done", 1, false, cpptb::probe::Value<1>, true> cnt_done;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 56, "i_i2c.byte_controller.core_ack", 1, false, cpptb::probe::Value<1>, true> core_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 57, "i_i2c.byte_controller.core_cmd", 4, true, cpptb::probe::Value<4>, true> core_cmd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 58, "i_i2c.byte_controller.core_rxd", 1, false, cpptb::probe::Value<1>, true> core_rxd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 59, "i_i2c.byte_controller.core_txd", 1, true, cpptb::probe::Value<1>, true> core_txd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 60, "i_i2c.byte_controller.dcnt", 3, true, cpptb::probe::Value<3>, true> dcnt;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 61, "i_i2c.byte_controller.din", 8, false, cpptb::probe::Value<8>, true> din;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 62, "i_i2c.byte_controller.dout", 8, false, cpptb::probe::Value<8>, true> dout;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 63, "i_i2c.byte_controller.ena", 1, false, cpptb::probe::Value<1>, true> ena;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 64, "i_i2c.byte_controller.go", 1, false, cpptb::probe::Value<1>, true> go;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 65, "i_i2c.byte_controller.i2c_al", 1, false, cpptb::probe::Value<1>, true> i2c_al;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 66, "i_i2c.byte_controller.i2c_busy", 1, false, cpptb::probe::Value<1>, true> i2c_busy;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 67, "i_i2c.byte_controller.ld", 1, true, cpptb::probe::Value<1>, true> ld;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 68, "i_i2c.byte_controller.nReset", 1, false, cpptb::probe::Value<1>, true> nReset;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 69, "i_i2c.byte_controller.read", 1, false, cpptb::probe::Value<1>, true> read;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 70, "i_i2c.byte_controller.scl_i", 1, false, cpptb::probe::Value<1>, true> scl_i;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 71, "i_i2c.byte_controller.scl_o", 1, false, cpptb::probe::Value<1>, true> scl_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 72, "i_i2c.byte_controller.scl_oen", 1, false, cpptb::probe::Value<1>, true> scl_oen;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 73, "i_i2c.byte_controller.sda_i", 1, false, cpptb::probe::Value<1>, true> sda_i;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 74, "i_i2c.byte_controller.sda_o", 1, false, cpptb::probe::Value<1>, true> sda_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 75, "i_i2c.byte_controller.sda_oen", 1, false, cpptb::probe::Value<1>, true> sda_oen;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 76, "i_i2c.byte_controller.shift", 1, true, cpptb::probe::Value<1>, true> shift;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 77, "i_i2c.byte_controller.sr", 8, true, cpptb::probe::Value<8>, true> sr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 78, "i_i2c.byte_controller.start", 1, false, cpptb::probe::Value<1>, true> start;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 79, "i_i2c.byte_controller.stop", 1, false, cpptb::probe::Value<1>, true> stop;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 80, "i_i2c.byte_controller.write", 1, false, cpptb::probe::Value<1>, true> write;
+};
+
+struct HierarchyII2CIRegsScope {
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 89, "i_i2c.i_regs.arst_n", 1, false, cpptb::probe::Value<1>, true> arst_n;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 90, "i_i2c.i_regs.clk", 1, false, cpptb::probe::Value<1>, true> clk;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 91, "i_i2c.i_regs.cpuif_addr", 5, true, cpptb::probe::Value<5>, true> cpuif_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 92, "i_i2c.i_regs.cpuif_rd_ack", 1, true, cpptb::probe::Value<1>, true> cpuif_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 93, "i_i2c.i_regs.cpuif_rd_data", 32, true, cpptb::probe::Value<32>, true> cpuif_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 94, "i_i2c.i_regs.cpuif_rd_err", 1, true, cpptb::probe::Value<1>, true> cpuif_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 95, "i_i2c.i_regs.cpuif_req", 1, true, cpptb::probe::Value<1>, true> cpuif_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 96, "i_i2c.i_regs.cpuif_req_is_wr", 1, true, cpptb::probe::Value<1>, true> cpuif_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 97, "i_i2c.i_regs.cpuif_req_masked", 1, true, cpptb::probe::Value<1>, true> cpuif_req_masked;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 98, "i_i2c.i_regs.cpuif_req_stall_rd", 1, true, cpptb::probe::Value<1>, true> cpuif_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 99, "i_i2c.i_regs.cpuif_req_stall_wr", 1, true, cpptb::probe::Value<1>, true> cpuif_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 100, "i_i2c.i_regs.cpuif_wr_ack", 1, true, cpptb::probe::Value<1>, true> cpuif_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 101, "i_i2c.i_regs.cpuif_wr_biten", 32, true, cpptb::probe::Value<32>, true> cpuif_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 102, "i_i2c.i_regs.cpuif_wr_data", 32, true, cpptb::probe::Value<32>, true> cpuif_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 103, "i_i2c.i_regs.cpuif_wr_err", 1, true, cpptb::probe::Value<1>, true> cpuif_wr_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 104, "i_i2c.i_regs.decoded_addr", 5, true, cpptb::probe::Value<5>, true> decoded_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 105, "i_i2c.i_regs.decoded_err", 1, true, cpptb::probe::Value<1>, true> decoded_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 106, "i_i2c.i_regs.decoded_req", 1, true, cpptb::probe::Value<1>, true> decoded_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 107, "i_i2c.i_regs.decoded_req_is_wr", 1, true, cpptb::probe::Value<1>, true> decoded_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 108, "i_i2c.i_regs.decoded_wr_biten", 32, true, cpptb::probe::Value<32>, true> decoded_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 109, "i_i2c.i_regs.decoded_wr_data", 32, true, cpptb::probe::Value<32>, true> decoded_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 110, "i_i2c.i_regs.is_valid_addr", 1, true, cpptb::probe::Value<1>, true> is_valid_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 111, "i_i2c.i_regs.is_valid_rw", 1, true, cpptb::probe::Value<1>, true> is_valid_rw;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 112, "i_i2c.i_regs.load_next_c", 1, true, cpptb::probe::Value<1>, true> load_next_c;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 113, "i_i2c.i_regs.next_c", 32, true, cpptb::probe::Value<32>, true> next_c;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 114, "i_i2c.i_regs.rd_mux_addr", 5, true, cpptb::probe::Value<5>, true> rd_mux_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 115, "i_i2c.i_regs.readback_data", 32, true, cpptb::probe::Value<32>, true> readback_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 116, "i_i2c.i_regs.readback_data_var", 32, true, cpptb::probe::Value<32>, true> readback_data_var;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 117, "i_i2c.i_regs.readback_done", 1, true, cpptb::probe::Value<1>, true> readback_done;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 118, "i_i2c.i_regs.readback_err", 1, true, cpptb::probe::Value<1>, true> readback_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 119, "i_i2c.i_regs.s_cpuif_addr", 5, false, cpptb::probe::Value<5>, true> s_cpuif_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 120, "i_i2c.i_regs.s_cpuif_rd_ack", 1, false, cpptb::probe::Value<1>, true> s_cpuif_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 121, "i_i2c.i_regs.s_cpuif_rd_data", 32, false, cpptb::probe::Value<32>, true> s_cpuif_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 122, "i_i2c.i_regs.s_cpuif_rd_err", 1, false, cpptb::probe::Value<1>, true> s_cpuif_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 123, "i_i2c.i_regs.s_cpuif_req", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 124, "i_i2c.i_regs.s_cpuif_req_is_wr", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 125, "i_i2c.i_regs.s_cpuif_req_stall_rd", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 126, "i_i2c.i_regs.s_cpuif_req_stall_wr", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 127, "i_i2c.i_regs.s_cpuif_wr_ack", 1, false, cpptb::probe::Value<1>, true> s_cpuif_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 128, "i_i2c.i_regs.s_cpuif_wr_biten", 32, false, cpptb::probe::Value<32>, true> s_cpuif_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 129, "i_i2c.i_regs.s_cpuif_wr_data", 32, false, cpptb::probe::Value<32>, true> s_cpuif_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 130, "i_i2c.i_regs.s_cpuif_wr_err", 1, false, cpptb::probe::Value<1>, true> s_cpuif_wr_err;
+};
+
+struct HierarchyISpiIRegsScope {
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 176, "i_spi.i_regs.arst_n", 1, false, cpptb::probe::Value<1>, true> arst_n;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 177, "i_spi.i_regs.clk", 1, false, cpptb::probe::Value<1>, true> clk;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 178, "i_spi.i_regs.cpuif_addr", 6, true, cpptb::probe::Value<6>, true> cpuif_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 179, "i_spi.i_regs.cpuif_rd_ack", 1, true, cpptb::probe::Value<1>, true> cpuif_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 180, "i_spi.i_regs.cpuif_rd_data", 32, true, cpptb::probe::Value<32>, true> cpuif_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 181, "i_spi.i_regs.cpuif_rd_err", 1, true, cpptb::probe::Value<1>, true> cpuif_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 182, "i_spi.i_regs.cpuif_req", 1, true, cpptb::probe::Value<1>, true> cpuif_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 183, "i_spi.i_regs.cpuif_req_is_wr", 1, true, cpptb::probe::Value<1>, true> cpuif_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 184, "i_spi.i_regs.cpuif_req_masked", 1, true, cpptb::probe::Value<1>, true> cpuif_req_masked;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 185, "i_spi.i_regs.cpuif_req_stall_rd", 1, true, cpptb::probe::Value<1>, true> cpuif_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 186, "i_spi.i_regs.cpuif_req_stall_wr", 1, true, cpptb::probe::Value<1>, true> cpuif_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 187, "i_spi.i_regs.cpuif_wr_ack", 1, true, cpptb::probe::Value<1>, true> cpuif_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 188, "i_spi.i_regs.cpuif_wr_biten", 32, true, cpptb::probe::Value<32>, true> cpuif_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 189, "i_spi.i_regs.cpuif_wr_data", 32, true, cpptb::probe::Value<32>, true> cpuif_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 190, "i_spi.i_regs.cpuif_wr_err", 1, true, cpptb::probe::Value<1>, true> cpuif_wr_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 191, "i_spi.i_regs.decoded_addr", 6, true, cpptb::probe::Value<6>, true> decoded_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 192, "i_spi.i_regs.decoded_err", 1, true, cpptb::probe::Value<1>, true> decoded_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 193, "i_spi.i_regs.decoded_req", 1, true, cpptb::probe::Value<1>, true> decoded_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 194, "i_spi.i_regs.decoded_req_is_wr", 1, true, cpptb::probe::Value<1>, true> decoded_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 195, "i_spi.i_regs.decoded_wr_biten", 32, true, cpptb::probe::Value<32>, true> decoded_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 196, "i_spi.i_regs.decoded_wr_data", 32, true, cpptb::probe::Value<32>, true> decoded_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 197, "i_spi.i_regs.is_valid_addr", 1, true, cpptb::probe::Value<1>, true> is_valid_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 198, "i_spi.i_regs.is_valid_rw", 1, true, cpptb::probe::Value<1>, true> is_valid_rw;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 199, "i_spi.i_regs.load_next_c", 1, true, cpptb::probe::Value<1>, true> load_next_c;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 200, "i_spi.i_regs.next_c", 32, true, cpptb::probe::Value<32>, true> next_c;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 201, "i_spi.i_regs.rd_mux_addr", 6, true, cpptb::probe::Value<6>, true> rd_mux_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 202, "i_spi.i_regs.readback_data", 32, true, cpptb::probe::Value<32>, true> readback_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 203, "i_spi.i_regs.readback_data_var", 32, true, cpptb::probe::Value<32>, true> readback_data_var;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 204, "i_spi.i_regs.readback_done", 1, true, cpptb::probe::Value<1>, true> readback_done;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 205, "i_spi.i_regs.readback_err", 1, true, cpptb::probe::Value<1>, true> readback_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 206, "i_spi.i_regs.s_cpuif_addr", 6, false, cpptb::probe::Value<6>, true> s_cpuif_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 207, "i_spi.i_regs.s_cpuif_rd_ack", 1, false, cpptb::probe::Value<1>, true> s_cpuif_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 208, "i_spi.i_regs.s_cpuif_rd_data", 32, false, cpptb::probe::Value<32>, true> s_cpuif_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 209, "i_spi.i_regs.s_cpuif_rd_err", 1, false, cpptb::probe::Value<1>, true> s_cpuif_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 210, "i_spi.i_regs.s_cpuif_req", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 211, "i_spi.i_regs.s_cpuif_req_is_wr", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_is_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 212, "i_spi.i_regs.s_cpuif_req_stall_rd", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 213, "i_spi.i_regs.s_cpuif_req_stall_wr", 1, false, cpptb::probe::Value<1>, true> s_cpuif_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 214, "i_spi.i_regs.s_cpuif_wr_ack", 1, false, cpptb::probe::Value<1>, true> s_cpuif_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 215, "i_spi.i_regs.s_cpuif_wr_biten", 32, false, cpptb::probe::Value<32>, true> s_cpuif_wr_biten;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 216, "i_spi.i_regs.s_cpuif_wr_data", 32, false, cpptb::probe::Value<32>, true> s_cpuif_wr_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 217, "i_spi.i_regs.s_cpuif_wr_err", 1, false, cpptb::probe::Value<1>, true> s_cpuif_wr_err;
+};
+
+struct HierarchyITimerTimerGen0Scope {
+    [[no_unique_address]] HierarchyITimerTimerGen0TimerIScope timer_i;
+    static constexpr std::int64_t k = 0;
+};
+
+struct HierarchyITimerTimerGen1Scope {
+    [[no_unique_address]] HierarchyITimerTimerGen1TimerIScope timer_i;
+    static constexpr std::int64_t k = 1;
+};
+
+struct HierarchyII2CScope {
+    [[no_unique_address]] HierarchyII2CByteControllerScope byte_controller;
+    [[no_unique_address]] HierarchyII2CIRegsScope i_regs;
+    static constexpr std::int64_t APB_ADDR_WIDTH = 12;
+    static constexpr std::int64_t REG_CLK_PRESCALER = 0;
+    static constexpr std::int64_t REG_CMD = 5;
+    static constexpr std::int64_t REG_CTRL = 1;
+    static constexpr std::int64_t REG_RX = 2;
+    static constexpr std::int64_t REG_STATUS = 3;
+    static constexpr std::int64_t REG_TX = 4;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 0, "i_i2c.HCLK", 1, true, cpptb::probe::Value<1>, true> HCLK;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 1, "i_i2c.HRESETn", 1, true, cpptb::probe::Value<1>, true> HRESETn;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 2, "i_i2c.PADDR", 12, true, cpptb::probe::Value<12>, true> PADDR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 3, "i_i2c.PENABLE", 1, true, cpptb::probe::Value<1>, true> PENABLE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 4, "i_i2c.PRDATA", 32, true, cpptb::probe::Value<32>, true> PRDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 5, "i_i2c.PREADY", 1, true, cpptb::probe::Value<1>, true> PREADY;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 6, "i_i2c.PSEL", 1, true, cpptb::probe::Value<1>, true> PSEL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 7, "i_i2c.PSLVERR", 1, true, cpptb::probe::Value<1>, true> PSLVERR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 8, "i_i2c.PWDATA", 32, true, cpptb::probe::Value<32>, true> PWDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 9, "i_i2c.PWRITE", 1, true, cpptb::probe::Value<1>, true> PWRITE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 10, "i_i2c.ack", 1, true, cpptb::probe::Value<1>, true> ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 11, "i_i2c.al", 1, true, cpptb::probe::Value<1>, true> al;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 12, "i_i2c.apb_addr", 4, true, cpptb::probe::Value<4>, true> apb_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 13, "i_i2c.apb_write", 1, true, cpptb::probe::Value<1>, true> apb_write;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 81, "i_i2c.cmd_next", 32, true, cpptb::probe::Value<32>, true> cmd_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 82, "i_i2c.cmd_q", 8, true, cpptb::probe::Value<8>, true> cmd_q;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 83, "i_i2c.core_en", 1, true, cpptb::probe::Value<1>, true> core_en;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 84, "i_i2c.ctrl_next", 32, true, cpptb::probe::Value<32>, true> ctrl_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 85, "i_i2c.ctrl_q", 8, true, cpptb::probe::Value<8>, true> ctrl_q;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 86, "i_i2c.done", 1, true, cpptb::probe::Value<1>, true> done;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 87, "i_i2c.i2c_al", 1, true, cpptb::probe::Value<1>, true> i2c_al;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 88, "i_i2c.i2c_busy", 1, true, cpptb::probe::Value<1>, true> i2c_busy;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 131, "i_i2c.iack", 1, true, cpptb::probe::Value<1>, true> iack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 132, "i_i2c.ien", 1, true, cpptb::probe::Value<1>, true> ien;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 133, "i_i2c.interrupt_o", 1, true, cpptb::probe::Value<1>, true> interrupt_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 134, "i_i2c.irq_flag", 1, true, cpptb::probe::Value<1>, true> irq_flag;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 135, "i_i2c.irxack", 1, true, cpptb::probe::Value<1>, true> irxack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 136, "i_i2c.pre_next", 32, true, cpptb::probe::Value<32>, true> pre_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 137, "i_i2c.pre_q", 16, true, cpptb::probe::Value<16>, true> pre_q;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 138, "i_i2c.rd", 1, true, cpptb::probe::Value<1>, true> rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 139, "i_i2c.rx_data", 8, true, cpptb::probe::Value<8>, true> rx_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 140, "i_i2c.rxack", 1, true, cpptb::probe::Value<1>, true> rxack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 141, "i_i2c.scl_pad_i", 1, true, cpptb::probe::Value<1>, true> scl_pad_i;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 142, "i_i2c.scl_pad_o", 1, true, cpptb::probe::Value<1>, true> scl_pad_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 143, "i_i2c.scl_padoen_o", 1, true, cpptb::probe::Value<1>, true> scl_padoen_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 144, "i_i2c.sda_pad_i", 1, true, cpptb::probe::Value<1>, true> sda_pad_i;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 145, "i_i2c.sda_pad_o", 1, true, cpptb::probe::Value<1>, true> sda_pad_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 146, "i_i2c.sda_padoen_o", 1, true, cpptb::probe::Value<1>, true> sda_padoen_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 147, "i_i2c.sta", 1, true, cpptb::probe::Value<1>, true> sta;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 148, "i_i2c.status_data", 8, true, cpptb::probe::Value<8>, true> status_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 149, "i_i2c.sto", 1, true, cpptb::probe::Value<1>, true> sto;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 150, "i_i2c.tip", 1, true, cpptb::probe::Value<1>, true> tip;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 151, "i_i2c.tx_next", 32, true, cpptb::probe::Value<32>, true> tx_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 152, "i_i2c.tx_q", 8, true, cpptb::probe::Value<8>, true> tx_q;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 153, "i_i2c.unused_core_rd_ack", 1, true, cpptb::probe::Value<1>, true> unused_core_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 154, "i_i2c.unused_core_rd_data", 32, true, cpptb::probe::Value<32>, true> unused_core_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 155, "i_i2c.unused_core_rd_err", 1, true, cpptb::probe::Value<1>, true> unused_core_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 156, "i_i2c.unused_core_req_stall_rd", 1, true, cpptb::probe::Value<1>, true> unused_core_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 157, "i_i2c.unused_core_req_stall_wr", 1, true, cpptb::probe::Value<1>, true> unused_core_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 158, "i_i2c.unused_core_wr_ack", 1, true, cpptb::probe::Value<1>, true> unused_core_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 159, "i_i2c.unused_core_wr_err", 1, true, cpptb::probe::Value<1>, true> unused_core_wr_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 160, "i_i2c.unused_signals", 1, true, cpptb::probe::Value<1>, true> unused_signals;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 161, "i_i2c.wr", 1, true, cpptb::probe::Value<1>, true> wr;
+};
+
+struct HierarchyISpiScope {
+    [[no_unique_address]] HierarchyISpiIRegsScope i_regs;
+    static constexpr std::int64_t APB_ADDR_WIDTH = 12;
+    static constexpr std::int64_t BUFFER_DEPTH = 10;
+    static constexpr std::int64_t LOG_BUFFER_DEPTH = 4;
+    static constexpr std::int64_t REG_CLKDIV = 1;
+    static constexpr std::int64_t REG_INTCFG = 9;
+    static constexpr std::int64_t REG_INTSTA = 10;
+    static constexpr std::int64_t REG_RXFIFO = 8;
+    static constexpr std::int64_t REG_SPIADR = 3;
+    static constexpr std::int64_t REG_SPICMD = 2;
+    static constexpr std::int64_t REG_SPIDUM = 5;
+    static constexpr std::int64_t REG_SPILEN = 4;
+    static constexpr std::int64_t REG_STATUS = 0;
+    static constexpr std::int64_t REG_TXFIFO = 6;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 162, "i_spi.HCLK", 1, true, cpptb::probe::Value<1>, true> HCLK;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 163, "i_spi.HRESETn", 1, true, cpptb::probe::Value<1>, true> HRESETn;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 164, "i_spi.PADDR", 12, true, cpptb::probe::Value<12>, true> PADDR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 165, "i_spi.PENABLE", 1, true, cpptb::probe::Value<1>, true> PENABLE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 166, "i_spi.PRDATA", 32, true, cpptb::probe::Value<32>, true> PRDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 167, "i_spi.PREADY", 1, true, cpptb::probe::Value<1>, true> PREADY;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 168, "i_spi.PSEL", 1, true, cpptb::probe::Value<1>, true> PSEL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 169, "i_spi.PSLVERR", 1, true, cpptb::probe::Value<1>, true> PSLVERR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 170, "i_spi.PWDATA", 32, true, cpptb::probe::Value<32>, true> PWDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 171, "i_spi.PWRITE", 1, true, cpptb::probe::Value<1>, true> PWRITE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 172, "i_spi.apb_addr", 4, true, cpptb::probe::Value<4>, true> apb_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 173, "i_spi.apb_read", 1, true, cpptb::probe::Value<1>, true> apb_read;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 174, "i_spi.apb_write", 1, true, cpptb::probe::Value<1>, true> apb_write;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 175, "i_spi.clkdiv_next", 32, true, cpptb::probe::Value<32>, true> clkdiv_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 218, "i_spi.intcfg_next", 32, true, cpptb::probe::Value<32>, true> intcfg_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 219, "i_spi.spi_addr", 32, true, cpptb::probe::Value<32>, true> spi_addr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 220, "i_spi.spi_addr_len", 6, true, cpptb::probe::Value<6>, true> spi_addr_len;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 221, "i_spi.spi_clk_div", 8, true, cpptb::probe::Value<8>, true> spi_clk_div;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 222, "i_spi.spi_clk_div_valid", 1, true, cpptb::probe::Value<1>, true> spi_clk_div_valid;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 223, "i_spi.spi_cmd", 32, true, cpptb::probe::Value<32>, true> spi_cmd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 224, "i_spi.spi_cmd_len", 6, true, cpptb::probe::Value<6>, true> spi_cmd_len;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 225, "i_spi.spi_csreg", 4, true, cpptb::probe::Value<4>, true> spi_csreg;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 226, "i_spi.spi_data_len", 16, true, cpptb::probe::Value<16>, true> spi_data_len;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 227, "i_spi.spi_data_rx", 32, true, cpptb::probe::Value<32>, true> spi_data_rx;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 228, "i_spi.spi_data_rx_ready", 1, true, cpptb::probe::Value<1>, true> spi_data_rx_ready;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 229, "i_spi.spi_data_rx_valid", 1, true, cpptb::probe::Value<1>, true> spi_data_rx_valid;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 230, "i_spi.spi_data_tx", 32, true, cpptb::probe::Value<32>, true> spi_data_tx;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 231, "i_spi.spi_data_tx_ready", 1, true, cpptb::probe::Value<1>, true> spi_data_tx_ready;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 232, "i_spi.spi_data_tx_valid", 1, true, cpptb::probe::Value<1>, true> spi_data_tx_valid;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 233, "i_spi.spi_dummy_rd", 16, true, cpptb::probe::Value<16>, true> spi_dummy_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 234, "i_spi.spi_dummy_wr", 16, true, cpptb::probe::Value<16>, true> spi_dummy_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 235, "i_spi.spi_int_cnt_en", 1, true, cpptb::probe::Value<1>, true> spi_int_cnt_en;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 236, "i_spi.spi_int_cnt_rx", 5, true, cpptb::probe::Value<5>, true> spi_int_cnt_rx;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 237, "i_spi.spi_int_cnt_tx", 5, true, cpptb::probe::Value<5>, true> spi_int_cnt_tx;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 238, "i_spi.spi_int_en", 1, true, cpptb::probe::Value<1>, true> spi_int_en;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 239, "i_spi.spi_int_rd_sta", 1, true, cpptb::probe::Value<1>, true> spi_int_rd_sta;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 240, "i_spi.spi_int_th_rx", 5, true, cpptb::probe::Value<5>, true> spi_int_th_rx;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 241, "i_spi.spi_int_th_tx", 5, true, cpptb::probe::Value<5>, true> spi_int_th_tx;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 242, "i_spi.spi_qrd", 1, true, cpptb::probe::Value<1>, true> spi_qrd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 243, "i_spi.spi_qwr", 1, true, cpptb::probe::Value<1>, true> spi_qwr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 244, "i_spi.spi_rd", 1, true, cpptb::probe::Value<1>, true> spi_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 245, "i_spi.spi_status", 32, true, cpptb::probe::Value<32>, true> spi_status;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 246, "i_spi.spi_swrst", 1, true, cpptb::probe::Value<1>, true> spi_swrst;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 247, "i_spi.spi_wr", 1, true, cpptb::probe::Value<1>, true> spi_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 248, "i_spi.spiadr_next", 32, true, cpptb::probe::Value<32>, true> spiadr_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 249, "i_spi.spicmd_next", 32, true, cpptb::probe::Value<32>, true> spicmd_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 250, "i_spi.spidum_next", 32, true, cpptb::probe::Value<32>, true> spidum_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 251, "i_spi.spilen_next", 32, true, cpptb::probe::Value<32>, true> spilen_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 252, "i_spi.status_next", 32, true, cpptb::probe::Value<32>, true> status_next;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 253, "i_spi.unused_core_rd_ack", 1, true, cpptb::probe::Value<1>, true> unused_core_rd_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 254, "i_spi.unused_core_rd_data", 32, true, cpptb::probe::Value<32>, true> unused_core_rd_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 255, "i_spi.unused_core_rd_err", 1, true, cpptb::probe::Value<1>, true> unused_core_rd_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 256, "i_spi.unused_core_req_stall_rd", 1, true, cpptb::probe::Value<1>, true> unused_core_req_stall_rd;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 257, "i_spi.unused_core_req_stall_wr", 1, true, cpptb::probe::Value<1>, true> unused_core_req_stall_wr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 258, "i_spi.unused_core_wr_ack", 1, true, cpptb::probe::Value<1>, true> unused_core_wr_ack;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 259, "i_spi.unused_core_wr_err", 1, true, cpptb::probe::Value<1>, true> unused_core_wr_err;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 260, "i_spi.unused_signals", 1, true, cpptb::probe::Value<1>, true> unused_signals;
+};
+
+struct HierarchyITimerScope {
+    [[no_unique_address]] cpptb::hierarchy::ScopeArray<cpptb::hierarchy::ScopeElement<0, HierarchyITimerTimerGen0Scope>, cpptb::hierarchy::ScopeElement<1, HierarchyITimerTimerGen1Scope>> TIMER_GEN;
+    static constexpr std::int64_t APB_ADDR_WIDTH = 12;
+    static constexpr std::int64_t RegsMaxAdr = 2;
+    static constexpr std::int64_t TIMER_CNT = 2;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 261, "i_timer.HCLK", 1, true, cpptb::probe::Value<1>, true> HCLK;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 262, "i_timer.HRESETn", 1, true, cpptb::probe::Value<1>, true> HRESETn;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 263, "i_timer.PADDR", 12, true, cpptb::probe::Value<12>, true> PADDR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 264, "i_timer.PENABLE", 1, true, cpptb::probe::Value<1>, true> PENABLE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 265, "i_timer.PRDATA", 32, true, cpptb::probe::Value<32>, true> PRDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 266, "i_timer.PREADY", 1, true, cpptb::probe::Value<1>, true> PREADY;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 267, "i_timer.PSEL", 1, true, cpptb::probe::Value<1>, true> PSEL;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 268, "i_timer.PSLVERR", 1, true, cpptb::probe::Value<1>, true> PSLVERR;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 269, "i_timer.PWDATA", 32, true, cpptb::probe::Value<32>, true> PWDATA;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 270, "i_timer.PWRITE", 1, true, cpptb::probe::Value<1>, true> PWRITE;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 409, "i_timer.irq_o", 4, true, cpptb::probe::Value<4>, true> irq_o;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 410, "i_timer.prdata", 64, true, cpptb::probe::Value<64>, true> prdata;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 411, "i_timer.pready", 2, true, cpptb::probe::Value<2>, true> pready;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 412, "i_timer.psel_int", 2, true, cpptb::probe::Value<2>, true> psel_int;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 413, "i_timer.pslverr", 2, true, cpptb::probe::Value<2>, true> pslverr;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 414, "i_timer.slave_address_int", 1, true, cpptb::probe::Value<1>, true> slave_address_int;
+};
+
 struct ApbBus {
     coro::Signal PADDR;
     coro::Signal PWDATA;
@@ -142,6 +791,13 @@ struct PeripheralSuiteDut {
     TimerDut timer;
     SpiDut spi;
     I2cDut i2c;
+    [[no_unique_address]] HierarchyII2CScope i_i2c;
+    [[no_unique_address]] HierarchyISpiScope i_spi;
+    [[no_unique_address]] HierarchyITimerScope i_timer;
+    static constexpr std::int64_t APB_ADDR_WIDTH = 12;
+    static constexpr std::int64_t SPI_BUFFER_DEPTH = 10;
+    static constexpr std::int64_t SPI_LOG_BUFFER_DEPTH = 4;
+    static constexpr std::int64_t TIMER_CNT = 2;
 };
 
 }  // namespace cpptb::benchmarks::peripheral_suite

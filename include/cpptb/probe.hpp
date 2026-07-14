@@ -13,14 +13,19 @@ namespace cpptb::probe {
 namespace detail {
 
 inline thread_local uint32_t dpi_callback_depth = 0;
+inline thread_local uint64_t dpi_callback_epoch = 0;
 
 class DpiCallbackScope {
    public:
-    DpiCallbackScope() { ++dpi_callback_depth; }
+    DpiCallbackScope() {
+        if (dpi_callback_depth++ == 0) ++dpi_callback_epoch;
+    }
     DpiCallbackScope(const DpiCallbackScope&) = delete;
     DpiCallbackScope& operator=(const DpiCallbackScope&) = delete;
     ~DpiCallbackScope() { --dpi_callback_depth; }
 };
+
+inline uint64_t current_callback_epoch() { return dpi_callback_epoch; }
 
 inline void require_callback(const char* name) {
     if (dpi_callback_depth != 0) return;

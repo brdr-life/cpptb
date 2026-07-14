@@ -2,11 +2,13 @@
 // Do not edit by hand.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 
 #include "cpptb/dpi_static_binding.hpp"
-#include "cpptb/probe.hpp"
+#include "cpptb/hierarchy.hpp"
+#include "svdpi.h"
 
 namespace cpptb::benchmarks::authoring_core {
 
@@ -295,16 +297,222 @@ private:
     return PacketTView<11>{bits_};
 }
 
-struct InternalDut {
-    probe::Probe<32, false> cycle_count;
-    probe::Probe<32, true> pending_data;
-    probe::MemoryProbe<32, 0, 255, true> memory;
-    probe::Probe<32, false, true> force_target;
+extern "C" {
+unsigned int dpi_authoring_core_hierarchy_1_get(int index);
+unsigned int dpi_authoring_core_hierarchy_8_get(int index);
+void dpi_authoring_core_hierarchy_10_get(int index, unsigned int* value);
+unsigned int dpi_authoring_core_hierarchy_12_get(int index);
+unsigned int dpi_authoring_core_hierarchy_14_get(int index);
+void dpi_authoring_core_hierarchy_10_deposit(int index, const unsigned int* value);
+void dpi_authoring_core_hierarchy_12_deposit(int index, unsigned int value);
+void dpi_authoring_core_hierarchy_14_deposit(int index, unsigned int value);
+void dpi_authoring_core_hierarchy_8_force(int index, unsigned int value);
+void dpi_authoring_core_hierarchy_8_release(int index);
+void dpi_authoring_core_hierarchy_9_get_logic(int index, svLogicVecVal* value);
+void dpi_authoring_core_hierarchy_9_deposit_logic(int index, const svLogicVecVal* value);
+}  // extern "C"
+
+template <std::uint32_t Id, typename Value>
+struct HierarchyImmediateForceCache {
+    static constexpr std::uint64_t invalid_callback_epoch =
+        ~std::uint64_t{0};
+    inline static thread_local std::uint64_t callback_epoch =
+        invalid_callback_epoch;
+    inline static thread_local std::int32_t index = 0;
+    inline static thread_local Value value{};
+};
+
+struct HierarchyTransport {
+    template <std::size_t Width>
+    static cpptb::probe::Value<Width> get(std::uint32_t id,
+                                           std::int32_t index) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                case 1:
+                    return static_cast<cpptb::probe::Value<Width>>(dpi_authoring_core_hierarchy_1_get(index));
+                case 8:
+                {
+                    using Cache =
+                        HierarchyImmediateForceCache<8,
+                            cpptb::probe::Value<Width>>;
+                    if (Cache::callback_epoch ==
+                            cpptb::probe::detail::current_callback_epoch() &&
+                        Cache::index == index) {
+                        return Cache::value;
+                    }
+                    return static_cast<cpptb::probe::Value<Width>>(dpi_authoring_core_hierarchy_8_get(index));
+                }
+                case 12:
+                    return static_cast<cpptb::probe::Value<Width>>(dpi_authoring_core_hierarchy_12_get(index));
+                case 14:
+                    return static_cast<cpptb::probe::Value<Width>>(dpi_authoring_core_hierarchy_14_get(index));
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                case 10:
+                {
+                    typename cpptb::Bits<Width>::word_array words{};
+                    dpi_authoring_core_hierarchy_10_get(index, words.data());
+                    return cpptb::Bits<Width>::from_words(words);
+                }
+                default: break;
+            }
+        }
+        fail("get", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit(std::uint32_t id, std::int32_t index,
+                        cpptb::probe::Value<Width> value) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                case 12:
+                    dpi_authoring_core_hierarchy_12_deposit(index, value);
+                    return;
+                case 14:
+                    dpi_authoring_core_hierarchy_14_deposit(index, value);
+                    return;
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                case 10:
+                    dpi_authoring_core_hierarchy_10_deposit(index, value.words().data());
+                    return;
+                default: break;
+            }
+        }
+        fail("deposit", id);
+    }
+
+    template <std::size_t Width>
+    static void force(std::uint32_t id, std::int32_t index,
+                        cpptb::probe::Value<Width> value) {
+        if constexpr (Width <= 32) {
+            switch (id) {
+                case 8:
+                {
+                    dpi_authoring_core_hierarchy_8_force(index, value);
+                    using Cache =
+                        HierarchyImmediateForceCache<8,
+                            cpptb::probe::Value<Width>>;
+                    Cache::value = value;
+                    Cache::index = index;
+                    Cache::callback_epoch =
+                        cpptb::probe::detail::current_callback_epoch();
+                    return;
+                }
+                default: break;
+            }
+        }
+        if constexpr (Width > 32 && Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        if constexpr (Width > 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("force", id);
+    }
+
+    template <std::size_t Width>
+    static cpptb::LogicBits<Width> get_logic(
+        std::uint32_t id, std::int32_t index) {
+        switch (id) {
+            case 9: {
+                std::array<svLogicVecVal,
+                           cpptb::LogicBits<Width>::word_count>
+                    words{};
+                dpi_authoring_core_hierarchy_9_get_logic(index, words.data());
+                return cpptb::LogicBits<Width>::from_dpi_words(
+                    words.data());
+            }
+            default: break;
+        }
+        fail("get_logic", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit_logic(
+        std::uint32_t id, std::int32_t index,
+        cpptb::LogicBits<Width> value) {
+        switch (id) {
+            case 9: {
+                auto words =
+                    value.template dpi_words<svLogicVecVal>();
+                dpi_authoring_core_hierarchy_9_deposit_logic(index, words.data());
+                return;
+            }
+            default: break;
+        }
+        fail("deposit_logic", id);
+    }
+
+    template <std::size_t Width>
+    static void force_logic(
+        std::uint32_t id, std::int32_t index,
+        cpptb::LogicBits<Width> value) {
+        switch (id) {
+            default: break;
+        }
+        fail("force_logic", id);
+    }
+
+    static void release(std::uint32_t id, std::int32_t index) {
+        switch (id) {
+            case 8: {
+                dpi_authoring_core_hierarchy_8_release(index);
+                using Cache =
+                    HierarchyImmediateForceCache<8,
+                        cpptb::probe::Value<32>>;
+                if (Cache::index == index) {
+                    Cache::callback_epoch =
+                        Cache::invalid_callback_epoch;
+                }
+                return;
+            }
+            default: break;
+        }
+        fail("release", id);
+    }
+
+    static cpptb::coro::Signal signal(std::uint32_t id,
+                                      const char* name) {
+        switch (id) {
+            default: break;
+        }
+        fail("edge", id);
+    }
+
+private:
+    [[noreturn]] static void fail(const char* operation,
+                                  std::uint32_t id) {
+        std::fprintf(stderr,
+                     "cpptb: hierarchy %s was not selected for signal %u\n",
+                     operation, id);
+        std::abort();
+    }
 };
 
 struct AuthoringCoreDut {
     static constexpr bool cpptb_static_binding = true;
-    cpptb::dpi::StaticPackedSignal<1, false, false, kSignalClk, 0> clk;
+    cpptb::dpi::StaticPackedSignal<1, true, false, kSignalClk, 0> clk;
     cpptb::dpi::StaticPackedSignal<1, true, true, kSignalRstN, 0> rst_n;
     cpptb::dpi::StaticPackedSignal<1, true, true, kSignalReqValid, 1> req_valid;
     cpptb::dpi::StaticPackedSignal<32, true, true, kSignalReqData, 2> req_data;
@@ -336,7 +544,22 @@ struct AuthoringCoreDut {
     cpptb::dpi::StaticPackedSignal<32, true, true, kSignalMemWdataI, 37> mem_wdata_i;
     cpptb::dpi::StaticPackedSignal<1, true, true, kSignalMemWeI, 38> mem_we_i;
     cpptb::dpi::StaticPackedSignal<32, false, false, kSignalMemRdataO, 38> mem_rdata_o;
-    InternalDut internal;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 0, "column", 32, true, cpptb::probe::Value<32>, false> column;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 1, "cycle_count", 32, true, cpptb::probe::Value<32>, true> cycle_count;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 2, "delay_count", 2, true, cpptb::probe::Value<2>, true> delay_count;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 3, "fixed_magnitude", 32, true, cpptb::probe::Value<32>, true> fixed_magnitude;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 4, "fixed_product", 32, true, cpptb::probe::Value<32>, true> fixed_product;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 5, "fixed_quotient", 18, true, cpptb::probe::Value<18>, true> fixed_quotient;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 6, "fixed_remainder", 14, true, cpptb::probe::Value<14>, true> fixed_remainder;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 7, "fixed_rounded", 33, true, cpptb::probe::Value<33>, true> fixed_rounded;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 8, "force_target", 32, false, cpptb::probe::Value<32>, true> force_target;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 9, "hierarchy_logic", 4, true, cpptb::probe::Value<4>, true> hierarchy_logic;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 10, "hierarchy_wide", 137, true, cpptb::probe::Value<137>, false> hierarchy_wide;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 11, "index", 32, true, cpptb::probe::Value<32>, false> index;
+    [[no_unique_address]] cpptb::hierarchy::Memory<HierarchyTransport, 12, "memory", 32, 0, 255, true, cpptb::probe::Value<32>, true> memory;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 13, "pending", 1, true, cpptb::probe::Value<1>, true> pending;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 14, "pending_data", 32, true, cpptb::probe::Value<32>, true> pending_data;
+    [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 15, "row", 32, true, cpptb::probe::Value<32>, false> row;
 };
 
 }  // namespace cpptb::benchmarks::authoring_core

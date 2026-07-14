@@ -18,34 +18,9 @@
     "static_binding": true
   },
   "sources": ["../../rtl/authoring_core_dut.sv"],
-  "internals": [
-    {
-      "path": "cycle_count",
-      "access": "read"
-    },
-    {
-      "path": "pending_data",
-      "access": "read_write"
-    },
-    {
-      "path": "memory",
-      "access": "read_write"
-    },
-    {
-      "path": "force_target",
-      "access": "read",
-      "force": true
-    }
-  ],
-  "clocks": [
-    {
-      "port": "clk",
-      "source": "generated",
-      "half_period": "1ns",
-      "primary": true
-    }
-  ],
+  "clocks": [],
   "edge_observers": ["rsp_valid"],
+  "auto_edge_observers": true,
   "port_transport": {
     "wide137_i": "on_demand",
     "wide137_o": "on_demand",
@@ -58,6 +33,8 @@
     "pull_outputs_function": "authoring_core_dpi_pull_outputs",
     "next_deadline_function": "authoring_core_dpi_next_timer_deadline",
     "edge_interest_function": "authoring_core_dpi_edge_interest",
+    "clock_config_function": "authoring_core_dpi_clock_config",
+    "dynamic_clocks": true,
     "iteration_plusarg": "AUTHORING_CORE_ITERS",
     "default_iterations": 10000,
     "timeprecision": "1ps"

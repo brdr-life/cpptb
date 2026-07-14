@@ -1,3 +1,5 @@
+import contextlib
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,9 +23,15 @@ from cpptb_codegen.generate_dpi_bindings import (
     compare_designs,
     discover_ports,
     map_ports,
+    main as codegen_main,
     render_cpp_binding,
+    render_cpp_adapter,
     render_cpp_dut,
     render_sv,
+    load_access_plan,
+    load_discovered_clocks,
+    parse_clock_argument,
+    source_manifest,
     time_literal_femtoseconds,
     validate_clock_ports,
     validate_internals,
@@ -55,6 +63,242 @@ def manifest():
 
 
 class CodegenTests(unittest.TestCase):
+    def test_access_plan_loads_and_deduplicates_port_edges(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "access.json"
+            path.write_text(
+                '{"schema_version": 1, "accesses": [], '
+                '"port_edges": [4, 0, 4]}\n'
+            )
+            hierarchy, port_edges = load_access_plan(path)
+
+        self.assertEqual(hierarchy, [])
+        self.assertEqual(port_edges, [0, 4])
+
+    def test_discovered_clocks_render_as_writable_literal_drivers(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "clocks.json"
+            path.write_text(
+                '{"schema_version": 1, "clocks": ['
+                '{"port": "clk", "period_fs": 10000000, '
+                '"phase_fs": 1000000, "primary": true}]}\n'
+            )
+            clocks = load_discovered_clocks(path)
+            config = source_manifest(
+                [Path(temp_dir) / "counter.sv"],
+                "counter",
+                output_dir=Path(temp_dir) / "generated",
+                clocks=clocks,
+                dynamic_clocks=False,
+            )
+            ports = map_ports(
+                [Port("clk", "input", 1), Port("count", "output", 8)],
+                config,
+            )
+            tree = build_tree(ports)
+            header = render_cpp_dut(ports, [], tree, config, "counter.sv")
+            binding = render_cpp_binding(
+                ports, [], tree, config, "counter.sv"
+            )
+            wrapper = render_sv(ports, [], config, "counter.sv")
+
+            self.assertEqual(clocks[0]["source"], "registered")
+            self.assertIn(
+                "StaticPackedSignal<1, true, false", header
+            )
+            self.assertIn("kRegisteredClockConfigs", binding)
+            self.assertIn("10000000ULL", binding)
+            self.assertIn("bind_dut_for_clock_discovery", binding)
+            self.assertIn("next_edge = $realtime + 1ns + 5ns;", wrapper)
+            self.assertIn("task automatic drive_clock_0", wrapper)
+            self.assertNotIn("drive_registered_clock_", wrapper)
+            self.assertNotIn("dpi_clock_config", wrapper)
+
+    def test_source_cli_infers_top_and_reports_ambiguous_sources(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            source = base / "design.sv"
+            output = base / "generated"
+            source.write_text("module inferred(input logic clk); endmodule\n")
+            with contextlib.redirect_stdout(io.StringIO()):
+                result = codegen_main(
+                    [
+                        str(source),
+                        "--clock",
+                        "clk=10ns",
+                        "--output-dir",
+                        str(output),
+                    ]
+                )
+            self.assertEqual(result, 0)
+            self.assertTrue((output / "inferred_dut.hpp").is_file())
+            self.assertTrue((output / "dpi_inferred.cpp").is_file())
+
+            source.write_text(
+                "module inferred(input logic first_clk, "
+                "input logic second_clk); endmodule\n"
+            )
+            errors = io.StringIO()
+            with contextlib.redirect_stderr(errors):
+                result = codegen_main(
+                    [
+                        str(source),
+                        "--clock",
+                        "first_clk=4ns",
+                        "--clock",
+                        "second_clk=6ns@1ns",
+                        "--output-dir",
+                        str(output),
+                    ]
+                )
+            self.assertEqual(result, 1)
+            self.assertIn("require --primary-clock", errors.getvalue())
+
+            source.write_text(
+                "module first(input logic clk); endmodule\n"
+                "module second(input logic clk); endmodule\n"
+            )
+            errors = io.StringIO()
+            with contextlib.redirect_stderr(errors):
+                result = codegen_main(
+                    [str(source), "--output-dir", str(output)]
+                )
+            self.assertEqual(result, 1)
+            self.assertIn("multiple top-level modules", errors.getvalue())
+            self.assertIn("--top", errors.getvalue())
+
+    def test_source_defaults_generate_generic_target_unique_dut(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            source = base / "counter.sv"
+            source.write_text("module counter(input logic clk); endmodule\n")
+            config = source_manifest(
+                [source],
+                "counter",
+                output_dir=base / "generated",
+                clocks=[parse_clock_argument("clk=10ns")],
+            )
+            ports = map_ports([Port("clk", "input", 1)], config)
+            tree = build_tree(ports)
+            header = render_cpp_dut(
+                ports, [], tree, config, "counter.sv"
+            )
+            adapter = render_cpp_adapter(config, "counter.sv")
+
+            self.assertEqual(config["namespace"], "cpptb::generated::counter")
+            self.assertEqual(config["root_type"], "Dut")
+            self.assertEqual(config["top_module"], "dpi_counter")
+            self.assertEqual(
+                config["clocks"][0]["half_period"], "5ns"
+            )
+            self.assertIn("struct Dut {", header)
+            self.assertIn("using CounterDut = Dut;", header)
+            self.assertIn("struct DpiAdapter", adapter)
+            self.assertIn("cpptb::run_registered_test", adapter)
+            self.assertIn("cpptb_counter_dpi_init", adapter)
+            self.assertIn("CPP_DPI_COUNTER_RESULT", adapter)
+
+    def test_source_defaults_defer_clock_timing_to_cpp_testbench(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            source = base / "clocked.sv"
+            source.write_text(
+                "module clocked(input logic clk, input logic enable, "
+                "output logic output_clk); endmodule\n"
+            )
+            config = source_manifest(
+                [source], "clocked", output_dir=base / "generated"
+            )
+            ports = map_ports(
+                [
+                    Port("clk", "input", 1),
+                    Port("enable", "input", 1),
+                    Port("output_clk", "output", 1),
+                ],
+                config,
+            )
+            tree = build_tree(ports)
+            binding = render_cpp_binding(
+                ports, [], tree, config, "clocked.sv"
+            )
+            adapter = render_cpp_adapter(config, "clocked.sv")
+            wrapper = render_sv(ports, [], config, "clocked.sv")
+
+            self.assertEqual(config["clocks"], [])
+            self.assertIn("kSignalClk", binding)
+            self.assertIn("kSignalOutputClk", binding)
+            self.assertIn("coro::ClockRegistrar clocks", adapter)
+            self.assertIn("CPPTB_DEFINE_NAMED_DPI_CLOCK_API", adapter)
+            self.assertIn("task automatic drive_registered_clock_0", wrapper)
+            self.assertIn("half_period = cpptb_clocked_dpi_clock_config", wrapper)
+            self.assertIn("#(half_period);", wrapper)
+            self.assertIn(
+                "if (!clock_drivers_active || !registered_clock[SIGNAL_CLK])",
+                wrapper,
+            )
+            self.assertIn("@(output_clk);", wrapper)
+            self.assertIn("@(output_clk);", wrapper)
+            self.assertNotIn("wait ((status != 0)", wrapper)
+            self.assertNotIn("@(clk);", wrapper)
+            self.assertNotIn("realtime next_edge", wrapper)
+
+    def test_source_overrides_and_target_namespaces_do_not_collide(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            source = base / "design.sv"
+            source.write_text("module design(input logic clk); endmodule\n")
+            alpha = source_manifest(
+                [source],
+                "design",
+                output_dir=base / "alpha",
+                target="alpha",
+                namespace="project::targets::alpha",
+                root_type="TypedDut",
+            )
+            beta = source_manifest(
+                [source],
+                "design",
+                output_dir=base / "beta",
+                target="beta",
+            )
+
+            self.assertEqual(alpha["namespace"], "project::targets::alpha")
+            self.assertEqual(alpha["root_type"], "TypedDut")
+            self.assertEqual(alpha["top_module"], "dpi_alpha")
+            self.assertEqual(beta["namespace"], "cpptb::generated::beta")
+            self.assertNotEqual(alpha["namespace"], beta["namespace"])
+            self.assertNotEqual(
+                alpha["run"]["step_function"],
+                beta["run"]["step_function"],
+            )
+
+    def test_clock_cli_requires_an_explicit_even_period(self):
+        self.assertEqual(
+            parse_clock_argument("clk=10ns")["half_period"], "5ns"
+        )
+        self.assertEqual(
+            parse_clock_argument("fast_clk=1500ps")["half_period"],
+            "750ps",
+        )
+        with self.assertRaisesRegex(CodegenError, "PORT=PERIOD"):
+            parse_clock_argument("clk")
+        with self.assertRaisesRegex(CodegenError, "whole femtosecond"):
+            parse_clock_argument("clk=1fs")
+        phased = parse_clock_argument("read_clk=6ns@1ns", primary=False)
+        self.assertEqual(phased["half_period"], "3ns")
+        self.assertEqual(phased["phase"], "1ns")
+        self.assertFalse(phased["primary"])
+
+    def test_v1_manifest_root_naming_remains_unchanged(self):
+        config = manifest()
+        ports = map_ports([Port("clk", "input", 1)], config)
+        header = render_cpp_dut(
+            ports, [], build_tree(ports), config, "sample.json"
+        )
+        self.assertIn("struct SampleDut {", header)
+        self.assertNotIn("struct Dut {", header)
+        self.assertNotIn("using SampleDut =", header)
+
     def test_signal_named_count_does_not_collide_with_wrapper_bookkeeping(self):
         config = manifest()
         del config["clock"]
@@ -400,6 +644,8 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("realtime next_edge", wrapper)
         self.assertIn("STEP_FALLING_EDGES", wrapper)
         self.assertIn("STEP_OUTPUTS_CHANGED", wrapper)
+        self.assertIn("STEP_NEXT_TICK_TIMER", wrapper)
+        self.assertIn("STEP_TIMER_IDLE", wrapper)
         self.assertIn("if ((requests >= 0) &&", wrapper)
         self.assertIn("((phase == PHASE_INIT) ||", wrapper)
         self.assertIn("((requests & STEP_OUTPUTS_CHANGED) != 0)", wrapper)
@@ -415,11 +661,25 @@ class CodegenTests(unittest.TestCase):
         self.assertNotIn("sample_delay", wrapper)
         self.assertIn("cpptb_dpi_next_timer_deadline", wrapper)
         self.assertIn("cpptb_dpi_edge_interest", wrapper)
+        self.assertIn(
+            'import "DPI-C" function longint unsigned '
+            "cpptb_dpi_next_timer_deadline();",
+            wrapper,
+        )
+        self.assertNotIn(
+            'import "DPI-C" context function longint unsigned '
+            "cpptb_dpi_next_timer_deadline();",
+            wrapper,
+        )
         self.assertIn("longint unsigned timer_deadline;", wrapper)
         self.assertIn("longint unsigned timer_owner_target;", wrapper)
         self.assertIn("event timer_kick;", wrapper)
         self.assertIn("task automatic timer_owner();", wrapper)
         self.assertIn("task automatic update_timer_schedule();", wrapper)
+        self.assertIn("timer_deadline = $time + 1;", wrapper)
+        self.assertIn("timer_wakeup(timer_deadline, generation);", wrapper)
+        self.assertNotIn("#1step;", wrapper)
+        self.assertNotIn("service_done", wrapper)
         self.assertIn("if (timer_owner_target == NO_TIMER) begin", wrapper)
         self.assertIn("end else if (deadline < timer_owner_target) begin", wrapper)
         self.assertIn("timer_wakeup(deadline, generation);", wrapper)
@@ -487,6 +747,18 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("task automatic observe_signal_0", wrapper)
         self.assertIn("@(bus_ready);", wrapper)
         self.assertIn("edge_interest[SIGNAL_BUSREADY]", wrapper)
+        observer_start = wrapper.index("  task automatic observe_signal_0();")
+        observer_end = wrapper.index("  endtask", observer_start)
+        observer = wrapper[observer_start:observer_end]
+        self.assertNotIn("wait (", observer)
+        self.assertLess(
+            observer.index("@(bus_ready);"),
+            observer.index("edge_interest[SIGNAL_BUSREADY]"),
+        )
+        self.assertLess(
+            observer.index("edge_interest[SIGNAL_BUSREADY]"),
+            observer.index("run_step(PHASE_EDGE"),
+        )
         self.assertIn("STEP_EDGE_INTEREST_CHANGED", wrapper)
         self.assertIn("observe_signal_0();", wrapper)
         launcher = wrapper.index(
@@ -497,6 +769,25 @@ class CodegenTests(unittest.TestCase):
         self.assertLess(wrapper.index("service_requests(initial_requests);"), launcher)
         self.assertLess(launcher, wrapper.index("        drive_clock_0();", launcher))
         self.assertLess(launcher, wrapper.index("        observe_signal_0();", launcher))
+
+    def test_auto_edge_observers_use_the_discovered_port_set(self):
+        config = manifest()
+        config["edge_observers"] = []
+        config["auto_edge_observers"] = True
+        config["edge_observer_signal_ids"] = [0, 2]
+        ports = map_ports(
+            [
+                Port("clk", "input", 1),
+                Port("unused", "output", 1),
+                Port("event_out", "output", 1),
+            ],
+            config,
+        )
+        wrapper = render_sv(ports, [], config, "sample.json")
+
+        self.assertIn("@(event_out);", wrapper)
+        self.assertNotIn("@(unused);", wrapper)
+        self.assertNotIn("@(clk);", wrapper)
 
     def test_rejects_invalid_edge_observer_ports(self):
         ports = [

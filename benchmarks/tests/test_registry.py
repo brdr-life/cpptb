@@ -22,6 +22,8 @@ EXPECTED_NAMES = (
     "dpi_fifo_scoreboard",
     "dpi_apb_regfile",
     "dpi_watchdog_timeout",
+    "dpi_fault_injection",
+    "dpi_rich_data",
     "peripheral_suite",
 )
 
@@ -32,6 +34,8 @@ EXAMPLE_NAMES = (
     "dpi_fifo_scoreboard",
     "dpi_apb_regfile",
     "dpi_watchdog_timeout",
+    "dpi_fault_injection",
+    "dpi_rich_data",
 )
 
 
@@ -66,7 +70,7 @@ class RegistryTests(unittest.TestCase):
                     tuple(binary.adapter for binary in entry.binaries),
                     ("cpp_dpi", "pure_sv"),
                 )
-                self.assertIsNotNone(entry.runner.iterations_environment)
+                self.assertIsNone(entry.runner.iterations_environment)
         self.assertEqual(
             registry.get_benchmark("peripheral_suite").gate_policy,
             registry.GatePolicy.DIAGNOSTIC,
@@ -75,14 +79,29 @@ class RegistryTests(unittest.TestCase):
             registry.get_benchmark("peripheral_suite").runner.semantic_build_targets,
             ("peripheral-suite-dpi-build", "peripheral-suite-sv-build"),
         )
+        authoring = registry.list_benchmarks(
+            category=registry.Category.AUTHORING_FEATURE
+        )
+        self.assertEqual(
+            tuple(
+                entry.name
+                for entry in authoring
+                if entry.gate_policy is registry.GatePolicy.WAIVED_HARD_1_10
+            ),
+            ("force_direct",),
+        )
         self.assertTrue(
             all(
                 entry.gate_policy is registry.GatePolicy.HARD_1_10
-                for entry in registry.list_benchmarks(
-                    category=registry.Category.AUTHORING_FEATURE
-                )
+                for entry in authoring
+                if entry.name != "force_direct"
             )
         )
+        waiver = registry.get_benchmark("force_direct").waiver
+        self.assertIsNotNone(waiver)
+        self.assertGreater(waiver.max_ratio, 1.10)
+        self.assertTrue(waiver.approved_on)
+        self.assertTrue(waiver.rationale)
 
     def test_lookup_and_filtered_listing(self) -> None:
         control = registry.get_benchmark("control")
@@ -99,6 +118,8 @@ class RegistryTests(unittest.TestCase):
                 "dpi_fifo_scoreboard",
                 "dpi_apb_regfile",
                 "dpi_watchdog_timeout",
+                "dpi_fault_injection",
+                "dpi_rich_data",
                 "peripheral_suite",
             ),
         )
@@ -118,7 +139,12 @@ class RegistryTests(unittest.TestCase):
         ):
             with self.subTest(entry=entry.name):
                 self.assertEqual(entry.build_targets[0], entry.binaries[0].path)
-                self.assertEqual(entry.build_targets[1], "authoring-core-sv-build")
+                expected_sv_target = (
+                    "authoring-core-force-direct-sv-build"
+                    if entry.name == "force_direct"
+                    else "authoring-core-sv-build"
+                )
+                self.assertEqual(entry.build_targets[1], expected_sv_target)
 
     def test_repository_contract_is_consistent(self) -> None:
         self.assertEqual(registry.consistency_errors(), ())

@@ -9,6 +9,10 @@ from typing import Any
 from cpptb_codegen.design_ir import (
     CodegenError,
     DesignIR,
+    HierarchyCatalog,
+    HierarchyParameter,
+    HierarchyScope,
+    HierarchySignal,
     Internal,
     PackedEnumType,
     PackedEnumValue,
@@ -40,12 +44,14 @@ def _define_args(manifest: dict[str, Any]) -> list[str]:
     raise CodegenError("manifest defines must be an object or list")
 
 
-def _command_line(manifest: dict[str, Any], base_dir: Path) -> list[str]:
+def _command_line(
+    manifest: dict[str, Any], base_dir: Path, *, select_top: bool = True
+) -> list[str]:
     config = _frontend_config(manifest)
     standard = config.get("standard", "1800-2023")
     args = [
         f"--std={standard}",
-        f"--top={manifest['module']}",
+        *([f"--top={manifest['module']}"] if select_top else []),
         *(
             f"-I{(base_dir / include_dir).resolve()}"
             for include_dir in manifest.get("include_dirs", [])
@@ -59,6 +65,51 @@ def _command_line(manifest: dict[str, Any], base_dir: Path) -> list[str]:
         *(str((base_dir / source).resolve()) for source in manifest["sources"]),
     ]
     return args
+
+
+def _create_compilation(
+    manifest: dict[str, Any], base_dir: Path, *, select_top: bool = True
+) -> tuple[Any, Any]:
+    try:
+        import pyslang
+    except ImportError as error:
+        raise CodegenError(
+            "the Slang frontend requires pyslang; run code generation via "
+            "`uv run python` or install the locked project dependencies"
+        ) from error
+
+    driver = pyslang.driver.Driver()
+    driver.addStandardArgs()
+    command_line = shlex.join(
+        _command_line(manifest, base_dir, select_top=select_top)
+    )
+    if not driver.parseCommandLine(command_line) or not driver.processOptions():
+        raise CodegenError("Slang rejected the configured frontend options")
+
+    driver.parseAllSources()
+    compilation = driver.createCompilation()
+    diagnostics = _diagnostic_text(pyslang, compilation)
+    if diagnostics:
+        raise CodegenError("Slang could not elaborate the DUT:\n" + diagnostics)
+    return pyslang, compilation
+
+
+def infer_top_module(manifest: dict[str, Any], base_dir: Path) -> str:
+    _, compilation = _create_compilation(
+        manifest, base_dir, select_top=False
+    )
+    candidates = sorted(
+        instance.name for instance in compilation.getRoot().topInstances
+    )
+    if len(candidates) == 1:
+        return candidates[0]
+    if not candidates:
+        raise CodegenError("cannot infer a top module: no top-level modules found")
+    raise CodegenError(
+        "cannot infer a top module: multiple top-level modules found: "
+        + ", ".join(candidates)
+        + "; select one with --top"
+    )
 
 
 def _diagnostic_text(pyslang: Any, compilation: Any) -> str:
@@ -189,6 +240,110 @@ def _internal_cpp_path(config: dict[str, Any], hdl_path: str) -> tuple[str, ...]
     return ("internal", *configured.split("."))
 
 
+def _relative_hierarchy_path(top_name: str, hierarchical_path: str) -> str:
+    prefix = f"{top_name}."
+    if not hierarchical_path.startswith(prefix):
+        raise CodegenError(
+            f"Slang returned hierarchy path {hierarchical_path!r} outside "
+            f"top instance {top_name!r}"
+        )
+    return hierarchical_path[len(prefix) :]
+
+
+def _hierarchy_cpp_path(hdl_path: str) -> tuple[str, ...]:
+    """Preserve array suffixes for grouping by the C++ hierarchy renderer."""
+
+    return tuple(hdl_path.split("."))
+
+
+def _elaborate_hierarchy(pyslang: Any, top: Any) -> HierarchyCatalog:
+    scopes: dict[str, HierarchyScope] = {}
+    signals: dict[str, HierarchySignal] = {}
+    parameters: dict[str, HierarchyParameter] = {}
+    top_port_paths = {
+        f"{top.name}.{port.name}" for port in top.body.portList
+    }
+    scope_kinds = {
+        pyslang.ast.SymbolKind.Instance: "instance",
+        pyslang.ast.SymbolKind.InstanceArray: "instance_array",
+        pyslang.ast.SymbolKind.GenerateBlock: "generate_block",
+        pyslang.ast.SymbolKind.GenerateBlockArray: "generate_array",
+    }
+
+    def visit(symbol: Any) -> None:
+        kind = getattr(symbol, "kind", None)
+        hierarchical_path = getattr(symbol, "hierarchicalPath", "")
+        if (
+            not hierarchical_path
+            or hierarchical_path == top.name
+            or not hierarchical_path.startswith(f"{top.name}.")
+        ):
+            return
+
+        hdl_path = _relative_hierarchy_path(top.name, hierarchical_path)
+        cpp_path = _hierarchy_cpp_path(hdl_path)
+        if kind in scope_kinds:
+            scopes.setdefault(
+                hdl_path,
+                HierarchyScope(hdl_path, cpp_path, scope_kinds[kind]),
+            )
+            return
+
+        if kind == pyslang.ast.SymbolKind.Parameter:
+            try:
+                converted = symbol.value.convertToInt()
+                if converted.hasUnknown():
+                    return
+                value = int(converted.value)
+            except Exception:
+                return
+            parameters.setdefault(
+                hdl_path,
+                HierarchyParameter(
+                    hdl_path,
+                    cpp_path,
+                    value,
+                    bool(symbol.isLocalParam),
+                ),
+            )
+            return
+
+        symbol_kinds = {
+            pyslang.ast.SymbolKind.Variable: "variable",
+            pyslang.ast.SymbolKind.Net: "net",
+        }
+        if kind not in symbol_kinds or hierarchical_path in top_port_paths:
+            return
+        try:
+            element_type, unpacked = _port_shape(symbol.type)
+        except CodegenError:
+            return
+        if not element_type.isIntegral:
+            return
+        packed_type = _packed_type(element_type)
+        signals.setdefault(
+            hdl_path,
+            HierarchySignal(
+                hdl_path=hdl_path,
+                cpp_path=cpp_path,
+                symbol_kind=symbol_kinds[kind],
+                width=int(element_type.bitWidth),
+                type_kind=_transport_kind(packed_type),
+                signed=bool(element_type.isSigned),
+                four_state=bool(element_type.isFourState),
+                unpacked=unpacked,
+                packed_type=packed_type,
+            ),
+        )
+
+    top.body.visit(visit)
+    return HierarchyCatalog(
+        scopes=tuple(scopes[path] for path in sorted(scopes)),
+        signals=tuple(signals[path] for path in sorted(signals)),
+        parameters=tuple(parameters[path] for path in sorted(parameters)),
+    )
+
+
 def _resolve_internals(
     pyslang: Any, top: Any, manifest: dict[str, Any]
 ) -> tuple[Internal, ...]:
@@ -273,25 +428,7 @@ class SlangFrontend:
     name = "slang"
 
     def elaborate(self, manifest: dict[str, Any], base_dir: Path) -> DesignIR:
-        try:
-            import pyslang
-        except ImportError as error:
-            raise CodegenError(
-                "the Slang frontend requires pyslang; run code generation via "
-                "`uv run python` or install the locked project dependencies"
-            ) from error
-
-        driver = pyslang.driver.Driver()
-        driver.addStandardArgs()
-        command_line = shlex.join(_command_line(manifest, base_dir))
-        if not driver.parseCommandLine(command_line) or not driver.processOptions():
-            raise CodegenError("Slang rejected the configured frontend options")
-
-        driver.parseAllSources()
-        compilation = driver.createCompilation()
-        diagnostics = _diagnostic_text(pyslang, compilation)
-        if diagnostics:
-            raise CodegenError("Slang could not elaborate the DUT:\n" + diagnostics)
+        pyslang, compilation = _create_compilation(manifest, base_dir)
 
         top = next(
             (
@@ -369,5 +506,8 @@ class SlangFrontend:
                 f"module {manifest['module']!r} has no discoverable ports"
             )
         return DesignIR(
-            manifest["module"], tuple(ports), _resolve_internals(pyslang, top, manifest)
+            manifest["module"],
+            tuple(ports),
+            _resolve_internals(pyslang, top, manifest),
+            _elaborate_hierarchy(pyslang, top),
         )

@@ -13,7 +13,7 @@ from cpptb_codegen.design_ir import (
     UnpackedRange,
 )
 from cpptb_codegen.generate_dpi_bindings import validate_transport_ports
-from cpptb_codegen.frontends.slang import SlangFrontend
+from cpptb_codegen.frontends.slang import SlangFrontend, infer_top_module
 from cpptb_codegen.frontends.verilator_json import VerilatorJsonFrontend, parse_range
 
 
@@ -91,6 +91,61 @@ endmodule
         self.assertEqual(memory.width, 73)
         self.assertEqual(memory.unpacked, (UnpackedRange(7, 4),))
         self.assertTrue(memory.forceable)
+
+    def test_slang_catalogs_complete_elaborated_hierarchy_without_manifest(self):
+        fixture_dir = Path(__file__).parent / "fixtures"
+        design = SlangFrontend().elaborate(
+            {
+                "module": "hierarchy_catalog",
+                "sources": ["hierarchy_catalog.sv"],
+                "frontend_options": {
+                    "slang": {"standard": "1800-2023"}
+                },
+            },
+            fixture_dir,
+        )
+
+        scopes = {scope.hdl_path: scope for scope in design.hierarchy.scopes}
+        self.assertEqual(scopes["block1"].symbol_kind, "instance")
+        self.assertEqual(scopes["lanes"].symbol_kind, "generate_array")
+        self.assertEqual(scopes["lanes[0]"].symbol_kind, "generate_block")
+        self.assertEqual(
+            scopes["lanes[1].block2"].cpp_path,
+            ("lanes[1]", "block2"),
+        )
+
+        signals = {
+            signal.hdl_path: signal for signal in design.hierarchy.signals
+        }
+        self.assertNotIn("clk", signals)
+        self.assertEqual(signals["block1.storage"].symbol_kind, "variable")
+        self.assertTrue(signals["block1.storage"].depositable)
+        self.assertEqual(signals["block1.inverted"].symbol_kind, "net")
+        self.assertFalse(signals["block1.inverted"].depositable)
+        self.assertEqual(
+            signals["block1.memory"].unpacked,
+            (UnpackedRange(2, 5),),
+        )
+        self.assertEqual(
+            signals["block1.matrix"].unpacked,
+            (UnpackedRange(1, 0), UnpackedRange(4, 2)),
+        )
+        self.assertIsInstance(
+            signals["block1.state"].packed_type, PackedEnumType
+        )
+        self.assertIsInstance(
+            signals["block1.packet"].packed_type, PackedStructType
+        )
+        self.assertIn("lanes[1].block2.storage", signals)
+
+        parameters = {
+            parameter.hdl_path: parameter
+            for parameter in design.hierarchy.parameters
+        }
+        self.assertEqual(parameters["block1.WIDTH"].value, 8)
+        self.assertEqual(parameters["block1.DOUBLE_WIDTH"].value, 16)
+        self.assertTrue(parameters["block1.DOUBLE_WIDTH"].local)
+        self.assertEqual(parameters["lanes[1].index"].value, 1)
 
     def test_slang_rejects_invalid_internal_configuration(self):
         source = """
@@ -213,6 +268,33 @@ endmodule
     def test_slang_reports_source_diagnostics(self):
         with self.assertRaisesRegex(CodegenError, "Slang could not elaborate"):
             self.elaborate("module sample(input logic broken; endmodule")
+
+    def test_slang_infers_one_top_and_diagnoses_ambiguity(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_dir = Path(temp_dir)
+            source = base_dir / "design.sv"
+            source.write_text(
+                "module leaf(input logic value); endmodule\n"
+                "module selected(input logic value); leaf child(value); endmodule\n"
+            )
+            inference = {
+                "sources": ["design.sv"],
+                "frontend_options": {
+                    "slang": {"standard": "1800-2023"}
+                },
+            }
+            self.assertEqual(
+                infer_top_module(inference, base_dir), "selected"
+            )
+
+            source.write_text(
+                "module first(input logic value); endmodule\n"
+                "module second(input logic value); endmodule\n"
+            )
+            with self.assertRaisesRegex(
+                CodegenError, "multiple top-level modules.*first, second.*--top"
+            ):
+                infer_top_module(inference, base_dir)
 
     @unittest.skipUnless(shutil.which("verilator"), "Verilator is not installed")
     def test_slang_matches_verilator_transport_contract(self):

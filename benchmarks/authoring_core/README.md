@@ -1,9 +1,10 @@
 # Authoring-core C++ DPI vs pure-SystemVerilog benchmark
 
 This suite measures the authoring cost of the coroutine primitives in
-`cpptb/coro_runtime.hpp` against direct SystemVerilog equivalents. Both sides
-instantiate the same deterministic `authoring_core_dut`, issue the same request
-stream, check the same responses, and fold them into the same 32-bit checksum.
+`include/cpptb/coro_runtime.hpp` against direct SystemVerilog equivalents. Both
+sides instantiate the same deterministic `authoring_core_dut`, issue the same
+request stream, check the same responses, and fold them into the same 32-bit
+checksum.
 The generated DPI wrapper comes from the Slang manifest and public DPI runtime;
 the benchmark does not use a Verilator-private API.
 
@@ -25,11 +26,19 @@ simulation cycles, checksum, failures, and every feature-use counter. The
 runner also validates counts and checksum against `workload.py`, independently
 of the other implementation.
 
-For `N > 0`, every kernel has `transactions=N`, one response check per
-transaction, and two final DUT-count checks. Most feature kernels add one
+For `N > 0`, every protocol kernel has `transactions=N`, one response check
+per transaction, and two final DUT-count checks. Most feature kernels add one
 semantic check per iteration. `array_index` adds eight, `array_wide` adds four,
 and `force_release` adds two; `clock_cycles` adds none because its effect is
 proved by its use counter and paired cycle count.
+
+`force_direct` is a deliberately separate zero-time microbenchmark. It has no
+protocol transaction or clock activity and performs one force, immediate
+readback of the forced net, and release per iteration. The runner always
+reports its raw `1.10x` guard result. The top-level feature registry applies a
+narrow `1.20x` waiver ceiling to this one transport-bound case; it does not
+waive semantic parity, malformed results, invalid environments, or any other
+feature.
 
 | Kernel | Feature counts | Checks |
 |---|---|---:|
@@ -56,6 +65,8 @@ proved by its use counter and paired cycle count.
 | `signal_edge` | `signal_edges=N` | `N + 2` |
 | `array_multidim` | `array_multidim=N` | `7N + 2` |
 | `force_release` | `force_release=N` | `3N + 2` |
+| `packed_view` | `packed_view=N` | `5N + 2` |
+| `force_direct` | `force_release=N`, zero transactions and cycles | `N` |
 | `all` | all aggregate usage counts enabled, both timeout-hit counts `floor(N/2)` | `28N + 2` |
 
 ## Semantic mapping
@@ -78,9 +89,12 @@ proved by its use counter and paired cycle count.
 | `RisingEdge{rsp_valid}` on a DUT output observer | `@(posedge rsp_valid)` |
 | rank-2 `.at(row).at(column).set()/get()` with 65-bit elements | nested unpacked-array indexed writes/reads |
 | internal `.force(value)`, explicit `Delay{1_ps}`, `.release()`, explicit `Delay{1_ps}` | `force`, `#1ps`, `release`, `#1ps` on the same internal net |
+| internal `.force(value)`, immediate `.get()`, `.release()` | zero-time `force`, hierarchical readback, and `release` in a standalone SV top |
 
-The `signal_edge`, `array_multidim`, and `force_release` kernels are
-intentionally isolated and are not included in `all`.
+The `signal_edge`, `array_multidim`, `force_release`, `packed_view`, and
+`force_direct` kernels are intentionally isolated and are not included in
+`all`. `force_direct` uses a standalone pure-SV binary so its zero-time loop
+does not distort or inherit the larger timed testbench's generated code.
 
 The task-timeout kernel alternates deterministically: even iterations complete
 the task after `500ps` against a `3ns` limit and consume `value()`; odd
