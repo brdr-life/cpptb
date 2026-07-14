@@ -32,6 +32,8 @@ enum StepResult : uint32_t {
     kStepFallingEdges = 16,
     kStepOutputsChanged = 32,
     kStepEdgeInterestChanged = 64,
+    kStepNextTickTimer = 128,
+    kStepTimerIdle = 256,
 };
 
 template <typename Adapter>
@@ -54,6 +56,7 @@ class Runtime {
             static_binding_.inputs = inputs_.data();
             static_binding_.outputs = outputs_.data();
             static_binding_.configured_clock = configured_clock_.data();
+            static_binding_.edge_observer = edge_observer_.data();
             static_binding_.local_edge_capable = local_edge_capable_.data();
             static_binding_.outputs_dirty = &outputs_dirty_;
             static_binding_.local_edge_delivery_enabled =
@@ -75,6 +78,7 @@ class Runtime {
         configured_clock_.fill(false);
         edge_observer_.fill(false);
         local_edge_capable_.fill(false);
+        testbench_clock_.fill(false);
         observed_transport_offsets_.fill(kNoTransportOffset);
         on_demand_get_words_.fill(nullptr);
         on_demand_set_words_.fill(nullptr);
@@ -87,10 +91,26 @@ class Runtime {
         outputs_dirty_ = false;
         access_violation_ = false;
         reported_ = false;
+        registered_clock_count_ = 0;
+        registered_clocks_.fill(RegisteredClock{});
+        timeprecision_fs_ = timeprecision_fs;
+        clock_registration_open_ = true;
 #ifdef CPPTB_DPI_PROFILE
         profile_step_count_ = 0;
+        profile_init_step_count_ = 0;
+        profile_clock_edge_step_count_ = 0;
+        profile_signal_edge_step_count_ = 0;
+        profile_rising_edge_step_count_ = 0;
+        profile_falling_edge_step_count_ = 0;
+        profile_edge_without_interest_count_ = 0;
+        profile_delay_step_count_ = 0;
+        profile_next_tick_timer_count_ = 0;
+        profile_timer_idle_count_ = 0;
         profile_outputs_changed_count_ = 0;
         profile_output_transfer_count_ = 0;
+#endif
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+        coro::detail::coroutine_frame_pool().reset_stats();
 #endif
 
         scheduler_ =
@@ -143,7 +163,19 @@ class Runtime {
         });
         validate_transport_completeness();
         start_ = std::chrono::steady_clock::now();
-        Adapter::register_testbench(*scheduler_, dut_, iterations_, result_);
+        const coro::ClockRegistrar clocks{this, register_clock_callback};
+        if constexpr (requires {
+                          Adapter::register_testbench(
+                              *scheduler_, dut_, iterations_, result_, clocks);
+                      }) {
+            Adapter::register_testbench(*scheduler_, dut_, iterations_,
+                                        result_, clocks);
+        } else {
+            Adapter::register_testbench(*scheduler_, dut_, iterations_,
+                                        result_);
+        }
+        validate_registered_clock_setup();
+        clock_registration_open_ = false;
     }
 
     int step(uint32_t phase_value, uint64_t sim_time, uint64_t sim_cycles,
@@ -160,6 +192,32 @@ class Runtime {
 
 #ifdef CPPTB_DPI_PROFILE
         ++profile_step_count_;
+        switch (phase) {
+            case Phase::Init:
+                ++profile_init_step_count_;
+                break;
+            case Phase::Edge:
+                if (event_signal_id < configured_clock_.size() &&
+                    configured_clock_[event_signal_id]) {
+                    ++profile_clock_edge_step_count_;
+                } else {
+                    ++profile_signal_edge_step_count_;
+                }
+                if (event_edge == 0u) {
+                    ++profile_rising_edge_step_count_;
+                } else if (event_edge == 1u) {
+                    ++profile_falling_edge_step_count_;
+                }
+                if (!scheduler_->has_edge_interest(
+                        event_signal_id,
+                        static_cast<coro::EdgeKind>(event_edge))) {
+                    ++profile_edge_without_interest_count_;
+                }
+                break;
+            case Phase::Delay:
+                ++profile_delay_step_count_;
+                break;
+        }
 #endif
 
         const auto* input_data = array_ptr(in_words, "input");
@@ -183,6 +241,15 @@ class Runtime {
                     std::fprintf(stderr, "%s: unknown edge %u\n",
                                  Adapter::result_name, event_edge);
                     return -1;
+                }
+                if (event_signal_id < configured_clock_.size() &&
+                    configured_clock_[event_signal_id] &&
+                    testbench_clock_[event_signal_id]) {
+                    outputs_[event_signal_id] =
+                        event_edge ==
+                                static_cast<uint32_t>(coro::EdgeKind::Rising)
+                            ? 1u
+                            : 0u;
                 }
                 scheduler_->notify_edge(
                     event_signal_id, static_cast<coro::EdgeKind>(event_edge));
@@ -216,7 +283,21 @@ class Runtime {
 
         uint32_t requests = completion > 0 ? kStepDone : 0;
         if (scheduler_->consume_timer_schedule_changed()) {
-            requests |= kStepTimerChanged;
+            const uint64_t deadline = scheduler_->next_timer_deadline();
+            if (deadline == std::numeric_limits<uint64_t>::max()) {
+                requests |= kStepTimerIdle;
+#ifdef CPPTB_DPI_PROFILE
+                ++profile_timer_idle_count_;
+#endif
+            } else if (deadline > scheduler_->now_ticks() &&
+                       deadline - scheduler_->now_ticks() == 1u) {
+                requests |= kStepNextTickTimer;
+#ifdef CPPTB_DPI_PROFILE
+                ++profile_next_tick_timer_count_;
+#endif
+            } else {
+                requests |= kStepTimerChanged;
+            }
         }
         if (scheduler_->has_falling_edge_waiters()) {
             requests |= kStepFallingEdges;
@@ -252,6 +333,26 @@ class Runtime {
                           : coro::kEdgeInterestNone;
     }
 
+    uint64_t clock_config(uint32_t signal_id, uint32_t field) const {
+        for (uint32_t index = 0; index < registered_clock_count_; ++index) {
+            const auto& clock = registered_clocks_[index];
+            if (clock.signal_id != signal_id) continue;
+            switch (field) {
+                case 0:
+                    return clock.half_period_ticks;
+                case 1:
+                    return clock.phase_ticks;
+                case 2:
+                    return clock.primary ? 1u : 0u;
+                default:
+                    std::fprintf(stderr, "%s: invalid clock field %u\n",
+                                 Adapter::result_name, field);
+                    return 0;
+            }
+        }
+        return 0;
+    }
+
     uint64_t edge_interest_generation() const {
         return scheduler_ ? scheduler_->edge_interest_generation() : 0;
     }
@@ -262,6 +363,126 @@ class Runtime {
     }
 
    private:
+    struct RegisteredClock {
+        uint32_t signal_id = 0;
+        uint64_t half_period_ticks = 0;
+        uint64_t phase_ticks = 0;
+        bool primary = false;
+    };
+
+    static void register_clock_callback(void* context, coro::Signal signal,
+                                        coro::SimTime period,
+                                        coro::SimTime phase) {
+        static_cast<Runtime*>(context)->register_clock(signal, period, phase);
+    }
+
+    void register_clock(coro::Signal signal, coro::SimTime period,
+                        coro::SimTime phase) {
+        if (!clock_registration_open_) {
+            std::fprintf(stderr,
+                         "%s: clocks must be started before the test's first "
+                         "await\n",
+                         Adapter::result_name);
+            std::abort();
+        }
+        const uint32_t id = signal.id;
+        const RegisteredClockConfig* expected = nullptr;
+        if constexpr (requires { Adapter::registered_clock_configs; }) {
+            for (const auto& config : Adapter::registered_clock_configs) {
+                if (config.signal_id == id) expected = &config;
+            }
+        }
+        if (id >= driven_.size() || (!driven_[id] && !expected) ||
+            !local_edge_capable_[id]) {
+            std::fprintf(stderr,
+                         "%s: clock '%s' must be a writable one-bit DUT port\n",
+                         Adapter::result_name,
+                         signal.name ? signal.name : "<unnamed>");
+            std::abort();
+        }
+        for (uint32_t index = 0; index < registered_clock_count_; ++index) {
+            if (registered_clocks_[index].signal_id == id) {
+                std::fprintf(stderr,
+                             "%s: clock '%s' was started more than once\n",
+                             Adapter::result_name,
+                             signal.name ? signal.name : "<unnamed>");
+                std::abort();
+            }
+        }
+        if (configured_clock_[id] && !expected) {
+            std::fprintf(stderr, "%s: clock '%s' was started more than once\n",
+                         Adapter::result_name,
+                         signal.name ? signal.name : "<unnamed>");
+            std::abort();
+        }
+        if (period.femtoseconds == 0 ||
+            (period.femtoseconds % 2u) != 0) {
+            std::fprintf(stderr,
+                         "%s: clock '%s' period must be positive and even\n",
+                         Adapter::result_name,
+                         signal.name ? signal.name : "<unnamed>");
+            std::abort();
+        }
+        const uint64_t half_period_fs = period.femtoseconds / 2u;
+        if ((half_period_fs % timeprecision_fs_) != 0 ||
+            (phase.femtoseconds % timeprecision_fs_) != 0) {
+            std::fprintf(stderr,
+                         "%s: clock '%s' timing is not representable at the "
+                         "simulator precision\n",
+                         Adapter::result_name,
+                         signal.name ? signal.name : "<unnamed>");
+            std::abort();
+        }
+        if (expected &&
+            (expected->period_fs != period.femtoseconds ||
+             expected->phase_fs != phase.femtoseconds ||
+             expected->initial_value != (outputs_[id] & 1u))) {
+            std::fprintf(
+                stderr,
+                "%s: clock '%s' timing changed after clock discovery; "
+                "regenerate the testbench wrapper\n",
+                Adapter::result_name,
+                signal.name ? signal.name : "<unnamed>");
+            std::abort();
+        }
+        if (registered_clock_count_ >= registered_clocks_.size()) {
+            std::fprintf(stderr, "%s: too many registered clocks\n",
+                         Adapter::result_name);
+            std::abort();
+        }
+
+        registered_clocks_[registered_clock_count_] = RegisteredClock{
+            id, half_period_fs / timeprecision_fs_,
+            phase.femtoseconds / timeprecision_fs_,
+            registered_clock_count_ == 0};
+        ++registered_clock_count_;
+        configured_clock_[id] = true;
+        testbench_clock_[id] = true;
+        scheduler_->configure_static_edge_source(id);
+    }
+
+    void validate_registered_clock_setup() const {
+        if constexpr (requires { Adapter::registered_clock_configs; }) {
+            for (const auto& expected : Adapter::registered_clock_configs) {
+                bool found = false;
+                for (uint32_t index = 0; index < registered_clock_count_;
+                     ++index) {
+                    found = found ||
+                            registered_clocks_[index].signal_id ==
+                                expected.signal_id;
+                }
+                if (!found) {
+                    std::fprintf(
+                        stderr,
+                        "%s: a clock captured during discovery is no longer "
+                        "started; regenerate the testbench wrapper\n",
+                        Adapter::result_name);
+                    std::abort();
+                }
+            }
+        }
+    }
+
     static constexpr uint32_t kNoTransportOffset =
         std::numeric_limits<uint32_t>::max();
     class InputViewScope {
@@ -340,6 +561,20 @@ class Runtime {
             for (uint32_t id = 0; id < transport_seen.size(); ++id) {
                 if (on_demand_get_words_[id]) {
                     validate_transport_word(id, driven_[id], transport_seen);
+                }
+            }
+            if constexpr (requires {
+                              Adapter::transportless_edge_signal_ids;
+                          }) {
+                for (const auto id : Adapter::transportless_edge_signal_ids) {
+                    if (id >= transport_seen.size() || transport_seen[id]) {
+                        std::fprintf(
+                            stderr,
+                            "%s: invalid transportless edge signal %u\n",
+                            Adapter::result_name, id);
+                        std::abort();
+                    }
+                    transport_seen[id] = true;
                 }
             }
             for (uint32_t id = 0; id < transport_seen.size(); ++id) {
@@ -659,7 +894,8 @@ class Runtime {
 
     void deliver_local_edge(uint32_t id, uint32_t previous, uint32_t value) {
         if (!local_edge_delivery_enabled_ || !scheduler_ ||
-            !local_edge_capable_[id] || configured_clock_[id]) {
+            !local_edge_capable_[id] || configured_clock_[id] ||
+            edge_observer_[id]) {
             return;
         }
 
@@ -805,12 +1041,52 @@ class Runtime {
             }
         }();
         std::printf(
-            "CPPTB_DPI_PROFILE steps=%llu outputs_changed=%llu "
+            "CPPTB_DPI_PROFILE steps=%llu init=%llu clock_edges=%llu "
+            "signal_edges=%llu rising_edges=%llu falling_edges=%llu "
+            "edges_without_interest=%llu delays=%llu next_tick_timers=%llu "
+            "timer_idle=%llu outputs_changed=%llu "
             "output_transfers=%llu input_words=%zu output_words=%zu\n",
             static_cast<unsigned long long>(profile_step_count_),
+            static_cast<unsigned long long>(profile_init_step_count_),
+            static_cast<unsigned long long>(profile_clock_edge_step_count_),
+            static_cast<unsigned long long>(profile_signal_edge_step_count_),
+            static_cast<unsigned long long>(profile_rising_edge_step_count_),
+            static_cast<unsigned long long>(profile_falling_edge_step_count_),
+            static_cast<unsigned long long>(profile_edge_without_interest_count_),
+            static_cast<unsigned long long>(profile_delay_step_count_),
+            static_cast<unsigned long long>(profile_next_tick_timer_count_),
+            static_cast<unsigned long long>(profile_timer_idle_count_),
             static_cast<unsigned long long>(profile_outputs_changed_count_),
             static_cast<unsigned long long>(profile_output_transfer_count_),
             input_words, output_words);
+#endif
+#ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
+        const auto& frame_pool =
+            coro::detail::coroutine_frame_pool().stats();
+        std::printf(
+            "CPPTB_CORO_FRAME_POOL system_allocations=%llu "
+            "reused_allocations=%llu cached_deallocations=%llu "
+            "system_deallocations=%llu\n",
+            static_cast<unsigned long long>(frame_pool.system_allocations),
+            static_cast<unsigned long long>(frame_pool.reused_allocations),
+            static_cast<unsigned long long>(frame_pool.cached_deallocations),
+            static_cast<unsigned long long>(frame_pool.system_deallocations));
+#endif
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        std::printf(
+            "CPPTB_CORO_WAIT_PATH edge_notifications=%llu "
+            "edge_notifications_resumed=%llu rising_parks=%llu "
+            "falling_parks=%llu any_parks=%llu\n",
+            static_cast<unsigned long long>(
+                scheduler_->edge_notification_count()),
+            static_cast<unsigned long long>(
+                scheduler_->edge_notification_resume_count()),
+            static_cast<unsigned long long>(
+                scheduler_->single_edge_park_count(coro::EdgeKind::Rising)),
+            static_cast<unsigned long long>(
+                scheduler_->single_edge_park_count(coro::EdgeKind::Falling)),
+            static_cast<unsigned long long>(
+                scheduler_->single_edge_park_count(coro::EdgeKind::Any)));
 #endif
         reported_ = true;
         return result_.failures == 0 ? 1 : -1;
@@ -822,6 +1098,7 @@ class Runtime {
     std::array<bool, Adapter::signal_count> configured_clock_{};
     std::array<bool, Adapter::signal_count> edge_observer_{};
     std::array<bool, Adapter::signal_count> local_edge_capable_{};
+    std::array<bool, Adapter::signal_count> testbench_clock_{};
     std::array<const char*, Adapter::signal_count> signal_names_{};
     std::array<uint32_t, Adapter::signal_count> observed_transport_offsets_{};
     std::array<OnDemandGetWordsFn, Adapter::signal_count>
@@ -841,8 +1118,21 @@ class Runtime {
     bool access_violation_ = false;
     bool reported_ = false;
     bool local_edge_delivery_enabled_ = false;
+    std::array<RegisteredClock, Adapter::signal_count> registered_clocks_{};
+    uint32_t registered_clock_count_ = 0;
+    uint64_t timeprecision_fs_ = 1;
+    bool clock_registration_open_ = false;
 #ifdef CPPTB_DPI_PROFILE
     uint64_t profile_step_count_ = 0;
+    uint64_t profile_init_step_count_ = 0;
+    uint64_t profile_clock_edge_step_count_ = 0;
+    uint64_t profile_signal_edge_step_count_ = 0;
+    uint64_t profile_rising_edge_step_count_ = 0;
+    uint64_t profile_falling_edge_step_count_ = 0;
+    uint64_t profile_edge_without_interest_count_ = 0;
+    uint64_t profile_delay_step_count_ = 0;
+    uint64_t profile_next_tick_timer_count_ = 0;
+    uint64_t profile_timer_idle_count_ = 0;
     uint64_t profile_outputs_changed_count_ = 0;
     mutable uint64_t profile_output_transfer_count_ = 0;
 #endif
@@ -885,3 +1175,9 @@ class Runtime {
                                    cpptb_dpi_pull_outputs,                 \
                                    cpptb_dpi_next_timer_deadline,          \
                                    cpptb_dpi_edge_interest)
+
+#define CPPTB_DEFINE_NAMED_DPI_CLOCK_API(ClockConfigFunction)             \
+    extern "C" unsigned long long ClockConfigFunction(                  \
+        unsigned int signal_id, unsigned int field) {                     \
+        return g_cpptb_dpi_runtime.clock_config(signal_id, field);         \
+    }

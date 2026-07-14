@@ -15,7 +15,15 @@ make feature-test FEATURE=dpi_fifo_scoreboard
 ```
 
 The two testbenches use the same deterministic data generator, ready pattern,
-sampling points, checks, and primary-clock cycle count.
+sampling points, checks, and primary-clock cycle count. Both use the fixed
+semantic workload `kWordCount = 24`; this equivalence example has no benchmark
+iteration control. Generate it from RTL with:
+
+```sh
+uv run --frozen cpptb-codegen stream_fifo.sv
+```
+
+The C++ testbench initializes `dut.clk` and starts its 10 ns period.
 
 | cpptb | SystemVerilog |
 |---|---|

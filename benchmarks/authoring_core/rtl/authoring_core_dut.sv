@@ -61,6 +61,8 @@ module authoring_core_dut (
   logic [13:0] fixed_remainder;
   logic signed [32:0] fixed_rounded;
   logic [31:0] memory [0:255];
+  bit [136:0] hierarchy_wide;
+  logic [3:0] hierarchy_logic;
   wire [31:0] force_target = force_source_i ^ 32'h5a5a_a5a5;
 
   assign req_ready = !pending && !rsp_valid;

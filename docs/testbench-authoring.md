@@ -16,25 +16,40 @@ The APB example keeps protocol timing in a reusable helper, leaving the test
 sequence register-oriented:
 
 ```cpp
-Task<void> register_sequence(ApbRegfileTb tb) {
-    co_await reset_dut(tb);
-    const ApbMaster apb{tb};
+Task<void> register_sequence(Dut dut, TestContext& test) {
+    dut.clk.set(0);
+    test.start_clock(dut.clk, 10_ns);
+
+    co_await reset_dut(dut);
+    const ApbMaster apb{dut, test};
 
     co_await apb.write(0x04, 0x1234'5678);
     co_await apb.read_expect("register readback", 0x04, 0x1234'5678);
 }
+
+CPPTB_REGISTER_TEST(register_sequence);
 ```
+
+`CPPTB_REGISTER_TEST` installs the test through a translation-unit initializer.
+Link the testbench translation unit directly into the simulator executable. If
+it is packaged in a static archive, link that archive with whole-archive
+semantics (or force-link the object) so the linker does not discard its
+otherwise unreferenced initializer.
 
 The complete implementation, including `Task<uint32_t> read(...)`, is in
 `examples/apb_regfile/testbench.cpp`.
 
 The user-facing primitives are deliberately small:
 
-- `tb.spawn(task)` to attach concurrent reset, driver, sequence, and monitor
+- `test.start_clock(dut.clk, 10_ns)` to register a periodic input clock before
+  the test's first await.
+- `test.spawn(task)` to attach concurrent reset, driver, sequence, and monitor
   coroutines and return a process handle.
 - `co_await RisingEdge{dut.HCLK}` and `co_await FallingEdge{dut.HCLK}` for
   simulator triggers.
 - `dut.signal.set(value)` and `dut.signal.get()` for explicit signal access.
+- `dut.block1.block2.name.get()`, `deposit(value)`, `force(value)`, and
+  `release()` for any supported object in the inferred RTL hierarchy.
 - `co_await helper_task(...)` for reusable bus operations such as APB writes
   and read/check transactions.
 
@@ -103,38 +118,69 @@ These pieces compose into ordinary driver, monitor, and scoreboard code. The
 following is the core of the runnable `fifo_scoreboard` example:
 
 ```cpp
-Task<void> scoreboard(FifoScoreboardTb tb,
+constexpr uint32_t kWordCount = 24;
+
+Task<void> scoreboard(TestContext& test,
                       Channel<uint32_t>& expected_words,
                       Channel<uint32_t>& observed_words) {
-    for (uint32_t index = 0; index < tb.iterations(); ++index) {
+    for (uint32_t index = 0; index < kWordCount; ++index) {
         const uint32_t expected = co_await expected_words.get();
         const uint32_t actual = co_await observed_words.get();
-        tb.expect_eq("FIFO payload", actual, expected);
+        test.expect_eq("FIFO payload", actual, expected);
     }
 }
 
-Task<void> fifo_test(FifoScoreboardTb tb) {
+Task<void> fifo_test(Dut dut, TestContext& test) {
     Event reset_done;
     Channel<uint32_t> expected_words;
     Channel<uint32_t> observed_words;
 
-    co_await Join{reset_dut(tb, reset_done),
-                  input_driver(tb, reset_done, expected_words),
-                  output_ready_driver(tb, reset_done),
-                  output_monitor(tb, reset_done, observed_words),
-                  scoreboard(tb, expected_words, observed_words)};
+    co_await Join{reset_dut(dut, reset_done),
+                  input_driver(dut, reset_done, expected_words),
+                  output_ready_driver(dut, reset_done),
+                  output_monitor(dut, reset_done, observed_words),
+                  scoreboard(test, expected_words, observed_words)};
 }
+
+CPPTB_REGISTER_TEST(fifo_test);
 ```
 
 A spawned process can be awaited or cancelled explicitly:
 
 ```cpp
-auto monitor = tb.spawn(monitor_bus(tb));
-auto driver = tb.spawn(drive_packets(tb));
+auto monitor = test.spawn(monitor_bus(dut));
+auto driver = test.spawn(drive_packets(dut));
 
 co_await driver;
 monitor.cancel();
 ```
+
+`TestContext::now()` reports the scheduler's current absolute simulation time.
+`spawn_detached()` starts a root that needs no handle. Neither signal writes
+nor backdoor operations add an implicit delay; drive, wait, settle, and sample
+remain visible in user code.
+
+The `TestContext&` passed to the registered root refers to a context stored in
+that root's coroutine frame. A child that may outlive the root must not retain
+that reference. Pass `TestContext` by value to such a child, especially a
+detached child:
+
+```cpp
+Task<void> detached_monitor(Dut dut, TestContext test) {
+    co_await RisingEdge{dut.alert};
+    test.expect_eq("alert payload", dut.payload.get(), 0x42u);
+}
+
+Task<void> root_test(Dut dut, TestContext& test) {
+    test.spawn_detached(detached_monitor(dut, test));
+    co_return;
+}
+```
+
+Copying `TestContext` copies its handles to the scheduler and result; it does
+not schedule work or advance simulation time. Children that are joined before
+the root returns may use the reference as long as their lifetime is bounded by
+that join.
 
 `Process` is a copyable handle to scheduler-owned process state. Copying a
 handle does not copy the coroutine or transfer ownership; all copies observe
@@ -185,6 +231,22 @@ In particular, an edge wake does not by itself promise that downstream
 sequential or combinational logic has settled. The examples therefore show
 the sampling point explicitly with `Delay{1_ps}`, mirrored by `#1ps` in SV.
 
+The [fault-injection example](examples/fault-injection.md) and
+[hierarchy guide](hierarchy.md) show the backdoor
+operations on a resolved net, a clocked variable, and a memory element. These
+operations are immediate and add no implicit delay. `force()` applies until
+the matching `release()`; after release, normal RTL drivers can update the
+object again. Force is generated for hierarchical objects used by the compiled
+testbench, not ordinary DUT ports. In particular, registered input clocks remain owned
+by `start_clock()` and cannot safely be forced or paused through the public
+API.
+
+Calling `force()` or `release()` on an ordinary port produces an intentional
+compile-time diagnostic rather than a generic missing-member error. For a
+scheduler-owned clock, the diagnostic directs the user back to
+`TestContext::start_clock()` and states that coherent clock pause/override is
+not yet supported.
+
 The complete learning path is indexed in `examples/README.md`. Run individual
 pairs or all examples through the standard target:
 
@@ -203,10 +265,14 @@ stale by `First`, cancellation, or completion are removed without resuming the
 coroutine; this cleanup includes edge queues and falling-edge interest counts,
 not only the timer heap.
 
-Generated clocks are configured as static edge sources before the first wait is
-registered. Their edges are delivered unconditionally, so waits on those IDs do
-not contribute dynamic edge-interest masks or publications; waiter lifecycle,
-cancellation, `First`, and falling-edge summaries are otherwise unchanged.
+C++-owned clocks are registered as static edge sources before the first wait.
+The first `start_clock()` call selects the primary cycle counter; later calls
+add independent domains and may specify a phase. Registered input-clock rising
+edges are delivered on every cycle; falling edges are delivered while the
+scheduler has a falling- or either-edge waiter. Waits on clock IDs do not
+publish dynamic edge-interest masks. DUT-produced and manually driven edges use
+interest-gated observers. See [clocking](clocking.md) for the concise user
+contract.
 
 Generated DPI wrappers use one persistent, clock-agnostic timer owner. The
 module-level `timer_deadline` is the source of truth, `timer_owner_target`
@@ -261,6 +327,10 @@ reported with a warning. Result artifacts include raw pairs and the
 environment/build metadata needed to interpret them. Close ratios are treated
 as noisy measurements, not evidence that either implementation is
 directionally faster.
+
+The raw runner applies this calculation to every feature. The registry has one
+visible, capped exception for the transport-only `force_direct` microbenchmark;
+see [Scoped direct-force waiver](performance.md#scoped-direct-force-waiver).
 
 ## Current scope
 

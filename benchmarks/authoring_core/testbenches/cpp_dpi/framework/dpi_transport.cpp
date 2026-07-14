@@ -21,6 +21,8 @@ struct DpiAdapter {
         generated::kDrivenSignalWordIds;
     inline static constexpr auto clock_signal_ids =
         generated::kClockSignalIds;
+    inline static constexpr auto registered_clock_configs =
+        generated::kRegisteredClockConfigs;
     inline static constexpr auto edge_observer_signal_ids =
         generated::kEdgeObserverSignalIds;
     static constexpr const char* result_name = "CPP_DPI_AUTHORING_CORE_RUNTIME";
@@ -31,8 +33,9 @@ struct DpiAdapter {
     }
 
     static void register_testbench(coro::Testbench& scheduler, Dut dut,
-                                   uint32_t iterations, Result& result) {
-        register_benchmark(scheduler, dut, iterations, result);
+                                   uint32_t iterations, Result& result,
+                                   coro::ClockRegistrar clocks) {
+        register_benchmark(scheduler, dut, iterations, result, clocks);
     }
 
     static bool timed_out(coro::SimTime, uint64_t sim_cycles,
@@ -50,3 +53,4 @@ CPPTB_DEFINE_NAMED_DPI_RUNTIME(
     authoring_core_dpi_pull_outputs,
     authoring_core_dpi_next_timer_deadline,
     authoring_core_dpi_edge_interest)
+CPPTB_DEFINE_NAMED_DPI_CLOCK_API(authoring_core_dpi_clock_config)

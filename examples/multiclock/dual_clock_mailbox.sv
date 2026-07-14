@@ -14,7 +14,8 @@ module dual_clock_mailbox (
     output logic [31:0] read_count,
 
     input  logic [7:0] probe_in,
-    output logic [7:0] probe_echo
+    output logic [7:0] probe_echo,
+    output logic       output_clk
 );
   logic [7:0] payload;
   logic request_toggle;
@@ -25,7 +26,15 @@ module dual_clock_mailbox (
   logic request_sync_2;
 
   assign write_ready = acknowledge_sync_2 == request_toggle;
-  assign probe_echo = probe_in;
+    assign probe_echo = probe_in;
+
+    always_ff @(posedge write_clk or negedge rst_n) begin
+      if (!rst_n) begin
+        output_clk <= 1'b0;
+      end else begin
+        output_clk <= ~output_clk;
+      end
+    end
 
   always_ff @(posedge write_clk or negedge rst_n) begin
     if (!rst_n) begin

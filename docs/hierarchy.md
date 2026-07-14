@@ -1,0 +1,188 @@
+# Hierarchical DUT access
+
+`cpptb-codegen` elaborates the complete SystemVerilog design with Slang and
+generates a stateless C++ view of the resulting hierarchy. The testbench does
+not list probes in JSON and does not use a separate `internal` namespace:
+
+```cpp
+const auto status = dut.block1.block2.status.get();
+dut.block1.block2.control.deposit(0x12);
+dut.lanes.at<1>().state.force(3);
+dut.lanes.at<1>().state.release();
+```
+
+The C++ path mirrors the elaborated SystemVerilog instance, generate-block,
+and object path. A misspelled path, invalid array index, or unsupported
+operation is a C++ compile error.
+
+## Runnable examples
+
+Start with the [fault-injection example](examples/fault-injection.md). It is a
+complete framework testbench that starts a clock, resets the DUT, reads and
+forces an internal resolved net, forces clocked state, deposits and forces a
+memory element, and checks the resulting top-level outputs. Its C++ and pure
+SystemVerilog forms execute the same 13 checks over the same 7 clock edges:
+
+```sh
+make cpp-dpi-fault-injection-run
+make cpp-dpi-fault-injection-sv-run
+```
+
+The central sequence uses the generated `Dut` directly and is registered like
+any other cpptb coroutine:
+
+```cpp
+Task<void> fault_injection_sequence(Dut dut, TestContext& test) {
+    dut.clk.set(0);
+    test.start_clock(dut.clk, 10_ns);
+
+    dut.rst_n.set(0);
+    co_await clock_cycles(dut.clk, 2);
+    co_await FallingEdge{dut.clk};
+    dut.rst_n.set(1);
+
+    dut.resolved_value.force(0xa5);
+    test.expect_eq("force is immediately readable",
+                   dut.resolved_value.get(), 0xa5u);
+
+    co_await Delay{1_ps};
+    test.expect_eq("forced net reaches output", dut.resolved_o.get(), 0xa5u);
+    dut.resolved_value.release();
+}
+
+CPPTB_REGISTER_TEST(fault_injection_sequence);
+```
+
+For adjacent typed access patterns, see [rich data](examples/rich-data.md) for
+wide packed values, fixed point, multidimensional arrays, packed structs, and
+enums. The [examples overview](examples.md) links every complete C++/pure-SV
+pair included in the standard regression.
+
+## Operations
+
+Top-level input ports use `set()` because they are normal testbench drives:
+
+```cpp
+dut.request.set(1);
+const auto response = dut.response.get();
+```
+
+Objects below the DUT hierarchy use explicit SystemVerilog backdoor
+operations:
+
+```cpp
+const auto before = dut.core.pending.get();
+dut.core.pending.deposit(0x2a);
+dut.core.pending.force(0x3f);
+dut.core.pending.release();
+```
+
+- `get()` reads the current value immediately.
+- `deposit(value)` performs one blocking assignment immediately.
+- `force(value)` overrides normal HDL drivers immediately and remains active.
+- `release()` removes that force immediately.
+
+None of these operations advances simulation time or adds an evaluation
+phase. An immediate `get()` of the same object sees a deposit or force. Await
+an edge or `Delay` only when dependent RTL must execute before it is sampled:
+
+```cpp
+dut.core.pending.deposit(0x2a);
+test.expect_eq("immediate backdoor read", dut.core.pending.get(), 0x2au);
+
+co_await Delay{1_ps};
+test.expect_eq("dependent output", dut.pending_o.get(), 0x2au);
+```
+
+After `release()`, a variable retains its last forced value until RTL writes it
+again. A net returns to its resolved drivers. These are the corresponding
+SystemVerilog semantics.
+
+## Arrays and generated scopes
+
+Fixed unpacked memories preserve their declared index range:
+
+```cpp
+dut.memory.at(5).deposit(0xbeef);
+const auto value = dut.memory.at(5).get();
+```
+
+Multidimensional arrays take one index per dimension:
+
+```cpp
+dut.coefficients.at(1, 3).deposit(7);
+```
+
+Elaborated instance and generate arrays use a compile-time index:
+
+```cpp
+const auto lane_state = dut.lanes.at<2>().state.get();
+```
+
+The compile-time form keeps the returned scope fully typed and rejects an
+out-of-range index during compilation.
+
+## Packed and typed values
+
+Signals up to 64 bits use native integer values. Wider packed values use
+`Bits<W>`:
+
+```cpp
+Bits<137> command;
+command.set_word(0, 0x1234'5678u);
+command.set_word(4, 0x1ffu);
+dut.core.command.deposit(command);
+const Bits<137> observed = dut.core.command.get();
+```
+
+Generated packed enum and struct value types preserve names and fields. The
+same signal API accepts and returns those generated types. `get_as<T>()` and
+`deposit_as(value)` provide the explicit conversion point for fixed-point or
+other user value types that expose the required bit conversion.
+
+For four-state objects, `get_logic()`, `deposit_logic()`, and `force_logic()`
+use `LogicBits<W>` with separate value and X/Z planes:
+
+```cpp
+const auto stimulus = LogicBits<4>::from_string("10xz");
+dut.core.bus.deposit_logic(stimulus);
+const auto sampled = dut.core.bus.get_logic();
+```
+
+The ordinary `get()`, `deposit()`, and `force()` operations remain available
+as two-state operations. Four-state behavior depends on simulator support;
+Verilator, the current end-to-end reference backend, is a two-state simulator.
+
+## Hierarchical triggers
+
+One-bit hierarchical objects support the same trigger vocabulary as ports:
+
+```cpp
+co_await RisingEdge{dut.core.done};
+co_await FallingEdge{dut.core.busy};
+co_await Edge{dut.core.phase};
+```
+
+Only paths used by the compiled testbench receive generated edge observers.
+
+## Generation cost
+
+The whole elaborated hierarchy is represented in the generated C++ type, but
+the proxy objects carry no runtime state. A discovery compile records the
+operations actually instantiated by the testbench; the final wrapper emits
+DPI exports and edge observers only for those path/operation pairs. An unused
+hierarchical object therefore adds no simulator process, callback, or runtime
+transport cost.
+
+Inspect the inferred catalog without creating a user configuration file:
+
+```sh
+uv run --frozen cpptb-codegen rtl/design.sv --inspect-hierarchy
+uv run --frozen cpptb-codegen rtl/design.sv \
+  --hierarchy-json build/design-hierarchy.json
+uv run --frozen cpptb-codegen rtl/design.sv \
+  --check-hierarchy build/design-hierarchy.json
+```
+
+The JSON form is an optional review or CI snapshot of elaboration. It is
+generator output, never testbench input.

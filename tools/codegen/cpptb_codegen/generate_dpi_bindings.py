@@ -9,6 +9,7 @@ import re
 import sys
 from collections import OrderedDict
 from dataclasses import dataclass, field, replace
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,10 @@ if __package__ in {None, ""}:
 from cpptb_codegen.design_ir import (
     CodegenError,
     DesignIR,
+    HierarchyCatalog,
+    HierarchyParameter,
+    HierarchyScope,
+    HierarchySignal,
     Internal,
     PackedEnumType,
     PackedField,
@@ -36,7 +41,7 @@ from cpptb_codegen.frontends.verilator_json import (
 )
 
 
-CLOCK_SOURCES = frozenset({"generated", "testbench", "dut"})
+CLOCK_SOURCES = frozenset({"generated", "registered", "testbench", "dut"})
 TIME_UNIT_FEMTOSECONDS = {
     "fs": 1,
     "ps": 1_000,
@@ -45,7 +50,22 @@ TIME_UNIT_FEMTOSECONDS = {
     "ms": 1_000_000_000_000,
     "s": 1_000_000_000_000_000,
 }
+
 PORT_TRANSPORTS = frozenset({"packed", "on_demand"})
+HIERARCHY_OPERATIONS = frozenset(
+    {
+        "get",
+        "deposit",
+        "force",
+        "release",
+        "rising_edge",
+        "falling_edge",
+        "any_edge",
+        "get_logic",
+        "deposit_logic",
+        "force_logic",
+    }
+)
 
 
 def time_literal_femtoseconds(value: str, label: str) -> int:
@@ -58,6 +78,41 @@ def time_literal_femtoseconds(value: str, label: str) -> int:
     if femtoseconds == 0:
         raise CodegenError(f"{label} cannot be zero")
     return femtoseconds
+
+
+def format_time_literal(femtoseconds: int) -> str:
+    for unit, multiplier in reversed(tuple(TIME_UNIT_FEMTOSECONDS.items())):
+        if femtoseconds % multiplier == 0:
+            return f"{femtoseconds // multiplier}{unit}"
+    raise CodegenError("time value cannot be represented in femtoseconds")
+
+
+def parse_clock_argument(value: str, *, primary: bool = True) -> dict[str, Any]:
+    try:
+        port, timing = value.split("=", 1)
+    except ValueError as error:
+        raise CodegenError(
+            f"clock {value!r} must use PORT=PERIOD or "
+            "PORT=PERIOD@PHASE syntax"
+        ) from error
+    period, separator, phase = timing.partition("@")
+    validate_identifier(port, "clock port")
+    period_fs = time_literal_femtoseconds(period, f"clock {port!r} period")
+    if period_fs % 2 != 0:
+        raise CodegenError(
+            f"clock {port!r} period must be divisible into two whole "
+            "femtosecond half-periods"
+        )
+    clock = {
+        "port": port,
+        "source": "generated",
+        "half_period": format_time_literal(period_fs // 2),
+        "primary": primary,
+    }
+    if separator:
+        phase_fs = time_literal_femtoseconds(phase, f"clock {port!r} phase")
+        clock["phase"] = format_time_literal(phase_fs)
+    return clock
 
 
 @dataclass
@@ -84,6 +139,196 @@ def load_manifest(path: Path) -> dict[str, Any]:
     return manifest
 
 
+def source_manifest(
+    sources: list[Path],
+    top: str,
+    *,
+    output_dir: Path,
+    clocks: list[dict[str, Any]] | None = None,
+    edge_observers: list[str] | None = None,
+    target: str | None = None,
+    namespace: str | None = None,
+    root_type: str = "Dut",
+    frontend: str = "slang",
+    dynamic_clocks: bool = True,
+) -> dict[str, Any]:
+    if not sources:
+        raise CodegenError("source-driven generation requires at least one source")
+    validate_identifier(top, "top module")
+    target = target or top
+    validate_identifier(target, "target")
+    validate_identifier(root_type, "root type")
+    namespace = namespace or f"cpptb::generated::{target}"
+    parts = namespace.split("::")
+    if not parts or any(not part for part in parts):
+        raise CodegenError(f"namespace {namespace!r} is not valid")
+    for part in parts:
+        validate_identifier(part, "namespace component")
+
+    stem = target
+    compatibility_root = f"{pascal_case(top)}Dut"
+    run_prefix = f"cpptb_{target}_dpi"
+    manifest: dict[str, Any] = {
+        "schema_version": 1,
+        "target": target,
+        "module": top,
+        "top_module": f"dpi_{target}",
+        "namespace": namespace,
+        "root_type": root_type,
+        "frontend": frontend,
+        "frontend_options": {
+            "slang": {"standard": "1800-2023"},
+            "verilator_json": {"args": ["-Wno-TIMESCALEMOD"]},
+        },
+        "codegen": {"static_binding": True},
+        "sources": [str(source.resolve()) for source in sources],
+        "clocks": clocks or [],
+        "edge_observers": edge_observers or [],
+        "auto_edge_observers": True,
+        "run": {
+            "init_function": f"{run_prefix}_init",
+            "step_function": f"{run_prefix}_step",
+            "pull_outputs_function": f"{run_prefix}_pull_outputs",
+            "next_deadline_function": f"{run_prefix}_next_timer_deadline",
+            "edge_interest_function": f"{run_prefix}_edge_interest",
+            "clock_config_function": f"{run_prefix}_clock_config",
+            "dynamic_clocks": dynamic_clocks,
+            "iteration_plusarg": None,
+            "default_iterations": 1,
+            "timeprecision": "1ps",
+            "timeout_cycles": 1_000_000,
+        },
+        "outputs": {
+            "cpp_dut": str((output_dir / f"{stem}_dut.hpp").resolve()),
+            "cpp_binding": str(
+                (output_dir / f"{stem}_binding.hpp").resolve()
+            ),
+            "cpp_adapter": str(
+                (output_dir / f"dpi_{stem}.cpp").resolve()
+            ),
+            "cpp_clock_discovery": str(
+                (output_dir / f"discover_{stem}_clocks.cpp").resolve()
+            ),
+            "sv_wrapper": str((output_dir / f"dpi_{stem}.sv").resolve()),
+            "cpp_include": f"{stem}_dut.hpp",
+            "cpp_binding_include": f"{stem}_binding.hpp",
+        },
+    }
+    if compatibility_root != root_type:
+        manifest["compatibility_root_type"] = compatibility_root
+    return manifest
+
+
+def load_discovered_clocks(path: Path) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise CodegenError(f"cannot read discovered clocks {path}: {error}") from error
+    if not isinstance(data, dict) or data.get("schema_version") != 1:
+        raise CodegenError("discovered clock file schema_version must be 1")
+    entries = data.get("clocks")
+    if not isinstance(entries, list):
+        raise CodegenError("discovered clock file must contain a clocks list")
+
+    clocks: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    primary_count = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise CodegenError("each discovered clock must be an object")
+        port = entry.get("port")
+        if not isinstance(port, str):
+            raise CodegenError("each discovered clock must name a port")
+        validate_identifier(port, "discovered clock port")
+        if port in seen:
+            raise CodegenError(f"discovered clock port {port!r} appears more than once")
+        seen.add(port)
+        period_fs = entry.get("period_fs")
+        phase_fs = entry.get("phase_fs", 0)
+        initial_value = entry.get("initial_value", 0)
+        primary = entry.get("primary", False)
+        if not isinstance(period_fs, int) or isinstance(period_fs, bool) or period_fs <= 0:
+            raise CodegenError(f"discovered clock {port!r} period_fs must be positive")
+        if period_fs % 2 != 0:
+            raise CodegenError(f"discovered clock {port!r} period must be even")
+        if not isinstance(phase_fs, int) or isinstance(phase_fs, bool) or phase_fs < 0:
+            raise CodegenError(f"discovered clock {port!r} phase_fs cannot be negative")
+        if not isinstance(primary, bool):
+            raise CodegenError(f"discovered clock {port!r} primary must be boolean")
+        if not isinstance(initial_value, int) or isinstance(initial_value, bool) or initial_value not in {0, 1}:
+            raise CodegenError(
+                f"discovered clock {port!r} initial_value must be zero or one"
+            )
+        clock = {
+            "port": port,
+            "source": "registered",
+            "half_period": format_time_literal(period_fs // 2),
+            "period_fs": period_fs,
+            "phase_fs": phase_fs,
+            "initial_value": initial_value,
+            "primary": primary,
+        }
+        if phase_fs:
+            clock["phase"] = format_time_literal(phase_fs)
+        clocks.append(clock)
+        primary_count += int(primary)
+    if primary_count > 1:
+        raise CodegenError("only one discovered clock may be primary")
+    if clocks and primary_count == 0:
+        clocks[0]["primary"] = True
+    return clocks
+
+
+def load_access_plan(
+    path: Path,
+) -> tuple[list[dict[str, str]], list[int]]:
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise CodegenError(
+            f"cannot read hierarchy access plan {path}: {error}"
+        ) from error
+    if not isinstance(data, dict) or data.get("schema_version") != 1:
+        raise CodegenError("hierarchy access plan schema_version must be 1")
+    entries = data.get("accesses")
+    if not isinstance(entries, list):
+        raise CodegenError("hierarchy access plan must contain an accesses list")
+
+    accesses: set[tuple[str, str]] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise CodegenError("each hierarchy access must be an object")
+        path_value = entry.get("path")
+        operation = entry.get("operation")
+        if not isinstance(path_value, str) or not path_value:
+            raise CodegenError("each hierarchy access must name a path")
+        if operation not in HIERARCHY_OPERATIONS:
+            raise CodegenError(
+                f"hierarchy access {path_value!r} has unsupported operation "
+                f"{operation!r}"
+            )
+        accesses.add((path_value, operation))
+    hierarchy_accesses = [
+        {"path": path_value, "operation": operation}
+        for path_value, operation in sorted(accesses)
+    ]
+    port_edges = data.get("port_edges", [])
+    if not isinstance(port_edges, list) or not all(
+        isinstance(signal_id, int)
+        and not isinstance(signal_id, bool)
+        and signal_id >= 0
+        for signal_id in port_edges
+    ):
+        raise CodegenError(
+            "hierarchy access plan port_edges must contain nonnegative integers"
+        )
+    return hierarchy_accesses, sorted(set(port_edges))
+
+
+def load_hierarchy_access_plan(path: Path) -> list[dict[str, str]]:
+    return load_access_plan(path)[0]
+
+
 def clock_configs(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     clocks = manifest.get("clocks")
     if clocks is None:
@@ -105,6 +350,41 @@ def generated_clock_names(manifest: dict[str, Any]) -> set[str]:
         for clock in clock_configs(manifest)
         if clock_source(clock) == "generated"
     }
+
+
+def literal_clock_names(manifest: dict[str, Any]) -> set[str]:
+    return {
+        clock["port"]
+        for clock in clock_configs(manifest)
+        if clock_source(clock) in {"generated", "registered"}
+    }
+
+
+def registered_clock_configs(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        clock
+        for clock in clock_configs(manifest)
+        if clock_source(clock) == "registered"
+    ]
+
+
+def clock_period_femtoseconds(clock: dict[str, Any]) -> int:
+    period_fs = clock.get("period_fs")
+    if isinstance(period_fs, int) and not isinstance(period_fs, bool):
+        return period_fs
+    return 2 * time_literal_femtoseconds(
+        clock["half_period"], f"clock {clock.get('port')!r} half-period"
+    )
+
+
+def clock_phase_femtoseconds(clock: dict[str, Any]) -> int:
+    phase_fs = clock.get("phase_fs")
+    if isinstance(phase_fs, int) and not isinstance(phase_fs, bool):
+        return phase_fs
+    phase = clock.get("phase")
+    return 0 if phase is None else time_literal_femtoseconds(
+        phase, f"clock {clock.get('port')!r} phase"
+    )
 
 
 def validate_clock_ports(manifest: dict[str, Any], ports: list[Port]) -> None:
@@ -141,12 +421,16 @@ def validate_clock_ports(manifest: dict[str, Any], ports: list[Port]) -> None:
                 f"{expected_direction}"
             )
 
-        if source != "generated" and any(
+        if source not in {"generated", "registered"} and any(
             key in clock for key in ("half_period", "phase")
         ):
             raise CodegenError(
                 f"{source} clock port {clock_name!r} cannot define "
                 "half_period or phase"
+            )
+        if source == "registered" and "half_period" not in clock:
+            raise CodegenError(
+                f"{source} clock port {clock_name!r} must define half_period"
             )
         if clock.get("primary", False):
             primary_count += 1
@@ -347,6 +631,36 @@ def validate_internals(internals: list[Internal]) -> None:
             )
 
 
+def validate_hierarchy_accesses(
+    hierarchy: HierarchyCatalog, accesses: list[dict[str, str]]
+) -> None:
+    signals = {signal.hdl_path: signal for signal in hierarchy.signals}
+    for access in accesses:
+        path = access["path"]
+        operation = access["operation"]
+        signal = signals.get(path)
+        if signal is None:
+            raise CodegenError(
+                f"hierarchy access path {path!r} was not found in the "
+                "elaborated DUT"
+            )
+        if operation in {"deposit", "deposit_logic"} and not signal.depositable:
+            raise CodegenError(
+                f"hierarchy net {path!r} does not support deposit; use force"
+            )
+        if operation.endswith("_logic") and not signal.four_state:
+            raise CodegenError(
+                f"hierarchy signal {path!r} is two-state and does not need "
+                f"{operation}"
+            )
+        if operation.endswith("edge") and (
+            signal.width != 1 or signal.unpacked
+        ):
+            raise CodegenError(
+                f"hierarchy edge access {path!r} requires a scalar one-bit signal"
+            )
+
+
 def build_tree(items: list[Port | Internal]) -> TreeNode:
     root = TreeNode(())
     for item in items:
@@ -537,12 +851,21 @@ class PackedCppRegistry:
             raise CodegenError("packed C++ type was not registered") from error
 
 
-def collect_packed_cpp_types(ports: list[Port]) -> PackedCppRegistry:
+def collect_packed_cpp_types(
+    ports: list[Port], hierarchy: HierarchyCatalog | None = None
+) -> PackedCppRegistry:
     registry = PackedCppRegistry()
     for port in ports:
         if port.packed_type is None:
             continue
         registry.register(port.packed_type, port.cpp_path or (port.name,))
+    if hierarchy is not None:
+        for signal in hierarchy.signals:
+            if signal.packed_type is None or isinstance(
+                signal.packed_type, PackedUnionType
+            ):
+                continue
+            registry.register(signal.packed_type, signal.cpp_path)
     return registry
 
 
@@ -554,6 +877,12 @@ def internal_export_name(
     manifest: dict[str, Any], index: int, operation: str
 ) -> str:
     return f"{manifest['top_module']}_internal_{index}_{operation}"
+
+
+def hierarchy_export_name(
+    manifest: dict[str, Any], index: int, operation: str
+) -> str:
+    return f"{manifest['top_module']}_hierarchy_{index}_{operation}"
 
 
 def port_export_name(
@@ -607,6 +936,15 @@ def on_demand_ports(ports: list[Port]) -> list[Port]:
 
 
 def driven_port_names(ports: list[Port], manifest: dict[str, Any]) -> set[str]:
+    literal_clocks = literal_clock_names(manifest)
+    return {
+        port.name
+        for port in ports
+        if port.direction == "input" and port.name not in literal_clocks
+    }
+
+
+def writable_port_names(ports: list[Port], manifest: dict[str, Any]) -> set[str]:
     generated_clocks = generated_clock_names(manifest)
     return {
         port.name
@@ -680,6 +1018,37 @@ def edge_observer_ports(
                 f"edge observer port {name!r} must be one bit wide in V1"
             )
         observers.append(port)
+    if manifest.get("auto_edge_observers", False):
+        configured_names = {port.name for port in observers}
+        discovered_ids = manifest.get("edge_observer_signal_ids")
+        strict_discovery = discovered_ids is not None
+        if discovered_ids is None:
+            candidates = ports
+        else:
+            offsets = signal_word_offsets(ports)
+            by_signal_id = {
+                offset: port for port, offset in zip(ports, offsets)
+            }
+            unknown = sorted(set(discovered_ids) - set(by_signal_id))
+            if unknown:
+                raise CodegenError(
+                    "discovered port-edge signal IDs were not found in the "
+                    f"DUT: {unknown}"
+                )
+            candidates = [by_signal_id[signal_id] for signal_id in discovered_ids]
+        for port in candidates:
+            if port.name in clock_names or port.direction == "input":
+                continue
+            if port.direction != "output" or port.unpacked or port.width != 1:
+                if not strict_discovery:
+                    continue
+                raise CodegenError(
+                    f"edge wait on DUT port {port.name!r} requires a scalar "
+                    "one-bit output"
+                )
+            if port.name not in configured_names:
+                observers.append(port)
+                configured_names.add(port.name)
     return observers
 
 
@@ -704,11 +1073,12 @@ def cpp_signal_type(port: Port, driven_names: set[str]) -> str:
 
 def cpp_static_signal_type(
     port: Port,
+    writable_names: set[str],
     driven_names: set[str],
     packed_transport_offsets: dict[str, int],
 ) -> str:
-    writable = "true" if port.name in driven_names else "false"
-    driven = writable
+    writable = "true" if port.name in writable_names else "false"
+    driven = "true" if port.name in driven_names else "false"
     transport = "Packed" if port.transport == "packed" else "OnDemand"
     template_values = f"{port.width}, {writable}, {driven}, {signal_id(port.name)}"
     if port.transport == "packed":
@@ -1100,19 +1470,631 @@ def render_packed_cpp_types(registry: PackedCppRegistry) -> list[str]:
     return lines
 
 
+def hierarchy_scope_type(path: tuple[str, ...]) -> str:
+    suffix = "".join(cpp_identifier(part, pascal=True) for part in path)
+    return f"Hierarchy{suffix}Scope"
+
+
+def hierarchy_signal_id(path: str) -> str:
+    return "kHierarchy" + pascal_case(path)
+
+
+def hierarchy_edge_signal_id(path: str) -> str:
+    return "kHierarchyEdge" + pascal_case(path)
+
+
+def hierarchy_edge_paths(accesses: list[dict[str, str]]) -> list[str]:
+    return sorted(
+        {
+            access["path"]
+            for access in accesses
+            if access["operation"].endswith("edge")
+        }
+    )
+
+
+def hierarchy_signal_cpp_type(
+    signal: HierarchySignal,
+    signal_index: int,
+    packed_types: PackedCppRegistry,
+) -> str:
+    depositable = "true" if signal.depositable else "false"
+    four_state = "true" if signal.four_state else "false"
+    common = (
+        f"HierarchyTransport, {signal_index}, \"{signal.hdl_path}\", "
+        f"{signal.width}"
+    )
+    user_value = f"cpptb::probe::Value<{signal.width}>"
+    if isinstance(signal.packed_type, (PackedEnumType, PackedStructType)):
+        user_value = packed_types.lookup(signal.packed_type).value_name
+    if not signal.unpacked:
+        return (
+            f"cpptb::hierarchy::Signal<{common}, {depositable}"
+            f", {user_value}, {four_state}>"
+        )
+    if len(signal.unpacked) == 1:
+        dimension = signal.unpacked[0]
+        return (
+            f"cpptb::hierarchy::Memory<{common}, {dimension.left}, "
+            f"{dimension.right}, {depositable}, {user_value}, "
+            f"{four_state}>"
+        )
+    dimensions = ", ".join(
+        f"cpptb::hierarchy::Dimension<{dimension.left}, {dimension.right}>"
+        for dimension in signal.unpacked
+    )
+    return (
+        f"cpptb::hierarchy::MemoryND<{common}, {depositable}, "
+        f"{four_state}, {user_value}, {dimensions}>"
+    )
+
+
+def hierarchy_nodes(
+    hierarchy: HierarchyCatalog,
+) -> tuple[
+    set[tuple[str, ...]],
+    dict[tuple[str, ...], list[HierarchySignal]],
+    dict[tuple[str, ...], list[HierarchyParameter]],
+]:
+    node_paths: set[tuple[str, ...]] = {()}
+    signals: dict[tuple[str, ...], list[HierarchySignal]] = {}
+    parameters: dict[tuple[str, ...], list[HierarchyParameter]] = {}
+
+    def add_parents(path: tuple[str, ...]) -> None:
+        for length in range(len(path) + 1):
+            node_paths.add(path[:length])
+
+    array_containers = {
+        scope.cpp_path
+        for scope in hierarchy.scopes
+        if scope.symbol_kind in {"generate_array", "instance_array"}
+    }
+    for scope in hierarchy.scopes:
+        if scope.cpp_path not in array_containers:
+            add_parents(scope.cpp_path)
+    for signal in hierarchy.signals:
+        parent = signal.cpp_path[:-1]
+        add_parents(parent)
+        signals.setdefault(parent, []).append(signal)
+    for parameter in hierarchy.parameters:
+        parent = parameter.cpp_path[:-1]
+        if parent in array_containers:
+            continue
+        add_parents(parent)
+        parameters.setdefault(parent, []).append(parameter)
+    return node_paths, signals, parameters
+
+
+def render_cpp_hierarchy_transport(
+    hierarchy: HierarchyCatalog,
+    accesses: list[dict[str, str]],
+    manifest: dict[str, Any],
+) -> list[str]:
+    if not hierarchy.signals:
+        return []
+    indices = {
+        signal.hdl_path: index
+        for index, signal in enumerate(hierarchy.signals)
+    }
+    signals = {signal.hdl_path: signal for signal in hierarchy.signals}
+    selected: dict[str, list[HierarchySignal]] = {
+        operation: [] for operation in HIERARCHY_OPERATIONS
+    }
+    for access in accesses:
+        selected[access["operation"]].append(signals[access["path"]])
+    selected_paths = {
+        operation: {signal.hdl_path for signal in operation_signals}
+        for operation, operation_signals in selected.items()
+    }
+    immediate_force_get_paths = (
+        selected_paths["get"] & selected_paths["force"]
+    )
+    immediate_logic_force_get_paths = (
+        selected_paths["get_logic"] & selected_paths["force_logic"]
+    )
+
+    lines = ['extern "C" {']
+    for operation in ("get", "deposit", "force", "release"):
+        for signal in selected[operation]:
+            name = hierarchy_export_name(
+                manifest, indices[signal.hdl_path], operation
+            )
+            if operation == "release":
+                lines.append(f"void {name}(int index);")
+                continue
+            if signal.width <= 32:
+                value_type = "unsigned int"
+            elif signal.width <= 64:
+                value_type = "unsigned long long"
+            else:
+                value_type = "unsigned int*"
+            if operation == "get":
+                if signal.width <= 64:
+                    lines.append(f"{value_type} {name}(int index);")
+                else:
+                    lines.append(f"void {name}(int index, {value_type} value);")
+            else:
+                const_prefix = "const " if signal.width > 64 else ""
+                lines.append(
+                    f"void {name}(int index, {const_prefix}{value_type} value);"
+                )
+    for operation in ("get_logic", "deposit_logic", "force_logic"):
+        for signal in selected[operation]:
+            name = hierarchy_export_name(
+                manifest, indices[signal.hdl_path], operation
+            )
+            if operation == "get_logic":
+                lines.append(
+                    f"void {name}(int index, svLogicVecVal* value);"
+                )
+            else:
+                lines.append(
+                    f"void {name}(int index, const svLogicVecVal* value);"
+                )
+    lines.extend(['}  // extern "C"', ""])
+    if immediate_force_get_paths or immediate_logic_force_get_paths:
+        lines.extend(
+            [
+                "template <std::uint32_t Id, typename Value>",
+                "struct HierarchyImmediateForceCache {",
+                "    static constexpr std::uint64_t invalid_callback_epoch =",
+                "        ~std::uint64_t{0};",
+                "    inline static thread_local std::uint64_t callback_epoch =",
+                "        invalid_callback_epoch;",
+                "    inline static thread_local std::int32_t index = 0;",
+                "    inline static thread_local Value value{};",
+                "};",
+                "",
+            ]
+        )
+    lines.append("struct HierarchyTransport {")
+
+    lines.extend(
+        [
+            "    template <std::size_t Width>",
+            "    static cpptb::probe::Value<Width> get(std::uint32_t id,",
+            "                                           std::int32_t index) {",
+        ]
+    )
+    for width_group, condition in (
+        (32, "Width <= 32"),
+        (64, "Width > 32 && Width <= 64"),
+        (0, "Width > 64"),
+    ):
+        group = [
+            signal
+            for signal in selected["get"]
+            if (
+                (width_group == 32 and signal.width <= 32)
+                or (width_group == 64 and 32 < signal.width <= 64)
+                or (width_group == 0 and signal.width > 64)
+            )
+        ]
+        lines.append(f"        if constexpr ({condition}) {{")
+        lines.append("            switch (id) {")
+        for signal in group:
+            index = indices[signal.hdl_path]
+            name = hierarchy_export_name(manifest, index, "get")
+            lines.append(f"                case {index}:")
+            cached = signal.hdl_path in immediate_force_get_paths
+            if cached:
+                lines.extend(
+                    [
+                        "                {",
+                        "                    using Cache =",
+                        f"                        HierarchyImmediateForceCache<{index},",
+                        "                            cpptb::probe::Value<Width>>;",
+                        "                    if (Cache::callback_epoch ==",
+                        "                            cpptb::probe::detail::current_callback_epoch() &&",
+                        "                        Cache::index == index) {",
+                        "                        return Cache::value;",
+                        "                    }",
+                    ]
+                )
+            if width_group:
+                lines.append(
+                    f"                    return static_cast<cpptb::probe::Value<Width>>("
+                    f"{name}(index));"
+                )
+            else:
+                lines.extend(
+                    [
+                        "                {",
+                        "                    typename cpptb::Bits<Width>::word_array words{};",
+                        f"                    {name}(index, words.data());",
+                        "                    return cpptb::Bits<Width>::from_words(words);",
+                        "                }",
+                    ]
+                )
+            if cached:
+                lines.append("                }")
+        lines.extend(["                default: break;", "            }", "        }"])
+    lines.extend(
+        [
+            '        fail("get", id);',
+            "    }",
+            "",
+        ]
+    )
+
+    for operation in ("deposit", "force"):
+        lines.extend(
+            [
+                "    template <std::size_t Width>",
+                f"    static void {operation}(std::uint32_t id, std::int32_t index,",
+                "                        cpptb::probe::Value<Width> value) {",
+            ]
+        )
+        for width_group, condition in (
+            (32, "Width <= 32"),
+            (64, "Width > 32 && Width <= 64"),
+            (0, "Width > 64"),
+        ):
+            group = [
+                signal
+                for signal in selected[operation]
+                if (
+                    (width_group == 32 and signal.width <= 32)
+                    or (width_group == 64 and 32 < signal.width <= 64)
+                    or (width_group == 0 and signal.width > 64)
+                )
+            ]
+            lines.append(f"        if constexpr ({condition}) {{")
+            lines.append("            switch (id) {")
+            for signal in group:
+                index = indices[signal.hdl_path]
+                name = hierarchy_export_name(manifest, index, operation)
+                lines.append(f"                case {index}:")
+                value = (
+                    "value" if width_group else "value.words().data()"
+                )
+                cached = (
+                    operation == "force"
+                    and signal.hdl_path in immediate_force_get_paths
+                )
+                invalidate_logic = (
+                    operation == "force"
+                    and signal.hdl_path in immediate_logic_force_get_paths
+                )
+                if cached or invalidate_logic:
+                    lines.append("                {")
+                lines.append(f"                    {name}(index, {value});")
+                if cached:
+                    lines.extend(
+                        [
+                            "                    using Cache =",
+                            f"                        HierarchyImmediateForceCache<{index},",
+                            "                            cpptb::probe::Value<Width>>;",
+                            "                    Cache::value = value;",
+                            "                    Cache::index = index;",
+                            "                    Cache::callback_epoch =",
+                            "                        cpptb::probe::detail::current_callback_epoch();",
+                        ]
+                    )
+                if invalidate_logic:
+                    lines.extend(
+                        [
+                            "                    using LogicCache =",
+                            f"                        HierarchyImmediateForceCache<{index},",
+                            f"                            cpptb::LogicBits<{signal.width}>>;",
+                            "                    LogicCache::callback_epoch =",
+                            "                        LogicCache::invalid_callback_epoch;",
+                        ]
+                    )
+                lines.append("                    return;")
+                if cached or invalidate_logic:
+                    lines.append("                }")
+            lines.extend(
+                ["                default: break;", "            }", "        }"]
+            )
+        lines.extend(
+            [
+                f'        fail("{operation}", id);',
+                "    }",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "    template <std::size_t Width>",
+            "    static cpptb::LogicBits<Width> get_logic(",
+            "        std::uint32_t id, std::int32_t index) {",
+            "        switch (id) {",
+        ]
+    )
+    for signal in selected["get_logic"]:
+        index = indices[signal.hdl_path]
+        name = hierarchy_export_name(manifest, index, "get_logic")
+        cached = signal.hdl_path in immediate_logic_force_get_paths
+        lines.extend(
+            [
+                f"            case {index}: {{",
+            ]
+        )
+        if cached:
+            lines.extend(
+                [
+                    "                using Cache =",
+                    f"                    HierarchyImmediateForceCache<{index},",
+                    "                        cpptb::LogicBits<Width>>;",
+                    "                if (Cache::callback_epoch ==",
+                    "                        cpptb::probe::detail::current_callback_epoch() &&",
+                    "                    Cache::index == index) {",
+                    "                    return Cache::value;",
+                    "                }",
+                ]
+            )
+        lines.extend(
+            [
+                "                std::array<svLogicVecVal,",
+                "                           cpptb::LogicBits<Width>::word_count>",
+                "                    words{};",
+                f"                {name}(index, words.data());",
+                "                return cpptb::LogicBits<Width>::from_dpi_words(",
+                "                    words.data());",
+                "            }",
+            ]
+        )
+    lines.extend(
+        [
+            "            default: break;",
+            "        }",
+            '        fail("get_logic", id);',
+            "    }",
+            "",
+        ]
+    )
+
+    for operation in ("deposit_logic", "force_logic"):
+        lines.extend(
+            [
+                "    template <std::size_t Width>",
+                f"    static void {operation}(",
+                "        std::uint32_t id, std::int32_t index,",
+                "        cpptb::LogicBits<Width> value) {",
+                "        switch (id) {",
+            ]
+        )
+        for signal in selected[operation]:
+            index = indices[signal.hdl_path]
+            name = hierarchy_export_name(manifest, index, operation)
+            cached = (
+                operation == "force_logic"
+                and signal.hdl_path in immediate_logic_force_get_paths
+            )
+            invalidate_bits = (
+                operation == "force_logic"
+                and signal.hdl_path in immediate_force_get_paths
+            )
+            lines.extend(
+                [
+                    f"            case {index}: {{",
+                    "                auto words =",
+                    "                    value.template dpi_words<svLogicVecVal>();",
+                    f"                {name}(index, words.data());",
+                ]
+            )
+            if cached:
+                lines.extend(
+                    [
+                        "                using Cache =",
+                        f"                    HierarchyImmediateForceCache<{index},",
+                        "                        cpptb::LogicBits<Width>>;",
+                        "                Cache::value = value;",
+                        "                Cache::index = index;",
+                        "                Cache::callback_epoch =",
+                        "                    cpptb::probe::detail::current_callback_epoch();",
+                    ]
+                )
+            if invalidate_bits:
+                lines.extend(
+                    [
+                        "                using BitCache =",
+                        f"                    HierarchyImmediateForceCache<{index},",
+                        f"                        cpptb::probe::Value<{signal.width}>>;",
+                        "                BitCache::callback_epoch =",
+                        "                    BitCache::invalid_callback_epoch;",
+                    ]
+                )
+            lines.extend(["                return;", "            }"])
+        lines.extend(
+            [
+                "            default: break;",
+                "        }",
+                f'        fail("{operation}", id);',
+                "    }",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "    static void release(std::uint32_t id, std::int32_t index) {",
+            "        switch (id) {",
+        ]
+    )
+    for signal in selected["release"]:
+        index = indices[signal.hdl_path]
+        name = hierarchy_export_name(manifest, index, "release")
+        invalidate_bits = signal.hdl_path in immediate_force_get_paths
+        invalidate_logic = (
+            signal.hdl_path in immediate_logic_force_get_paths
+        )
+        lines.extend(
+            [
+                f"            case {index}: {{",
+                f"                {name}(index);",
+            ]
+        )
+        if invalidate_bits:
+            lines.extend(
+                [
+                    "                using Cache =",
+                    f"                    HierarchyImmediateForceCache<{index},",
+                    f"                        cpptb::probe::Value<{signal.width}>>;",
+                    "                if (Cache::index == index) {",
+                    "                    Cache::callback_epoch =",
+                    "                        Cache::invalid_callback_epoch;",
+                    "                }",
+                ]
+            )
+        if invalidate_logic:
+            lines.extend(
+                [
+                    "                using LogicCache =",
+                    f"                    HierarchyImmediateForceCache<{index},",
+                    f"                        cpptb::LogicBits<{signal.width}>>;",
+                    "                if (LogicCache::index == index) {",
+                    "                    LogicCache::callback_epoch =",
+                    "                        LogicCache::invalid_callback_epoch;",
+                    "                }",
+                ]
+            )
+        lines.extend(["                return;", "            }"])
+    lines.extend(
+        [
+            "            default: break;",
+            "        }",
+            '        fail("release", id);',
+            "    }",
+            "",
+            "    static cpptb::coro::Signal signal(std::uint32_t id,",
+            "                                      const char* name) {",
+            "        switch (id) {",
+        ]
+    )
+    for path in hierarchy_edge_paths(accesses):
+        lines.extend(
+            [
+                f"            case {indices[path]}:",
+                "                return {nullptr, "
+                f"{hierarchy_edge_signal_id(path)}, name}};",
+            ]
+        )
+    lines.extend(
+        [
+            "            default: break;",
+            "        }",
+            '        fail("edge", id);',
+            "    }",
+            "",
+            "private:",
+            "    [[noreturn]] static void fail(const char* operation,",
+            "                                  std::uint32_t id) {",
+            "        std::fprintf(stderr,",
+            '                     "cpptb: hierarchy %s was not selected for signal %u\\n",',
+            "                     operation, id);",
+            "        std::abort();",
+            "    }",
+            "};",
+            "",
+        ]
+    )
+    return lines
+
+
+def render_cpp_hierarchy(
+    hierarchy: HierarchyCatalog,
+    accesses: list[dict[str, str]],
+    manifest: dict[str, Any],
+    packed_types: PackedCppRegistry,
+) -> tuple[list[str], list[str]]:
+    if not hierarchy.signals and not hierarchy.scopes:
+        return [], []
+    node_paths, signals_by_parent, parameters_by_parent = hierarchy_nodes(
+        hierarchy
+    )
+    signal_indices = {
+        signal.hdl_path: index
+        for index, signal in enumerate(hierarchy.signals)
+    }
+    definitions = render_cpp_hierarchy_transport(
+        hierarchy, accesses, manifest
+    )
+
+    def direct_children(path: tuple[str, ...]) -> list[tuple[str, ...]]:
+        return sorted(
+            candidate
+            for candidate in node_paths
+            if len(candidate) == len(path) + 1
+            and candidate[:-1] == path
+        )
+
+    def member_lines(path: tuple[str, ...]) -> list[str]:
+        lines: list[str] = []
+        children = direct_children(path)
+        array_children: dict[str, list[tuple[int, tuple[str, ...]]]] = {}
+        scalar_children: list[tuple[str, tuple[str, ...]]] = []
+        for child in children:
+            component = child[-1]
+            match = re.fullmatch(r"(.+)\[(-?\d+)\]", component)
+            if match:
+                array_children.setdefault(match.group(1), []).append(
+                    (int(match.group(2)), child)
+                )
+            else:
+                scalar_children.append((component, child))
+
+        for component, child in scalar_children:
+            lines.append(
+                "    [[no_unique_address]] "
+                f"{hierarchy_scope_type(child)} {cpp_identifier(component)};"
+            )
+        for base_name, entries in sorted(array_children.items()):
+            element_types = ", ".join(
+                "cpptb::hierarchy::ScopeElement<"
+                f"{index}, {hierarchy_scope_type(child)}>"
+                for index, child in sorted(entries)
+            )
+            lines.append(
+                "    [[no_unique_address]] cpptb::hierarchy::ScopeArray<"
+                f"{element_types}> {cpp_identifier(base_name)};"
+            )
+        for parameter in sorted(
+            parameters_by_parent.get(path, []), key=lambda item: item.hdl_path
+        ):
+            lines.append(
+                f"    static constexpr std::int64_t "
+                f"{cpp_identifier(parameter.cpp_path[-1])} = "
+                f"{parameter.value};"
+            )
+        for signal in sorted(
+            signals_by_parent.get(path, []), key=lambda item: item.hdl_path
+        ):
+            lines.append(
+                "    [[no_unique_address]] "
+                f"{hierarchy_signal_cpp_type(signal, signal_indices[signal.hdl_path], packed_types)} "
+                f"{cpp_identifier(signal.cpp_path[-1])};"
+            )
+        return lines
+
+    for path in sorted(
+        (path for path in node_paths if path),
+        key=lambda item: (-len(item), item),
+    ):
+        definitions.append(f"struct {hierarchy_scope_type(path)} {{")
+        definitions.extend(member_lines(path))
+        definitions.extend(["};", ""])
+    return definitions, member_lines(())
+
+
 def render_cpp_dut(
     ports: list[Port],
     internals: list[Internal],
     root: TreeNode,
     manifest: dict[str, Any],
     source: str,
+    hierarchy: HierarchyCatalog | None = None,
 ) -> str:
-    packed_types = collect_packed_cpp_types(ports)
+    hierarchy = hierarchy or HierarchyCatalog()
+    packed_types = collect_packed_cpp_types(ports, hierarchy)
     static_binding = static_binding_enabled(manifest)
     lines = [
         generated_banner(source).rstrip(),
         "#pragma once",
         "",
+        "#include <array>",
         "#include <cstddef>",
         "#include <cstdint>",
         "",
@@ -1124,6 +2106,13 @@ def render_cpp_dut(
     ]
     if internals:
         lines.append('#include "cpptb/probe.hpp"')
+    if hierarchy.signals or hierarchy.scopes:
+        lines.append('#include "cpptb/hierarchy.hpp"')
+    if any(
+        access["operation"].endswith("_logic")
+        for access in manifest.get("hierarchy_accesses", [])
+    ):
+        lines.append('#include "svdpi.h"')
     lines.extend(
         [
             "",
@@ -1134,18 +2123,44 @@ def render_cpp_dut(
     )
     offsets = signal_word_offsets(ports)
     driven_names = driven_port_names(ports, manifest)
+    writable_names = writable_port_names(ports, manifest)
     packed_transport_offsets = static_packed_transport_offsets(ports, manifest)
+    hierarchy_edges = hierarchy_edge_paths(
+        list(manifest.get("hierarchy_accesses", []))
+    )
     if all(port_word_count(port) == 1 for port in ports):
         lines.extend(f"    {signal_id(port.name)}," for port in ports)
+        lines.extend(
+            f"    {hierarchy_edge_signal_id(path)},"
+            for path in hierarchy_edges
+        )
         lines.extend(["    kCpptbSignalCount,", "};", ""])
     else:
         lines.extend(
             f"    {signal_id(port.name)} = {offset},"
             for port, offset in zip(ports, offsets)
         )
-        lines.extend([f"    kCpptbSignalCount = {offsets[-1]},", "};", ""])
+        lines.extend(
+            f"    {hierarchy_edge_signal_id(path)} = {offsets[-1] + index},"
+            for index, path in enumerate(hierarchy_edges)
+        )
+        lines.extend(
+            [
+                f"    kCpptbSignalCount = "
+                f"{offsets[-1] + len(hierarchy_edges)},",
+                "};",
+                "",
+            ]
+        )
 
     lines.extend(render_packed_cpp_types(packed_types))
+    hierarchy_definitions, hierarchy_root_members = render_cpp_hierarchy(
+        hierarchy,
+        list(manifest.get("hierarchy_accesses", [])),
+        manifest,
+        packed_types,
+    )
+    lines.extend(hierarchy_definitions)
 
     for node in collect_structs(root, manifest):
         lines.append(f"struct {node_type(node, manifest)} {{")
@@ -1155,7 +2170,8 @@ def render_cpp_dut(
             field_type = (
                 (
                     cpp_static_signal_type(
-                        child, driven_names, packed_transport_offsets
+                        child, writable_names, driven_names,
+                        packed_transport_offsets
                     )
                     if static_binding
                     else cpp_signal_type(child, driven_names)
@@ -1168,7 +2184,27 @@ def render_cpp_dut(
                 )
             )
             lines.append(f"    {field_type} {name};")
+        if not node.path:
+            lines.extend(hierarchy_root_members)
         lines.extend(["};", ""])
+
+    compatibility_root = manifest.get("compatibility_root_type")
+    if compatibility_root and compatibility_root != manifest["root_type"]:
+        validate_identifier(compatibility_root, "compatibility root type")
+        generated_types = {
+            node_type(node, manifest) for node in collect_structs(root, manifest)
+        }
+        if compatibility_root in generated_types:
+            raise CodegenError(
+                f"compatibility root type {compatibility_root!r} collides "
+                "with a generated hierarchy type"
+            )
+        lines.extend(
+            [
+                f"using {compatibility_root} = {manifest['root_type']};",
+                "",
+            ]
+        )
 
     lines.append(f"}}  // namespace {manifest['namespace']}")
     lines.append("")
@@ -1177,11 +2213,13 @@ def render_cpp_dut(
 
 def render_binding_expr(
     node: TreeNode,
+    writable_names: set[str],
     driven_names: set[str],
     internal_indices: dict[Internal, int],
     on_demand_indices: dict[Port, int],
     static_packed_offsets: dict[str, int] | None = None,
     indent: int = 4,
+    bind_internals: bool = True,
 ) -> list[str]:
     prefix = " " * indent
     lines = [prefix + "{"]
@@ -1189,8 +2227,8 @@ def render_binding_expr(
     for index, child in enumerate(values):
         comma = "," if index + 1 < len(values) else ""
         if isinstance(child, Port):
-            writable = "true" if child.name in driven_names else "false"
-            driven = writable
+            writable = "true" if child.name in writable_names else "false"
+            driven = "true" if child.name in driven_names else "false"
             if static_packed_offsets is not None:
                 dimensions = ", ".join(
                     f"coro::ArrayDimension<{dimension.left}, "
@@ -1302,18 +2340,22 @@ def render_binding_expr(
                     + f'{signal_id(child.name)}, "{child.name}"){comma}'
                 )
         elif isinstance(child, Internal):
-            lines.append(
-                " " * (indent + 4)
-                + f"make_internal_{internal_indices[child]}(){comma}"
+            expression = (
+                f"make_internal_{internal_indices[child]}()"
+                if bind_internals
+                else "{}"
             )
+            lines.append(" " * (indent + 4) + expression + comma)
         else:
             child_lines = render_binding_expr(
                 child,
+                writable_names,
                 driven_names,
                 internal_indices,
                 on_demand_indices,
                 static_packed_offsets,
                 indent + 4,
+                bind_internals,
             )
             child_lines[-1] += comma
             lines.extend(child_lines)
@@ -1476,6 +2518,7 @@ def cpp_internal_helpers(
                 f"{deposit_callback}, {force_callback}, {release_callback}}};"
             )
         lines.extend(["}", ""])
+
     return lines
 
 
@@ -1644,12 +2687,17 @@ def render_cpp_binding(
 ) -> str:
     clock_names = {clock["port"] for clock in clock_configs(manifest)}
     edge_observers = edge_observer_ports(ports, manifest)
+    hierarchy_edges = hierarchy_edge_paths(
+        list(manifest.get("hierarchy_accesses", []))
+    )
     driven_names = driven_port_names(ports, manifest)
+    writable_names = writable_port_names(ports, manifest)
     compact_input_transport = bool(
         manifest.get("run", {}).get("compact_input_transport", True)
     )
     static_binding = static_binding_enabled(manifest)
     selected_on_demand = on_demand_ports(ports)
+    registered_clocks = registered_clock_configs(manifest)
     effective_compact_input_transport = (
         compact_input_transport or bool(selected_on_demand) or static_binding
     )
@@ -1667,6 +2715,7 @@ def render_cpp_binding(
         "#include <array>",
         "#include <cstdint>",
         "#include <utility>",
+        '#include "cpptb/dpi_static_binding.hpp"',
     ]
     if internals or selected_on_demand:
         lines.append('#include "svdpi.h"')
@@ -1701,10 +2750,34 @@ def render_cpp_binding(
     )
     lines.extend([
         "};",
-        f"inline constexpr std::array<uint32_t, {len(edge_observers)}> "
+        f"inline constexpr std::array<cpptb::dpi::RegisteredClockConfig, "
+        f"{len(registered_clocks)}> kRegisteredClockConfigs = {{{{",
+    ])
+    lines.extend(
+        f"    {{{signal_id(clock['port'])}, "
+        f"{clock_period_femtoseconds(clock)}ULL, "
+        f"{clock_phase_femtoseconds(clock)}ULL, "
+        f"{int(clock.get('initial_value', 0))}u}},"
+        for clock in registered_clocks
+    )
+    lines.extend([
+        "}};",
+        f"inline constexpr std::array<uint32_t, "
+        f"{len(edge_observers) + len(hierarchy_edges)}> "
         "kEdgeObserverSignalIds = {",
     ])
     lines.extend(f"    {signal_id(port.name)}," for port in edge_observers)
+    lines.extend(
+        f"    {hierarchy_edge_signal_id(path)}," for path in hierarchy_edges
+    )
+    lines.extend([
+        "};",
+        f"inline constexpr std::array<uint32_t, {len(hierarchy_edges)}> "
+        "kTransportlessEdgeSignalIds = {",
+    ])
+    lines.extend(
+        f"    {hierarchy_edge_signal_id(path)}," for path in hierarchy_edges
+    )
     lines.extend([
         "};",
         f"inline constexpr std::array<std::pair<uint32_t, uint32_t>, {len(driven)}> "
@@ -1760,6 +2833,7 @@ def render_cpp_binding(
     )
     expression = render_binding_expr(
         root,
+        writable_names,
         driven_names,
         {internal: index for index, internal in enumerate(internals)},
         {
@@ -1773,7 +2847,159 @@ def render_cpp_binding(
     expression[0] = "    return " + expression[0].lstrip()
     expression[-1] += ";"
     lines.extend(expression)
+    if static_binding:
+        lines.extend(["}", "", "template <typename MakeSignal>"])
+        lines.append(
+            f"{manifest['root_type']} bind_dut_for_clock_discovery("
+            "MakeSignal&& make_signal) {"
+        )
+        discovery_expression = render_binding_expr(
+            root,
+            writable_names,
+            driven_names,
+            {internal: index for index, internal in enumerate(internals)},
+            {
+                port: index
+                for index, port in enumerate(ports)
+                if port.transport == "on_demand"
+            },
+            packed_transport_offsets,
+            4,
+            False,
+        )
+        discovery_expression[0] = (
+            "    return " + discovery_expression[0].lstrip()
+        )
+        discovery_expression[-1] += ";"
+        lines.extend(discovery_expression)
     lines.extend(["}", "", f"}}  // namespace {manifest['namespace']}::generated", ""])
+    return "\n".join(lines)
+
+
+def render_cpp_adapter(manifest: dict[str, Any], source: str) -> str:
+    run = manifest.get("run", {})
+    dynamic_clocks = bool(run.get("dynamic_clocks", False))
+    outputs = manifest["outputs"]
+    target = manifest.get("target", manifest["module"])
+    result_token = re.sub(r"[^A-Za-z0-9]+", "_", target).upper()
+    timeout_cycles = int(run.get("timeout_cycles", 1_000_000))
+    if timeout_cycles <= 0:
+        raise CodegenError("run.timeout_cycles must be greater than zero")
+
+    functions = {
+        "init": run.get("init_function", "cpptb_dpi_init"),
+        "step": run.get("step_function", "cpptb_dpi_step"),
+        "pull": run.get("pull_outputs_function", "cpptb_dpi_pull_outputs"),
+        "deadline": run.get(
+            "next_deadline_function", "cpptb_dpi_next_timer_deadline"
+        ),
+        "edge": run.get("edge_interest_function", "cpptb_dpi_edge_interest"),
+        "clock": run.get("clock_config_function", "cpptb_dpi_clock_config"),
+    }
+    for label, function in functions.items():
+        validate_identifier(function, f"{label} DPI function")
+
+    namespace = manifest["namespace"]
+    adapter_type = f"{namespace}::generated::DpiAdapter"
+    lines = [
+        generated_banner(source).rstrip(),
+        "",
+        '#include "cpptb/dpi_runtime.hpp"',
+        '#include "cpptb/test_api.hpp"',
+        f'#include "{outputs["cpp_binding_include"]}"',
+        "",
+        f"namespace {namespace}::generated {{",
+        "",
+        "struct DpiAdapter {",
+        f"    using Dut = ::{namespace}::{manifest['root_type']};",
+        "    using Result = cpptb::TestResult;",
+        "",
+        "    static constexpr uint32_t signal_count = kCpptbSignalCount;",
+        "    static constexpr bool compact_input_transport =",
+        "        kCompactInputTransport;",
+        "    inline static constexpr auto driven_signal_spans =",
+        "        kDrivenSignalSpans;",
+        "    inline static constexpr auto observed_signal_word_ids =",
+        "        kObservedSignalWordIds;",
+        "    inline static constexpr auto driven_signal_word_ids =",
+        "        kDrivenSignalWordIds;",
+        "    inline static constexpr auto clock_signal_ids = kClockSignalIds;",
+        "    inline static constexpr auto registered_clock_configs =",
+        "        kRegisteredClockConfigs;",
+        "    inline static constexpr auto edge_observer_signal_ids =",
+        "        kEdgeObserverSignalIds;",
+        "    inline static constexpr auto transportless_edge_signal_ids =",
+        "        kTransportlessEdgeSignalIds;",
+        f'    static constexpr const char* result_name = "CPP_DPI_{result_token}_RESULT";',
+        "",
+        "    template <typename MakeSignal>",
+        "    static Dut bind_dut(MakeSignal make_signal) {",
+        f"        return ::{namespace}::generated::bind_dut(make_signal);",
+        "    }",
+        "",
+        "    static void register_testbench(coro::Testbench& scheduler, Dut dut,",
+        "                                   uint32_t, Result& result,",
+        "                                   coro::ClockRegistrar clocks) {",
+        "        cpptb::run_registered_test(scheduler, dut, result, clocks);",
+        "    }",
+        "",
+        "    static bool timed_out(coro::SimTime, uint64_t sim_cycles,",
+        "                          uint32_t) {",
+        f"        return sim_cycles > {timeout_cycles}ULL;",
+        "    }",
+        "};",
+        "",
+        f"}}  // namespace {namespace}::generated",
+        "",
+        "CPPTB_DEFINE_NAMED_DPI_RUNTIME(",
+        f"    {adapter_type}, {functions['init']}, {functions['step']},",
+        f"    {functions['pull']}, {functions['deadline']}, {functions['edge']})",
+    ]
+    if dynamic_clocks:
+        lines.extend(
+            [
+                f"CPPTB_DEFINE_NAMED_DPI_CLOCK_API({functions['clock']})",
+            ]
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def render_cpp_clock_discovery(manifest: dict[str, Any], source: str) -> str:
+    outputs = manifest["outputs"]
+    namespace = manifest["namespace"]
+    timeprecision_fs = time_literal_femtoseconds(
+        manifest.get("run", {}).get("timeprecision", "1ps"),
+        "run.timeprecision",
+    )
+    lines = [
+        generated_banner(source).rstrip(),
+        "",
+        '#include "cpptb/clock_discovery.hpp"',
+        '#include "cpptb/hierarchy.hpp"',
+        f'#include "{outputs["cpp_binding_include"]}"',
+        "",
+        "int main(int argc, char** argv) {",
+        "    if (argc != 2 && argc != 3) {",
+        '        std::fprintf(stderr, "usage: %s CLOCKS.json [ACCESS.json]\\n", argv[0]);',
+        "        return 2;",
+        "    }",
+        f"    using Dut = ::{namespace}::{manifest['root_type']};",
+        f"    const int result = cpptb::dpi::discover_registered_clocks<",
+        f"        Dut, ::{namespace}::kCpptbSignalCount>(",
+        f"        argv[1], {timeprecision_fs}ULL, [](auto make_signal) {{",
+        f"            return ::{namespace}::generated::",
+        "                bind_dut_for_clock_discovery(make_signal);",
+        "        });",
+        "    if (result != 0) return result;",
+        "    if (argc == 3 &&",
+        "        !cpptb::hierarchy::write_discovered_access_plan(argv[2])) {",
+        "        return 1;",
+        "    }",
+        "    return 0;",
+        "}",
+        "",
+    ]
     return "\n".join(lines)
 
 
@@ -1905,6 +3131,12 @@ def sv_output_assignments(port: Port, signal: str | None = None) -> list[str]:
 def sv_signal_constant(port: Port) -> str:
     name = signal_id(port.name).replace("kSignal", "SIGNAL_").upper()
     return name
+
+
+def sv_hierarchy_edge_constant(path: str) -> str:
+    return hierarchy_edge_signal_id(path).replace(
+        "kHierarchyEdge", "HIERARCHY_EDGE_"
+    ).upper()
 
 
 def sv_internal_export_functions(
@@ -2089,6 +3321,440 @@ def sv_internal_export_functions(
         else:
             lines.append(f"    release {target};")
         lines.extend(["  endfunction", ""])
+
+    return lines
+
+
+def hierarchy_memory_targets(
+    signal: HierarchySignal, target: str
+) -> list[tuple[int, str, str]]:
+    if not signal.unpacked:
+        return [(0, target, "")]
+    ranges = [
+        range(dimension.low, dimension.high + 1)
+        for dimension in signal.unpacked
+    ]
+    return [
+        (
+            linear,
+            target + "".join(f"[{index}]" for index in indices),
+            "".join(f"[{index}]" for index in indices),
+        )
+        for linear, indices in enumerate(product(*ranges))
+    ]
+
+
+def hierarchy_assignment_value(
+    signal: HierarchySignal, value: str
+) -> str:
+    packed_type = signal.packed_type
+    if isinstance(packed_type, (PackedEnumType, PackedStructType)):
+        if packed_type.declared_name:
+            return f"{packed_type.declared_name}'({value})"
+    return value
+
+
+def sv_hierarchy_export_functions(
+    hierarchy: HierarchyCatalog,
+    accesses: list[dict[str, str]],
+    manifest: dict[str, Any],
+) -> list[str]:
+    if not accesses:
+        return []
+    indices = {
+        signal.hdl_path: index
+        for index, signal in enumerate(hierarchy.signals)
+    }
+    signals = {signal.hdl_path: signal for signal in hierarchy.signals}
+    operations = {
+        (access["path"], access["operation"]) for access in accesses
+    }
+    lines: list[str] = []
+    for path in sorted({access["path"] for access in accesses}):
+        signal = signals[path]
+        index = indices[path]
+        target = f"i_dut.{path}"
+        memory_targets = hierarchy_memory_targets(signal, target)
+        force_selected = (
+            (path, "force") in operations
+            or (path, "force_logic") in operations
+            or (path, "release") in operations
+        )
+        dynamic_one_dimensional_memory = (
+            len(signal.unpacked) == 1
+            and signal.unpacked[0].low == 0
+            and not force_selected
+        )
+        value_type = (
+            "int unsigned"
+            if signal.width <= 32
+            else (
+                "longint unsigned"
+                if signal.width <= 64
+                else f"bit [{signal.width - 1}:0]"
+            )
+        )
+        logic_value_type = f"logic [{signal.width - 1}:0]"
+        force_shadow = f"hierarchy_{index}_force_shadow"
+        if ((path, "force") in operations or
+                (path, "force_logic") in operations):
+            unpacked_suffix = ""
+            if signal.unpacked:
+                unpacked_suffix = "".join(
+                    f" [{dimension.left}:{dimension.right}]"
+                    for dimension in signal.unpacked
+                )
+            lines.extend(
+                [
+                    f"  {'logic' if (path, 'force_logic') in operations else 'bit'} "
+                    f"[{signal.width - 1}:0] "
+                    f"{force_shadow}{unpacked_suffix};",
+                    "",
+                ]
+            )
+
+        if (path, "get") in operations:
+            name = hierarchy_export_name(manifest, index, "get")
+            lines.append(f'  export "DPI-C" function {name};')
+            if signal.width <= 64:
+                lines.append(
+                    f"  function {value_type} {name}(input int index);"
+                )
+            else:
+                lines.append(
+                    f"  function void {name}(input int index, "
+                    f"output {value_type} value);"
+                )
+            destination = name if signal.width <= 64 else "value"
+            if dynamic_one_dimensional_memory:
+                lines.append(
+                    f"    {destination} = $unsigned({target}[index]);"
+                )
+            elif len(signal.unpacked) == 1:
+                lines.append("    case (index)")
+                dimension = signal.unpacked[0]
+                for linear, element_target, _ in memory_targets:
+                    actual_index = dimension.low + linear
+                    lines.append(
+                        f"      {actual_index}: {destination} = "
+                        f"$unsigned({element_target});"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "read index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            elif signal.unpacked:
+                lines.append("    case (index)")
+                for linear, element_target, _ in memory_targets:
+                    lines.append(
+                        f"      {linear}: {destination} = "
+                        f"$unsigned({element_target});"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "read index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            else:
+                lines.append(f"    {destination} = $unsigned({target});")
+            lines.extend(["  endfunction", ""])
+
+        if (path, "get_logic") in operations:
+            name = hierarchy_export_name(manifest, index, "get_logic")
+            lines.extend(
+                [
+                    f'  export "DPI-C" function {name};',
+                    f"  function void {name}(input int index, "
+                    f"output {logic_value_type} value);",
+                ]
+            )
+            if dynamic_one_dimensional_memory:
+                lines.append(f"    value = {target}[index];")
+            elif len(signal.unpacked) == 1:
+                lines.append("    case (index)")
+                dimension = signal.unpacked[0]
+                for linear, element_target, _ in memory_targets:
+                    actual_index = dimension.low + linear
+                    lines.append(
+                        f"      {actual_index}: value = {element_target};"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "logic read index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            elif signal.unpacked:
+                lines.append("    case (index)")
+                for linear, element_target, _ in memory_targets:
+                    lines.append(
+                        f"      {linear}: value = {element_target};"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "logic read index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            else:
+                lines.append(f"    value = {target};")
+            lines.extend(["  endfunction", ""])
+
+        if (path, "deposit") in operations:
+            name = hierarchy_export_name(manifest, index, "deposit")
+            assigned_value = hierarchy_assignment_value(signal, "value")
+            lines.extend(
+                [
+                    f'  export "DPI-C" function {name};',
+                    f"  function void {name}(input int index, "
+                    f"input {value_type} value);",
+                ]
+            )
+            if dynamic_one_dimensional_memory:
+                lines.append(f"    {target}[index] = {assigned_value};")
+            elif len(signal.unpacked) == 1:
+                lines.append("    case (index)")
+                dimension = signal.unpacked[0]
+                for linear, element_target, _ in memory_targets:
+                    actual_index = dimension.low + linear
+                    lines.append(
+                        f"      {actual_index}: {element_target} = "
+                        f"{assigned_value};"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "deposit index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            elif signal.unpacked:
+                lines.append("    case (index)")
+                for linear, element_target, _ in memory_targets:
+                    lines.append(
+                        f"      {linear}: {element_target} = "
+                        f"{assigned_value};"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "deposit index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            else:
+                lines.append(f"    {target} = {assigned_value};")
+            lines.extend(["  endfunction", ""])
+
+        if (path, "deposit_logic") in operations:
+            name = hierarchy_export_name(manifest, index, "deposit_logic")
+            assigned_value = hierarchy_assignment_value(signal, "value")
+            lines.extend(
+                [
+                    f'  export "DPI-C" function {name};',
+                    f"  function void {name}(input int index, "
+                    f"input {logic_value_type} value);",
+                ]
+            )
+            if dynamic_one_dimensional_memory:
+                lines.append(f"    {target}[index] = {assigned_value};")
+            elif len(signal.unpacked) == 1:
+                lines.append("    case (index)")
+                dimension = signal.unpacked[0]
+                for linear, element_target, _ in memory_targets:
+                    actual_index = dimension.low + linear
+                    lines.append(
+                        f"      {actual_index}: {element_target} = "
+                        f"{assigned_value};"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "logic deposit index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            elif signal.unpacked:
+                lines.append("    case (index)")
+                for linear, element_target, _ in memory_targets:
+                    lines.append(
+                        f"      {linear}: {element_target} = "
+                        f"{assigned_value};"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "logic deposit index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            else:
+                lines.append(f"    {target} = {assigned_value};")
+            lines.extend(["  endfunction", ""])
+
+        if (path, "force") in operations:
+            name = hierarchy_export_name(manifest, index, "force")
+            lines.extend(
+                [
+                    f'  export "DPI-C" function {name};',
+                    f"  function void {name}(input int index, "
+                    f"input {value_type} value);",
+                ]
+            )
+            if len(signal.unpacked) == 1:
+                lines.append("    case (index)")
+                dimension = signal.unpacked[0]
+                for linear, element_target, _ in memory_targets:
+                    actual_index = dimension.low + linear
+                    shadow = f"{force_shadow}[{actual_index}]"
+                    forced_value = hierarchy_assignment_value(signal, shadow)
+                    lines.extend(
+                        [
+                            f"      {actual_index}: begin",
+                            f"        {shadow} = value;",
+                            f"        force {element_target} = "
+                            f"{forced_value};",
+                            "      end",
+                        ]
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "force index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            elif signal.unpacked:
+                lines.append("    case (index)")
+                for linear, element_target, shadow_indices in memory_targets:
+                    forced_value = hierarchy_assignment_value(
+                        signal, f"{force_shadow}{shadow_indices}"
+                    )
+                    lines.extend(
+                        [
+                            f"      {linear}: begin",
+                            f"        {force_shadow}{shadow_indices} = value;",
+                            f"        force {element_target} = "
+                            f"{forced_value};",
+                            "      end",
+                        ]
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "force index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            else:
+                forced_value = hierarchy_assignment_value(
+                    signal, force_shadow
+                )
+                lines.extend(
+                    [
+                        f"    {force_shadow} = value;",
+                        f"    force {target} = {forced_value};",
+                    ]
+                )
+            lines.extend(["  endfunction", ""])
+
+        if (path, "force_logic") in operations:
+            name = hierarchy_export_name(manifest, index, "force_logic")
+            lines.extend(
+                [
+                    f'  export "DPI-C" function {name};',
+                    f"  function void {name}(input int index, "
+                    f"input {logic_value_type} value);",
+                ]
+            )
+            if len(signal.unpacked) == 1:
+                lines.append("    case (index)")
+                dimension = signal.unpacked[0]
+                for linear, element_target, _ in memory_targets:
+                    actual_index = dimension.low + linear
+                    shadow = f"{force_shadow}[{actual_index}]"
+                    forced_value = hierarchy_assignment_value(signal, shadow)
+                    lines.extend(
+                        [
+                            f"      {actual_index}: begin",
+                            f"        {shadow} = value;",
+                            f"        force {element_target} = "
+                            f"{forced_value};",
+                            "      end",
+                        ]
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "logic force index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            elif signal.unpacked:
+                lines.append("    case (index)")
+                for linear, element_target, shadow_indices in memory_targets:
+                    shadow = f"{force_shadow}{shadow_indices}"
+                    forced_value = hierarchy_assignment_value(signal, shadow)
+                    lines.extend(
+                        [
+                            f"      {linear}: begin",
+                            f"        {shadow} = value;",
+                            f"        force {element_target} = "
+                            f"{forced_value};",
+                            "      end",
+                        ]
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "logic force index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            else:
+                forced_value = hierarchy_assignment_value(
+                    signal, force_shadow
+                )
+                lines.extend(
+                    [
+                        f"    {force_shadow} = value;",
+                        f"    force {target} = {forced_value};",
+                    ]
+                )
+            lines.extend(["  endfunction", ""])
+
+        if (path, "release") in operations:
+            name = hierarchy_export_name(manifest, index, "release")
+            lines.extend(
+                [
+                    f'  export "DPI-C" function {name};',
+                    f"  function void {name}(input int index);",
+                ]
+            )
+            if len(signal.unpacked) == 1:
+                lines.append("    case (index)")
+                dimension = signal.unpacked[0]
+                for linear, element_target, _ in memory_targets:
+                    actual_index = dimension.low + linear
+                    lines.append(
+                        f"      {actual_index}: release {element_target};"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "release index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            elif signal.unpacked:
+                lines.append("    case (index)")
+                for linear, element_target, _ in memory_targets:
+                    lines.append(
+                        f"      {linear}: release {element_target};"
+                    )
+                lines.extend(
+                    [
+                        f'      default: $fatal(1, "release index %0d is out of bounds", index);',
+                        "    endcase",
+                    ]
+                )
+            else:
+                lines.append(f"    release {target};")
+            lines.extend(["  endfunction", ""])
     return lines
 
 
@@ -2159,15 +3825,32 @@ def render_sv(
     internals: list[Internal],
     manifest: dict[str, Any],
     source: str,
+    hierarchy: HierarchyCatalog | None = None,
 ) -> str:
+    hierarchy = hierarchy or HierarchyCatalog()
     clocks = clock_configs(manifest)
     edge_observers = edge_observer_ports(ports, manifest)
+    hierarchy_edge_paths_selected = hierarchy_edge_paths(
+        list(manifest.get("hierarchy_accesses", []))
+    )
+    hierarchy_signals = {
+        signal.hdl_path: signal for signal in hierarchy.signals
+    }
+    dynamic_clocks = bool(manifest.get("run", {}).get("dynamic_clocks", False))
     generated_clocks = generated_clock_names(manifest)
+    registered_literal_clocks = {
+        clock["port"] for clock in registered_clock_configs(manifest)
+    }
     driven_names = driven_port_names(ports, manifest)
     run = manifest.get("run", {})
     compact_input_transport = bool(run.get("compact_input_transport", True))
     observed_ports = [port for port in ports if port.name not in driven_names]
     driven_ports = [port for port in ports if port.name in driven_names]
+    dynamic_clock_ports = [
+        port
+        for port in driven_ports
+        if port.width == 1 and not port.unpacked
+    ]
     selected_on_demand = on_demand_ports(ports)
     packed_observed_ports = packed_ports(observed_ports)
     packed_driven_ports = packed_ports(driven_ports)
@@ -2215,6 +3898,9 @@ def render_sv(
     edge_interest_function = run.get(
         "edge_interest_function", "cpptb_dpi_edge_interest"
     )
+    clock_config_function = run.get(
+        "clock_config_function", "cpptb_dpi_clock_config"
+    )
     iteration_plusarg = run.get("iteration_plusarg", "CPPTB_ITERS")
     default_iterations = int(run.get("default_iterations", 1))
     parameters = manifest.get("parameters", {})
@@ -2255,11 +3941,19 @@ def render_sv(
             "  localparam int STEP_FALLING_EDGES = 16;",
             "  localparam int STEP_OUTPUTS_CHANGED = 32;",
             "  localparam int STEP_EDGE_INTEREST_CHANGED = 64;",
+            "  localparam int STEP_NEXT_TICK_TIMER = 128;",
+            "  localparam int STEP_TIMER_IDLE = 256;",
             "",
         ]
     )
     for port, offset in zip(ports, offsets):
         lines.append(f"  localparam int {sv_signal_constant(port)} = {offset};")
+    for index, path in enumerate(hierarchy_edge_paths_selected):
+        lines.append(
+            f"  localparam int "
+            f"{sv_hierarchy_edge_constant(path)} "
+            f"= {offsets[-1] + index};"
+        )
     for port in packed_observed_ports:
         lines.append(
             f"  localparam int INPUT_{sv_signal_constant(port)} = "
@@ -2272,7 +3966,8 @@ def render_sv(
         )
     lines.extend(
         [
-            f"  localparam int CPPTB_SIGNAL_COUNT = {offsets[-1]};",
+            f"  localparam int CPPTB_SIGNAL_COUNT = "
+            f"{offsets[-1] + len(hierarchy_edge_paths_selected)};",
             f"  localparam int INPUT_WORD_COUNT = {input_storage_count};",
             f"  localparam int OUTPUT_WORD_COUNT = {output_storage_count};",
             "",
@@ -2291,13 +3986,22 @@ def render_sv(
             f'  import "DPI-C" function void {pull_outputs_function}(',
             "      output int unsigned out_words[]",
             "  );",
-            f'  import "DPI-C" context function longint unsigned {next_deadline_function}();',
-            f'  import "DPI-C" context function int unsigned {edge_interest_function}(',
+            f'  import "DPI-C" function longint unsigned {next_deadline_function}();',
+            f'  import "DPI-C" function int unsigned {edge_interest_function}(',
             "      input int unsigned signal_id",
             "  );",
-            "",
         ]
     )
+    if dynamic_clocks:
+        lines.extend(
+            [
+                f'  import "DPI-C" function longint unsigned {clock_config_function}(',
+                "      input int unsigned signal_id,",
+                "      input int unsigned field",
+                "  );",
+            ]
+        )
+    lines.append("")
     lines.extend(sv_decl(port) for port in ports)
     lines.extend(
         [
@@ -2310,23 +4014,38 @@ def render_sv(
             "  event timer_kick;",
             "  int status;",
             "  bit track_falling_edges;",
+            "  bit clock_drivers_active;",
             "  int initial_requests;",
             "  int unsigned in_words[0:INPUT_WORD_COUNT-1];",
             "  int unsigned out_words[0:OUTPUT_WORD_COUNT-1];",
             "  int unsigned edge_interest[0:CPPTB_SIGNAL_COUNT-1];",
-            "",
-            "  task automatic pack_inputs();",
+            "  bit registered_clock[0:CPPTB_SIGNAL_COUNT-1];",
+            "  bit primary_clock[0:CPPTB_SIGNAL_COUNT-1];",
         ]
     )
+    lines.extend(["", "  task automatic pack_inputs();"])
     for port in packed_observed_ports:
         lines.extend(
             sv_pack_assignments(port, f"INPUT_{sv_signal_constant(port)}")
         )
     lines.extend(["  endtask", "", "  task automatic apply_outputs();"])
     for port in packed_driven_ports:
-        lines.extend(
-            sv_output_assignments(port, f"OUTPUT_{sv_signal_constant(port)}")
+        assignments = sv_output_assignments(
+            port, f"OUTPUT_{sv_signal_constant(port)}"
         )
+        if port.name in registered_literal_clocks:
+            lines.append("    if (!clock_drivers_active) begin")
+            lines.extend(f"  {line}" for line in assignments)
+            lines.append("    end")
+        elif dynamic_clocks and port in dynamic_clock_ports:
+            constant = sv_signal_constant(port)
+            lines.append(
+                f"    if (!clock_drivers_active || !registered_clock[{constant}]) begin"
+            )
+            lines.extend(f"  {line}" for line in assignments)
+            lines.append("    end")
+        else:
+            lines.extend(assignments)
     lines.extend(
         [
             "  endtask",
@@ -2415,10 +4134,11 @@ def render_sv(
             "      input int initial_requests",
             "  );",
             "    int requests;",
+            "    longint unsigned generation;",
             "    requests = initial_requests;",
         ]
     )
-    if edge_observers:
+    if edge_observers or hierarchy_edge_paths_selected:
         lines.extend(
             [
                 "    if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin",
@@ -2429,10 +4149,31 @@ def render_sv(
             lines.append(
                 f"      edge_interest[{constant}] = {edge_interest_function}({constant});"
             )
+        for path in hierarchy_edge_paths_selected:
+            constant = sv_hierarchy_edge_constant(path)
+            lines.append(
+                f"      edge_interest[{constant}] = "
+                f"{edge_interest_function}({constant});"
+            )
         lines.append("    end")
     lines.extend(
         [
-            "    if ((requests & STEP_TIMER_CHANGED) != 0) begin",
+            "    if ((requests & STEP_TIMER_IDLE) != 0) begin",
+            "      timer_deadline = NO_TIMER;",
+            "      timer_generation++;",
+            "    end",
+            "    if ((requests & STEP_NEXT_TICK_TIMER) != 0) begin",
+            "      timer_deadline = $time + 1;",
+            "      timer_generation++;",
+            "      generation = timer_generation;",
+            "      if (timer_owner_target == NO_TIMER) begin",
+            "        -> timer_kick;",
+            "      end else if (timer_deadline < timer_owner_target) begin",
+            "        fork",
+            "          timer_wakeup(timer_deadline, generation);",
+            "        join_none",
+            "      end",
+            "    end else if ((requests & STEP_TIMER_CHANGED) != 0) begin",
             "      update_timer_schedule();",
             "    end",
             "  endtask",
@@ -2442,7 +4183,7 @@ def render_sv(
 
     for index, clock in enumerate(clocks):
         clock_name = clock["port"]
-        if clock_source(clock) == "generated":
+        if clock_source(clock) in {"generated", "registered"}:
             lines.extend(
                 [
                     f"  task automatic drive_clock_{index}();",
@@ -2531,6 +4272,44 @@ def render_sv(
             ]
         )
 
+    if dynamic_clocks:
+        for index, port in enumerate(dynamic_clock_ports):
+            constant = sv_signal_constant(port)
+            lines.extend(
+                [
+                    f"  task automatic drive_registered_clock_{index}();",
+                    "    int requests;",
+                    "    int event_edge;",
+                    "    longint unsigned half_period;",
+                    "    longint unsigned phase;",
+                    f"    half_period = {clock_config_function}({constant}, 0);",
+                    "    if (half_period != 0) begin",
+                    f"      phase = {clock_config_function}({constant}, 1);",
+                    "      if (phase != 0) begin",
+                    "        #(phase);",
+                    "      end",
+                    "      while (status == 0) begin",
+                    "        #(half_period);",
+                    "        if (status == 0) begin",
+                    f"          {port.name} = ~{port.name};",
+                    f"          event_edge = {port.name} ? EDGE_RISING : EDGE_FALLING;",
+                    f"          if (primary_clock[{constant}] &&",
+                    "              (event_edge == EDGE_RISING)) begin",
+                    "            sim_cycles++;",
+                    "          end",
+                    "          if ((event_edge == EDGE_RISING) ||",
+                    "              track_falling_edges) begin",
+                    f"            run_step(PHASE_EDGE, {constant}, event_edge, requests);",
+                    "            service_requests(requests);",
+                    "          end",
+                    "        end",
+                    "      end",
+                    "    end",
+                    "  endtask",
+                    "",
+                ]
+            )
+
     for index, port in enumerate(edge_observers):
         constant = sv_signal_constant(port)
         lines.extend(
@@ -2542,9 +4321,34 @@ def render_sv(
                 f"      @({port.name});",
                 "      if (status == 0) begin",
                 f"        event_edge = {port.name} ? EDGE_RISING : EDGE_FALLING;",
-                "        if ((status == 0) &&",
-                f"            (((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
-                f"             ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0)))) begin",
+                "        if (",
+                f"            ((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
+                f"            ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0))) begin",
+                f"          run_step(PHASE_EDGE, {constant}, event_edge, requests);",
+                "          service_requests(requests);",
+                "        end",
+                "      end",
+                "    end",
+                "  endtask",
+                "",
+            ]
+        )
+
+    for index, path in enumerate(hierarchy_edge_paths_selected):
+        constant = sv_hierarchy_edge_constant(path)
+        target = f"i_dut.{path}"
+        lines.extend(
+            [
+                f"  task automatic observe_hierarchy_signal_{index}();",
+                "    int requests;",
+                "    int event_edge;",
+                "    while (status == 0) begin",
+                f"      @({target});",
+                "      if (status == 0) begin",
+                f"        event_edge = {target} ? EDGE_RISING : EDGE_FALLING;",
+                "        if (",
+                f"            ((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
+                f"            ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0))) begin",
                 f"          run_step(PHASE_EDGE, {constant}, event_edge, requests);",
                 "          service_requests(requests);",
                 "        end",
@@ -2557,11 +4361,16 @@ def render_sv(
 
     lines.append("  initial begin")
     for clock in clocks:
-        if clock_source(clock) != "generated":
-            continue
-        lines.append(f"    {clock['port']} = 1'b0;")
+        source_kind = clock_source(clock)
+        if source_kind == "generated":
+            lines.append(f"    {clock['port']} = 1'b0;")
+        elif source_kind == "registered":
+            lines.append(
+                f"    {clock['port']} = "
+                f"1'b{int(clock.get('initial_value', 0))};"
+            )
     for port in ports:
-        if port.direction == "input" and port.name not in generated_clocks:
+        if port.direction == "input" and port.name not in literal_clock_names(manifest):
             initial_value = "'{default: '0}" if port.unpacked else "'0"
             lines.append(f"    {port.name} = {initial_value};")
     lines.extend(
@@ -2573,7 +4382,19 @@ def render_sv(
             f"    iterations = {default_iterations};",
             "    status = 0;",
             "    track_falling_edges = 1'b0;",
-            f'    void\'($value$plusargs("{iteration_plusarg}=%d", iterations));',
+            "    clock_drivers_active = 1'b0;",
+        ]
+    )
+    if iteration_plusarg is not None:
+        if not isinstance(iteration_plusarg, str) or not iteration_plusarg:
+            raise CodegenError(
+                "run.iteration_plusarg must be a non-empty string or null"
+            )
+        lines.append(
+            f'    void\'($value$plusargs("{iteration_plusarg}=%d", iterations));'
+        )
+    lines.extend(
+        [
             "",
             "    for (int i = 0; i < INPUT_WORD_COUNT; i++) begin",
             "      in_words[i] = '0;",
@@ -2583,11 +4404,29 @@ def render_sv(
             "    end",
             "    for (int i = 0; i < CPPTB_SIGNAL_COUNT; i++) begin",
             "      edge_interest[i] = '0;",
+            "      registered_clock[i] = 1'b0;",
+            "      primary_clock[i] = 1'b0;",
             "    end",
             "",
             f"    {init_function}(iterations, TIMEPRECISION_FS);",
+        ]
+    )
+    if dynamic_clocks:
+        for port in dynamic_clock_ports:
+            constant = sv_signal_constant(port)
+            lines.extend(
+                [
+                    f"    registered_clock[{constant}] =",
+                    f"        {clock_config_function}({constant}, 0) != 0;",
+                    f"    primary_clock[{constant}] =",
+                    f"        {clock_config_function}({constant}, 2) != 0;",
+                ]
+            )
+    lines.extend(
+        [
             "    run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);",
             "    service_requests(initial_requests);",
+            "    clock_drivers_active = 1'b1;",
         ]
     )
     lines.extend(
@@ -2598,12 +4437,17 @@ def render_sv(
         ]
     )
     for index, clock in enumerate(clocks):
-        if clock_source(clock) == "generated":
+        if clock_source(clock) in {"generated", "registered"}:
             lines.append(f"        drive_clock_{index}();")
         else:
             lines.append(f"        observe_clock_{index}();")
+    if dynamic_clocks:
+        for index, _ in enumerate(dynamic_clock_ports):
+            lines.append(f"        drive_registered_clock_{index}();")
     for index, _ in enumerate(edge_observers):
         lines.append(f"        observe_signal_{index}();")
+    for index, _ in enumerate(hierarchy_edge_paths_selected):
+        lines.append(f"        observe_hierarchy_signal_{index}();")
     lines.extend(["      join_none", "    end"])
     lines.extend(
         [
@@ -2634,6 +4478,13 @@ def render_sv(
     lines.extend(["  );", ""])
     lines.extend(sv_port_export_functions(ports, manifest))
     lines.extend(sv_internal_export_functions(internals, manifest))
+    lines.extend(
+        sv_hierarchy_export_functions(
+            hierarchy,
+            list(manifest.get("hierarchy_accesses", [])),
+            manifest,
+        )
+    )
     lines.extend([f"endmodule : {manifest['top_module']}", ""])
     return "\n".join(lines)
 
@@ -2644,10 +4495,27 @@ def output_paths(manifest: dict[str, Any], base_dir: Path) -> dict[str, Path]:
     for key in required:
         if key not in outputs:
             raise CodegenError(f"manifest outputs is missing required key {key!r}")
-    return {
+    paths = {
         key: (base_dir / outputs[key]).resolve()
         for key in ("cpp_dut", "cpp_binding", "sv_wrapper")
     }
+    if "cpp_adapter" in outputs:
+        if "cpp_binding_include" not in outputs:
+            raise CodegenError(
+                "manifest outputs with cpp_adapter must define "
+                "cpp_binding_include"
+            )
+        paths["cpp_adapter"] = (base_dir / outputs["cpp_adapter"]).resolve()
+    if "cpp_clock_discovery" in outputs:
+        if "cpp_binding_include" not in outputs:
+            raise CodegenError(
+                "manifest outputs with cpp_clock_discovery must define "
+                "cpp_binding_include"
+            )
+        paths["cpp_clock_discovery"] = (
+            base_dir / outputs["cpp_clock_discovery"]
+        ).resolve()
+    return paths
 
 
 def write_or_check(outputs: dict[Path, str], check: bool) -> None:
@@ -2703,15 +4571,156 @@ def compare_designs(
     )
 
 
-def generate(
-    manifest_path: Path,
+def hierarchy_catalog_data(design: DesignIR) -> dict[str, Any]:
+    def dimensions(value: Port | HierarchySignal) -> list[dict[str, int]]:
+        return [
+            {"left": dimension.left, "right": dimension.right}
+            for dimension in value.unpacked
+        ]
+
+    def declared_type(value: Port | HierarchySignal) -> str | None:
+        packed_type = value.packed_type
+        return packed_type.declared_name if packed_type is not None else None
+
+    return {
+        "schema_version": 1,
+        "module": design.module,
+        "ports": [
+            {
+                "name": port.name,
+                "direction": port.direction,
+                "width": port.width,
+                "signed": port.signed,
+                "four_state": port.four_state,
+                "type_kind": port.type_kind,
+                "declared_type": declared_type(port),
+                "unpacked": dimensions(port),
+            }
+            for port in design.ports
+        ],
+        "scopes": [
+            {
+                "path": scope.hdl_path,
+                "cpp_path": list(scope.cpp_path),
+                "kind": scope.symbol_kind,
+            }
+            for scope in design.hierarchy.scopes
+        ],
+        "signals": [
+            {
+                "path": signal.hdl_path,
+                "cpp_path": list(signal.cpp_path),
+                "kind": signal.symbol_kind,
+                "width": signal.width,
+                "signed": signal.signed,
+                "four_state": signal.four_state,
+                "type_kind": signal.type_kind,
+                "declared_type": declared_type(signal),
+                "unpacked": dimensions(signal),
+                "depositable": signal.depositable,
+                "forceable": True,
+            }
+            for signal in design.hierarchy.signals
+        ],
+        "parameters": [
+            {
+                "path": parameter.hdl_path,
+                "cpp_path": list(parameter.cpp_path),
+                "value": parameter.value,
+                "local": parameter.local,
+            }
+            for parameter in design.hierarchy.parameters
+        ],
+    }
+
+
+def render_hierarchy_inspection(design: DesignIR) -> str:
+    lines = [f"DUT {design.module}", "", "Ports"]
+    for port in design.ports:
+        state = "logic" if port.four_state else "bit"
+        dimensions = "".join(
+            f" [{dimension.left}:{dimension.right}]"
+            for dimension in port.unpacked
+        )
+        lines.append(
+            f"  {port.direction:6} {port.name}: {state}[{port.width}]"
+            f"{dimensions}"
+        )
+
+    lines.extend(["", "Hierarchy"])
+    for signal in design.hierarchy.signals:
+        state = "logic" if signal.four_state else "bit"
+        dimensions = "".join(
+            f" [{dimension.left}:{dimension.right}]"
+            for dimension in signal.unpacked
+        )
+        access = "get/deposit/force/release" if signal.depositable else (
+            "get/force/release"
+        )
+        lines.append(
+            f"  {signal.hdl_path}: {signal.symbol_kind} "
+            f"{state}[{signal.width}]{dimensions} ({access})"
+        )
+    if not design.hierarchy.signals:
+        lines.append("  <none>")
+
+    lines.extend(["", "Parameters"])
+    for parameter in design.hierarchy.parameters:
+        lines.append(f"  {parameter.hdl_path} = {parameter.value}")
+    if not design.hierarchy.parameters:
+        lines.append("  <none>")
+    return "\n".join(lines) + "\n"
+
+
+def elaborate_inspection(
+    inputs: list[Path],
+    *,
+    top: str | None,
+    frontend: str | None,
+    base_dir: Path,
+) -> DesignIR:
+    legacy_manifest = len(inputs) == 1 and inputs[0].suffix.lower() == ".json"
+    if legacy_manifest:
+        manifest_path = (base_dir / inputs[0]).resolve()
+        manifest = load_manifest(manifest_path)
+        return apply_port_transport(
+            elaborate_design(manifest, manifest_path.parent, frontend),
+            manifest,
+        )
+
+    if any(path.suffix.lower() == ".json" for path in inputs):
+        raise CodegenError("a v1 manifest must be the only positional input")
+    resolved_sources = [
+        (path if path.is_absolute() else base_dir / path).resolve()
+        for path in inputs
+    ]
+    inference_manifest = {
+        "sources": [str(source) for source in resolved_sources],
+        "frontend_options": {"slang": {"standard": "1800-2023"}},
+    }
+    if top is None:
+        from cpptb_codegen.frontends.slang import infer_top_module
+
+        top = infer_top_module(inference_manifest, base_dir)
+    manifest = source_manifest(
+        resolved_sources,
+        top,
+        output_dir=base_dir / "generated",
+        frontend=frontend or "slang",
+    )
+    return apply_port_transport(
+        elaborate_design(manifest, base_dir, frontend), manifest
+    )
+
+
+def generate_manifest(
+    manifest: dict[str, Any],
+    base_dir: Path,
+    source: str,
     check: bool = False,
     frontend: str | None = None,
     compare_frontend: str | None = None,
 ) -> list[Path]:
-    manifest_path = manifest_path.resolve()
-    manifest = load_manifest(manifest_path)
-    base_dir = manifest_path.parent
     primary_name = frontend_name(manifest, frontend)
     design = apply_port_transport(
         elaborate_design(manifest, base_dir, frontend), manifest
@@ -2728,31 +4737,197 @@ def generate(
 
     discovered_ports = list(design.ports)
     internals = list(design.internals)
+    hierarchy_accesses = list(manifest.get("hierarchy_accesses", []))
     validate_transport_ports(discovered_ports)
     validate_internals(internals)
+    validate_hierarchy_accesses(design.hierarchy, hierarchy_accesses)
     ports = map_ports(discovered_ports, manifest)
     root = build_tree([*ports, *internals])
 
     validate_clock_ports(manifest, ports)
 
     paths = output_paths(manifest, base_dir)
-    source = manifest_path.name
     generated = {
         paths["cpp_dut"]: render_cpp_dut(
-            ports, internals, root, manifest, source
+            ports, internals, root, manifest, source, design.hierarchy
         ),
         paths["cpp_binding"]: render_cpp_binding(
             ports, internals, root, manifest, source
         ),
-        paths["sv_wrapper"]: render_sv(ports, internals, manifest, source),
+        paths["sv_wrapper"]: render_sv(
+            ports, internals, manifest, source, design.hierarchy
+        ),
     }
+    if "cpp_adapter" in paths:
+        generated[paths["cpp_adapter"]] = render_cpp_adapter(manifest, source)
+    if "cpp_clock_discovery" in paths:
+        generated[paths["cpp_clock_discovery"]] = render_cpp_clock_discovery(
+            manifest, source
+        )
     write_or_check(generated, check)
     return list(generated)
 
 
-def main() -> int:
+def generate(
+    manifest_path: Path,
+    check: bool = False,
+    frontend: str | None = None,
+    compare_frontend: str | None = None,
+    clock_config: Path | None = None,
+    access_config: Path | None = None,
+) -> list[Path]:
+    manifest_path = manifest_path.resolve()
+    manifest = load_manifest(manifest_path)
+    if clock_config is not None:
+        resolved_clock_config = (
+            clock_config
+            if clock_config.is_absolute()
+            else Path.cwd() / clock_config
+        ).resolve()
+        manifest["clocks"] = load_discovered_clocks(resolved_clock_config)
+        manifest.pop("clock", None)
+        manifest["run"] = {**manifest.get("run", {}), "dynamic_clocks": False}
+    if access_config is not None:
+        resolved_access_config = (
+            access_config
+            if access_config.is_absolute()
+            else Path.cwd() / access_config
+        ).resolve()
+        hierarchy_accesses, port_edges = load_access_plan(
+            resolved_access_config
+        )
+        manifest["hierarchy_accesses"] = hierarchy_accesses
+        manifest["edge_observer_signal_ids"] = port_edges
+    return generate_manifest(
+        manifest,
+        manifest_path.parent,
+        manifest_path.name,
+        check=check,
+        frontend=frontend,
+        compare_frontend=compare_frontend,
+    )
+
+
+def generate_sources(
+    sources: list[Path],
+    *,
+    top: str | None = None,
+    clocks: list[str] | None = None,
+    primary_clock: str | None = None,
+    edge_observers: list[str] | None = None,
+    output_dir: Path | None = None,
+    target: str | None = None,
+    namespace: str | None = None,
+    root_type: str = "Dut",
+    check: bool = False,
+    frontend: str = "slang",
+    compare_frontend: str | None = None,
+    clock_config: Path | None = None,
+    access_config: Path | None = None,
+    base_dir: Path | None = None,
+) -> list[Path]:
+    base_dir = (base_dir or Path.cwd()).resolve()
+    resolved_sources = [
+        (source if source.is_absolute() else base_dir / source).resolve()
+        for source in sources
+    ]
+    if not resolved_sources:
+        raise CodegenError("source-driven generation requires at least one source")
+
+    inference_manifest = {
+        "sources": [str(source) for source in resolved_sources],
+        "frontend_options": {
+            "slang": {"standard": "1800-2023"},
+        },
+    }
+    if top is None:
+        from cpptb_codegen.frontends.slang import infer_top_module
+
+        top = infer_top_module(inference_manifest, base_dir)
+
+    if output_dir is None:
+        source_parents = {source.parent for source in resolved_sources}
+        output_dir = (
+            next(iter(source_parents)) if len(source_parents) == 1 else base_dir
+        ) / "generated"
+    elif not output_dir.is_absolute():
+        output_dir = base_dir / output_dir
+
+    clock_arguments = clocks or []
+    if clock_config is not None and clock_arguments:
+        raise CodegenError("--clock-config cannot be combined with --clock")
+    if clock_config is not None and primary_clock is not None:
+        raise CodegenError(
+            "--primary-clock cannot be combined with --clock-config"
+        )
+    if len(clock_arguments) > 1 and primary_clock is None:
+        raise CodegenError(
+            "multiple generated clocks require --primary-clock"
+        )
+    if clock_config is not None:
+        resolved_clock_config = (
+            clock_config
+            if clock_config.is_absolute()
+            else base_dir / clock_config
+        ).resolve()
+        parsed_clocks = load_discovered_clocks(resolved_clock_config)
+    else:
+        parsed_clocks = []
+        for value in clock_arguments:
+            port = value.split("=", 1)[0]
+            parsed_clocks.append(
+                parse_clock_argument(
+                    value,
+                    primary=(len(clock_arguments) == 1 or port == primary_clock),
+                )
+            )
+    if primary_clock is not None and not any(
+        clock["port"] == primary_clock for clock in parsed_clocks
+    ):
+        raise CodegenError(
+            f"primary clock {primary_clock!r} is not configured by --clock"
+        )
+
+    manifest = source_manifest(
+        resolved_sources,
+        top,
+        output_dir=output_dir,
+        clocks=parsed_clocks,
+        edge_observers=edge_observers,
+        target=target,
+        namespace=namespace,
+        root_type=root_type,
+        frontend=frontend,
+        dynamic_clocks=clock_config is None,
+    )
+    if access_config is not None:
+        resolved_access_config = (
+            access_config
+            if access_config.is_absolute()
+            else base_dir / access_config
+        ).resolve()
+        hierarchy_accesses, port_edges = load_access_plan(
+            resolved_access_config
+        )
+        manifest["hierarchy_accesses"] = hierarchy_accesses
+        manifest["edge_observer_signal_ids"] = port_edges
+    return generate_manifest(
+        manifest,
+        base_dir,
+        ", ".join(source.name for source in resolved_sources),
+        check=check,
+        compare_frontend=compare_frontend,
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("manifest", type=Path)
+    parser.add_argument(
+        "inputs",
+        nargs="+",
+        type=Path,
+        help="a v1 manifest or one or more SystemVerilog sources",
+    )
     parser.add_argument(
         "--check", action="store_true", help="fail when checked-in outputs are stale"
     )
@@ -2766,14 +4941,152 @@ def main() -> int:
         choices=("slang", "verilator_json"),
         help="also elaborate with this frontend and compare the port contract",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--top", help="select the DUT top module when source inference is ambiguous"
+    )
+    parser.add_argument(
+        "--clock",
+        action="append",
+        default=[],
+        metavar="PORT=PERIOD[@PHASE]",
+        help="generate an explicitly timed clock; may be repeated",
+    )
+    parser.add_argument(
+        "--primary-clock",
+        help="select the primary clock when more than one --clock is present",
+    )
+    parser.add_argument(
+        "--clock-config",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--access-config",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument(
+        "--edge-observer",
+        action="append",
+        default=[],
+        help="observe edges on this DUT output; may be repeated",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="generated artifact directory (default: generated beside the source)",
+    )
+    parser.add_argument("--target", help="override the generated target identifier")
+    parser.add_argument(
+        "--namespace", help="override the target-unique generated C++ namespace"
+    )
+    parser.add_argument(
+        "--root-type",
+        default="Dut",
+        help="override the generated typed root name (default: Dut)",
+    )
+    parser.add_argument(
+        "--inspect-hierarchy",
+        action="store_true",
+        help="print the complete elaborated DUT hierarchy and exit",
+    )
+    parser.add_argument(
+        "--hierarchy-json",
+        type=Path,
+        help="write the inferred hierarchy as an optional JSON snapshot",
+    )
+    parser.add_argument(
+        "--check-hierarchy",
+        type=Path,
+        help="fail if an existing hierarchy JSON snapshot is stale",
+    )
+    args = parser.parse_args(argv)
     try:
-        paths = generate(
-            args.manifest,
-            check=args.check,
-            frontend=args.frontend,
-            compare_frontend=args.compare_frontend,
+        if args.hierarchy_json is not None and args.check_hierarchy is not None:
+            raise CodegenError(
+                "--hierarchy-json and --check-hierarchy are mutually exclusive"
+            )
+        if (args.inspect_hierarchy or args.hierarchy_json is not None or
+                args.check_hierarchy is not None):
+            design = elaborate_inspection(
+                args.inputs,
+                top=args.top,
+                frontend=args.frontend,
+                base_dir=Path.cwd(),
+            )
+            if args.inspect_hierarchy:
+                print(render_hierarchy_inspection(design), end="")
+            snapshot = json.dumps(
+                hierarchy_catalog_data(design), indent=2, sort_keys=True
+            ) + "\n"
+            if args.hierarchy_json is not None:
+                args.hierarchy_json.parent.mkdir(parents=True, exist_ok=True)
+                args.hierarchy_json.write_text(snapshot)
+                print(f"wrote hierarchy {args.hierarchy_json}")
+            if args.check_hierarchy is not None:
+                try:
+                    current = args.check_hierarchy.read_text()
+                except OSError as error:
+                    raise CodegenError(
+                        f"cannot read hierarchy snapshot "
+                        f"{args.check_hierarchy}: {error}"
+                    ) from error
+                if current != snapshot:
+                    raise CodegenError(
+                        f"hierarchy snapshot is stale: "
+                        f"{args.check_hierarchy}"
+                    )
+                print(f"checked hierarchy {args.check_hierarchy}")
+            return 0
+        legacy_manifest = (
+            len(args.inputs) == 1 and args.inputs[0].suffix.lower() == ".json"
         )
+        if legacy_manifest:
+            source_only_options = (
+                args.top,
+                args.clock or None,
+                args.primary_clock,
+                args.edge_observer or None,
+                args.output_dir,
+                args.target,
+                args.namespace,
+            )
+            if any(value is not None for value in source_only_options) or (
+                args.root_type != "Dut"
+            ):
+                raise CodegenError(
+                    "--top, --clock, --output-dir, --target, --namespace, and "
+                    "source metadata options are only valid with source inputs"
+                )
+            paths = generate(
+                args.inputs[0],
+                check=args.check,
+                frontend=args.frontend,
+                compare_frontend=args.compare_frontend,
+                clock_config=args.clock_config,
+                access_config=args.access_config,
+            )
+        else:
+            if any(path.suffix.lower() == ".json" for path in args.inputs):
+                raise CodegenError(
+                    "a v1 manifest must be the only positional input"
+                )
+            paths = generate_sources(
+                args.inputs,
+                top=args.top,
+                clocks=args.clock,
+                primary_clock=args.primary_clock,
+                edge_observers=args.edge_observer,
+                output_dir=args.output_dir,
+                target=args.target,
+                namespace=args.namespace,
+                root_type=args.root_type,
+                check=args.check,
+                frontend=args.frontend or "slang",
+                compare_frontend=args.compare_frontend,
+                clock_config=args.clock_config,
+                access_config=args.access_config,
+            )
     except CodegenError as error:
         print(f"cpptb-codegen: {error}", file=sys.stderr)
         return 1

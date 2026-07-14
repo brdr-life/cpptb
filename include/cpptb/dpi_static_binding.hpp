@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "cpptb/access_discovery.hpp"
 #include "cpptb/coro_runtime.hpp"
 
 namespace cpptb::dpi {
@@ -20,6 +21,7 @@ struct StaticBindingContext {
     uint32_t* outputs = nullptr;
     const uint32_t* current_inputs = nullptr;
     bool* configured_clock = nullptr;
+    bool* edge_observer = nullptr;
     bool* local_edge_capable = nullptr;
     bool* outputs_dirty = nullptr;
     bool* local_edge_delivery_enabled = nullptr;
@@ -31,7 +33,8 @@ struct StaticBindingContext {
     void deliver_local_edge(uint32_t id, uint32_t previous,
                             uint32_t value) const {
         if (!*local_edge_delivery_enabled || !scheduler ||
-            !local_edge_capable[id] || configured_clock[id]) {
+            !local_edge_capable[id] || configured_clock[id] ||
+            (edge_observer && edge_observer[id])) {
             return;
         }
         coro::EdgeKind edge = coro::EdgeKind::Any;
@@ -60,6 +63,13 @@ struct StaticPackedBindingSpan {
     uint32_t word_count = 0;
     uint32_t transport_offset = 0;
     bool driven = false;
+};
+
+struct RegisteredClockConfig {
+    uint32_t signal_id = 0;
+    uint64_t period_fs = 0;
+    uint64_t phase_fs = 0;
+    uint32_t initial_value = 0;
 };
 
 template <size_t SpanCount, size_t ObservedCount, size_t DrivenCount>
@@ -93,7 +103,7 @@ consteval bool validate_static_packed_binding_spans(
 
 template <size_t Width, bool Writable, bool Driven, uint32_t Id,
           uint32_t TransportOffset>
-    requires(Writable == Driven)
+    requires(!Driven || Writable)
 struct StaticPackedSignalSpec {
     static_assert(Width > 0, "signal width must be positive");
 };
@@ -189,7 +199,7 @@ coro::Signal static_dynamic_signal(StaticBindingContext* context, uint32_t id,
 }  // namespace detail
 
 template <size_t Width, bool Writable, bool Driven>
-    requires(Writable == Driven)
+    requires(!Driven || Writable)
 class StaticPackedRef {
    public:
     using value_type = coro::PackedSignalValue<Width>;
@@ -203,7 +213,7 @@ class StaticPackedRef {
     value_type get() const {
         typename cpptb::Bits<Width>::word_array words{};
         for (size_t word = 0; word < word_count; ++word) {
-            if constexpr (Driven) {
+            if constexpr (Writable) {
                 words[word] = context->outputs[id + word];
             } else if (context->current_inputs) {
                 words[word] = context->current_inputs[transport_offset + word];
@@ -231,6 +241,16 @@ class StaticPackedRef {
             }
             *context->outputs_dirty = *context->outputs_dirty || changed;
         }
+    }
+
+    template <typename Value>
+    void force(Value&&) const {
+        coro::detail::unsupported_port_force<Value>();
+    }
+
+    template <typename Port = StaticPackedRef>
+    void release() const {
+        coro::detail::unsupported_port_release<Port>();
     }
 
     operator coro::Signal() const requires(Width <= 32) {
@@ -279,6 +299,16 @@ class StaticOnDemandRef {
         }
     }
 
+    template <typename Value>
+    void force(Value&&) const {
+        coro::detail::unsupported_port_force<Value>();
+    }
+
+    template <typename Port = StaticOnDemandRef>
+    void release() const {
+        coro::detail::unsupported_port_release<Port>();
+    }
+
     operator coro::Signal() const requires(Width <= 32) {
         return detail::static_dynamic_signal<Width>(context, id, name);
     }
@@ -286,7 +316,7 @@ class StaticOnDemandRef {
 
 template <size_t Width, bool Writable, bool Driven, uint32_t Id,
           uint32_t TransportOffset>
-    requires(Writable == Driven)
+    requires(!Driven || Writable)
 class StaticPackedSignal {
    public:
     using value_type = coro::PackedSignalValue<Width>;
@@ -310,8 +340,23 @@ class StaticPackedSignal {
             context, Id, TransportOffset, name}.set(value);
     }
 
+    template <typename Value>
+    void force(Value&&) const {
+        coro::detail::unsupported_port_force<Value>();
+    }
+
+    template <typename Port = StaticPackedSignal>
+    void release() const {
+        coro::detail::unsupported_port_release<Port>();
+    }
+
     operator coro::Signal() const requires(Width <= 32) {
+#ifdef CPPTB_HIERARCHY_DISCOVERY
+        discovery::mark_port_edge<Id>();
+        return {nullptr, Id, name};
+#else
         return detail::static_dynamic_signal<Width>(context, Id, name);
+#endif
     }
 };
 
@@ -341,8 +386,23 @@ class StaticOnDemandSignal {
             context, Id, 0, name, get_words_fn, set_words_fn}.set(value);
     }
 
+    template <typename Value>
+    void force(Value&&) const {
+        coro::detail::unsupported_port_force<Value>();
+    }
+
+    template <typename Port = StaticOnDemandSignal>
+    void release() const {
+        coro::detail::unsupported_port_release<Port>();
+    }
+
     operator coro::Signal() const requires(Width <= 32) {
+#ifdef CPPTB_HIERARCHY_DISCOVERY
+        discovery::mark_port_edge<Id>();
+        return {nullptr, Id, name};
+#else
         return detail::static_dynamic_signal<Width>(context, Id, name);
+#endif
     }
 };
 

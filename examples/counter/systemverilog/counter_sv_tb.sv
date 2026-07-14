@@ -7,7 +7,8 @@ module counter_sv_tb;
   logic enable;
   logic [7:0] count;
 
-  int unsigned iterations;
+  localparam int unsigned kCountCycles = 8;
+
   longint unsigned checks;
   int unsigned failures;
   longint unsigned sim_cycles;
@@ -38,15 +39,12 @@ module counter_sv_tb;
     enable = 1'b0;
     checks = 0;
     failures = 0;
-    iterations = 8;
-    void'($value$plusargs("CPPTB_COUNTER_ITERS=%d", iterations));
-
     repeat (2) @(posedge clk);
     @(negedge clk);
     rst_n = 1'b1;
     enable = 1'b1;
 
-    for (int unsigned expected = 1; expected <= iterations; expected++) begin
+    for (int unsigned expected = 1; expected <= kCountCycles; expected++) begin
       @(posedge clk);
       #1ps;
       expect_eq("enabled count", count, expected);
@@ -55,11 +53,11 @@ module counter_sv_tb;
     enable = 1'b0;
     @(posedge clk);
     #1ps;
-    expect_eq("disabled count", count, iterations);
+    expect_eq("disabled count", count, kCountCycles);
 
     $display(
         "PURE_SV_COUNTER_RESULT iterations=%0d checks=%0d sim_cycles=%0d failures=%0d",
-        iterations, checks, sim_cycles, failures);
+        1, checks, sim_cycles, failures);
     if (failures != 0) $fatal(1, "counter pure-SV testbench failed");
     $finish;
   end

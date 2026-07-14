@@ -122,8 +122,8 @@ class SettleTests(unittest.TestCase):
 
 
 class MulticlockTests(unittest.TestCase):
-    CPP = "CPP_DPI_MULTICLOCK_RESULT iterations=16 checks=64 sim_cycles=81 wall_ms=0.125 failures=0\n"
-    SV = "PURE_SV_MULTICLOCK_RESULT iterations=16 checks=64 sim_cycles=81 failures=0\n"
+    CPP = "CPP_DPI_MULTICLOCK_RESULT iterations=1 checks=64 sim_cycles=81 wall_ms=0.125 failures=0\n"
+    SV = "PURE_SV_MULTICLOCK_RESULT iterations=1 checks=64 sim_cycles=81 failures=0\n"
 
     def test_exact_four_field_match_is_equivalence_only(self) -> None:
         result = regression.compare_multiclock(self.CPP, self.SV)
@@ -135,11 +135,11 @@ class MulticlockTests(unittest.TestCase):
         self,
     ) -> None:
         cpp = (
-            "CPP_DPI_TIMER_ONLY_RESULT iterations=9 checks=39 sim_cycles=0 "
+            "CPP_DPI_TIMER_ONLY_RESULT iterations=1 checks=39 sim_cycles=0 "
             "wall_ms=0.01 failures=0\n"
         )
         sv = (
-            "PURE_SV_TIMER_ONLY_RESULT iterations=9 checks=39 "
+            "PURE_SV_TIMER_ONLY_RESULT iterations=1 checks=39 "
             "sim_cycles=0 failures=0\n"
         )
         result = regression.compare_multiclock(cpp, sv)
@@ -148,11 +148,11 @@ class MulticlockTests(unittest.TestCase):
 
     def test_counter_markers_use_the_same_exact_equivalence_contract(self) -> None:
         cpp = (
-            "CPP_DPI_COUNTER_RESULT iterations=8 checks=9 sim_cycles=11 "
+            "CPP_DPI_COUNTER_RESULT iterations=1 checks=9 sim_cycles=11 "
             "wall_ms=0.01 failures=0\n"
         )
         sv = (
-            "PURE_SV_COUNTER_RESULT iterations=8 checks=9 "
+            "PURE_SV_COUNTER_RESULT iterations=1 checks=9 "
             "sim_cycles=11 failures=0\n"
         )
         result = regression.compare_multiclock(cpp, sv)
@@ -161,9 +161,9 @@ class MulticlockTests(unittest.TestCase):
 
     def test_expanded_examples_use_the_same_exact_equivalence_contract(self) -> None:
         examples = {
-            "FIFO_SCOREBOARD": (24, 27, 44),
-            "APB_REGFILE": (12, 41, 80),
-            "WATCHDOG_TIMEOUT": (8, 20, 44),
+            "FIFO_SCOREBOARD": (1, 27, 44),
+            "APB_REGFILE": (1, 41, 80),
+            "WATCHDOG_TIMEOUT": (1, 20, 44),
         }
         for marker, (iterations, checks, sim_cycles) in examples.items():
             with self.subTest(marker=marker):
@@ -543,6 +543,103 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(measured["status"], "failed")
         self.assertEqual(measured["diagnostic_status"], "failed")
         self.assertEqual(result["status"], "failed")
+
+    @staticmethod
+    def waived_force_entry() -> dict[str, object]:
+        entry = feature("force_direct", benchmark=["bench", "force_direct"])
+        entry["gate_policy"] = "waived_hard_1_10"
+        entry["waiver"] = {
+            "approved_on": "2026-07-14",
+            "max_ratio": 1.20,
+            "rationale": "isolated exported-DPI force transport",
+        }
+        return entry
+
+    @staticmethod
+    def force_result(status: str, ratio: float) -> dict[str, object]:
+        return {
+            "status": status,
+            "kernels": {
+                "force_direct": {
+                    "guard": {
+                        "status": (
+                            "invalid_environment"
+                            if status == "invalid_environment"
+                            else "hard_failure"
+                        ),
+                        "ratio": ratio,
+                    }
+                }
+            },
+        }
+
+    def test_scoped_waiver_preserves_failure_diagnostic_below_ceiling(self) -> None:
+        entry = self.waived_force_entry()
+        runner = SerialRunner(
+            {
+                ("bench", "force_direct"): {
+                    "returncode": 1,
+                    "stdout": "",
+                    "stderr": "",
+                }
+            }
+        )
+        with mock.patch.object(
+            regression,
+            "_load_runner_result",
+            return_value=self.force_result("failed", 1.135),
+        ):
+            result = self.run_in_temp(
+                [entry], command_runner=runner, probe_runner=SequenceProbe([0.1])
+            )
+
+        measured = result["entries"][0]
+        self.assertEqual(measured["status"], "passed")
+        self.assertEqual(measured["diagnostic_status"], "failed")
+        self.assertEqual(measured["waiver"]["measured_ratio"], 1.135)
+        self.assertEqual(measured["waiver"]["max_ratio"], 1.20)
+        self.assertEqual(result["status"], "passed")
+
+    def test_scoped_waiver_still_fails_above_its_ceiling(self) -> None:
+        with mock.patch.object(
+            regression,
+            "_load_runner_result",
+            return_value=self.force_result("failed", 1.201),
+        ):
+            result = self.run_in_temp(
+                [self.waived_force_entry()],
+                command_runner=SerialRunner(),
+                probe_runner=SequenceProbe([0.1]),
+            )
+        measured = result["entries"][0]
+        self.assertEqual(measured["status"], "failed")
+        self.assertEqual(measured["diagnostic_status"], "failed")
+
+    def test_scoped_waiver_does_not_hide_framework_errors(self) -> None:
+        with mock.patch.object(
+            regression,
+            "_load_runner_result",
+            return_value={"status": "workload_error"},
+        ):
+            result = self.run_in_temp(
+                [self.waived_force_entry()],
+                command_runner=SerialRunner(),
+                probe_runner=SequenceProbe([0.1]),
+            )
+        self.assertEqual(result["entries"][0]["status"], "failed")
+
+    def test_scoped_waiver_preserves_invalid_environment(self) -> None:
+        with mock.patch.object(
+            regression,
+            "_load_runner_result",
+            return_value=self.force_result("invalid_environment", 1.15),
+        ):
+            result = self.run_in_temp(
+                [self.waived_force_entry()],
+                command_runner=SerialRunner(),
+                probe_runner=SequenceProbe([0.1]),
+            )
+        self.assertEqual(result["entries"][0]["status"], "invalid_environment")
 
     def test_unchanged_runner_result_is_stale(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

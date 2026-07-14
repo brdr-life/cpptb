@@ -12,7 +12,9 @@ make cpp-dpi-timer-only-sv-run
 make feature-test FEATURE=dpi_timer_only
 ```
 
-Both executables accept `CPPTB_TIMER_ONLY_ITERS`. The C++ executable reports
-`CPP_DPI_TIMER_ONLY_RESULT`; the pure-SV executable reports
-`PURE_SV_TIMER_ONLY_RESULT`. Their `iterations`, `checks`, `sim_cycles`, and
-`failures` fields must match exactly, and `sim_cycles` is always zero.
+Both peers run the fixed `kCadenceSamples = 9` workload. This clockless target
+is generated directly from `timer_only_probe.sv`; its test simply never calls
+`start_clock()`.
+Their checks and `sim_cycles=0` must match exactly; the result marker reports
+`iterations=1` because this is an equivalence example, not a scalable
+benchmark.

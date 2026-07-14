@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include <utility>
+#include "cpptb/dpi_static_binding.hpp"
 
 #include "benchmarks/peripheral_suite/testbenches/cpp_dpi/generated/peripheral_suite_dut.hpp"
 
@@ -14,7 +15,11 @@ inline constexpr bool kCompactInputTransport = true;
 inline constexpr std::array<uint32_t, 1> kClockSignalIds = {
     kSignalHclk,
 };
+inline constexpr std::array<cpptb::dpi::RegisteredClockConfig, 0> kRegisteredClockConfigs = {{
+}};
 inline constexpr std::array<uint32_t, 0> kEdgeObserverSignalIds = {
+};
+inline constexpr std::array<uint32_t, 0> kTransportlessEdgeSignalIds = {
 };
 inline constexpr std::array<std::pair<uint32_t, uint32_t>, 22> kDrivenSignalSpans = {{
     {kSignalHresetn, 1},

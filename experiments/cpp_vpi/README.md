@@ -1,7 +1,7 @@
 # A C++ VPI Testbench Prototype
 
-The `cpptb/` prototype mirrors the MojoTB counter experiment, but keeps the
-testbench runtime and test processes in C++.
+This prototype mirrors the MojoTB counter experiment, but keeps the testbench
+runtime and test processes in C++.
 
 The goal is to evaluate the same cocotb-like scheduler shape with direct,
 standard VPI hooks instead of a Mojo shared-library boundary:
@@ -80,7 +80,7 @@ would move startup into simulator registration hooks such as
 
 ## Coroutine API Experiment
 
-The next prototype adds `cpptb/coro_runtime.hpp` and a more realistic
+The next prototype adds `include/cpptb/coro_runtime.hpp` and a more realistic
 RgGen-derived DUT under `experiments/cpp_vpi/rggen_apb_event/`.
 
 Run it with:
@@ -121,5 +121,6 @@ callbacks, but C++20 coroutines remove process ids and explicit wait-request
 returns from user test code. Void coroutines use `Task<void>`; typed,
 move-only results use `Task<T>` and are moved through `co_return`/`co_await`.
 Scheduler roots and `Join` children remain `Task<void>`. See
-`cpptb/README.md` for the live Authoring Core API, including `clock_cycles`,
-edge timeouts, predicate waits, sticky events, and unbounded FIFO channels.
+`docs/testbench-authoring.md` for the live Authoring Core API, including
+`clock_cycles`, edge timeouts, predicate waits, sticky events, and unbounded
+FIFO channels.

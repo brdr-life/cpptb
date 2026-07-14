@@ -5,6 +5,7 @@
 #include <array>
 #include <cstdint>
 #include <utility>
+#include "cpptb/dpi_static_binding.hpp"
 #include "svdpi.h"
 #include "cpptb/probe.hpp"
 #include <cstdio>
@@ -19,14 +20,6 @@ extern "C" {
     unsigned long long dpi_authoring_core_port_20_get(int index_0);
     void dpi_authoring_core_port_20_set(int index_0, unsigned long long value);
     unsigned long long dpi_authoring_core_port_21_get(int index_0);
-    unsigned int dpi_authoring_core_internal_0_get();
-    unsigned int dpi_authoring_core_internal_1_get();
-    void dpi_authoring_core_internal_1_deposit(unsigned int value);
-    unsigned int dpi_authoring_core_internal_2_get(int index);
-    void dpi_authoring_core_internal_2_deposit(int index, unsigned int value);
-    unsigned int dpi_authoring_core_internal_3_get();
-    void dpi_authoring_core_internal_3_force(unsigned int value);
-    void dpi_authoring_core_internal_3_release();
 }
 
 namespace cpptb::benchmarks::authoring_core::generated {
@@ -35,8 +28,13 @@ inline constexpr bool kCompactInputTransport = true;
 inline constexpr std::array<uint32_t, 1> kClockSignalIds = {
     kSignalClk,
 };
+inline constexpr std::array<cpptb::dpi::RegisteredClockConfig, 1> kRegisteredClockConfigs = {{
+    {kSignalClk, 2000000ULL, 0ULL, 0u},
+}};
 inline constexpr std::array<uint32_t, 1> kEdgeObserverSignalIds = {
     kSignalRspValid,
+};
+inline constexpr std::array<uint32_t, 0> kTransportlessEdgeSignalIds = {
 };
 inline constexpr std::array<std::pair<uint32_t, uint32_t>, 16> kDrivenSignalSpans = {{
     {kSignalRstN, 1},
@@ -281,62 +279,10 @@ inline void on_demand_port_21_get_words(
     words[1] = static_cast<uint32_t>(value >> 32);
 }
 
-inline probe::Value<32> internal_0_get(int32_t index) {
-    return dpi_authoring_core_internal_0_get();
-}
-
-inline auto make_internal_0() {
-    return probe::Probe<32, false>{
-        0, "cycle_count", internal_0_get, nullptr, nullptr, nullptr};
-}
-
-inline probe::Value<32> internal_1_get(int32_t index) {
-    return dpi_authoring_core_internal_1_get();
-}
-
-inline void internal_1_deposit(int32_t index, probe::Value<32> value) {
-    dpi_authoring_core_internal_1_deposit(value);
-}
-
-inline auto make_internal_1() {
-    return probe::Probe<32, true>{
-        0, "pending_data", internal_1_get, internal_1_deposit, nullptr, nullptr};
-}
-
-inline probe::Value<32> internal_2_get(int32_t index) {
-    return dpi_authoring_core_internal_2_get(index);
-}
-
-inline void internal_2_deposit(int32_t index, probe::Value<32> value) {
-    dpi_authoring_core_internal_2_deposit(index, value);
-}
-
-inline auto make_internal_2() {
-    return probe::MemoryProbe<32, 0, 255, true>{
-        "memory", internal_2_get, internal_2_deposit, nullptr, nullptr};
-}
-
-inline probe::Value<32> internal_3_get(int32_t index) {
-    return dpi_authoring_core_internal_3_get();
-}
-
-inline void internal_3_force(int32_t index, probe::Value<32> value) {
-    dpi_authoring_core_internal_3_force(value);
-}
-
-inline void internal_3_release(int32_t index) {
-    dpi_authoring_core_internal_3_release();
-}
-
-inline auto make_internal_3() {
-    return probe::Probe<32, false, true>{
-        0, "force_target", internal_3_get, nullptr, internal_3_force, internal_3_release};
-}
-
 template <typename MakeSignal>
 AuthoringCoreDut bind_dut(MakeSignal&& make_signal) {
     return {
-        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalClk, 0>{}, "clk"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, false, kSignalClk, 0>{}, "clk"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalRstN, 0>{}, "rst_n"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalReqValid, 1>{}, "req_valid"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalReqData, 2>{}, "req_data"),
@@ -367,13 +313,45 @@ AuthoringCoreDut bind_dut(MakeSignal&& make_signal) {
         make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalMemAddrI, 36>{}, "mem_addr_i"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalMemWdataI, 37>{}, "mem_wdata_i"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalMemWeI, 38>{}, "mem_we_i"),
-        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalMemRdataO, 38>{}, "mem_rdata_o"),
-        {
-            make_internal_0(),
-            make_internal_1(),
-            make_internal_2(),
-            make_internal_3()
-        }
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalMemRdataO, 38>{}, "mem_rdata_o")
+    };
+}
+
+template <typename MakeSignal>
+AuthoringCoreDut bind_dut_for_clock_discovery(MakeSignal&& make_signal) {
+    return {
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, false, kSignalClk, 0>{}, "clk"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalRstN, 0>{}, "rst_n"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalReqValid, 1>{}, "req_valid"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalReqData, 2>{}, "req_data"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalReqReady, 1>{}, "req_ready"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalRspValid, 2>{}, "rsp_valid"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalRspData, 3>{}, "rsp_data"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalRspReady, 3>{}, "rsp_ready"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalPulse, 4>{}, "pulse"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalRequestCount, 5>{}, "request_count"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalResponseCount, 6>{}, "response_count"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<64, true, true, kSignalWide64I, 4>{}, "wide64_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<64, false, false, kSignalWide64O, 7>{}, "wide64_o"),
+        make_signal(cpptb::dpi::StaticOnDemandSignalSpec<137, true, true, kSignalWide137I, on_demand_port_13_get_words, on_demand_port_13_set_words>{}, "wide137_i"),
+        make_signal(cpptb::dpi::StaticOnDemandSignalSpec<137, false, false, kSignalWide137O, on_demand_port_14_get_words, nullptr>{}, "wide137_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<16, true, true, kSignalFixedAI, 6>{}, "fixed_a_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<16, true, true, kSignalFixedBI, 7>{}, "fixed_b_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<16, false, false, kSignalFixedYO, 9>{}, "fixed_y_o"),
+        make_signal(cpptb::dpi::StaticPackedArraySpec<32, true, true, kSignalArrayI, 8, coro::ArrayDimension<1, 8>>{}, "array_i"),
+        make_signal(cpptb::dpi::StaticPackedArraySpec<32, false, false, kSignalArrayO, 10, coro::ArrayDimension<1, 8>>{}, "array_o"),
+        make_signal(cpptb::dpi::StaticOnDemandArraySpec<64, true, true, kSignalArrayWideI, on_demand_port_20_get_words, on_demand_port_20_set_words, coro::ArrayDimension<3, 0>>{}, "array_wide_i"),
+        make_signal(cpptb::dpi::StaticOnDemandArraySpec<64, false, false, kSignalArrayWideO, on_demand_port_21_get_words, nullptr, coro::ArrayDimension<3, 0>>{}, "array_wide_o"),
+        make_signal(cpptb::dpi::StaticPackedArraySpec<65, true, true, kSignalArrayMultidimI, 16, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, "array_multidim_i"),
+        make_signal(cpptb::dpi::StaticPackedArraySpec<65, false, false, kSignalArrayMultidimO, 18, coro::ArrayDimension<2, 1>, coro::ArrayDimension<-1, 1>>{}, "array_multidim_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalForceSourceI, 34>{}, "force_source_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalForceFanoutO, 36>{}, "force_fanout_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<11, true, true, kSignalPackedViewI, 35>{}, "packed_view_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<11, false, false, kSignalPackedViewO, 37>{}, "packed_view_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalMemAddrI, 36>{}, "mem_addr_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalMemWdataI, 37>{}, "mem_wdata_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalMemWeI, 38>{}, "mem_we_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalMemRdataO, 38>{}, "mem_rdata_o")
     };
 }
 

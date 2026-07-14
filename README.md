@@ -7,23 +7,31 @@ simulator events directly:
 
 ```cpp
 #include <cpptb/cpptb.hpp>
+#include "generated/counter_dut.hpp"
 
+using cpptb::TestContext;
 using cpptb::coro::Delay;
 using cpptb::coro::RisingEdge;
 using cpptb::coro::Task;
+using cpptb::generated::counter::Dut;
 using namespace cpptb::coro;
 
-Task<void> sequence(CounterTb tb) {
-    tb.dut.rst_n.set(0);
-    tb.dut.enable.set(0);
-    co_await clock_cycles(tb.dut.clk, 2);
+Task<void> sequence(Dut dut, TestContext& test) {
+    dut.clk.set(0);
+    test.start_clock(dut.clk, 10_ns);
 
-    tb.dut.rst_n.set(1);
-    tb.dut.enable.set(1);
-    co_await RisingEdge{tb.dut.clk};
+    dut.rst_n.set(0);
+    dut.enable.set(0);
+    co_await clock_cycles(dut.clk, 2);
+
+    dut.rst_n.set(1);
+    dut.enable.set(1);
+    co_await RisingEdge{dut.clk};
     co_await Delay{1_ps};
-    tb.expect_eq("first count", tb.dut.count.get(), 1);
+    test.expect_eq("first count", dut.count.get(), 1);
 }
+
+CPPTB_REGISTER_TEST(sequence);
 ```
 
 The framework currently targets Verilator for end-to-end testing, while its
@@ -38,14 +46,17 @@ types.
 - Absolute `Delay`, trigger and task timeouts, and `First` races.
 - Events, typed channels, process cancellation, and typed task results.
 - Typed scalar, wide packed, fixed-point, array, and hierarchical signals.
-- Read, deposit, force, and release access to generated internal probes.
-- Zero-, one-, and multi-clock designs with generated, testbench-driven, or
-  DUT-produced clocks.
+- Read, deposit, force, release, and edge access through natural generated
+  hierarchy paths with usage-pruned DPI transport.
+- Zero-, one-, and multi-clock designs with C++-owned input clocks and
+  directly observed DUT-produced clocks.
 - Batched and on-demand DPI transport selected by generated bindings.
 - An apples-to-apples C++ DPI versus SystemVerilog benchmark suite with a hard
-  1.10 performance-ratio guard.
+  1.10 performance-ratio guard and one documented direct-force transport
+  waiver.
 
 See [testbench authoring](docs/testbench-authoring.md),
+[hierarchical DUT access](docs/hierarchy.md),
 [scheduling](docs/scheduling.md), and [code generation](docs/code-generation.md)
 for the detailed contracts.
 
@@ -88,9 +99,10 @@ The checked-in examples include their generated output for readability and
 reproducible builds. Regenerate or verify one with:
 
 ```sh
-uv run --frozen cpptb-codegen examples/multiclock/dual_clock_mailbox.dpi.json
 uv run --frozen cpptb-codegen \
-  examples/multiclock/dual_clock_mailbox.dpi.json --check
+  examples/counter/counter.sv
+uv run --frozen cpptb-codegen \
+  examples/counter/counter.sv --check
 ```
 
 Start with [the examples](examples/README.md). The generated wrapper and
@@ -99,6 +111,21 @@ the user-authored sequence. The examples progress from a counter and clockless
 delays through a ready/valid scoreboard, multiple clocks, APB transactions,
 and expected timeout/cancellation paths. Every example includes an equivalent
 pure-SystemVerilog testbench and runs under `make examples-test`.
+
+## Documentation site
+
+The Markdown under `docs/` is the shared source for two static HTML builds.
+Build both variants or preview either one locally:
+
+```sh
+make docs-build
+make docs-sphinx-serve    # http://localhost:8001
+make docs-zensical-serve  # http://localhost:8002
+```
+
+The Sphinx build uses MyST and Furo; the parallel Zensical build uses its
+modern theme and built-in search. Generated HTML stays under `build/docs/` and
+is not committed.
 
 ## Benchmarks
 
@@ -111,11 +138,24 @@ make feature-list
 make feature-test FEATURE=event
 make feature-benchmark FEATURE=event
 make feature-regression
+make framework-comparison-heavy-benchmark
+make framework-comparison-open-cores-benchmark
 ```
 
 CI checks behavior and equivalence. Performance gates run on a controlled local
 or dedicated runner because shared CI timing is not stable enough for a 10%
 threshold. Compact reference results live in `benchmarks/baselines/`.
+
+The heavy four-mode suite compares pure SystemVerilog, C++ DPI, raw C++ VPI,
+and Cocotb on a 32-tap FIR, variable-length packet CRC32, and 4x4 matrix
+accelerator. Its independent scoreboards perform the same software arithmetic
+and reject samples unless their semantic evidence and simulated cycle counts
+match exactly.
+
+The open-source core suite extends that comparison to PicoRV32 firmware,
+secworks AES-128 register traffic, and 64-bit AXI-stream Ethernet FCS frames.
+Vendored RTL is pinned with its upstream license and each workload elaborates
+only the selected core.
 
 ## Repository map
 

@@ -11,10 +11,11 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[2]
-BENCH_DIR = REPO / "benchmarks" / "cocotb_cpp_compare"
-RESULT_DIR = BENCH_DIR / "results"
-CPP_BINARY = REPO / "build" / "benchmarks" / "cocotb_cpp_compare" / "apb_event_bench_host"
-COCOTB_RUNNER = BENCH_DIR / "run_cocotb.py"
+EXPERIMENT_DIR = Path(__file__).resolve().parent
+RESULT_DIR = EXPERIMENT_DIR / "results"
+BUILD_DIR = REPO / "build" / "experiments" / "cocotb_cpp_comparison"
+CPP_BINARY = BUILD_DIR / "apb_event_bench_host"
+COCOTB_RUNNER = EXPERIMENT_DIR / "run_cocotb.py"
 COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "/opt/homebrew/bin/python3.12")
 
 RESULT_RE = re.compile(r"(?P<name>[A-Z_]+_BENCH_RESULT)\s+(?P<fields>.*)")

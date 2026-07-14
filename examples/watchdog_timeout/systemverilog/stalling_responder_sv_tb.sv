@@ -12,7 +12,8 @@ module stalling_responder_sv_tb;
   logic [31:0] response_data;
   logic busy;
 
-  int unsigned iterations;
+  localparam int unsigned kTransactionCount = 8;
+
   longint unsigned checks;
   int unsigned failures;
   longint unsigned sim_cycles;
@@ -119,12 +120,10 @@ module stalling_responder_sv_tb;
 
     checks = 0;
     failures = 0;
-    iterations = 8;
-    void'($value$plusargs("CPPTB_WATCHDOG_TIMEOUT_ITERS=%d", iterations));
     reset_dut();
     state = 32'h5566_7788;
 
-    for (int unsigned index = 0; index < iterations; index++) begin
+    for (int unsigned index = 0; index < kTransactionCount; index++) begin
       state = state * 32'd1664525 + 32'd1013904223;
       word = state;
       timed_transaction(word, 2 + index % 3, 1'b0, 200ns);
@@ -165,7 +164,7 @@ module stalling_responder_sv_tb;
 
     $display(
         "PURE_SV_WATCHDOG_TIMEOUT_RESULT iterations=%0d checks=%0d sim_cycles=%0d failures=%0d",
-        iterations, checks, sim_cycles, failures);
+        1, checks, sim_cycles, failures);
     if (failures != 0) $fatal(1, "watchdog timeout pure-SV testbench failed");
     $finish;
   end

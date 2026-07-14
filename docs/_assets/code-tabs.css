@@ -1,0 +1,71 @@
+.cpptb-code-tabs {
+  --cpptb-tab-border: color-mix(in srgb, currentColor 18%, transparent);
+  --cpptb-tab-muted: color-mix(in srgb, currentColor 68%, transparent);
+  --cpptb-tab-hover: color-mix(in srgb, currentColor 7%, transparent);
+  --cpptb-tab-active: var(--md-accent-fg-color, var(--color-brand-primary, #2563eb));
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 1rem 0;
+}
+
+.cpptb-code-tabs__tablist {
+  display: flex;
+  gap: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--cpptb-tab-border);
+  scrollbar-width: thin;
+}
+
+.cpptb-code-tabs__tab {
+  flex: 0 0 auto;
+  appearance: none;
+  padding: 0.65rem 0.9rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--cpptb-tab-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cpptb-code-tabs__tab:hover {
+  background: var(--cpptb-tab-hover);
+  color: inherit;
+}
+
+.cpptb-code-tabs__tab:focus-visible {
+  outline: 2px solid var(--cpptb-tab-active);
+  outline-offset: -2px;
+}
+
+.cpptb-code-tabs__tab[aria-selected="true"] {
+  border-bottom-color: var(--cpptb-tab-active);
+  color: var(--cpptb-tab-active);
+}
+
+.cpptb-code-tabs__panel > :first-child {
+  margin-top: 0;
+}
+
+.cpptb-code-tabs__panel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cpptb-code-tabs__panel > :last-child {
+  margin-bottom: 0;
+}
+
+.cpptb-code-tab-label {
+  margin: 1rem 0 0.4rem;
+  font-weight: 600;
+}
