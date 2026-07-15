@@ -7,6 +7,9 @@ module dpi_stalling_responder;
   localparam int PHASE_INIT = 0;
   localparam int PHASE_EDGE = 1;
   localparam int PHASE_DELAY = 4;
+  localparam int PHASE_READ_WRITE = 5;
+  localparam int PHASE_READ_ONLY = 6;
+  localparam int PHASE_NEXT_TIME_STEP = 7;
   localparam longint unsigned TIMEPRECISION_FS = 1000;
 
   localparam int EDGE_RISING = 0;
@@ -81,6 +84,7 @@ module dpi_stalling_responder;
   longint unsigned timer_deadline;
   longint unsigned timer_owner_target;
   event timer_kick;
+  event phase_outputs_pending;
   int status;
   bit track_falling_edges;
   bit clock_drivers_active;
@@ -105,6 +109,10 @@ module dpi_stalling_responder;
     latency = out_words[OUTPUT_SIGNAL_LATENCY][7:0];
     request_data = out_words[OUTPUT_SIGNAL_REQUESTDATA];
   endtask
+
+  always @(phase_outputs_pending) begin
+    apply_outputs();
+  end
 
   task automatic update_status(input int requests);
     if (requests < 0) begin
@@ -132,6 +140,22 @@ module dpi_stalling_responder;
          ((requests & STEP_OUTPUTS_CHANGED) != 0))) begin
       cpptb_stalling_responder_dpi_pull_outputs(out_words);
       apply_outputs();
+    end
+    update_status(requests);
+  endtask
+
+  task automatic run_phase_step(
+      input int unsigned phase,
+      output int requests
+  );
+    pack_inputs();
+    requests = cpptb_stalling_responder_dpi_step(phase, $time, sim_cycles,
+                               NO_SIGNAL, EDGE_RISING,
+                               in_words);
+    if ((requests >= 0) &&
+        ((requests & STEP_OUTPUTS_CHANGED) != 0)) begin
+      cpptb_stalling_responder_dpi_pull_outputs(out_words);
+      -> phase_outputs_pending;
     end
     update_status(requests);
   endtask
@@ -214,6 +238,15 @@ module dpi_stalling_responder;
       update_timer_schedule();
     end
   endtask
+
+  task automatic cpptb_stalling_responder_dpi_phase_dispatch(
+      input int unsigned phase
+  );
+    int requests;
+    run_phase_step(phase, requests);
+    service_requests(requests);
+  endtask
+  export "DPI-C" task cpptb_stalling_responder_dpi_phase_dispatch;
 
   task automatic drive_clock_0();
     int requests;

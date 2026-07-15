@@ -302,6 +302,7 @@ class Signal {
         (void)value;
 #else
         probe::detail::require_callback(Path.value);
+        probe::detail::require_write_allowed(Path.value, "deposit");
         auto raw = detail::to_transport<raw_value_type>(std::move(value));
         Transport::template deposit<Width>(
             Id, 0, detail::normalize(std::move(raw), Width));
@@ -315,6 +316,7 @@ class Signal {
         (void)value;
 #else
         probe::detail::require_callback(Path.value);
+        probe::detail::require_write_allowed(Path.value, "deposit_logic");
         Transport::template deposit_logic<Width>(Id, 0, std::move(value));
 #endif
     }
@@ -335,6 +337,7 @@ class Signal {
         (void)value;
 #else
         probe::detail::require_callback(Path.value);
+        probe::detail::require_write_allowed(Path.value, "force");
         auto raw = detail::to_transport<raw_value_type>(std::move(value));
         Transport::template force<Width>(
             Id, 0, detail::normalize(std::move(raw), Width));
@@ -347,6 +350,7 @@ class Signal {
         (void)value;
 #else
         probe::detail::require_callback(Path.value);
+        probe::detail::require_write_allowed(Path.value, "force_logic");
         Transport::template force_logic<Width>(Id, 0, std::move(value));
 #endif
     }
@@ -356,6 +360,7 @@ class Signal {
         detail::mark_access<Path, Operation::Release>();
 #else
         probe::detail::require_callback(Path.value);
+        probe::detail::require_write_allowed(Path.value, "release");
         Transport::release(Id, 0);
 #endif
     }
@@ -423,6 +428,7 @@ class Memory {
             (void)value;
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "deposit");
             auto raw = detail::to_transport<raw_value_type>(std::move(value));
             Transport::template deposit<Width>(
                 Id, index_, detail::normalize(std::move(raw), Width));
@@ -436,6 +442,7 @@ class Memory {
             (void)value;
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "deposit_logic");
             Transport::template deposit_logic<Width>(Id, index_,
                                                       std::move(value));
 #endif
@@ -457,6 +464,7 @@ class Memory {
             (void)value;
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "force");
             auto raw = detail::to_transport<raw_value_type>(std::move(value));
             Transport::template force<Width>(
                 Id, index_, detail::normalize(std::move(raw), Width));
@@ -469,6 +477,7 @@ class Memory {
             (void)value;
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "force_logic");
             Transport::template force_logic<Width>(Id, index_,
                                                     std::move(value));
 #endif
@@ -479,6 +488,7 @@ class Memory {
             detail::mark_access<Path, Operation::Release>();
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "release");
             Transport::release(Id, index_);
 #endif
         }
@@ -552,6 +562,7 @@ class MemoryND {
             (void)value;
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "deposit");
             auto raw = detail::to_transport<raw_value_type>(std::move(value));
             Transport::template deposit<Width>(
                 Id, linear_index_, detail::normalize(std::move(raw), Width));
@@ -565,6 +576,7 @@ class MemoryND {
             (void)value;
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "deposit_logic");
             Transport::template deposit_logic<Width>(Id, linear_index_,
                                                       std::move(value));
 #endif
@@ -586,6 +598,7 @@ class MemoryND {
             (void)value;
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "force");
             auto raw = detail::to_transport<raw_value_type>(std::move(value));
             Transport::template force<Width>(
                 Id, linear_index_, detail::normalize(std::move(raw), Width));
@@ -598,6 +611,7 @@ class MemoryND {
             (void)value;
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "force_logic");
             Transport::template force_logic<Width>(Id, linear_index_,
                                                     std::move(value));
 #endif
@@ -608,6 +622,7 @@ class MemoryND {
             detail::mark_access<Path, Operation::Release>();
 #else
             probe::detail::require_callback(Path.value);
+            probe::detail::require_write_allowed(Path.value, "release");
             Transport::release(Id, linear_index_);
 #endif
         }

@@ -192,6 +192,7 @@ def source_manifest(
             "next_deadline_function": f"{run_prefix}_next_timer_deadline",
             "edge_interest_function": f"{run_prefix}_edge_interest",
             "clock_config_function": f"{run_prefix}_clock_config",
+            "phase_dispatch_function": f"{run_prefix}_phase_dispatch",
             "dynamic_clocks": dynamic_clocks,
             "iteration_plusarg": None,
             "default_iterations": 1,
@@ -2895,6 +2896,9 @@ def render_cpp_adapter(manifest: dict[str, Any], source: str) -> str:
         ),
         "edge": run.get("edge_interest_function", "cpptb_dpi_edge_interest"),
         "clock": run.get("clock_config_function", "cpptb_dpi_clock_config"),
+        "phase_dispatch": run.get(
+            "phase_dispatch_function", "cpptb_dpi_phase_dispatch"
+        ),
     }
     for label, function in functions.items():
         validate_identifier(function, f"{label} DPI function")
@@ -2907,6 +2911,8 @@ def render_cpp_adapter(manifest: dict[str, Any], source: str) -> str:
         '#include "cpptb/dpi_runtime.hpp"',
         '#include "cpptb/test_api.hpp"',
         f'#include "{outputs["cpp_binding_include"]}"',
+        "",
+        f'extern "C" void {functions["phase_dispatch"]}(unsigned int phase);',
         "",
         f"namespace {namespace}::generated {{",
         "",
@@ -2941,6 +2947,10 @@ def render_cpp_adapter(manifest: dict[str, Any], source: str) -> str:
         "                                   uint32_t, Result& result,",
         "                                   coro::ClockRegistrar clocks) {",
         "        cpptb::run_registered_test(scheduler, dut, result, clocks);",
+        "    }",
+        "",
+        "    static void dispatch_phase(uint32_t phase) {",
+        f"        {functions['phase_dispatch']}(phase);",
         "    }",
         "",
         "    static bool timed_out(coro::SimTime, uint64_t sim_cycles,",
@@ -3901,6 +3911,9 @@ def render_sv(
     clock_config_function = run.get(
         "clock_config_function", "cpptb_dpi_clock_config"
     )
+    phase_dispatch_function = run.get(
+        "phase_dispatch_function", "cpptb_dpi_phase_dispatch"
+    )
     iteration_plusarg = run.get("iteration_plusarg", "CPPTB_ITERS")
     default_iterations = int(run.get("default_iterations", 1))
     parameters = manifest.get("parameters", {})
@@ -3928,6 +3941,9 @@ def render_sv(
             "  localparam int PHASE_INIT = 0;",
             "  localparam int PHASE_EDGE = 1;",
             "  localparam int PHASE_DELAY = 4;",
+            "  localparam int PHASE_READ_WRITE = 5;",
+            "  localparam int PHASE_READ_ONLY = 6;",
+            "  localparam int PHASE_NEXT_TIME_STEP = 7;",
             f"  localparam longint unsigned TIMEPRECISION_FS = {timeprecision_fs};",
             "",
             "  localparam int EDGE_RISING = 0;",
@@ -4012,6 +4028,7 @@ def render_sv(
             "  longint unsigned timer_deadline;",
             "  longint unsigned timer_owner_target;",
             "  event timer_kick;",
+            "  event phase_outputs_pending;",
             "  int status;",
             "  bit track_falling_edges;",
             "  bit clock_drivers_active;",
@@ -4050,6 +4067,10 @@ def render_sv(
         [
             "  endtask",
             "",
+            "  always @(phase_outputs_pending) begin",
+            "    apply_outputs();",
+            "  end",
+            "",
             "  task automatic update_status(input int requests);",
             "    if (requests < 0) begin",
             "      status = -1;",
@@ -4076,6 +4097,22 @@ def render_sv(
             "         ((requests & STEP_OUTPUTS_CHANGED) != 0))) begin",
             f"      {pull_outputs_function}(out_words);",
             "      apply_outputs();",
+            "    end",
+            "    update_status(requests);",
+            "  endtask",
+            "",
+            "  task automatic run_phase_step(",
+            "      input int unsigned phase,",
+            "      output int requests",
+            "  );",
+            "    pack_inputs();",
+            f"    requests = {step_function}(phase, $time, sim_cycles,",
+            "                               NO_SIGNAL, EDGE_RISING,",
+            "                               in_words);",
+            "    if ((requests >= 0) &&",
+            "        ((requests & STEP_OUTPUTS_CHANGED) != 0)) begin",
+            f"      {pull_outputs_function}(out_words);",
+            "      -> phase_outputs_pending;",
             "    end",
             "    update_status(requests);",
             "  endtask",
@@ -4177,6 +4214,20 @@ def render_sv(
             "      update_timer_schedule();",
             "    end",
             "  endtask",
+            "",
+        ]
+    )
+
+    lines.extend(
+        [
+            f"  task automatic {phase_dispatch_function}(",
+            "      input int unsigned phase",
+            "  );",
+            "    int requests;",
+            "    run_phase_step(phase, requests);",
+            "    service_requests(requests);",
+            "  endtask",
+            f'  export "DPI-C" task {phase_dispatch_function};',
             "",
         ]
     )
