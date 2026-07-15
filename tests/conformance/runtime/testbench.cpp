@@ -1631,9 +1631,36 @@ Task<void> timing_phase_contract(ConformanceTb tb) {
     co_await NextTimeStep{};
     tb.expect_time("NextTimeStep reaches next scheduled timestep", tb.now(),
                    2_ns);
+    tb.expect_eq("NextTimeStep precedes clocked NBA update",
+                 tb.dut.count.a.get(), 0);
     co_await ReadWrite{};
     tb.expect_eq("ReadWrite observes clocked update in new timestep",
                  tb.dut.count.a.get(), 1);
+    tb.expect_eq("ReadWrite observes sampled data after NBA",
+                 tb.dut.sample.a.get(), 0x20);
+
+    co_await NextTimeStep{};
+    tb.expect_time("NextTimeStep reaches falling clock edge", tb.now(), 4_ns);
+    co_await ReadWrite{};
+    tb.expect_eq("falling edge leaves sequential state unchanged",
+                 tb.dut.count.a.get(), 1);
+
+    co_await NextTimeStep{};
+    tb.expect_time("NextTimeStep reaches simultaneous clock edges", tb.now(),
+                   6_ns);
+    tb.expect_eq("first clock remains pre-NBA at NextTimeStep",
+                 tb.dut.count.a.get(), 1);
+    tb.expect_eq("second clock remains pre-NBA at NextTimeStep",
+                 tb.dut.count.b.get(), 0);
+    co_await ReadWrite{};
+    tb.expect_eq("first simultaneous clock update settles",
+                 tb.dut.count.a.get(), 2);
+    tb.expect_eq("second simultaneous clock update settles",
+                 tb.dut.count.b.get(), 1);
+    tb.expect_eq("first simultaneous sample settles", tb.dut.sample.a.get(),
+                 0x20);
+    tb.expect_eq("second simultaneous sample settles", tb.dut.sample.b.get(),
+                 0x20);
 }
 
 Task<void> readonly_write_violation(ConformanceTb tb) {

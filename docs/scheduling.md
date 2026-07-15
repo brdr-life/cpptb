@@ -68,6 +68,25 @@ The Verilator backend dispatches these phases directly when cpptb owns the
 host loop; other supported simulator integrations use the equivalent standard
 VPI callbacks. Both paths run the same conformance contracts.
 
+### Timing backend support
+
+Generated DPI remains the signal and data transport in every mode. The timing
+backend only determines how the simulator resumes `ReadWrite`, `ReadOnly`, and
+`NextTimeStep` waiters.
+
+| Timing backend | Status | Timing contract | Portability |
+|---|---|---|---|
+| Direct Verilator dispatch | Supported default | Complete | Verilator-specific |
+| Standard VPI callbacks | Supported fallback | Complete | Standard simulator API |
+| Generated SV-DPI calendar | Experimental | Complete for generated and observed events | Cross-simulator validation pending |
+
+The generated calendar owns framework clocks and timers and observes selected
+external signals, but standard DPI cannot query the simulator's complete event
+queue. Its `NextTimeStep` therefore cannot yet promise to wake for an arbitrary
+unobserved internal DUT event. Direct Verilator dispatch and standard VPI are
+the supported contract-complete choices. See [Performance](performance.md) for
+the exact backend comparison.
+
 ## Composition
 
 Use an ordinary `co_await task()` when the next operation is sequential. The

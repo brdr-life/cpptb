@@ -7,6 +7,9 @@ module dpi_heavy_benchmark;
   localparam int PHASE_INIT = 0;
   localparam int PHASE_EDGE = 1;
   localparam int PHASE_DELAY = 4;
+  localparam int PHASE_READ_WRITE = 5;
+  localparam int PHASE_READ_ONLY = 6;
+  localparam int PHASE_NEXT_TIME_STEP = 7;
   localparam longint unsigned TIMEPRECISION_FS = 1000;
 
   localparam int EDGE_RISING = 0;
@@ -22,6 +25,11 @@ module dpi_heavy_benchmark;
   localparam int STEP_EDGE_INTEREST_CHANGED = 64;
   localparam int STEP_NEXT_TICK_TIMER = 128;
   localparam int STEP_TIMER_IDLE = 256;
+  localparam int STEP_READ_WRITE = 512;
+  localparam int STEP_READ_ONLY = 1024;
+  localparam int STEP_NEXT_TIME_STEP = 2048;
+  localparam int STEP_PHASE_MASK = STEP_READ_WRITE |
+      STEP_READ_ONLY | STEP_NEXT_TIME_STEP;
 
   localparam int SIGNAL_CLK = 0;
   localparam int SIGNAL_RSTN = 1;
@@ -138,6 +146,23 @@ module dpi_heavy_benchmark;
   longint unsigned timer_deadline;
   longint unsigned timer_owner_target;
   event timer_kick;
+  event phase_outputs_pending;
+`ifdef CPPTB_SV_DPI_TIMING
+  event phase_kick;
+  event phase_barrier_kick;
+  event time_step_started;
+  int phase_requests;
+  bit phase_barrier_token;
+  time last_started_time;
+`endif
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+  localparam int CALENDAR_CLOCK_COUNT = 1;
+  localparam int CALENDAR_CLOCK_STORAGE =
+      CALENDAR_CLOCK_COUNT > 0 ? CALENDAR_CLOCK_COUNT : 1;
+  longint unsigned calendar_clock_half_period[0:CALENDAR_CLOCK_STORAGE-1];
+  longint unsigned calendar_clock_next_edge[0:CALENDAR_CLOCK_STORAGE-1];
+  bit calendar_clock_active[0:CALENDAR_CLOCK_STORAGE-1];
+`endif
   int status;
   bit track_falling_edges;
   bit clock_drivers_active;
@@ -182,6 +207,15 @@ module dpi_heavy_benchmark;
     mat_out_ready = out_words[OUTPUT_SIGNAL_MATOUTREADY][0];
   endtask
 
+  always @(phase_outputs_pending) begin
+    apply_outputs();
+  end
+`ifdef CPPTB_SV_DPI_NBA_TIMING
+  always @(phase_barrier_kick) begin
+    phase_barrier_token <= ~phase_barrier_token;
+  end
+`endif
+
   task automatic update_status(input int requests);
     if (requests < 0) begin
       status = -1;
@@ -212,6 +246,84 @@ module dpi_heavy_benchmark;
     update_status(requests);
   endtask
 
+  task automatic run_phase_step(
+      input int unsigned phase,
+      output int requests
+  );
+    pack_inputs();
+    requests = heavy_dpi_step(phase, $time, sim_cycles,
+                               NO_SIGNAL, EDGE_RISING,
+                               in_words);
+    if ((requests >= 0) &&
+        ((requests & STEP_OUTPUTS_CHANGED) != 0)) begin
+      heavy_dpi_pull_outputs(out_words);
+`ifdef CPPTB_SV_DPI_TIMING
+      apply_outputs();
+`else
+      -> phase_outputs_pending;
+`endif
+    end
+    update_status(requests);
+  endtask
+
+`ifdef CPPTB_SV_DPI_TIMING
+  task automatic note_time_step();
+    int requests;
+    if ($time != last_started_time) begin
+      last_started_time = $time;
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+      if ((phase_requests & STEP_NEXT_TIME_STEP) != 0) begin
+        phase_requests &= ~STEP_NEXT_TIME_STEP;
+        run_phase_step(PHASE_NEXT_TIME_STEP, requests);
+        service_requests(requests);
+      end
+`else
+      -> time_step_started;
+`endif
+    end
+  endtask
+
+  task automatic phase_settle_barrier();
+`ifdef CPPTB_SV_DPI_NBA_TIMING
+    -> phase_barrier_kick;
+    @(phase_barrier_token);
+`endif
+  endtask
+
+`ifndef CPPTB_SV_DPI_CALENDAR_TIMING
+  task automatic phase_pump();
+    int requests;
+    time requested_time;
+    while (status == 0) begin
+      if ((phase_requests & STEP_PHASE_MASK) == 0) begin
+        @(phase_kick);
+      end
+      if ((phase_requests & STEP_READ_WRITE) != 0) begin
+        phase_requests &= ~STEP_READ_WRITE;
+        phase_settle_barrier();
+        run_phase_step(PHASE_READ_WRITE, requests);
+        service_requests(requests);
+      end
+      if ((phase_requests & STEP_READ_ONLY) != 0) begin
+        phase_requests &= ~STEP_READ_ONLY;
+        phase_settle_barrier();
+        run_phase_step(PHASE_READ_ONLY, requests);
+        service_requests(requests);
+      end
+      if ((phase_requests & STEP_NEXT_TIME_STEP) != 0) begin
+        phase_requests &= ~STEP_NEXT_TIME_STEP;
+        requested_time = $time;
+        while (last_started_time <= requested_time) begin
+          @(time_step_started);
+        end
+        run_phase_step(PHASE_NEXT_TIME_STEP, requests);
+        service_requests(requests);
+      end
+    end
+  endtask
+`endif
+`endif
+
   task automatic timer_wakeup(
       input longint unsigned deadline,
       input longint unsigned generation
@@ -220,9 +332,15 @@ module dpi_heavy_benchmark;
     if (deadline > $time) begin
       #(deadline - $time);
     end
+`ifdef CPPTB_SV_DPI_TIMING
+    note_time_step();
+`endif
     if ((status == 0) && (generation == timer_generation)) begin
       run_step(PHASE_DELAY, NO_SIGNAL, EDGE_RISING, requests);
       service_requests(requests);
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+      calendar_drain_phases();
+`endif
     end
   endtask
 
@@ -254,6 +372,9 @@ module dpi_heavy_benchmark;
         target = timer_deadline;
         timer_owner_target = target;
         #(target - $time);
+`ifdef CPPTB_SV_DPI_TIMING
+        note_time_step();
+`endif
         timer_owner_target = NO_TIMER;
       end else begin
         run_step(PHASE_DELAY, NO_SIGNAL, EDGE_RISING, requests);
@@ -294,7 +415,116 @@ module dpi_heavy_benchmark;
     end else if ((requests & STEP_TIMER_CHANGED) != 0) begin
       update_timer_schedule();
     end
+`ifdef CPPTB_SV_DPI_TIMING
+    if ((requests & STEP_PHASE_MASK) != 0) begin
+      phase_requests |= requests & STEP_PHASE_MASK;
+`ifndef CPPTB_SV_DPI_CALENDAR_TIMING
+      -> phase_kick;
+`endif
+    end
+`endif
   endtask
+
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+  task automatic calendar_initialize();
+    for (int i = 0; i < CALENDAR_CLOCK_STORAGE; i++) begin
+      calendar_clock_active[i] = 1'b0;
+      calendar_clock_half_period[i] = 0;
+      calendar_clock_next_edge[i] = NO_TIMER;
+    end
+    calendar_clock_active[0] = 1'b1;
+    calendar_clock_half_period[0] = 1ns;
+    calendar_clock_next_edge[0] = $time + calendar_clock_half_period[0];
+  endtask
+
+  task automatic calendar_drain_phases();
+    int requests;
+    while ((status == 0) &&
+           ((phase_requests & (STEP_READ_WRITE | STEP_READ_ONLY)) != 0)) begin
+      if ((phase_requests & STEP_READ_WRITE) != 0) begin
+        phase_requests &= ~STEP_READ_WRITE;
+        phase_settle_barrier();
+        run_phase_step(PHASE_READ_WRITE, requests);
+        service_requests(requests);
+      end else begin
+        phase_requests &= ~STEP_READ_ONLY;
+        phase_settle_barrier();
+        run_phase_step(PHASE_READ_ONLY, requests);
+        service_requests(requests);
+      end
+    end
+  endtask
+
+  task automatic calendar_next_target(
+      output longint unsigned target
+  );
+    target = timer_deadline;
+    for (int i = 0; i < CALENDAR_CLOCK_COUNT; i++) begin
+      if (calendar_clock_active[i] &&
+          (calendar_clock_next_edge[i] < target)) begin
+        target = calendar_clock_next_edge[i];
+      end
+    end
+  endtask
+
+  task automatic calendar_drive_due_clocks();
+    int requests;
+    int event_edge;
+    if (calendar_clock_active[0] &&
+        (calendar_clock_next_edge[0] <= $time)) begin
+      clk = ~clk;
+      calendar_clock_next_edge[0] +=
+          calendar_clock_half_period[0];
+      event_edge = clk ? EDGE_RISING : EDGE_FALLING;
+      if (event_edge == EDGE_RISING) begin
+        sim_cycles++;
+      end
+      if ((event_edge == EDGE_RISING) ||
+          track_falling_edges) begin
+        run_step(PHASE_EDGE, SIGNAL_CLK, event_edge, requests);
+        service_requests(requests);
+      end
+    end
+  endtask
+
+  task automatic calendar_owner();
+    int requests;
+    longint unsigned target;
+    calendar_drain_phases();
+    while (status == 0) begin
+      calendar_next_target(target);
+      if (target == NO_TIMER) begin
+        timer_owner_target = NO_TIMER;
+        @(timer_kick);
+      end else begin
+        timer_owner_target = target;
+        if (target > $time) begin
+          #(target - $time);
+        end
+        timer_owner_target = NO_TIMER;
+        if (status == 0) begin
+          note_time_step();
+          if ((timer_deadline != NO_TIMER) &&
+              (timer_deadline <= $time)) begin
+            run_step(PHASE_DELAY, NO_SIGNAL, EDGE_RISING, requests);
+            service_requests(requests);
+          end
+          calendar_drive_due_clocks();
+          calendar_drain_phases();
+        end
+      end
+    end
+  endtask
+`endif
+
+  task automatic cpptb_dpi_phase_dispatch(
+      input int unsigned phase
+  );
+    int requests;
+    run_phase_step(phase, requests);
+    service_requests(requests);
+  endtask
+  export "DPI-C" task cpptb_dpi_phase_dispatch;
 
   task automatic drive_clock_0();
     int requests;
@@ -306,6 +536,9 @@ module dpi_heavy_benchmark;
         #(next_edge - $realtime);
       end
       if (status == 0) begin
+`ifdef CPPTB_SV_DPI_TIMING
+        note_time_step();
+`endif
         clk = ~clk;
         next_edge = next_edge + 1ns;
         event_edge = clk ? EDGE_RISING : EDGE_FALLING;
@@ -327,6 +560,9 @@ module dpi_heavy_benchmark;
     int event_edge;
     while (status == 0) begin
       @(fir_out_valid);
+`ifdef CPPTB_SV_DPI_TIMING
+      note_time_step();
+`endif
       if (status == 0) begin
         event_edge = fir_out_valid ? EDGE_RISING : EDGE_FALLING;
         if (
@@ -334,6 +570,9 @@ module dpi_heavy_benchmark;
             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_FIROUTVALID] & 2) != 0))) begin
           run_step(PHASE_EDGE, SIGNAL_FIROUTVALID, event_edge, requests);
           service_requests(requests);
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+          calendar_drain_phases();
+`endif
         end
       end
     end
@@ -344,6 +583,9 @@ module dpi_heavy_benchmark;
     int event_edge;
     while (status == 0) begin
       @(crc_out_valid);
+`ifdef CPPTB_SV_DPI_TIMING
+      note_time_step();
+`endif
       if (status == 0) begin
         event_edge = crc_out_valid ? EDGE_RISING : EDGE_FALLING;
         if (
@@ -351,6 +593,9 @@ module dpi_heavy_benchmark;
             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CRCOUTVALID] & 2) != 0))) begin
           run_step(PHASE_EDGE, SIGNAL_CRCOUTVALID, event_edge, requests);
           service_requests(requests);
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+          calendar_drain_phases();
+`endif
         end
       end
     end
@@ -361,6 +606,9 @@ module dpi_heavy_benchmark;
     int event_edge;
     while (status == 0) begin
       @(mat_out_valid);
+`ifdef CPPTB_SV_DPI_TIMING
+      note_time_step();
+`endif
       if (status == 0) begin
         event_edge = mat_out_valid ? EDGE_RISING : EDGE_FALLING;
         if (
@@ -368,6 +616,9 @@ module dpi_heavy_benchmark;
             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_MATOUTVALID] & 2) != 0))) begin
           run_step(PHASE_EDGE, SIGNAL_MATOUTVALID, event_edge, requests);
           service_requests(requests);
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+          calendar_drain_phases();
+`endif
         end
       end
     end
@@ -378,6 +629,9 @@ module dpi_heavy_benchmark;
     int event_edge;
     while (status == 0) begin
       @(fir_in_ready);
+`ifdef CPPTB_SV_DPI_TIMING
+      note_time_step();
+`endif
       if (status == 0) begin
         event_edge = fir_in_ready ? EDGE_RISING : EDGE_FALLING;
         if (
@@ -385,6 +639,9 @@ module dpi_heavy_benchmark;
             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_FIRINREADY] & 2) != 0))) begin
           run_step(PHASE_EDGE, SIGNAL_FIRINREADY, event_edge, requests);
           service_requests(requests);
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+          calendar_drain_phases();
+`endif
         end
       end
     end
@@ -395,6 +652,9 @@ module dpi_heavy_benchmark;
     int event_edge;
     while (status == 0) begin
       @(crc_in_ready);
+`ifdef CPPTB_SV_DPI_TIMING
+      note_time_step();
+`endif
       if (status == 0) begin
         event_edge = crc_in_ready ? EDGE_RISING : EDGE_FALLING;
         if (
@@ -402,6 +662,9 @@ module dpi_heavy_benchmark;
             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CRCINREADY] & 2) != 0))) begin
           run_step(PHASE_EDGE, SIGNAL_CRCINREADY, event_edge, requests);
           service_requests(requests);
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+          calendar_drain_phases();
+`endif
         end
       end
     end
@@ -412,6 +675,9 @@ module dpi_heavy_benchmark;
     int event_edge;
     while (status == 0) begin
       @(mat_load_ready);
+`ifdef CPPTB_SV_DPI_TIMING
+      note_time_step();
+`endif
       if (status == 0) begin
         event_edge = mat_load_ready ? EDGE_RISING : EDGE_FALLING;
         if (
@@ -419,6 +685,9 @@ module dpi_heavy_benchmark;
             ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_MATLOADREADY] & 2) != 0))) begin
           run_step(PHASE_EDGE, SIGNAL_MATLOADREADY, event_edge, requests);
           service_requests(requests);
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+          calendar_drain_phases();
+`endif
         end
       end
     end
@@ -448,6 +717,11 @@ module dpi_heavy_benchmark;
     status = 0;
     track_falling_edges = 1'b0;
     clock_drivers_active = 1'b0;
+`ifdef CPPTB_SV_DPI_TIMING
+    phase_requests = 0;
+    phase_barrier_token = 1'b0;
+    last_started_time = $time;
+`endif
     void'($value$plusargs("HEAVY_BENCH_ITERS=%d", iterations));
 
     for (int i = 0; i < INPUT_WORD_COUNT; i++) begin
@@ -463,13 +737,23 @@ module dpi_heavy_benchmark;
     end
 
     heavy_dpi_init(iterations, TIMEPRECISION_FS);
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+    calendar_initialize();
+`endif
     run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);
     service_requests(initial_requests);
     clock_drivers_active = 1'b1;
     if (status == 0) begin
       fork
+`ifdef CPPTB_SV_DPI_CALENDAR_TIMING
+        calendar_owner();
+`else
         timer_owner();
+`ifdef CPPTB_SV_DPI_TIMING
+        phase_pump();
+`endif
         drive_clock_0();
+`endif
         observe_signal_0();
         observe_signal_1();
         observe_signal_2();
