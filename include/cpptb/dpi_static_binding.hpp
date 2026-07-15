@@ -8,6 +8,7 @@
 
 #include "cpptb/access_discovery.hpp"
 #include "cpptb/coro_runtime.hpp"
+#include "cpptb/probe.hpp"
 
 namespace cpptb::dpi {
 
@@ -229,6 +230,7 @@ class StaticPackedRef {
     }
 
     void set(value_type value) const requires(Writable) {
+        probe::detail::require_write_allowed(name, "set");
         if constexpr (Width <= 32) {
             context->set_packed_scalar(
                 id, detail::normalize_scalar<Width>(value));
@@ -284,6 +286,7 @@ class StaticOnDemandRef {
     }
 
     void set(value_type value) const requires(Writable) {
+        probe::detail::require_write_allowed(name, "set");
         if constexpr (Width <= 32) {
             value = detail::normalize_scalar<Width>(value);
         }

@@ -256,7 +256,8 @@ class ContractTests(unittest.TestCase):
         self.assertIn("clocks.start(dut.clk, 2_ns);", cpp)
         self.assertIn("task automatic run_signal_edge();", sv)
         self.assertIn("@(posedge rsp_valid);", sv)
-        self.assertIn("always #1ns clk = ~clk;", sv)
+        self.assertIn("#1ns clk = ~clk;", sv)
+        self.assertIn("if (clk) sim_cycles++;", sv)
 
     def test_array_multidim_has_exact_isolated_counts(self):
         counts = workload.expected_counts("array_multidim", 5)
@@ -351,7 +352,7 @@ class ContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         cpp_feature = cpp[
             cpp.index("Task<void> run_force_direct"):
-            cpp.index("Task<void> run(Context context)")
+            cpp.index("Task<void> run_timing_phases")
         ]
         self.assertIn("force_target.force(forced);", cpp_feature)
         self.assertIn("force_target.get(), forced", cpp_feature)

@@ -130,9 +130,11 @@
   "simulator": "verilator",
   "simulator_options": {
     "verilator": {
+      "timing_bridge": true,
       "compile_args": [
         "--binary",
         "--timing",
+        "--vpi",
         "--no-sched-zero-delay",
         "-Wno-TIMESCALEMOD",
         "-Wno-WIDTH",
@@ -173,6 +175,13 @@
         "case": "timer_idle_rearm",
         "expected_iterations": 1,
         "expected_checks": 8,
+        "expected_sim_cycles": 1,
+        "expected_failures": 0
+      },
+      {
+        "case": "timing_phases",
+        "expected_iterations": 1,
+        "expected_checks": 6,
         "expected_sim_cycles": 1,
         "expected_failures": 0
       }
@@ -234,6 +243,16 @@
         "iterations": 13,
         "case": "on_demand_callback_scope",
         "message": "on-demand signal 'packed137_i' used outside a DPI callback"
+      },
+      {
+        "iterations": 14,
+        "case": "readonly_write",
+        "message": "set() is not allowed during ReadOnly for signal 'drive_value'"
+      },
+      {
+        "iterations": 15,
+        "case": "readonly_phase_transition",
+        "message": "cannot await ReadWrite after ReadOnly in the same timestep"
       }
     ]
   }

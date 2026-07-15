@@ -45,7 +45,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event channel all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event channel all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
 AUTHORING_CORE_EXTRA_CFLAGS ?=
@@ -304,7 +304,7 @@ $(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_
 $(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb))
 $(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb))
 
-.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -582,6 +582,9 @@ cpptb-conformance-build: $(CPPTB_CONFORMANCE_BINARY)
 cpptb-conformance-run: $(CPPTB_CONFORMANCE_BINARY)
 	$(CODEGEN_PYTHON) $(CPPTB_CONFORMANCE_RUNNER) --no-build
 
+cpptb-conformance-vpi-run:
+	$(CODEGEN_PYTHON) $(CPPTB_CONFORMANCE_RUNNER) --timing-backend vpi
+
 $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite.mk: $(PERIPHERAL_SUITE_VPI_RTL)
 	mkdir -p $(PERIPHERAL_SUITE_VPI_OBJ_DIR)
 	verilator --cc --vpi --public-flat-rw --no-timing \
@@ -736,20 +739,21 @@ $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		$(AUTHORING_CORE_DPI_GENERATED) include/cpptb/coro_runtime.hpp \
 		include/cpptb/packed_bits.hpp include/cpptb/fixed.hpp include/cpptb/dpi_runtime.hpp include/cpptb/dpi_static_binding.hpp \
-		include/cpptb/test_result.hpp Makefile
+		include/cpptb/test_result.hpp Makefile $(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
 	mkdir -p $$(dir $$@)
-	verilator --binary --timing --no-sched-zero-delay \
+	verilator $(if $(filter timing_phases,$(1)),--cc --exe --build --vpi,--binary) --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
 		-Wno-MULTIDRIVEN \
 		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
+		-CFLAGS "-I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $(if $(filter timing_phases,$(1)),-DCPPTB_VERILATED_TOP=Vdpi_authoring_core -DCPPTB_VERILATOR_DIRECT_TIMING) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
 		$$(if $$(strip $$(AUTHORING_CORE_EXTRA_LDFLAGS)),-LDFLAGS "$$(AUTHORING_CORE_EXTRA_LDFLAGS)",) \
 		--Mdir $$(dir $$@) \
 		--top-module dpi_authoring_core \
 		$(AUTHORING_CORE_RTL) \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/generated/dpi_authoring_core.sv \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
-		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
+		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp \
+		$(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
 endef
 
 $(eval $(call AUTHORING_CORE_DPI_template,control,0))
@@ -779,6 +783,7 @@ $(eval $(call AUTHORING_CORE_DPI_template,force_release,23))
 $(eval $(call AUTHORING_CORE_DPI_template,packed_view,24))
 $(eval $(call AUTHORING_CORE_DPI_template,force_direct,25))
 $(eval $(call AUTHORING_CORE_DPI_template,hier_data,26))
+$(eval $(call AUTHORING_CORE_DPI_template,timing_phases,27))
 
 AUTHORING_CORE_DPI_BINARIES := $(foreach kernel,$(AUTHORING_CORE_KERNELS),$(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(kernel)/Vdpi_authoring_core)
 

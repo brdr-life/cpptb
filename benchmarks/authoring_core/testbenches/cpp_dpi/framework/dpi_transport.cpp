@@ -4,6 +4,8 @@
 #include "benchmarks/authoring_core/testbenches/cpp_dpi/generated/authoring_core_binding.hpp"
 #include "cpptb/dpi_runtime.hpp"
 
+extern "C" void authoring_core_dpi_phase_dispatch(unsigned int phase);
+
 namespace cpptb::benchmarks::authoring_core {
 
 struct DpiAdapter {
@@ -36,6 +38,10 @@ struct DpiAdapter {
                                    uint32_t iterations, Result& result,
                                    coro::ClockRegistrar clocks) {
         register_benchmark(scheduler, dut, iterations, result, clocks);
+    }
+
+    static void dispatch_phase(uint32_t phase) {
+        authoring_core_dpi_phase_dispatch(phase);
     }
 
     static bool timed_out(coro::SimTime, uint64_t sim_cycles,

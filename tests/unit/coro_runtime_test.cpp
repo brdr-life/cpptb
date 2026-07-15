@@ -302,6 +302,32 @@ Task<void> wait_for_delay(Testbench& tb, Results& results) {
     if (tb.now() == 7_ns) ++results.delayed;
 }
 
+Task<void> wait_for_simulator_phases(std::vector<uint32_t>& order) {
+    co_await ReadWrite{};
+    order.push_back(1);
+    co_await ReadOnly{};
+    order.push_back(2);
+    co_await NextTimeStep{};
+    order.push_back(3);
+}
+
+Task<void> wait_for_read_write_twice(uint32_t& resumes) {
+    co_await ReadWrite{};
+    ++resumes;
+    co_await ReadWrite{};
+    ++resumes;
+}
+
+Task<void> invalid_read_write_after_read_only() {
+    co_await ReadOnly{};
+    co_await ReadWrite{};
+}
+
+Task<void> invalid_read_only_after_read_only() {
+    co_await ReadOnly{};
+    co_await ReadOnly{};
+}
+
 Task<void> wait_for_first(Signal signal, Results& results) {
     results.first_winner =
         static_cast<uint32_t>(co_await First{RisingEdge{signal}, Delay{11_ns}});
@@ -976,6 +1002,26 @@ void trigger_probe_outside_callback() {
     (void)value.get();
 }
 
+void trigger_read_write_after_read_only() {
+    Testbench tb;
+    tb.spawn_detached(invalid_read_write_after_read_only());
+    tb.notify_read_only();
+}
+
+void trigger_read_only_after_read_only() {
+    Testbench tb;
+    tb.spawn_detached(invalid_read_only_after_read_only());
+    tb.notify_read_only();
+}
+
+void trigger_probe_write_during_read_only() {
+    const cpptb::probe::Probe<73, true> value{
+        0, "readonly_target", probe_get, probe_deposit};
+    cpptb::probe::detail::DpiCallbackScope scope{
+        cpptb::probe::detail::CallbackPhase::ReadOnly};
+    value.deposit(cpptb::Bits<73>::from_uint(7));
+}
+
 bool expect(const char* label, uint32_t actual, uint32_t expected) {
     if (actual == expected) return true;
     std::fprintf(stderr, "%s: got %u expected %u\n", label, actual, expected);
@@ -1050,6 +1096,42 @@ int main() {
     static_assert(1_ms == SimTime{1'000'000'000'000});
 
     bool passed = true;
+    {
+        Testbench tb;
+        std::vector<uint32_t> order;
+        uint32_t repeated_read_write = 0;
+        const auto sequence = tb.spawn(wait_for_simulator_phases(order));
+        const auto repeated =
+            tb.spawn(wait_for_read_write_twice(repeated_read_write));
+        passed &= expect("ReadWrite interest armed",
+                         tb.has_read_write_waiters() ? 1 : 0, 1);
+        passed &= expect("ReadOnly interest initially idle",
+                         tb.has_read_only_waiters() ? 1 : 0, 0);
+        tb.notify_read_write();
+        passed &= expect("first ReadWrite resumes both tasks",
+                         static_cast<uint32_t>(order.size()), 1);
+        passed &= expect("repeated ReadWrite resumes once",
+                         repeated_read_write, 1);
+        passed &= expect("ReadWrite can re-arm for next evaluation cycle",
+                         tb.has_read_write_waiters() ? 1 : 0, 1);
+        passed &= expect("ReadOnly arms after ReadWrite",
+                         tb.has_read_only_waiters() ? 1 : 0, 1);
+        tb.notify_read_write();
+        passed &= expect("second ReadWrite resumes repeated waiter",
+                         repeated_read_write, 2);
+        passed &= expect("repeated ReadWrite task completes",
+                         repeated.done() ? 1 : 0, 1);
+        tb.notify_read_only();
+        passed &= expect("ReadOnly resumes at end of timestep",
+                         static_cast<uint32_t>(order.size()), 2);
+        passed &= expect("NextTimeStep arms from ReadOnly",
+                         tb.has_next_time_step_waiters() ? 1 : 0, 1);
+        tb.notify_next_time_step();
+        passed &= expect("NextTimeStep resumes sequence",
+                         static_cast<uint32_t>(order.size()), 3);
+        passed &= expect("phase sequence completes", sequence.done() ? 1 : 0,
+                         1);
+    }
     {
         Testbench tb;
         std::array<uint32_t, 8> inputs{};
@@ -2865,5 +2947,15 @@ int main() {
     passed &= expect_abort(
         "probe callback lifetime abort", trigger_probe_outside_callback,
         "internal probe 'state' used outside a DPI callback");
+    passed &= expect_abort(
+        "ReadWrite after ReadOnly abort", trigger_read_write_after_read_only,
+        "cannot await ReadWrite after ReadOnly in the same timestep");
+    passed &= expect_abort(
+        "ReadOnly after ReadOnly abort", trigger_read_only_after_read_only,
+        "cannot await ReadOnly after ReadOnly in the same timestep");
+    passed &= expect_abort(
+        "write during ReadOnly abort", trigger_probe_write_during_read_only,
+        "deposit() is not allowed during ReadOnly for signal "
+        "'readonly_target'");
     return passed ? 0 : 1;
 }

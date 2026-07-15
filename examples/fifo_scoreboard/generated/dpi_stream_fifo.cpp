@@ -5,6 +5,8 @@
 #include "cpptb/test_api.hpp"
 #include "stream_fifo_binding.hpp"
 
+extern "C" void cpptb_stream_fifo_dpi_phase_dispatch(unsigned int phase);
+
 namespace cpptb::generated::stream_fifo::generated {
 
 struct DpiAdapter {
@@ -38,6 +40,10 @@ struct DpiAdapter {
                                    uint32_t, Result& result,
                                    coro::ClockRegistrar clocks) {
         cpptb::run_registered_test(scheduler, dut, result, clocks);
+    }
+
+    static void dispatch_phase(uint32_t phase) {
+        cpptb_stream_fifo_dpi_phase_dispatch(phase);
     }
 
     static bool timed_out(coro::SimTime, uint64_t sim_cycles,

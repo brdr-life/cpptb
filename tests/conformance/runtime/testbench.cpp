@@ -1612,6 +1612,40 @@ Task<void> on_demand_callback_scope_violation(ConformanceTb tb) {
     co_return;
 }
 
+Task<void> timing_phase_contract(ConformanceTb tb) {
+    tb.dut.rst_n.set(1);
+    tb.dut.drive_value.set(0x10);
+    tb.dut.addend.set(0x03);
+
+    co_await ReadWrite{};
+    tb.expect_time("ReadWrite remains in current timestep", tb.now(), 0_ps);
+    tb.expect_eq("ReadWrite observes settled combinational output",
+                 tb.dut.comb_sum.get(), 0x13);
+
+    tb.dut.drive_value.set(0x20);
+    co_await ReadOnly{};
+    tb.expect_time("ReadOnly remains in current timestep", tb.now(), 0_ps);
+    tb.expect_eq("ReadOnly observes write settled after ReadWrite",
+                 tb.dut.comb_sum.get(), 0x23);
+
+    co_await NextTimeStep{};
+    tb.expect_time("NextTimeStep reaches next scheduled timestep", tb.now(),
+                   2_ns);
+    co_await ReadWrite{};
+    tb.expect_eq("ReadWrite observes clocked update in new timestep",
+                 tb.dut.count.a.get(), 1);
+}
+
+Task<void> readonly_write_violation(ConformanceTb tb) {
+    co_await ReadOnly{};
+    tb.dut.drive_value.set(0x55);
+}
+
+Task<void> readonly_phase_transition_violation(ConformanceTb) {
+    co_await ReadOnly{};
+    co_await ReadWrite{};
+}
+
 }  // namespace
 
 void register_user_testbench(ConformanceTb& tb) {
@@ -1632,6 +1666,10 @@ void register_user_testbench(ConformanceTb& tb) {
         }
         if (selected == "timer_idle_rearm") {
             tb.sequence(idle_timer_rearm_contract);
+            return;
+        }
+        if (selected == "timing_phases") {
+            tb.sequence(timing_phase_contract);
             return;
         }
     }
@@ -1673,6 +1711,14 @@ void register_user_testbench(ConformanceTb& tb) {
         }
         if (selected == "on_demand_callback_scope") {
             tb.sequence(on_demand_callback_scope_violation);
+            return;
+        }
+        if (selected == "readonly_write") {
+            tb.sequence(readonly_write_violation);
+            return;
+        }
+        if (selected == "readonly_phase_transition") {
+            tb.sequence(readonly_phase_transition_violation);
             return;
         }
     }

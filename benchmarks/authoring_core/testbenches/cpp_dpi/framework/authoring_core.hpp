@@ -35,6 +35,7 @@
 #define AUTHORING_CORE_KERNEL_PACKED_VIEW 24
 #define AUTHORING_CORE_KERNEL_FORCE_DIRECT 25
 #define AUTHORING_CORE_KERNEL_HIER_DATA 26
+#define AUTHORING_CORE_KERNEL_TIMING_PHASES 27
 
 #ifndef AUTHORING_CORE_KERNEL
 #define AUTHORING_CORE_KERNEL AUTHORING_CORE_KERNEL_CONTROL
@@ -73,6 +74,7 @@ struct FeatureCounts {
     uint64_t packed_view = 0;
     uint64_t hier_data_reads = 0;
     uint64_t hier_data_deposits = 0;
+    uint64_t timing_phases = 0;
 };
 
 struct BenchResult : cpptb::TestResult {
@@ -137,6 +139,8 @@ constexpr const char* kernel_name() {
     return "force_direct";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_HIER_DATA
     return "hier_data";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TIMING_PHASES
+    return "timing_phases";
 #else
 #error "Unknown AUTHORING_CORE_KERNEL"
 #endif
