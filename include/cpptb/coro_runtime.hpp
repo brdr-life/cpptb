@@ -38,6 +38,16 @@ enum class EdgeKind : uint8_t {
 enum class WaitKind : uint8_t {
     Edge,
     Delay,
+    ReadWrite,
+    ReadOnly,
+    NextTimeStep,
+};
+
+enum class SimulationPhase : uint8_t {
+    Evaluation,
+    ReadWrite,
+    ReadOnly,
+    NextTimeStep,
 };
 
 enum EdgeInterest : uint8_t {
@@ -455,6 +465,10 @@ struct Delay {
     explicit constexpr Delay(SimTime value) : duration(value) {}
 };
 
+struct ReadWrite {};
+struct ReadOnly {};
+struct NextTimeStep {};
+
 template <typename... Triggers>
 struct First {
     static_assert(sizeof...(Triggers) >= 2,
@@ -481,6 +495,10 @@ struct WaitRequest {
     static WaitRequest delay_for(SimTime duration) {
         return {WaitKind::Delay, 0, EdgeKind::Rising, duration};
     }
+
+    static WaitRequest phase(WaitKind kind) {
+        return {kind, 0, EdgeKind::Rising, {}};
+    }
 };
 
 inline WaitRequest wait_request(RisingEdge trigger) {
@@ -497,6 +515,18 @@ inline WaitRequest wait_request(Edge trigger) {
 
 inline WaitRequest wait_request(Delay trigger) {
     return WaitRequest::delay_for(trigger.duration);
+}
+
+inline WaitRequest wait_request(ReadWrite) {
+    return WaitRequest::phase(WaitKind::ReadWrite);
+}
+
+inline WaitRequest wait_request(ReadOnly) {
+    return WaitRequest::phase(WaitKind::ReadOnly);
+}
+
+inline WaitRequest wait_request(NextTimeStep) {
+    return WaitRequest::phase(WaitKind::NextTimeStep);
 }
 
 class Scheduler;
@@ -915,6 +945,10 @@ class Scheduler {
             edge_wait_indices_by_state_.resize(state_index + 1);
         }
         edge_wait_indices_by_state_[state_index].clear();
+        if (state_index >= phase_wait_counts_by_state_.size()) {
+            phase_wait_counts_by_state_.resize(state_index + 1);
+        }
+        phase_wait_counts_by_state_[state_index].fill(0);
         promise.state_index = state_index;
         ++active_coroutines_;
         return state_index;
@@ -1152,6 +1186,7 @@ class Scheduler {
     }
 
     void resume_edge(uint32_t signal_id, EdgeKind edge) {
+        current_phase_ = SimulationPhase::Evaluation;
         const bool resumed_specific =
             resume_edge_queue(edge_queue_index(signal_id, edge));
         const bool resumed_any =
@@ -1172,6 +1207,7 @@ class Scheduler {
     }
 
     void advance_time(uint64_t time) {
+        current_phase_ = SimulationPhase::Evaluation;
         now_ = time;
         if (!next_timer_ || next_timer_->deadline > now_) return;
 
@@ -1192,6 +1228,30 @@ class Scheduler {
             scheduler_boundary();
         }
     }
+
+    void resume_phase(WaitKind kind) {
+        const size_t index = phase_wait_index(kind);
+        current_phase_ = simulation_phase(kind);
+        auto& queue = phase_waiters_[index];
+        const size_t ready_count = queue.size();
+        bool resumed = false;
+        for (size_t registration = 0; registration < ready_count;
+             ++registration) {
+            resumed |= resume_registration(queue[registration]);
+        }
+        queue.erase(queue.begin(), queue.begin() + ready_count);
+        if (resumed) {
+            drain_ready();
+        } else {
+            scheduler_boundary();
+        }
+    }
+
+    bool has_phase_waiters(WaitKind kind) const {
+        return phase_waiter_counts_[phase_wait_index(kind)] != 0;
+    }
+
+    SimulationPhase current_phase() const { return current_phase_; }
 
     bool has_falling_edge_waiters() const {
         return falling_edge_registrations_ != 0;
@@ -1354,6 +1414,36 @@ class Scheduler {
         return static_cast<size_t>(signal_id) * 3 + static_cast<size_t>(edge);
     }
 
+    static size_t phase_wait_index(WaitKind kind) {
+        switch (kind) {
+            case WaitKind::ReadWrite:
+                return 0;
+            case WaitKind::ReadOnly:
+                return 1;
+            case WaitKind::NextTimeStep:
+                return 2;
+            default:
+                std::fprintf(stderr,
+                             "cpptb: wait kind is not a simulator phase\n");
+                std::abort();
+        }
+    }
+
+    static SimulationPhase simulation_phase(WaitKind kind) {
+        switch (kind) {
+            case WaitKind::ReadWrite:
+                return SimulationPhase::ReadWrite;
+            case WaitKind::ReadOnly:
+                return SimulationPhase::ReadOnly;
+            case WaitKind::NextTimeStep:
+                return SimulationPhase::NextTimeStep;
+            default:
+                std::fprintf(stderr,
+                             "cpptb: wait kind is not a simulator phase\n");
+                std::abort();
+        }
+    }
+
     static uint8_t interest_mask(const std::array<uint32_t, 3>& counts) {
         uint8_t mask = kEdgeInterestNone;
         if (counts[static_cast<size_t>(EdgeKind::Rising)] != 0 ||
@@ -1433,6 +1523,17 @@ class Scheduler {
             falling_edge_registrations_ -= state.falling_edge_wait_count;
             state.falling_edge_wait_count = 0;
         }
+        auto& phase_counts = phase_wait_counts_by_state_[state_index];
+        for (size_t phase = 0; phase < phase_counts.size(); ++phase) {
+            if (phase_counts[phase] >
+                phase_waiter_counts_[phase]) {
+                std::fprintf(stderr,
+                             "cpptb: phase interest bookkeeping underflow\n");
+                std::abort();
+            }
+            phase_waiter_counts_[phase] -= phase_counts[phase];
+            phase_counts[phase] = 0;
+        }
     }
 
     void register_edge_wait(uint32_t signal_id, EdgeKind edge,
@@ -1472,6 +1573,28 @@ class Scheduler {
                 push_timer(TimerRegistration{
                     deadline, next_timer_sequence_++, registration});
                 if (deadline < previous_deadline) timer_schedule_changed_ = true;
+                break;
+            }
+            case WaitKind::ReadWrite:
+            case WaitKind::ReadOnly:
+            case WaitKind::NextTimeStep: {
+                if (current_phase_ == SimulationPhase::ReadOnly &&
+                    request.kind != WaitKind::NextTimeStep) {
+                    const char* trigger =
+                        request.kind == WaitKind::ReadWrite ? "ReadWrite"
+                                                           : "ReadOnly";
+                    std::fprintf(
+                        stderr,
+                        "cpptb: cannot await %s after ReadOnly in the same "
+                        "timestep; await NextTimeStep{}, Delay{...}, or an "
+                        "edge first\n",
+                        trigger);
+                    std::abort();
+                }
+                const size_t phase = phase_wait_index(request.kind);
+                phase_waiters_[phase].push_back(registration);
+                ++phase_waiter_counts_[phase];
+                ++phase_wait_counts_by_state_[registration.state_index][phase];
                 break;
             }
         }
@@ -1676,6 +1799,9 @@ class Scheduler {
     std::vector<size_t> free_process_slots_;
     std::vector<size_t> finished_states_;
     std::vector<std::vector<WaitRegistration>> edge_waiters_;
+    std::array<std::vector<WaitRegistration>, 3> phase_waiters_;
+    std::array<size_t, 3> phase_waiter_counts_{};
+    std::vector<std::array<uint32_t, 3>> phase_wait_counts_by_state_;
     std::vector<std::vector<size_t>> edge_wait_indices_by_state_;
     std::vector<std::array<uint32_t, 3>> edge_interest_counts_;
     std::vector<bool> edge_interest_change_pending_;
@@ -1695,6 +1821,7 @@ class Scheduler {
     size_t stale_edge_registrations_ = 0;
     uint64_t edge_interest_generation_ = 0;
     uint64_t femtoseconds_per_tick_ = 1'000'000u;
+    SimulationPhase current_phase_ = SimulationPhase::Evaluation;
 #ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
     std::array<uint64_t, 3> single_edge_park_counts_{};
     uint64_t compound_wait_parks_ = 0;
@@ -1926,6 +2053,19 @@ inline BasicTriggerAwaiter<Edge> operator co_await(Edge trigger) {
 }
 
 inline BasicTriggerAwaiter<Delay> operator co_await(Delay trigger) {
+    return {trigger};
+}
+
+inline BasicTriggerAwaiter<ReadWrite> operator co_await(ReadWrite trigger) {
+    return {trigger};
+}
+
+inline BasicTriggerAwaiter<ReadOnly> operator co_await(ReadOnly trigger) {
+    return {trigger};
+}
+
+inline BasicTriggerAwaiter<NextTimeStep> operator co_await(
+    NextTimeStep trigger) {
     return {trigger};
 }
 
@@ -2509,6 +2649,30 @@ class Testbench {
 
     void notify_edge(uint32_t signal_id, EdgeKind edge) {
         scheduler_.resume_edge(signal_id, edge);
+    }
+
+    void notify_read_write() { scheduler_.resume_phase(WaitKind::ReadWrite); }
+
+    void notify_read_only() { scheduler_.resume_phase(WaitKind::ReadOnly); }
+
+    void notify_next_time_step() {
+        scheduler_.resume_phase(WaitKind::NextTimeStep);
+    }
+
+    bool has_read_write_waiters() const {
+        return scheduler_.has_phase_waiters(WaitKind::ReadWrite);
+    }
+
+    bool has_read_only_waiters() const {
+        return scheduler_.has_phase_waiters(WaitKind::ReadOnly);
+    }
+
+    bool has_next_time_step_waiters() const {
+        return scheduler_.has_phase_waiters(WaitKind::NextTimeStep);
+    }
+
+    SimulationPhase current_phase() const {
+        return scheduler_.current_phase();
     }
 
     uint8_t edge_interest(uint32_t signal_id) const {

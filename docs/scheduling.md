@@ -36,6 +36,38 @@ an explicit delay such as `Delay{1_ps}` when the testbench intends to observe
 logic after a later simulator time slot. Signal writes and backdoor operations
 never add that delay automatically.
 
+## Simulator phases
+
+Use phase waits when a test needs a specific point within the current or next
+simulator timestep:
+
+- `co_await ReadWrite{}` resumes after the current evaluation has settled.
+  The coroutine may read and drive signals, and any writes are evaluated before
+  a later `ReadOnly` waiter resumes.
+- `co_await ReadOnly{}` resumes at the stable end of the current timestep. It
+  is intended for observation and checking; `set()`, `deposit()`, `force()`,
+  and `release()` report an error in this phase.
+- `co_await NextTimeStep{}` resumes at the beginning of the next scheduled
+  simulator timestep, before that timestep's HDL evaluation.
+
+```cpp
+dut.request.set(request);
+co_await ReadWrite{};
+test.expect_eq("combinational request", dut.request_seen.get(), request);
+
+dut.request.set(next_request);
+co_await ReadOnly{};
+test.expect_eq("stable response", dut.response.get(), expected_response);
+
+co_await NextTimeStep{};
+```
+
+These waits describe simulator ordering, not arbitrary delays. Use `Delay` for
+elapsed simulation time and edge waits for a particular signal transition.
+The Verilator backend dispatches these phases directly when cpptb owns the
+host loop; other supported simulator integrations use the equivalent standard
+VPI callbacks. Both paths run the same conformance contracts.
+
 ## Composition
 
 Use an ordinary `co_await task()` when the next operation is sequential. The

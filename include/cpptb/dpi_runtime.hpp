@@ -24,7 +24,23 @@ enum class Phase : uint32_t {
     Init = 0,
     Edge = 1,
     Delay = 4,
+    ReadWrite = 5,
+    ReadOnly = 6,
+    NextTimeStep = 7,
 };
+
+inline probe::detail::CallbackPhase callback_phase(Phase phase) {
+    switch (phase) {
+        case Phase::ReadWrite:
+            return probe::detail::CallbackPhase::ReadWrite;
+        case Phase::ReadOnly:
+            return probe::detail::CallbackPhase::ReadOnly;
+        case Phase::NextTimeStep:
+            return probe::detail::CallbackPhase::NextTimeStep;
+        default:
+            return probe::detail::CallbackPhase::Evaluation;
+    }
+}
 
 enum StepResult : uint32_t {
     kStepDone = 1,
@@ -65,12 +81,21 @@ class Runtime {
             static_binding_.dynamic_get = signal_get;
             static_binding_.dynamic_set = signal_set;
         }
+#if (((defined(VM_VPI) && VM_VPI) || defined(CPPTB_ENABLE_VPI_TIMING)) && \
+     !defined(CPPTB_VERILATOR_DIRECT_TIMING))
+        phase_callbacks_ = {
+            PhaseCallbackData{this, Phase::ReadWrite},
+            PhaseCallbackData{this, Phase::ReadOnly},
+            PhaseCallbackData{this, Phase::NextTimeStep},
+        };
+#endif
     }
     Runtime(const Runtime&) = delete;
     Runtime& operator=(const Runtime&) = delete;
 
     void init(uint32_t iterations, uint64_t timeprecision_fs) {
         probe::detail::DpiCallbackScope callback_scope;
+        dpi_scope_ = svGetScope();
         scheduler_.reset();
         inputs_.fill(0);
         outputs_.fill(0);
@@ -95,6 +120,16 @@ class Runtime {
         registered_clocks_.fill(RegisteredClock{});
         timeprecision_fs_ = timeprecision_fs;
         clock_registration_open_ = true;
+#if (((defined(VM_VPI) && VM_VPI) || defined(CPPTB_ENABLE_VPI_TIMING)) && \
+     !defined(CPPTB_VERILATOR_DIRECT_TIMING))
+        for (auto& callback : phase_callbacks_) {
+            if (callback.pending && callback.handle) {
+                vpi_remove_cb(callback.handle);
+            }
+            callback.pending = false;
+            callback.handle = nullptr;
+        }
+#endif
 #ifdef CPPTB_DPI_PROFILE
         profile_step_count_ = 0;
         profile_init_step_count_ = 0;
@@ -181,7 +216,6 @@ class Runtime {
     int step(uint32_t phase_value, uint64_t sim_time, uint64_t sim_cycles,
              uint32_t event_signal_id, uint32_t event_edge,
              const svOpenArrayHandle in_words) {
-        probe::detail::DpiCallbackScope callback_scope;
         if (!scheduler_) {
             std::fprintf(stderr, "%s: DPI step called before init\n",
                          Adapter::result_name);
@@ -189,6 +223,7 @@ class Runtime {
         }
 
         const auto phase = static_cast<Phase>(phase_value);
+        probe::detail::DpiCallbackScope callback_scope{callback_phase(phase)};
 
 #ifdef CPPTB_DPI_PROFILE
         ++profile_step_count_;
@@ -216,6 +251,15 @@ class Runtime {
                 break;
             case Phase::Delay:
                 ++profile_delay_step_count_;
+                break;
+            case Phase::ReadWrite:
+                ++profile_read_write_step_count_;
+                break;
+            case Phase::ReadOnly:
+                ++profile_read_only_step_count_;
+                break;
+            case Phase::NextTimeStep:
+                ++profile_next_time_step_count_;
                 break;
         }
 #endif
@@ -253,6 +297,15 @@ class Runtime {
                 }
                 scheduler_->notify_edge(
                     event_signal_id, static_cast<coro::EdgeKind>(event_edge));
+                break;
+            case Phase::ReadWrite:
+                scheduler_->notify_read_write();
+                break;
+            case Phase::ReadOnly:
+                scheduler_->notify_read_only();
+                break;
+            case Phase::NextTimeStep:
+                scheduler_->notify_next_time_step();
                 break;
             default:
                 std::fprintf(stderr, "%s: unknown phase %u\n",
@@ -308,6 +361,9 @@ class Runtime {
         if (edge_interest_changed) {
             requests |= kStepEdgeInterestChanged;
         }
+        if (!schedule_phase_callbacks()) {
+            return -1;
+        }
         return static_cast<int>(requests);
     }
 
@@ -331,6 +387,41 @@ class Runtime {
     uint8_t edge_interest(uint32_t signal_id) const {
         return scheduler_ ? scheduler_->edge_interest(signal_id)
                           : coro::kEdgeInterestNone;
+    }
+
+    uint32_t pending_phase_mask() const {
+        if (!scheduler_) return 0;
+        uint32_t phases = 0;
+        if (scheduler_->has_read_write_waiters()) {
+            phases |= 1u << static_cast<uint32_t>(Phase::ReadWrite);
+        }
+        if (scheduler_->has_read_only_waiters()) {
+            phases |= 1u << static_cast<uint32_t>(Phase::ReadOnly);
+        }
+        if (scheduler_->has_next_time_step_waiters()) {
+            phases |= 1u << static_cast<uint32_t>(Phase::NextTimeStep);
+        }
+        return phases;
+    }
+
+    void dispatch_phase(Phase phase) {
+        if (phase != Phase::ReadWrite && phase != Phase::ReadOnly &&
+            phase != Phase::NextTimeStep) {
+            std::fprintf(stderr, "%s: invalid direct timing phase %u\n",
+                         Adapter::result_name,
+                         static_cast<uint32_t>(phase));
+            std::abort();
+        }
+        const svScope previous_scope = svGetScope();
+        if (!dpi_scope_) {
+            std::fprintf(stderr,
+                         "%s: direct timing dispatch has no DPI scope\n",
+                         Adapter::result_name);
+            std::abort();
+        }
+        svSetScope(dpi_scope_);
+        Adapter::dispatch_phase(static_cast<uint32_t>(phase));
+        if (previous_scope) svSetScope(previous_scope);
     }
 
     uint64_t clock_config(uint32_t signal_id, uint32_t field) const {
@@ -369,6 +460,87 @@ class Runtime {
         uint64_t phase_ticks = 0;
         bool primary = false;
     };
+
+#if (((defined(VM_VPI) && VM_VPI) || defined(CPPTB_ENABLE_VPI_TIMING)) && \
+     !defined(CPPTB_VERILATOR_DIRECT_TIMING))
+    struct PhaseCallbackData {
+        Runtime* runtime = nullptr;
+        Phase phase = Phase::ReadWrite;
+        vpiHandle handle = nullptr;
+        bool pending = false;
+    };
+
+    static PLI_INT32 phase_callback(p_cb_data callback) {
+        auto* data = reinterpret_cast<PhaseCallbackData*>(callback->user_data);
+        if (!data || !data->runtime) {
+            std::fprintf(stderr, "cpptb: invalid simulator phase callback\n");
+            return 0;
+        }
+        data->pending = false;
+        data->handle = nullptr;
+        data->runtime->dispatch_phase(data->phase);
+        return 0;
+    }
+
+    bool arm_phase_callback(size_t index, PLI_INT32 reason) {
+        auto& callback = phase_callbacks_[index];
+        if (callback.pending) return true;
+
+        s_cb_data registration{};
+        registration.reason = reason;
+        registration.cb_rtn = phase_callback;
+        registration.user_data =
+            reinterpret_cast<PLI_BYTE8*>(&callback);
+        callback.handle = vpi_register_cb(&registration);
+        if (!callback.handle) {
+            std::fprintf(stderr,
+                         "%s: simulator rejected the %s timing callback\n",
+                         Adapter::result_name, phase_name(callback.phase));
+            return false;
+        }
+        callback.pending = true;
+#ifdef CPPTB_DPI_PROFILE
+        ++profile_phase_callback_registration_count_[index];
+#endif
+        return true;
+    }
+
+    static const char* phase_name(Phase phase) {
+        switch (phase) {
+            case Phase::ReadWrite:
+                return "ReadWrite";
+            case Phase::ReadOnly:
+                return "ReadOnly";
+            case Phase::NextTimeStep:
+                return "NextTimeStep";
+            default:
+                return "unknown";
+        }
+    }
+#endif
+
+    bool schedule_phase_callbacks() {
+        const bool read_write = scheduler_->has_read_write_waiters();
+        const bool read_only = scheduler_->has_read_only_waiters();
+        const bool next_time_step = scheduler_->has_next_time_step_waiters();
+        if (!read_write && !read_only && !next_time_step) return true;
+
+#ifdef CPPTB_VERILATOR_DIRECT_TIMING
+        return true;
+#elif (defined(VM_VPI) && VM_VPI) || defined(CPPTB_ENABLE_VPI_TIMING)
+        return (!read_write || arm_phase_callback(0, cbReadWriteSynch)) &&
+               (!read_only || arm_phase_callback(1, cbReadOnlySynch)) &&
+               (!next_time_step || arm_phase_callback(2, cbNextSimTime));
+#else
+        std::fprintf(
+            stderr,
+            "%s: ReadWrite, ReadOnly, and NextTimeStep require the standard "
+            "simulator timing bridge; enable VPI timing support in the "
+            "simulator build (Verilator: --vpi)\n",
+            Adapter::result_name);
+        return false;
+#endif
+    }
 
     static void register_clock_callback(void* context, coro::Signal signal,
                                         coro::SimTime period,
@@ -878,6 +1050,7 @@ class Runtime {
             access_violation_ = true;
             return;
         }
+        probe::detail::require_write_allowed(signal_names_[id], "set");
         if (on_demand_set_words_[id]) {
             const uint32_t previous = get(id);
             if (previous == value) return;
@@ -968,6 +1141,7 @@ class Runtime {
             access_violation_ = true;
             return;
         }
+        probe::detail::require_write_allowed(signal_names_[id], "set");
 
         if (on_demand_set_words_[id]) {
             on_demand_set_words_[id](id - on_demand_base_ids_[id], words,
@@ -1045,7 +1219,9 @@ class Runtime {
             "signal_edges=%llu rising_edges=%llu falling_edges=%llu "
             "edges_without_interest=%llu delays=%llu next_tick_timers=%llu "
             "timer_idle=%llu outputs_changed=%llu "
-            "output_transfers=%llu input_words=%zu output_words=%zu\n",
+            "output_transfers=%llu read_write=%llu read_only=%llu "
+            "next_time_step=%llu phase_cb_rw=%llu phase_cb_ro=%llu "
+            "phase_cb_nts=%llu input_words=%zu output_words=%zu\n",
             static_cast<unsigned long long>(profile_step_count_),
             static_cast<unsigned long long>(profile_init_step_count_),
             static_cast<unsigned long long>(profile_clock_edge_step_count_),
@@ -1058,6 +1234,15 @@ class Runtime {
             static_cast<unsigned long long>(profile_timer_idle_count_),
             static_cast<unsigned long long>(profile_outputs_changed_count_),
             static_cast<unsigned long long>(profile_output_transfer_count_),
+            static_cast<unsigned long long>(profile_read_write_step_count_),
+            static_cast<unsigned long long>(profile_read_only_step_count_),
+            static_cast<unsigned long long>(profile_next_time_step_count_),
+            static_cast<unsigned long long>(
+                profile_phase_callback_registration_count_[0]),
+            static_cast<unsigned long long>(
+                profile_phase_callback_registration_count_[1]),
+            static_cast<unsigned long long>(
+                profile_phase_callback_registration_count_[2]),
             input_words, output_words);
 #endif
 #ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
@@ -1108,6 +1293,7 @@ class Runtime {
     std::array<uint32_t, Adapter::signal_count> on_demand_base_ids_{};
     [[no_unique_address]] StaticBindingStorage static_binding_{};
     const uint32_t* current_inputs_ = nullptr;
+    svScope dpi_scope_ = nullptr;
     std::unique_ptr<coro::Testbench> scheduler_;
     Dut dut_{};
     Result result_{};
@@ -1122,6 +1308,10 @@ class Runtime {
     uint32_t registered_clock_count_ = 0;
     uint64_t timeprecision_fs_ = 1;
     bool clock_registration_open_ = false;
+#if (((defined(VM_VPI) && VM_VPI) || defined(CPPTB_ENABLE_VPI_TIMING)) && \
+     !defined(CPPTB_VERILATOR_DIRECT_TIMING))
+    std::array<PhaseCallbackData, 3> phase_callbacks_{};
+#endif
 #ifdef CPPTB_DPI_PROFILE
     uint64_t profile_step_count_ = 0;
     uint64_t profile_init_step_count_ = 0;
@@ -1131,14 +1321,32 @@ class Runtime {
     uint64_t profile_falling_edge_step_count_ = 0;
     uint64_t profile_edge_without_interest_count_ = 0;
     uint64_t profile_delay_step_count_ = 0;
+    uint64_t profile_read_write_step_count_ = 0;
+    uint64_t profile_read_only_step_count_ = 0;
+    uint64_t profile_next_time_step_count_ = 0;
     uint64_t profile_next_tick_timer_count_ = 0;
     uint64_t profile_timer_idle_count_ = 0;
     uint64_t profile_outputs_changed_count_ = 0;
     mutable uint64_t profile_output_transfer_count_ = 0;
+    std::array<uint64_t, 3> profile_phase_callback_registration_count_{};
 #endif
 };
 
 }  // namespace cpptb::dpi
+
+#ifdef CPPTB_VERILATOR_DIRECT_TIMING
+#define CPPTB_DEFINE_VERILATOR_DIRECT_TIMING_API()                       \
+    extern "C" unsigned int cpptb_verilator_pending_phases() {         \
+        return g_cpptb_dpi_runtime.pending_phase_mask();                  \
+    }                                                                     \
+    extern "C" void cpptb_verilator_dispatch_phase(                     \
+        unsigned int phase) {                                             \
+        g_cpptb_dpi_runtime.dispatch_phase(                               \
+            static_cast<cpptb::dpi::Phase>(phase));                       \
+    }
+#else
+#define CPPTB_DEFINE_VERILATOR_DIRECT_TIMING_API()
+#endif
 
 #define CPPTB_DEFINE_NAMED_DPI_RUNTIME(                                   \
     AdapterType, InitFunction, StepFunction, PullOutputsFunction,          \
@@ -1167,7 +1375,8 @@ class Runtime {
     }                                                                     \
     extern "C" unsigned int EdgeInterestFunction(unsigned int signal_id) { \
         return g_cpptb_dpi_runtime.edge_interest(signal_id);              \
-    }
+    }                                                                     \
+    CPPTB_DEFINE_VERILATOR_DIRECT_TIMING_API()
 
 #define CPPTB_DEFINE_DPI_RUNTIME(AdapterType)                              \
     CPPTB_DEFINE_NAMED_DPI_RUNTIME(AdapterType, cpptb_dpi_init,            \

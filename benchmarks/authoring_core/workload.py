@@ -33,6 +33,7 @@ KERNELS = (
     "packed_view",
     "force_direct",
     "hier_data",
+    "timing_phases",
 )
 
 FEATURE_FIELDS = (
@@ -66,6 +67,7 @@ FEATURE_FIELDS = (
     "packed_view",
     "hier_data_reads",
     "hier_data_deposits",
+    "timing_phases",
 )
 
 RESULT_FIELDS = (
@@ -116,6 +118,7 @@ class ExpectedCounts:
     packed_view: int = 0
     hier_data_reads: int = 0
     hier_data_deposits: int = 0
+    timing_phases: int = 0
 
     def fields(self) -> dict[str, int]:
         return asdict(self)
@@ -250,6 +253,14 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             force_release=force_release,
         )
 
+    if kernel == "timing_phases":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=2 * iterations,
+            timing_phases=iterations,
+        )
+
     return ExpectedCounts(
         iterations=iterations,
         transactions=iterations,
@@ -284,6 +295,7 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
         packed_view=packed_view,
         hier_data_reads=hier_data_reads,
         hier_data_deposits=hier_data_deposits,
+        timing_phases=0,
     )
 
 
@@ -298,7 +310,7 @@ def response(iteration: int) -> int:
 def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
     if iterations <= 0:
         raise ValueError("iterations must be greater than zero")
-    if kernel == "force_direct":
+    if kernel in ("force_direct", "timing_phases"):
         return 0x811C9DC5
     checksum = 0x811C9DC5
     for iteration in range(iterations):

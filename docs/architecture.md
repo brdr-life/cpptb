@@ -15,6 +15,14 @@ The C++ scheduler owns coroutine readiness and cancellation. Signal reads and
 writes use generated IDs and typed bindings; no runtime hierarchical-name
 lookup is required on the optimized DPI path.
 
+Simulator-phase waits have a backend boundary below the public API. The
+portable path registers standard VPI callbacks for read/write synchronization,
+read-only synchronization, and the next timestep. When cpptb owns Verilator's
+host loop, its direct backend polls the same pending phase state at those exact
+host-loop locations and dispatches the generated DPI phase task without
+allocating one-shot VPI callback records. The VPI path remains available for
+other simulators and Verilator builds that require external VPI integration.
+
 The framework keeps clock-cycle waits and absolute delays separate. Any signal
 configured as an observable clock can drive edge waits, while the persistent
 timer owner supports clockless and arbitrary multi-clock designs.

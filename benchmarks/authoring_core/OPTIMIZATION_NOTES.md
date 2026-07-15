@@ -580,3 +580,49 @@ semantic failures, invalid environments, missing results, or any other
 feature. This records the transport limit without allowing the isolated
 microbenchmark to block unrelated hierarchy work, and still catches future
 regressions in the force path.
+
+## Timing-phase dispatch profile (2026-07-14)
+
+The exact `timing_phases` twin isolates one falling-edge wait, one
+`ReadWrite`, one `ReadOnly`, one `NextTimeStep`, two combinational writes, and
+two settled reads per iteration. The initial 100,000-iteration release guard
+measured `1.675x` C++ DPI/pure SV.
+
+Compile-gated telemetry showed 600,004 runtime steps, 400,000 phase callback
+registrations, 400,008 model evaluations, and 200,008 simulator timesteps.
+Half of the read/write callbacks were a historical settle barrier made
+redundant by the generated `phase_outputs_pending` event. Removing that
+barrier reduced the instrumented runtime by `11.7%` and the release guard to
+`1.413x` while preserving all checks.
+
+A macOS CPU sample then identified repeated `vpi_register_cb` allocation,
+Verilator VPI TLS lookup, and empty generic VPI callback scans as the dominant
+framework-specific work. Skipping unused value, timed, start-of-slot, and
+end-of-slot callback classes in the framework-owned host loop reduced the
+guard to `1.337x`. The opt-in full VPI loop remains available for executables
+that load unrelated external VPI clients.
+
+The retained Verilator direct backend polls pending phase bits at the same
+host-loop regions and invokes the generated phase dispatcher directly. It
+does not change the public waits or generated SV scheduling contract. The
+portable backend continues to use standard `cbReadWriteSynch`,
+`cbReadOnlySynch`, and `cbNextSimTime` callbacks. Both backends pass the full
+275-check conformance suite, all five focused positive cases, and all 14
+negative diagnostics.
+
+Direct dispatch reduced phase callback registrations from 300,000 to zero in
+the 100,000-iteration workload and moved the exact guard to `0.861x`.
+Consolidating three callback-safety thread-local variables into one state
+object then reduced repeated macOS TLS resolver calls and produced the final
+`0.834x` paired result (`0.823x` DPI-first, `0.834x` SV-first, `0.835x`
+independent, `0.17%` disagreement).
+
+The post-change profile is dominated by Verilator model evaluation, the
+generated SV clock-delay coroutine, phase-export dispatch, and packed output
+copying. Scheduler parking, ready draining, edge resumption, and phase
+resumption are visible but individually small. Fully demand-gating rising
+clock crossings is parked: configured clocks intentionally use static edge
+sources, and suppressing an edge also requires preserving exact clock
+readback in later read/write and read-only phases. The measured path already
+passes the hard guard, so that broader clock-shadow change is not justified
+without a dedicated clock-idle workload and conformance contract.

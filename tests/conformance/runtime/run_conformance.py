@@ -21,7 +21,7 @@ from cpptb_codegen import CodegenError, generate
 
 SUITE_DIR = Path(__file__).resolve().parent
 MANIFEST_PATH = SUITE_DIR / "scheduler_conformance.dpi.json"
-BUILD_DIR = REPO / "build" / "cpptb" / "conformance_obj"
+BUILD_ROOT = REPO / "build" / "cpptb"
 RESULT_PATTERN = re.compile(
     r"CPPTB_CONFORMANCE_RESULT "
     r"iterations=(?P<iterations>\d+) "
@@ -40,13 +40,23 @@ def simulator_name(manifest: dict[str, Any], override: str | None) -> str:
     return override or manifest.get("simulator", "verilator")
 
 
-def build_verilator(manifest: dict[str, Any]) -> Path:
+def build_dir(timing_backend: str) -> Path:
+    suffix = (
+        "conformance_obj"
+        if timing_backend == "direct"
+        else "conformance_vpi_obj"
+    )
+    return BUILD_ROOT / suffix
+
+
+def build_verilator(manifest: dict[str, Any], timing_backend: str) -> Path:
     options = manifest.get("simulator_options", {}).get("verilator", {})
     compile_args = options.get("compile_args", [])
     if not isinstance(compile_args, list):
         raise SystemExit("simulator_options.verilator.compile_args must be a list")
 
-    BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir = build_dir(timing_backend)
+    output_dir.mkdir(parents=True, exist_ok=True)
     sources = [
         str((MANIFEST_PATH.parent / source).resolve())
         for source in manifest["sources"]
@@ -59,13 +69,26 @@ def build_verilator(manifest: dict[str, Any]) -> Path:
         str(SUITE_DIR / "framework.cpp"),
         str(SUITE_DIR / "testbench.cpp"),
     ]
+    timing_bridge = bool(options.get("timing_bridge", False))
+    if timing_bridge:
+        compile_args = [argument for argument in compile_args if argument != "--binary"]
+        for argument in ("--cc", "--exe", "--build", "--vpi"):
+            if argument not in compile_args:
+                compile_args.append(argument)
+        cpp_sources.append(str(REPO / "src" / "verilator_timing_main.cpp"))
+    top_class = f"V{manifest['top_module']}"
+    cflags = f"-I{REPO} -I{REPO / 'include'}"
+    if timing_bridge:
+        cflags += f" -DCPPTB_VERILATED_TOP={top_class}"
+        if timing_backend == "direct":
+            cflags += " -DCPPTB_VERILATOR_DIRECT_TIMING"
     command = [
         "verilator",
         *compile_args,
         "-CFLAGS",
-        f"-I{REPO} -I{REPO / 'include'}",
+        cflags,
         "--Mdir",
-        str(BUILD_DIR),
+        str(output_dir),
         "--top-module",
         manifest["top_module"],
         *sources,
@@ -75,26 +98,28 @@ def build_verilator(manifest: dict[str, Any]) -> Path:
     completed = subprocess.run(command, cwd=REPO, check=False)
     if completed.returncode != 0:
         raise SystemExit(f"Verilator conformance build failed with {completed.returncode}")
-    return BUILD_DIR / f"V{manifest['top_module']}"
+    return output_dir / top_class
 
 
-def build(manifest: dict[str, Any], simulator: str) -> Path:
+def build(manifest: dict[str, Any], simulator: str, timing_backend: str) -> Path:
     try:
         generate(MANIFEST_PATH)
     except CodegenError as error:
         raise SystemExit(f"conformance code generation failed: {error}") from error
 
     if simulator == "verilator":
-        return build_verilator(manifest)
+        return build_verilator(manifest, timing_backend)
     configured = ", ".join(sorted(manifest.get("simulator_options", {})))
     raise SystemExit(
         f"simulator {simulator!r} has no conformance runner; configured: {configured}"
     )
 
 
-def binary_path(manifest: dict[str, Any], simulator: str) -> Path:
+def binary_path(
+    manifest: dict[str, Any], simulator: str, timing_backend: str
+) -> Path:
     if simulator == "verilator":
-        return BUILD_DIR / f"V{manifest['top_module']}"
+        return build_dir(timing_backend) / f"V{manifest['top_module']}"
     raise SystemExit(f"simulator {simulator!r} has no conformance binary mapping")
 
 
@@ -127,7 +152,9 @@ def validate_result(contract: dict[str, Any], result: dict[str, int | float]) ->
         raise SystemExit("conformance result mismatch: " + ", ".join(mismatches))
 
 
-def run(manifest: dict[str, Any], simulator: str, binary: Path) -> None:
+def run(
+    manifest: dict[str, Any], simulator: str, binary: Path, timing_backend: str
+) -> None:
     if not binary.exists():
         raise SystemExit(f"conformance binary does not exist: {binary}")
     iterations = int(manifest["conformance"]["expected_iterations"])
@@ -149,7 +176,8 @@ def run(manifest: dict[str, Any], simulator: str, binary: Path) -> None:
     validate_result(manifest["conformance"], result)
     print(
         "CPPTB_CONFORMANCE_PASS "
-        f"simulator={simulator} checks={result['checks']} "
+        f"simulator={simulator} timing_backend={timing_backend} "
+        f"checks={result['checks']} "
         f"sim_cycles={result['sim_cycles']}"
     )
 
@@ -216,6 +244,12 @@ def run(manifest: dict[str, Any], simulator: str, binary: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--simulator", help="override the manifest simulator")
+    parser.add_argument(
+        "--timing-backend",
+        choices=("direct", "vpi"),
+        default="direct",
+        help="Verilator timing dispatch backend (default: direct)",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--build-only", action="store_true")
     mode.add_argument("--no-build", action="store_true")
@@ -224,12 +258,12 @@ def main() -> int:
     manifest = load_manifest()
     simulator = simulator_name(manifest, args.simulator)
     binary = (
-        binary_path(manifest, simulator)
+        binary_path(manifest, simulator, args.timing_backend)
         if args.no_build
-        else build(manifest, simulator)
+        else build(manifest, simulator, args.timing_backend)
     )
     if not args.build_only:
-        run(manifest, simulator, binary)
+        run(manifest, simulator, binary, args.timing_backend)
     return 0
 
 

@@ -73,14 +73,17 @@ module authoring_core_sv_tb;
   longint unsigned packed_view_count;
   longint unsigned hier_data_reads;
   longint unsigned hier_data_deposits;
+  longint unsigned timing_phases_count;
   event authored_event;
   bit authored_event_set;
   event channel_available;
   logic [31:0] event_token;
   logic [31:0] channel_queue[$];
 
-  always #1ns clk = ~clk;
-  always @(posedge clk) sim_cycles++;
+  always begin
+    #1ns clk = ~clk;
+    if (clk) sim_cycles++;
+  end
 
   function automatic logic [31:0] stimulus(input int unsigned iteration);
     return ((iteration + 1) * 32'h1f12_3bb5) ^ 32'hc001_d00d;
@@ -773,6 +776,29 @@ module authoring_core_sv_tb;
     end
   endtask
 
+  task automatic run_timing_phases();
+    logic [31:0] first;
+    logic [31:0] second;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      first = stimulus(i);
+      second = first ^ 32'ha5a5_5a5a;
+      timing_phases_count++;
+
+      @(negedge clk);
+      array_i[1] = first;
+      wait (array_o[1] == (first ^ 32'h6d2b_79f6));
+      check32(array_o[1], first ^ 32'h6d2b_79f6,
+              "ReadWrite settled value");
+
+      array_i[1] = second;
+      wait (array_o[1] == (second ^ 32'h6d2b_79f6));
+      check32(array_o[1], second ^ 32'h6d2b_79f6,
+              "ReadOnly settled value");
+
+      @(posedge clk);
+    end
+  endtask
+
   task automatic run_mem_backdoor();
     for (int unsigned i = 0; i < iterations; i++) begin
       mem_backdoor_feature(i);
@@ -898,6 +924,7 @@ module authoring_core_sv_tb;
     packed_view_count = 0;
     hier_data_reads = 0;
     hier_data_deposits = 0;
+    timing_phases_count = 0;
     wide64_i = '0;
     wide137_i = '0;
     fixed_a_i = '0;
@@ -942,16 +969,19 @@ module authoring_core_sv_tb;
       "force_release": run_force_release();
       "packed_view": run_packed_view();
       "hier_data": run_hier_data();
+      "timing_phases": run_timing_phases();
       default: $fatal(1, "unknown AUTHORING_CORE_KERNEL=%s", kernel);
     endcase
 
-    while (response_count != iterations) begin
-      @(posedge clk);
-      #1ps;
+    if (kernel != "timing_phases") begin
+      while (response_count != iterations) begin
+        @(posedge clk);
+        #1ps;
+      end
+      check32(request_count, iterations, "request count");
+      check32(response_count, iterations, "response count");
     end
-    check32(request_count, iterations, "request count");
-    check32(response_count, iterations, "response count");
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d channel_send=%0d channel_receive=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d",
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d channel_send=%0d channel_receive=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d",
              kernel, iterations, transactions, checks, sim_cycles, checksum,
              failures, task_value_count, clock_cycles_count, timeout_count,
              timeout_hits, task_timeout_count, task_timeout_hits,
@@ -963,7 +993,7 @@ module authoring_core_sv_tb;
              hier_probe_reads, hier_probe_deposits, mem_backdoor_reads,
              mem_backdoor_deposits, probe_diag_reads, probe_diag_deposits,
              signal_edges, force_release_count, packed_view_count,
-             hier_data_reads, hier_data_deposits);
+             hier_data_reads, hier_data_deposits, timing_phases_count);
     $finish;
   end
 

@@ -21,6 +21,29 @@ Historical scheduler experiments and their accepted or rejected rationale are
 recorded in `benchmarks/authoring_core/OPTIMIZATION_NOTES.md` in the source
 repository.
 
+## Timing-phase dispatch
+
+The exact `timing_phases` pair performs one falling-edge wait, one
+`ReadWrite`, one `ReadOnly`, one `NextTimeStep`, two settled combinational
+checks, and two driven values per iteration. A July 14, 2026 profile at 100,000
+iterations initially measured `1.675x` C++ DPI over pure SV.
+
+Three retained changes reduced that ratio:
+
+1. Removing a redundant read/write settle callback reduced scheduler steps,
+   model evaluations, and VPI callbacks by 100,000 each.
+2. The framework-only Verilator host loop stopped scanning unused value,
+   timed, start-of-slot, and end-of-slot VPI callback classes.
+3. Direct Verilator phase dispatch removed 300,000 one-shot VPI callback
+   registrations while preserving the portable VPI fallback.
+
+Consolidating callback legality state into one thread-local object removed
+additional TLS resolver work. The final 32-pair run passed at `0.834x`, with
+`0.823x` DPI-first, `0.834x` SV-first, `0.835x` independent, and `0.17%`
+paired/independent disagreement. All 200,000 checks matched. This is a
+machine-specific result; the registry's `1.10x` hard guard remains the
+acceptance criterion.
+
 ## Scoped direct-force waiver
 
 `force_direct` isolates one zero-time force, immediate readback, and release.

@@ -12,23 +12,63 @@ namespace cpptb::probe {
 
 namespace detail {
 
-inline thread_local uint32_t dpi_callback_depth = 0;
-inline thread_local uint64_t dpi_callback_epoch = 0;
+enum class CallbackPhase : uint8_t {
+    Evaluation,
+    ReadWrite,
+    ReadOnly,
+    NextTimeStep,
+};
+
+struct DpiCallbackState {
+    uint32_t depth = 0;
+    uint64_t epoch = 0;
+    CallbackPhase phase = CallbackPhase::Evaluation;
+};
+
+inline thread_local DpiCallbackState dpi_callback_state;
 
 class DpiCallbackScope {
    public:
-    DpiCallbackScope() {
-        if (dpi_callback_depth++ == 0) ++dpi_callback_epoch;
+    explicit DpiCallbackScope(
+        CallbackPhase phase = CallbackPhase::Evaluation)
+        : previous_phase_(dpi_callback_state.phase) {
+        auto& state = dpi_callback_state;
+        state.phase = phase;
+        if (state.depth++ == 0) ++state.epoch;
     }
     DpiCallbackScope(const DpiCallbackScope&) = delete;
     DpiCallbackScope& operator=(const DpiCallbackScope&) = delete;
-    ~DpiCallbackScope() { --dpi_callback_depth; }
+    ~DpiCallbackScope() {
+        auto& state = dpi_callback_state;
+        --state.depth;
+        state.phase = previous_phase_;
+    }
+
+   private:
+    CallbackPhase previous_phase_;
 };
 
-inline uint64_t current_callback_epoch() { return dpi_callback_epoch; }
+inline uint64_t current_callback_epoch() { return dpi_callback_state.epoch; }
+
+inline CallbackPhase current_callback_phase() {
+    return dpi_callback_state.phase;
+}
+
+inline void require_write_allowed(const char* name, const char* operation) {
+    const auto& state = dpi_callback_state;
+    if (state.depth == 0 || state.phase != CallbackPhase::ReadOnly) {
+        return;
+    }
+    std::fprintf(
+        stderr,
+        "cpptb: %s() is not allowed during ReadOnly for signal '%s'; "
+        "await NextTimeStep{}, Delay{...}, or an edge before driving it\n",
+        operation ? operation : "write", name ? name : "<unnamed>");
+    std::abort();
+}
 
 inline void require_callback(const char* name) {
-    if (dpi_callback_depth != 0) return;
+    if (dpi_callback_state.depth != 0) return;
     std::fprintf(stderr,
                  "cpptb: internal probe '%s' used outside a DPI callback\n",
                  name ? name : "<unnamed>");
@@ -36,7 +76,7 @@ inline void require_callback(const char* name) {
 }
 
 inline void require_signal_callback(const char* name) {
-    if (dpi_callback_depth != 0) return;
+    if (dpi_callback_state.depth != 0) return;
     std::fprintf(stderr,
                  "cpptb: on-demand signal '%s' used outside a DPI callback\n",
                  name ? name : "<unnamed>");
@@ -85,6 +125,7 @@ class Probe {
 
     void deposit(value_type value) const requires(Writable) {
         detail::require_callback(name);
+        detail::require_write_allowed(name, "deposit");
         if (!deposit_fn) {
             std::fprintf(stderr,
                          "cpptb: internal probe '%s' has no deposit callback\n",
@@ -97,6 +138,7 @@ class Probe {
 
     void force(value_type value) const requires(Forceable) {
         detail::require_callback(name);
+        detail::require_write_allowed(name, "force");
         if (!force_fn) {
             std::fprintf(stderr,
                          "cpptb: internal probe '%s' has no force callback\n",
@@ -109,6 +151,7 @@ class Probe {
 
     void release() const requires(Forceable) {
         detail::require_callback(name);
+        detail::require_write_allowed(name, "release");
         if (!release_fn) {
             std::fprintf(stderr,
                          "cpptb: internal probe '%s' has no release callback\n",

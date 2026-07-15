@@ -34,6 +34,7 @@
     "next_deadline_function": "authoring_core_dpi_next_timer_deadline",
     "edge_interest_function": "authoring_core_dpi_edge_interest",
     "clock_config_function": "authoring_core_dpi_clock_config",
+    "phase_dispatch_function": "authoring_core_dpi_phase_dispatch",
     "dynamic_clocks": true,
     "iteration_plusarg": "AUTHORING_CORE_ITERS",
     "default_iterations": 10000,

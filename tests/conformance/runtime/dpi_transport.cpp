@@ -4,6 +4,8 @@
 #include "tests/conformance/runtime/generated/scheduler_conformance_binding.hpp"
 #include "cpptb/dpi_runtime.hpp"
 
+extern "C" void cpptb_dpi_phase_dispatch(unsigned int phase);
+
 namespace cpptb::conformance {
 
 struct DpiAdapter {
@@ -42,6 +44,10 @@ struct DpiAdapter {
         } else {
             register_user_testbench(tb);
         }
+    }
+
+    static void dispatch_phase(uint32_t phase) {
+        cpptb_dpi_phase_dispatch(phase);
     }
 
     static bool timed_out(coro::SimTime sim_time, uint64_t sim_cycles,

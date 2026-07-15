@@ -109,6 +109,7 @@ _AUTHORING_TEMPLATE_IDS = {
     "packed_view": 24,
     "force_direct": 25,
     "hier_data": 26,
+    "timing_phases": 27,
 }
 
 
@@ -206,6 +207,7 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         ),
     ),
     _authoring("hier_data", "Wide and four-state hierarchy data"),
+    _authoring("timing_phases", "Simulator timing phases"),
     Benchmark(
         name="dpi_counter",
         label="DPI counter",

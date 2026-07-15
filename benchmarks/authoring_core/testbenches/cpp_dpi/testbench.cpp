@@ -572,6 +572,7 @@ void report(Context& context) {
         "mem_backdoor_deposits=%llu probe_diag_reads=%llu "
         "probe_diag_deposits=%llu signal_edges=%llu force_release=%llu "
         "packed_view=%llu hier_data_reads=%llu hier_data_deposits=%llu "
+        "timing_phases=%llu "
         "wall_ms=%.3f\n",
         kernel_name(), context.iterations,
         static_cast<unsigned long long>(context.result.transactions),
@@ -608,6 +609,7 @@ void report(Context& context) {
         static_cast<unsigned long long>(feature.packed_view),
         static_cast<unsigned long long>(feature.hier_data_reads),
         static_cast<unsigned long long>(feature.hier_data_deposits),
+        static_cast<unsigned long long>(feature.timing_phases),
         static_cast<double>(elapsed_us) / 1000.0);
 }
 
@@ -622,6 +624,38 @@ Task<void> run_force_direct(Context context) {
     }
     report(context);
     co_return;
+}
+
+Task<void> run_timing_phases(Context context) {
+    context.dut.rst_n.set(0);
+    context.dut.req_valid.set(0);
+    context.dut.rsp_ready.set(1);
+    context.dut.array_i.at(1).set(0);
+    for (uint32_t cycle = 0; cycle < 4; ++cycle) {
+        co_await RisingEdge{context.dut.clk};
+    }
+    context.dut.rst_n.set(1);
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t first = stimulus(iteration);
+        const uint32_t second = first ^ 0xa5a5'5a5au;
+        ++context.result.features.timing_phases;
+
+        co_await FallingEdge{context.dut.clk};
+        context.dut.array_i.at(1).set(first);
+        co_await ReadWrite{};
+        check(context, "ReadWrite settled value",
+              context.dut.array_o.at(1).get(), first ^ 0x6d2b'79f6u);
+
+        context.dut.array_i.at(1).set(second);
+        co_await ReadOnly{};
+        check(context, "ReadOnly settled value",
+              context.dut.array_o.at(1).get(), second ^ 0x6d2b'79f6u);
+
+        co_await NextTimeStep{};
+    }
+
+    report(context);
 }
 
 Task<void> run(Context context) {
@@ -812,6 +846,9 @@ void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_FORCE_DIRECT
     scheduler.spawn_detached(
         run_force_direct(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TIMING_PHASES
+    scheduler.spawn_detached(
+        run_timing_phases(Context{scheduler, dut, iterations, result}));
 #else
     scheduler.spawn_detached(run(Context{scheduler, dut, iterations, result}));
 #endif
