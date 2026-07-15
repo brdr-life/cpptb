@@ -646,16 +646,47 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("STEP_OUTPUTS_CHANGED", wrapper)
         self.assertIn("STEP_NEXT_TICK_TIMER", wrapper)
         self.assertIn("STEP_TIMER_IDLE", wrapper)
+        self.assertIn("STEP_READ_WRITE = 512", wrapper)
+        self.assertIn("STEP_READ_ONLY = 1024", wrapper)
+        self.assertIn("STEP_NEXT_TIME_STEP = 2048", wrapper)
+        self.assertIn("STEP_PHASE_MASK = STEP_READ_WRITE |", wrapper)
         self.assertIn("if ((requests >= 0) &&", wrapper)
         self.assertIn("((phase == PHASE_INIT) ||", wrapper)
         self.assertIn("((requests & STEP_OUTPUTS_CHANGED) != 0)", wrapper)
         self.assertIn("cpptb_dpi_pull_outputs(out_words);", wrapper)
         self.assertIn("input int unsigned in_words[]\n  );", wrapper)
         self.assertNotIn("in_words[],\n      output int unsigned out_words[]", wrapper)
-        self.assertEqual(wrapper.count("apply_outputs();"), 3)
+        self.assertEqual(wrapper.count("apply_outputs();"), 4)
         self.assertIn("event phase_outputs_pending;", wrapper)
         self.assertIn("always @(phase_outputs_pending)", wrapper)
         self.assertIn("-> phase_outputs_pending;", wrapper)
+        self.assertIn(
+            "`ifdef CPPTB_SV_DPI_TIMING\n"
+            "      apply_outputs();\n"
+            "`else\n"
+            "      -> phase_outputs_pending;\n"
+            "`endif",
+            wrapper,
+        )
+        self.assertIn("task automatic phase_settle_barrier();", wrapper)
+        self.assertIn("task automatic phase_pump();", wrapper)
+        self.assertIn("localparam int CALENDAR_CLOCK_COUNT = 2;", wrapper)
+        self.assertIn("task automatic calendar_initialize();", wrapper)
+        self.assertIn("task automatic calendar_drain_phases();", wrapper)
+        self.assertIn("task automatic calendar_next_target(", wrapper)
+        self.assertIn("task automatic calendar_drive_due_clocks();", wrapper)
+        self.assertIn("task automatic calendar_owner();", wrapper)
+        self.assertIn("calendar_clock_half_period[0] = 2ns;", wrapper)
+        self.assertIn("calendar_clock_half_period[1] = 3ns;", wrapper)
+        self.assertIn(
+            "calendar_clock_next_edge[1] = $time + time'(1ns) + "
+            "calendar_clock_half_period[1];",
+            wrapper,
+        )
+        self.assertIn("event time_step_started;", wrapper)
+        self.assertIn("task automatic note_time_step();", wrapper)
+        self.assertIn("phase_requests |= requests & STEP_PHASE_MASK;", wrapper)
+        self.assertIn("phase_barrier_token <= ~phase_barrier_token;", wrapper)
         self.assertIn("timeunit 1ps", wrapper)
         self.assertIn("TIMEPRECISION_FS = 1000", wrapper)
         self.assertIn("cpptb_dpi_init(iterations, TIMEPRECISION_FS)", wrapper)
@@ -688,16 +719,34 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("timer_wakeup(deadline, generation);", wrapper)
         self.assertNotIn("reschedule_timer", wrapper)
         self.assertNotIn("#0", wrapper)
-        self.assertNotIn("<=", wrapper)
+        nonblocking_assignments = [
+            line.strip()
+            for line in wrapper.splitlines()
+            if "<=" in line and line.strip().endswith(";")
+        ]
+        self.assertEqual(
+            nonblocking_assignments,
+            ["phase_barrier_token <= ~phase_barrier_token;"],
+        )
         self.assertNotIn("disable fork", wrapper)
+        calendar_start = wrapper.index("  task automatic calendar_owner();")
+        calendar = wrapper[
+            calendar_start : wrapper.index("  endtask", calendar_start)
+        ]
+        self.assertLess(
+            calendar.index("run_step(PHASE_DELAY"),
+            calendar.index("calendar_drive_due_clocks();"),
+        )
         launcher = wrapper.index(
             "    if (status == 0) begin\n"
             "      fork\n"
-            "        timer_owner();"
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING\n"
+            "        calendar_owner();"
         )
         self.assertLess(wrapper.index("service_requests(initial_requests);"), launcher)
-        self.assertLess(launcher, wrapper.index("        drive_clock_0();", launcher))
-        self.assertLess(launcher, wrapper.index("        drive_clock_1();", launcher))
+        fallback = wrapper.index("`else\n        timer_owner();", launcher)
+        self.assertLess(fallback, wrapper.index("        drive_clock_0();", fallback))
+        self.assertLess(fallback, wrapper.index("        drive_clock_1();", fallback))
 
     def test_generates_persistent_timer_owner_for_clockless_wrapper(self):
         config = manifest()
@@ -714,10 +763,24 @@ class CodegenTests(unittest.TestCase):
         wrapper = render_sv(ports, [], config, "clockless.json")
 
         self.assertIn("task automatic timer_owner();", wrapper)
+        self.assertIn("localparam int CALENDAR_CLOCK_COUNT = 0;", wrapper)
+        self.assertIn(
+            "localparam int CALENDAR_CLOCK_STORAGE =\n"
+            "      CALENDAR_CLOCK_COUNT > 0 ? CALENDAR_CLOCK_COUNT : 1;",
+            wrapper,
+        )
+        self.assertIn("task automatic calendar_owner();", wrapper)
         self.assertIn(
             "    if (status == 0) begin\n"
             "      fork\n"
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING\n"
+            "        calendar_owner();\n"
+            "`else\n"
             "        timer_owner();\n"
+            "`ifdef CPPTB_SV_DPI_TIMING\n"
+            "        phase_pump();\n"
+            "`endif\n"
+            "`endif\n"
             "      join_none\n"
             "    end",
             wrapper,
@@ -726,7 +789,15 @@ class CodegenTests(unittest.TestCase):
         self.assertNotIn("task automatic observe_clock_", wrapper)
         self.assertNotIn("reschedule_timer", wrapper)
         self.assertNotIn("#0", wrapper)
-        self.assertNotIn("<=", wrapper)
+        nonblocking_assignments = [
+            line.strip()
+            for line in wrapper.splitlines()
+            if "<=" in line and line.strip().endswith(";")
+        ]
+        self.assertEqual(
+            nonblocking_assignments,
+            ["phase_barrier_token <= ~phase_barrier_token;"],
+        )
         self.assertNotIn("disable fork", wrapper)
 
     def test_generates_opt_in_dut_output_edge_observer(self):
@@ -767,11 +838,13 @@ class CodegenTests(unittest.TestCase):
         launcher = wrapper.index(
             "    if (status == 0) begin\n"
             "      fork\n"
-            "        timer_owner();"
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING\n"
+            "        calendar_owner();"
         )
         self.assertLess(wrapper.index("service_requests(initial_requests);"), launcher)
-        self.assertLess(launcher, wrapper.index("        drive_clock_0();", launcher))
-        self.assertLess(launcher, wrapper.index("        observe_signal_0();", launcher))
+        fallback = wrapper.index("`else\n        timer_owner();", launcher)
+        self.assertLess(fallback, wrapper.index("        drive_clock_0();", fallback))
+        self.assertLess(fallback, wrapper.index("        observe_signal_0();", fallback))
 
     def test_auto_edge_observers_use_the_discovered_port_set(self):
         config = manifest()

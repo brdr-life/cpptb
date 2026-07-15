@@ -50,6 +50,9 @@ enum StepResult : uint32_t {
     kStepEdgeInterestChanged = 64,
     kStepNextTickTimer = 128,
     kStepTimerIdle = 256,
+    kStepReadWrite = 512,
+    kStepReadOnly = 1024,
+    kStepNextTimeStep = 2048,
 };
 
 template <typename Adapter>
@@ -361,6 +364,17 @@ class Runtime {
         if (edge_interest_changed) {
             requests |= kStepEdgeInterestChanged;
         }
+#ifdef CPPTB_SV_DPI_TIMING
+        if (scheduler_->has_read_write_waiters()) {
+            requests |= kStepReadWrite;
+        }
+        if (scheduler_->has_read_only_waiters()) {
+            requests |= kStepReadOnly;
+        }
+        if (scheduler_->has_next_time_step_waiters()) {
+            requests |= kStepNextTimeStep;
+        }
+#endif
         if (!schedule_phase_callbacks()) {
             return -1;
         }
@@ -525,7 +539,7 @@ class Runtime {
         const bool next_time_step = scheduler_->has_next_time_step_waiters();
         if (!read_write && !read_only && !next_time_step) return true;
 
-#ifdef CPPTB_VERILATOR_DIRECT_TIMING
+#if defined(CPPTB_VERILATOR_DIRECT_TIMING) || defined(CPPTB_SV_DPI_TIMING)
         return true;
 #elif (defined(VM_VPI) && VM_VPI) || defined(CPPTB_ENABLE_VPI_TIMING)
         return (!read_write || arm_phase_callback(0, cbReadWriteSynch)) &&
