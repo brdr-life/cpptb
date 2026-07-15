@@ -44,6 +44,43 @@ paired/independent disagreement. All 200,000 checks matched. This is a
 machine-specific result; the registry's `1.10x` hard guard remains the
 acceptance criterion.
 
+### Portable timing experiments
+
+Three pure-DPI timing transports were prototyped against that same
+`timing_phases` workload. All leave simulator time ownership in generated
+SystemVerilog and return pending phase requests in the existing DPI step
+result:
+
+- **Inline phase pump:** dispatches `ReadWrite` and `ReadOnly` immediately.
+  It is fast structurally but invalid: `ReadOnly` can run before the DUT gets
+  a settle turn. The semantic probe reported 1,000 failures in 2,000 checks.
+- **NBA phase pump:** crosses an explicit generated NBA token barrier before
+  dispatching `ReadWrite` or `ReadOnly`. It passes the strengthened timing
+  conformance suite, including simultaneous unrelated clock edges and
+  pre-/post-NBA observations.
+- **Centralized calendar:** gives one generated SystemVerilog process ownership
+  of compile-time-discovered clocks, framework timers, and phase dispatch.
+  It uses the NBA token only when a settled phase is requested and retains
+  deterministic timer-before-coincident-clock ordering.
+
+The July 14, 2026 serialized comparison used the exact pure-SV twin:
+
+| Timing backend | Semantic result | C++ / pure SV |
+|---|---|---:|
+| Direct Verilator dispatch | Pass | 0.831x |
+| Portable VPI callbacks | Pass | 1.303x |
+| Pure-DPI inline pump | Fail | Not benchmarked |
+| Pure-DPI NBA pump | Pass | 1.356x |
+| Pure-DPI centralized calendar | Pass | 0.976x |
+
+The calendar reduced wall time by about 28% relative to the NBA pump and
+cleared the `1.10x` hard guard. It remains an experiment while cross-simulator
+semantics are unverified: standard DPI cannot discover arbitrary hidden DUT
+events, so its `NextTimeStep` knowledge is limited to generated clocks,
+framework timers, and explicitly observed signals. Full implementation details
+and reproduction commands are in
+`benchmarks/authoring_core/TIMING_BACKEND_EXPERIMENTS.md`.
+
 ## Scoped direct-force waiver
 
 `force_direct` isolates one zero-time force, immediate readback, and release.

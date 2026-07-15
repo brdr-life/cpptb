@@ -41,11 +41,14 @@ def simulator_name(manifest: dict[str, Any], override: str | None) -> str:
 
 
 def build_dir(timing_backend: str) -> Path:
-    suffix = (
-        "conformance_obj"
-        if timing_backend == "direct"
-        else "conformance_vpi_obj"
-    )
+    suffixes = {
+        "direct": "conformance_obj",
+        "vpi": "conformance_vpi_obj",
+        "sv-dpi-inline": "conformance_sv_dpi_inline_obj",
+        "sv-dpi-nba": "conformance_sv_dpi_nba_obj",
+        "sv-dpi-calendar": "conformance_sv_dpi_calendar_obj",
+    }
+    suffix = suffixes[timing_backend]
     return BUILD_ROOT / suffix
 
 
@@ -69,7 +72,10 @@ def build_verilator(manifest: dict[str, Any], timing_backend: str) -> Path:
         str(SUITE_DIR / "framework.cpp"),
         str(SUITE_DIR / "testbench.cpp"),
     ]
-    timing_bridge = bool(options.get("timing_bridge", False))
+    sv_dpi_timing = timing_backend.startswith("sv-dpi-")
+    timing_bridge = bool(options.get("timing_bridge", False)) and not sv_dpi_timing
+    if sv_dpi_timing:
+        compile_args = [argument for argument in compile_args if argument != "--vpi"]
     if timing_bridge:
         compile_args = [argument for argument in compile_args if argument != "--binary"]
         for argument in ("--cc", "--exe", "--build", "--vpi"):
@@ -78,13 +84,32 @@ def build_verilator(manifest: dict[str, Any], timing_backend: str) -> Path:
         cpp_sources.append(str(REPO / "src" / "verilator_timing_main.cpp"))
     top_class = f"V{manifest['top_module']}"
     cflags = f"-I{REPO} -I{REPO / 'include'}"
+    sv_defines: list[str] = []
     if timing_bridge:
         cflags += f" -DCPPTB_VERILATED_TOP={top_class}"
         if timing_backend == "direct":
             cflags += " -DCPPTB_VERILATOR_DIRECT_TIMING"
+    if sv_dpi_timing:
+        cflags += " -DCPPTB_SV_DPI_TIMING"
+        sv_defines.append("-DCPPTB_SV_DPI_TIMING")
+        if timing_backend == "sv-dpi-nba":
+            cflags += " -DCPPTB_SV_DPI_NBA_TIMING"
+            sv_defines.append("-DCPPTB_SV_DPI_NBA_TIMING")
+        if timing_backend == "sv-dpi-calendar":
+            cflags += (
+                " -DCPPTB_SV_DPI_NBA_TIMING"
+                " -DCPPTB_SV_DPI_CALENDAR_TIMING"
+            )
+            sv_defines.extend(
+                (
+                    "-DCPPTB_SV_DPI_NBA_TIMING",
+                    "-DCPPTB_SV_DPI_CALENDAR_TIMING",
+                )
+            )
     command = [
         "verilator",
         *compile_args,
+        *sv_defines,
         "-CFLAGS",
         cflags,
         "--Mdir",
@@ -246,7 +271,13 @@ def main() -> int:
     parser.add_argument("--simulator", help="override the manifest simulator")
     parser.add_argument(
         "--timing-backend",
-        choices=("direct", "vpi"),
+        choices=(
+            "direct",
+            "vpi",
+            "sv-dpi-inline",
+            "sv-dpi-nba",
+            "sv-dpi-calendar",
+        ),
         default="direct",
         help="Verilator timing dispatch backend (default: direct)",
     )

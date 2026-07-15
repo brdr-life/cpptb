@@ -3897,6 +3897,20 @@ def render_sv(
     if len(primary_clocks) > 1:
         raise CodegenError("only one clock may be marked primary")
     primary_clock = primary_clocks[0] if primary_clocks else (clocks[0] if clocks else None)
+    calendar_clocks = [
+        clock
+        for clock in clocks
+        if clock_source(clock) in {"generated", "registered"}
+    ]
+    calendar_clock_names = {clock["port"] for clock in calendar_clocks}
+    calendar_dynamic_ports = [
+        port
+        for port in dynamic_clock_ports
+        if dynamic_clocks
+        and not calendar_clocks
+        and port.name not in calendar_clock_names
+    ]
+    calendar_clock_count = len(calendar_clocks) + len(calendar_dynamic_ports)
     init_function = run.get("init_function", "cpptb_dpi_init")
     step_function = run.get("step_function", "cpptb_dpi_step")
     pull_outputs_function = run.get(
@@ -3959,6 +3973,11 @@ def render_sv(
             "  localparam int STEP_EDGE_INTEREST_CHANGED = 64;",
             "  localparam int STEP_NEXT_TICK_TIMER = 128;",
             "  localparam int STEP_TIMER_IDLE = 256;",
+            "  localparam int STEP_READ_WRITE = 512;",
+            "  localparam int STEP_READ_ONLY = 1024;",
+            "  localparam int STEP_NEXT_TIME_STEP = 2048;",
+            "  localparam int STEP_PHASE_MASK = STEP_READ_WRITE |",
+            "      STEP_READ_ONLY | STEP_NEXT_TIME_STEP;",
             "",
         ]
     )
@@ -4029,6 +4048,22 @@ def render_sv(
             "  longint unsigned timer_owner_target;",
             "  event timer_kick;",
             "  event phase_outputs_pending;",
+            "`ifdef CPPTB_SV_DPI_TIMING",
+            "  event phase_kick;",
+            "  event phase_barrier_kick;",
+            "  event time_step_started;",
+            "  int phase_requests;",
+            "  bit phase_barrier_token;",
+            "  time last_started_time;",
+            "`endif",
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+            f"  localparam int CALENDAR_CLOCK_COUNT = {calendar_clock_count};",
+            "  localparam int CALENDAR_CLOCK_STORAGE =",
+            "      CALENDAR_CLOCK_COUNT > 0 ? CALENDAR_CLOCK_COUNT : 1;",
+            "  longint unsigned calendar_clock_half_period[0:CALENDAR_CLOCK_STORAGE-1];",
+            "  longint unsigned calendar_clock_next_edge[0:CALENDAR_CLOCK_STORAGE-1];",
+            "  bit calendar_clock_active[0:CALENDAR_CLOCK_STORAGE-1];",
+            "`endif",
             "  int status;",
             "  bit track_falling_edges;",
             "  bit clock_drivers_active;",
@@ -4070,6 +4105,11 @@ def render_sv(
             "  always @(phase_outputs_pending) begin",
             "    apply_outputs();",
             "  end",
+            "`ifdef CPPTB_SV_DPI_NBA_TIMING",
+            "  always @(phase_barrier_kick) begin",
+            "    phase_barrier_token <= ~phase_barrier_token;",
+            "  end",
+            "`endif",
             "",
             "  task automatic update_status(input int requests);",
             "    if (requests < 0) begin",
@@ -4112,10 +4152,72 @@ def render_sv(
             "    if ((requests >= 0) &&",
             "        ((requests & STEP_OUTPUTS_CHANGED) != 0)) begin",
             f"      {pull_outputs_function}(out_words);",
+            "`ifdef CPPTB_SV_DPI_TIMING",
+            "      apply_outputs();",
+            "`else",
             "      -> phase_outputs_pending;",
+            "`endif",
             "    end",
             "    update_status(requests);",
             "  endtask",
+            "",
+            "`ifdef CPPTB_SV_DPI_TIMING",
+            "  task automatic note_time_step();",
+            "    int requests;",
+            "    if ($time != last_started_time) begin",
+            "      last_started_time = $time;",
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+            "      if ((phase_requests & STEP_NEXT_TIME_STEP) != 0) begin",
+            "        phase_requests &= ~STEP_NEXT_TIME_STEP;",
+            "        run_phase_step(PHASE_NEXT_TIME_STEP, requests);",
+            "        service_requests(requests);",
+            "      end",
+            "`else",
+            "      -> time_step_started;",
+            "`endif",
+            "    end",
+            "  endtask",
+            "",
+            "  task automatic phase_settle_barrier();",
+            "`ifdef CPPTB_SV_DPI_NBA_TIMING",
+            "    -> phase_barrier_kick;",
+            "    @(phase_barrier_token);",
+            "`endif",
+            "  endtask",
+            "",
+            "`ifndef CPPTB_SV_DPI_CALENDAR_TIMING",
+            "  task automatic phase_pump();",
+            "    int requests;",
+            "    time requested_time;",
+            "    while (status == 0) begin",
+            "      if ((phase_requests & STEP_PHASE_MASK) == 0) begin",
+            "        @(phase_kick);",
+            "      end",
+            "      if ((phase_requests & STEP_READ_WRITE) != 0) begin",
+            "        phase_requests &= ~STEP_READ_WRITE;",
+            "        phase_settle_barrier();",
+            "        run_phase_step(PHASE_READ_WRITE, requests);",
+            "        service_requests(requests);",
+            "      end",
+            "      if ((phase_requests & STEP_READ_ONLY) != 0) begin",
+            "        phase_requests &= ~STEP_READ_ONLY;",
+            "        phase_settle_barrier();",
+            "        run_phase_step(PHASE_READ_ONLY, requests);",
+            "        service_requests(requests);",
+            "      end",
+            "      if ((phase_requests & STEP_NEXT_TIME_STEP) != 0) begin",
+            "        phase_requests &= ~STEP_NEXT_TIME_STEP;",
+            "        requested_time = $time;",
+            "        while (last_started_time <= requested_time) begin",
+            "          @(time_step_started);",
+            "        end",
+            "        run_phase_step(PHASE_NEXT_TIME_STEP, requests);",
+            "        service_requests(requests);",
+            "      end",
+            "    end",
+            "  endtask",
+            "`endif",
+            "`endif",
             "",
             "  task automatic timer_wakeup(",
             "      input longint unsigned deadline,",
@@ -4125,9 +4227,15 @@ def render_sv(
             "    if (deadline > $time) begin",
             "      #(deadline - $time);",
             "    end",
+            "`ifdef CPPTB_SV_DPI_TIMING",
+            "    note_time_step();",
+            "`endif",
             "    if ((status == 0) && (generation == timer_generation)) begin",
             "      run_step(PHASE_DELAY, NO_SIGNAL, EDGE_RISING, requests);",
             "      service_requests(requests);",
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+            "      calendar_drain_phases();",
+            "`endif",
             "    end",
             "  endtask",
             "",
@@ -4159,6 +4267,9 @@ def render_sv(
             "        target = timer_deadline;",
             "        timer_owner_target = target;",
             "        #(target - $time);",
+            "`ifdef CPPTB_SV_DPI_TIMING",
+            "        note_time_step();",
+            "`endif",
             "        timer_owner_target = NO_TIMER;",
             "      end else begin",
             "        run_step(PHASE_DELAY, NO_SIGNAL, EDGE_RISING, requests);",
@@ -4213,7 +4324,190 @@ def render_sv(
             "    end else if ((requests & STEP_TIMER_CHANGED) != 0) begin",
             "      update_timer_schedule();",
             "    end",
+            "`ifdef CPPTB_SV_DPI_TIMING",
+            "    if ((requests & STEP_PHASE_MASK) != 0) begin",
+            "      phase_requests |= requests & STEP_PHASE_MASK;",
+            "`ifndef CPPTB_SV_DPI_CALENDAR_TIMING",
+            "      -> phase_kick;",
+            "`endif",
+            "    end",
+            "`endif",
             "  endtask",
+            "",
+        ]
+    )
+
+    lines.extend(
+        [
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+            "  task automatic calendar_initialize();",
+            "    for (int i = 0; i < CALENDAR_CLOCK_STORAGE; i++) begin",
+            "      calendar_clock_active[i] = 1'b0;",
+            "      calendar_clock_half_period[i] = 0;",
+            "      calendar_clock_next_edge[i] = NO_TIMER;",
+            "    end",
+        ]
+    )
+    for index, clock in enumerate(calendar_clocks):
+        half_period = clock.get("half_period", "1ns")
+        phase = clock.get("phase")
+        lines.extend(
+            [
+                f"    calendar_clock_active[{index}] = 1'b1;",
+                f"    calendar_clock_half_period[{index}] = {half_period};",
+            ]
+        )
+        if phase:
+            lines.append(
+                f"    calendar_clock_next_edge[{index}] = "
+                f"$time + time'({phase}) + calendar_clock_half_period[{index}];"
+            )
+        else:
+            lines.append(
+                f"    calendar_clock_next_edge[{index}] = "
+                f"$time + calendar_clock_half_period[{index}];"
+            )
+    for dynamic_index, port in enumerate(calendar_dynamic_ports):
+        index = len(calendar_clocks) + dynamic_index
+        constant = sv_signal_constant(port)
+        lines.extend(
+            [
+                f"    calendar_clock_half_period[{index}] =",
+                f"        {clock_config_function}({constant}, 0);",
+                f"    calendar_clock_active[{index}] =",
+                f"        calendar_clock_half_period[{index}] != 0;",
+                f"    calendar_clock_next_edge[{index}] = $time +",
+                f"        {clock_config_function}({constant}, 1) +",
+                f"        calendar_clock_half_period[{index}];",
+            ]
+        )
+    lines.extend(
+        [
+            "  endtask",
+            "",
+            "  task automatic calendar_drain_phases();",
+            "    int requests;",
+            "    while ((status == 0) &&",
+            "           ((phase_requests & (STEP_READ_WRITE | STEP_READ_ONLY)) != 0)) begin",
+            "      if ((phase_requests & STEP_READ_WRITE) != 0) begin",
+            "        phase_requests &= ~STEP_READ_WRITE;",
+            "        phase_settle_barrier();",
+            "        run_phase_step(PHASE_READ_WRITE, requests);",
+            "        service_requests(requests);",
+            "      end else begin",
+            "        phase_requests &= ~STEP_READ_ONLY;",
+            "        phase_settle_barrier();",
+            "        run_phase_step(PHASE_READ_ONLY, requests);",
+            "        service_requests(requests);",
+            "      end",
+            "    end",
+            "  endtask",
+            "",
+            "  task automatic calendar_next_target(",
+            "      output longint unsigned target",
+            "  );",
+            "    target = timer_deadline;",
+            "    for (int i = 0; i < CALENDAR_CLOCK_COUNT; i++) begin",
+            "      if (calendar_clock_active[i] &&",
+            "          (calendar_clock_next_edge[i] < target)) begin",
+            "        target = calendar_clock_next_edge[i];",
+            "      end",
+            "    end",
+            "  endtask",
+            "",
+            "  task automatic calendar_drive_due_clocks();",
+            "    int requests;",
+            "    int event_edge;",
+        ]
+    )
+    for index, clock in enumerate(calendar_clocks):
+        clock_name = clock["port"]
+        port = next(port for port in ports if port.name == clock_name)
+        constant = sv_signal_constant(port)
+        lines.extend(
+            [
+                f"    if (calendar_clock_active[{index}] &&",
+                f"        (calendar_clock_next_edge[{index}] <= $time)) begin",
+                f"      {clock_name} = ~{clock_name};",
+                f"      calendar_clock_next_edge[{index}] +=",
+                f"          calendar_clock_half_period[{index}];",
+                f"      event_edge = {clock_name} ? EDGE_RISING : EDGE_FALLING;",
+            ]
+        )
+        if primary_clock is not None and clock_name == primary_clock["port"]:
+            lines.extend(
+                [
+                    "      if (event_edge == EDGE_RISING) begin",
+                    "        sim_cycles++;",
+                    "      end",
+                ]
+            )
+        lines.extend(
+            [
+                "      if ((event_edge == EDGE_RISING) ||",
+                "          track_falling_edges) begin",
+                f"        run_step(PHASE_EDGE, {constant}, event_edge, requests);",
+                "        service_requests(requests);",
+                "      end",
+                "    end",
+            ]
+        )
+    for dynamic_index, port in enumerate(calendar_dynamic_ports):
+        index = len(calendar_clocks) + dynamic_index
+        constant = sv_signal_constant(port)
+        lines.extend(
+            [
+                f"    if (calendar_clock_active[{index}] &&",
+                f"        (calendar_clock_next_edge[{index}] <= $time)) begin",
+                f"      {port.name} = ~{port.name};",
+                f"      calendar_clock_next_edge[{index}] +=",
+                f"          calendar_clock_half_period[{index}];",
+                f"      event_edge = {port.name} ? EDGE_RISING : EDGE_FALLING;",
+                f"      if (primary_clock[{constant}] &&",
+                "          (event_edge == EDGE_RISING)) begin",
+                "        sim_cycles++;",
+                "      end",
+                "      if ((event_edge == EDGE_RISING) ||",
+                "          track_falling_edges) begin",
+                f"        run_step(PHASE_EDGE, {constant}, event_edge, requests);",
+                "        service_requests(requests);",
+                "      end",
+                "    end",
+            ]
+        )
+    lines.extend(
+        [
+            "  endtask",
+            "",
+            "  task automatic calendar_owner();",
+            "    int requests;",
+            "    longint unsigned target;",
+            "    calendar_drain_phases();",
+            "    while (status == 0) begin",
+            "      calendar_next_target(target);",
+            "      if (target == NO_TIMER) begin",
+            "        timer_owner_target = NO_TIMER;",
+            "        @(timer_kick);",
+            "      end else begin",
+            "        timer_owner_target = target;",
+            "        if (target > $time) begin",
+            "          #(target - $time);",
+            "        end",
+            "        timer_owner_target = NO_TIMER;",
+            "        if (status == 0) begin",
+            "          note_time_step();",
+            "          if ((timer_deadline != NO_TIMER) &&",
+            "              (timer_deadline <= $time)) begin",
+            "            run_step(PHASE_DELAY, NO_SIGNAL, EDGE_RISING, requests);",
+            "            service_requests(requests);",
+            "          end",
+            "          calendar_drive_due_clocks();",
+            "          calendar_drain_phases();",
+            "        end",
+            "      end",
+            "    end",
+            "  endtask",
+            "`endif",
             "",
         ]
     )
@@ -4261,6 +4555,9 @@ def render_sv(
                     "        #(next_edge - $realtime);",
                     "      end",
                     "      if (status == 0) begin",
+                    "`ifdef CPPTB_SV_DPI_TIMING",
+                    "        note_time_step();",
+                    "`endif",
                     f"        {clock_name} = ~{clock_name};",
                     f"        next_edge = next_edge + {clock.get('half_period', '1ns')};",
                     f"        event_edge = {clock_name} ? EDGE_RISING : EDGE_FALLING;",
@@ -4297,6 +4594,9 @@ def render_sv(
                 "    int event_edge;",
                 "    while (status == 0) begin",
                 f"      @({clock_name});",
+                "`ifdef CPPTB_SV_DPI_TIMING",
+                "      note_time_step();",
+                "`endif",
                 f"      event_edge = {clock_name} ? EDGE_RISING : EDGE_FALLING;",
             ]
         )
@@ -4315,6 +4615,9 @@ def render_sv(
                 f"          run_step(PHASE_EDGE, {sv_signal_constant(next(port for port in ports if port.name == clock_name))},",
                 "                   event_edge, requests);",
                 "          service_requests(requests);",
+                "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+                "          calendar_drain_phases();",
+                "`endif",
                 "        end",
                 "      end",
                 "    end",
@@ -4342,6 +4645,9 @@ def render_sv(
                     "      while (status == 0) begin",
                     "        #(half_period);",
                     "        if (status == 0) begin",
+                    "`ifdef CPPTB_SV_DPI_TIMING",
+                    "          note_time_step();",
+                    "`endif",
                     f"          {port.name} = ~{port.name};",
                     f"          event_edge = {port.name} ? EDGE_RISING : EDGE_FALLING;",
                     f"          if (primary_clock[{constant}] &&",
@@ -4370,6 +4676,9 @@ def render_sv(
                 "    int event_edge;",
                 "    while (status == 0) begin",
                 f"      @({port.name});",
+                "`ifdef CPPTB_SV_DPI_TIMING",
+                "      note_time_step();",
+                "`endif",
                 "      if (status == 0) begin",
                 f"        event_edge = {port.name} ? EDGE_RISING : EDGE_FALLING;",
                 "        if (",
@@ -4377,6 +4686,9 @@ def render_sv(
                 f"            ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0))) begin",
                 f"          run_step(PHASE_EDGE, {constant}, event_edge, requests);",
                 "          service_requests(requests);",
+                "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+                "          calendar_drain_phases();",
+                "`endif",
                 "        end",
                 "      end",
                 "    end",
@@ -4395,6 +4707,9 @@ def render_sv(
                 "    int event_edge;",
                 "    while (status == 0) begin",
                 f"      @({target});",
+                "`ifdef CPPTB_SV_DPI_TIMING",
+                "      note_time_step();",
+                "`endif",
                 "      if (status == 0) begin",
                 f"        event_edge = {target} ? EDGE_RISING : EDGE_FALLING;",
                 "        if (",
@@ -4402,6 +4717,9 @@ def render_sv(
                 f"            ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0))) begin",
                 f"          run_step(PHASE_EDGE, {constant}, event_edge, requests);",
                 "          service_requests(requests);",
+                "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+                "          calendar_drain_phases();",
+                "`endif",
                 "        end",
                 "      end",
                 "    end",
@@ -4434,6 +4752,11 @@ def render_sv(
             "    status = 0;",
             "    track_falling_edges = 1'b0;",
             "    clock_drivers_active = 1'b0;",
+            "`ifdef CPPTB_SV_DPI_TIMING",
+            "    phase_requests = 0;",
+            "    phase_barrier_token = 1'b0;",
+            "    last_started_time = $time;",
+            "`endif",
         ]
     )
     if iteration_plusarg is not None:
@@ -4475,6 +4798,9 @@ def render_sv(
             )
     lines.extend(
         [
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+            "    calendar_initialize();",
+            "`endif",
             "    run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);",
             "    service_requests(initial_requests);",
             "    clock_drivers_active = 1'b1;",
@@ -4484,17 +4810,25 @@ def render_sv(
         [
             "    if (status == 0) begin",
             "      fork",
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+            "        calendar_owner();",
+            "`else",
             "        timer_owner();",
+            "`ifdef CPPTB_SV_DPI_TIMING",
+            "        phase_pump();",
+            "`endif",
         ]
     )
     for index, clock in enumerate(clocks):
         if clock_source(clock) in {"generated", "registered"}:
             lines.append(f"        drive_clock_{index}();")
-        else:
-            lines.append(f"        observe_clock_{index}();")
     if dynamic_clocks:
         for index, _ in enumerate(dynamic_clock_ports):
             lines.append(f"        drive_registered_clock_{index}();")
+    lines.append("`endif")
+    for index, clock in enumerate(clocks):
+        if clock_source(clock) not in {"generated", "registered"}:
+            lines.append(f"        observe_clock_{index}();")
     for index, _ in enumerate(edge_observers):
         lines.append(f"        observe_signal_{index}();")
     for index, _ in enumerate(hierarchy_edge_paths_selected):

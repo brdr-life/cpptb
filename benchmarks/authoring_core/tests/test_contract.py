@@ -9,6 +9,7 @@ REPO = BENCH_DIR.parents[1]
 sys.path.insert(0, str(BENCH_DIR))
 
 import run_benchmark as runner  # noqa: E402
+import run_timing_backend_experiments as timing_experiments  # noqa: E402
 import workload  # noqa: E402
 
 
@@ -30,6 +31,24 @@ def result_line(kernel="control", iterations=1, **overrides):
 
 
 class ContractTests(unittest.TestCase):
+    def test_timing_backend_experiment_matrix_is_complete(self):
+        self.assertEqual(
+            tuple(timing_experiments.BACKENDS),
+            (
+                "direct",
+                "portable-vpi",
+                "sv-dpi-inline",
+                "sv-dpi-nba",
+                "sv-dpi-calendar",
+            ),
+        )
+
+        makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("authoring-core-timing-experiments-build:", makefile)
+        self.assertIn("-DCPPTB_SV_DPI_TIMING", makefile)
+        self.assertIn("-DCPPTB_SV_DPI_NBA_TIMING", makefile)
+        self.assertIn("-DCPPTB_SV_DPI_CALENDAR_TIMING", makefile)
+
     def test_makefile_builds_every_authoring_kernel(self):
         makefile = (REPO / "Makefile").read_text(encoding="utf-8")
         kernel_line = next(
@@ -100,11 +119,11 @@ class ContractTests(unittest.TestCase):
         self.assertIn("AUTHORING_CORE_OPT_FAST ?= -O3", makefile)
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)"'),
-            2,
+            3,
         )
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)"'),
-            1,
+            2,
         )
 
     def test_boundary_counts_one_iteration(self):

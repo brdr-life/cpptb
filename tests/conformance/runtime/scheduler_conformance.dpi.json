@@ -181,8 +181,8 @@
       {
         "case": "timing_phases",
         "expected_iterations": 1,
-        "expected_checks": 6,
-        "expected_sim_cycles": 1,
+        "expected_checks": 17,
+        "expected_sim_cycles": 2,
         "expected_failures": 0
       }
     ],

@@ -55,6 +55,8 @@ CPPTB_REGISTER_TEST(count_sequence);
 
 The current implementation supports concurrent processes, edge and delay
 triggers, typed tasks, timeouts, events, channels, wide packed and fixed-point
-values, multidimensional arrays, and source-inferred hierarchical access. Verilator is
-the end-to-end reference simulator; broader standards-compliant simulator
-portability remains active work in the [roadmap](roadmap.md).
+values, multidimensional arrays, and source-inferred hierarchical access.
+Verilator is the end-to-end reference simulator. Direct Verilator timing
+dispatch and the standard VPI fallback implement the complete scheduling
+contract; the faster generated SV-DPI calendar remains experimental. Broader
+simulator portability remains active work in the [roadmap](roadmap.md).
