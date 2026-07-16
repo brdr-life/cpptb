@@ -8,7 +8,7 @@ twin with the same stimulus, checks, and primary-clock cycle count.
 |---|---|---|
 | [`counter`](counter/) | C++-owned clock, explicit reset, `get()`/`set()`, edge waits, and post-edge sampling | `make cpp-dpi-counter-run` |
 | [`timer_only`](timer_only/) | Clockless `Delay` scheduling and concurrent timer processes | `make cpp-dpi-timer-only-run` |
-| [`fifo_scoreboard`](fifo_scoreboard/) | Ready/valid traffic, `Event`, `Channel`, driver, monitor, scoreboard, and `Join` | `make cpp-dpi-fifo-scoreboard-run` |
+| [`fifo_scoreboard`](fifo_scoreboard/) | Ready/valid traffic, `Event`, `Queue`, driver, monitor, scoreboard, and `Join` | `make cpp-dpi-fifo-scoreboard-run` |
 | [`multiclock`](multiclock/) | Independent input clocks, a DUT output clock, producer/consumer traffic, and `First` | `make cpp-dpi-multiclock-run` |
 | [`apb_regfile`](apb_regfile/) | Reusable protocol transactions and typed `Task<uint32_t>` results | `make cpp-dpi-apb-regfile-run` |
 | [`watchdog_timeout`](watchdog_timeout/) | Trigger/task timeouts, expected stalls, process handles, and cancellation | `make cpp-dpi-watchdog-timeout-run` |
@@ -44,20 +44,22 @@ example/
 ├── README.md
 ├── design.sv
 ├── testbench.cpp
-├── generated/
 └── systemverilog/
 ```
 
-`testbench.cpp` is the user-facing file. It accepts the target-specific
-generated `Dut` and library-owned `TestContext&`, then uses
-`CPPTB_REGISTER_TEST` once. The generator owns everything under `generated/`,
-including the DPI transport. The `systemverilog/` testbench executes the same
-fixed semantic workload for exact comparison.
+`testbench.cpp` is the user-facing file. It includes the stable generated
+`dut.hpp`, accepts `cpptb::Dut` and library-owned `TestContext&`, then uses
+`CPPTB_REGISTER_TEST` for each root test. Generated bindings and all compiler
+output live under `build/cpptb/<example>/`; the source directories remain
+author-owned. The `systemverilog/` testbench is repository validation material
+that executes the same fixed semantic workload for exact comparison. Users do
+not need it in their own projects.
 
-The Makefile invokes `cpptb-codegen` directly on each RTL source. Clock roles,
-periods, and phases live in `testbench.cpp`: initialize an input clock, then
-call `test.start_clock(...)` before the first await. DUT-produced clocks are
-ordinary observed signals.
+The root Makefile targets are developer aliases over `cpptb build` and
+`cpptb test`; generation, discovery, and Verilator compilation live inside the
+CLI. Clock roles, periods, and phases remain in `testbench.cpp`: initialize an
+input clock, then call `test.start_clock(...)` before the first await.
+DUT-produced clocks are ordinary observed signals.
 
 The examples use the same broad verification patterns documented by cocotb:
 typed DUT access, coroutines that yield on simulator events, concurrent tasks,

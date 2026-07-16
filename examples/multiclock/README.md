@@ -18,10 +18,10 @@ reports one module-specific `CPP_DPI_*_RESULT` marker and the pure-SV peer
 reports `PURE_SV_MULTICLOCK_RESULT`; both report `iterations=1` because this is
 an equivalence example, not a scalable benchmark.
 
-Its source-first generation command needs no timing metadata:
+Its project build needs no timing configuration:
 
 ```sh
-uv run --frozen cpptb-codegen dual_clock_mailbox.sv
+uv run --frozen cpptb build
 ```
 
 The C++ testbench owns the clocks:

@@ -51,7 +51,7 @@ html_baseurl = os.environ.get("SPHINX_HTML_BASE_URL", "")
 html_static_path = [
     os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../docs/_assets"))
 ]
-html_css_files = ["code-tabs.css"]
+html_css_files = ["code-tabs.css", "roadmap-status.css"]
 html_js_files = ["code-tabs.js"]
 html_theme_options = {
     "navigation_with_keys": True,
@@ -65,15 +65,53 @@ linkcheck_workers = 5
 linkcheck_rate_limit_timeout = 60
 linkcheck_report_timeouts_as_broken = True
 
-_TOCTREE = """
+_ROOT_TOCTREE = """
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Start here
+
+getting-started
+```
+
 ```{toctree}
 :hidden:
 :maxdepth: 2
+:caption: Guides
 
-getting-started
 testbench-authoring
+test-lifecycle
+running-tests
 hierarchy
 examples
+clocking
+scheduling
+code-generation
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Internals
+
+architecture
+performance
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Project
+
+roadmap
+```
+"""
+
+_EXAMPLES_TOCTREE = """
+```{toctree}
+:hidden:
+:maxdepth: 1
+
 examples/counter
 examples/timer-only
 examples/fifo-scoreboard
@@ -84,22 +122,22 @@ examples/fault-injection
 examples/rich-data
 examples/heavy-benchmarks
 examples/open-source-cores
-clocking
-scheduling
-code-generation
-architecture
-performance
-roadmap
 ```
 """
+
+_NAVIGATION_TOCTREES = {
+    "index": _ROOT_TOCTREE,
+    "examples": _EXAMPLES_TOCTREE,
+}
 
 
 def _inject_navigation(app, docname, source):
     """Keep the Sphinx toctree out of the generator-neutral Markdown source."""
-    if docname == root_doc:
-        source[0] += app.config.cpptb_navigation_toctree
+    toctree = app.config.cpptb_navigation_toctrees.get(docname)
+    if toctree:
+        source[0] += toctree
 
 
 def setup(app):
-    app.add_config_value("cpptb_navigation_toctree", _TOCTREE, "env")
+    app.add_config_value("cpptb_navigation_toctrees", _NAVIGATION_TOCTREES, "env")
     app.connect("source-read", _inject_navigation)

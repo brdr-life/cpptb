@@ -13,7 +13,8 @@ KERNELS = (
     "task_timeout",
     "wait_until",
     "event",
-    "channel",
+    "queue",
+    "queue_sync",
     "all",
     "wide64",
     "wide_echo_137",
@@ -34,6 +35,11 @@ KERNELS = (
     "force_direct",
     "hier_data",
     "timing_phases",
+    "test_lifecycle",
+    "dynamic_spawn",
+    "dynamic_task",
+    "dynamic_spawn_scheduler",
+    "dynamic_spawn_suspending",
 )
 
 FEATURE_FIELDS = (
@@ -46,8 +52,12 @@ FEATURE_FIELDS = (
     "wait_until",
     "event_set",
     "event_wait",
-    "channel_send",
-    "channel_receive",
+    "queue_send",
+    "queue_receive",
+    "queue_put",
+    "queue_get",
+    "lock_acquire",
+    "semaphore_acquire",
     "wide64",
     "wide_echo_137",
     "wide_slice",
@@ -68,6 +78,8 @@ FEATURE_FIELDS = (
     "hier_data_reads",
     "hier_data_deposits",
     "timing_phases",
+    "test_lifecycle",
+    "dynamic_spawn",
 )
 
 RESULT_FIELDS = (
@@ -97,8 +109,12 @@ class ExpectedCounts:
     wait_until: int = 0
     event_set: int = 0
     event_wait: int = 0
-    channel_send: int = 0
-    channel_receive: int = 0
+    queue_send: int = 0
+    queue_receive: int = 0
+    queue_put: int = 0
+    queue_get: int = 0
+    lock_acquire: int = 0
+    semaphore_acquire: int = 0
     wide64: int = 0
     wide_echo_137: int = 0
     wide_slice: int = 0
@@ -119,6 +135,8 @@ class ExpectedCounts:
     hier_data_reads: int = 0
     hier_data_deposits: int = 0
     timing_phases: int = 0
+    test_lifecycle: int = 0
+    dynamic_spawn: int = 0
 
     def fields(self) -> dict[str, int]:
         return asdict(self)
@@ -158,9 +176,16 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
     if event_set:
         feature_checks += iterations
 
-    channel_send = iterations if enabled or kernel == "channel" else 0
-    channel_receive = channel_send
-    if channel_send:
+    queue_send = iterations if enabled or kernel == "queue" else 0
+    queue_receive = queue_send
+    if queue_send:
+        feature_checks += iterations
+
+    queue_put = iterations if kernel == "queue_sync" else 0
+    queue_get = queue_put
+    lock_acquire = queue_put
+    semaphore_acquire = queue_put
+    if queue_put:
         feature_checks += iterations
 
     wide64 = iterations if enabled or kernel == "wide64" else 0
@@ -261,6 +286,27 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             timing_phases=iterations,
         )
 
+    if kernel == "test_lifecycle":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=3 * iterations,
+            test_lifecycle=iterations,
+        )
+
+    if kernel in (
+        "dynamic_spawn",
+        "dynamic_task",
+        "dynamic_spawn_scheduler",
+        "dynamic_spawn_suspending",
+    ):
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=iterations,
+            dynamic_spawn=iterations,
+        )
+
     return ExpectedCounts(
         iterations=iterations,
         transactions=iterations,
@@ -274,8 +320,12 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
         wait_until=wait_until,
         event_set=event_set,
         event_wait=event_wait,
-        channel_send=channel_send,
-        channel_receive=channel_receive,
+        queue_send=queue_send,
+        queue_receive=queue_receive,
+        queue_put=queue_put,
+        queue_get=queue_get,
+        lock_acquire=lock_acquire,
+        semaphore_acquire=semaphore_acquire,
         wide64=wide64,
         wide_echo_137=wide_echo_137,
         wide_slice=wide_slice,
@@ -310,7 +360,15 @@ def response(iteration: int) -> int:
 def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
     if iterations <= 0:
         raise ValueError("iterations must be greater than zero")
-    if kernel in ("force_direct", "timing_phases"):
+    if kernel in (
+        "force_direct",
+        "timing_phases",
+        "test_lifecycle",
+        "dynamic_spawn",
+        "dynamic_task",
+        "dynamic_spawn_scheduler",
+        "dynamic_spawn_suspending",
+    ):
         return 0x811C9DC5
     checksum = 0x811C9DC5
     for iteration in range(iterations):

@@ -7,7 +7,9 @@ dependencies = [
 ]
 
 [project.scripts]
+cpptb = "cpptb_codegen.cli:main"
 cpptb-codegen = "cpptb_codegen.generate_dpi_bindings:main"
+cpptb-run = "cpptb_codegen.runner:main"
 
 [build-system]
 requires = ["setuptools>=69"]
@@ -19,6 +21,9 @@ package-dir = {"" = "tools/codegen"}
 [tool.setuptools.packages.find]
 where = ["tools/codegen"]
 include = ["cpptb_codegen*"]
+
+[tool.setuptools.data-files]
+"include/cpptb" = ["include/cpptb/*.hpp"]
 
 [dependency-groups]
 docs = [

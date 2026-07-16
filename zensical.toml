@@ -3,13 +3,19 @@ site_name = "cpptb"
 site_description = "A C++20 coroutine testbench framework for SystemVerilog simulators."
 docs_dir = "docs"
 site_dir = "build/docs/zensical"
-extra_css = ["_zensical/extra.css", "_assets/code-tabs.css"]
+extra_css = [
+  "_zensical/extra.css",
+  "_assets/code-tabs.css",
+  "_assets/roadmap-status.css",
+]
 extra_javascript = ["_assets/code-tabs.js"]
 nav = [
   { "Home" = "index.md" },
   { "Getting started" = "getting-started.md" },
   { "Guides" = [
     { "Testbench authoring" = "testbench-authoring.md" },
+    { "Framework test lifecycle" = "test-lifecycle.md" },
+    { "Running tests" = "running-tests.md" },
     { "Hierarchical DUT access" = "hierarchy.md" },
     { "Examples" = [
       { "Overview" = "examples.md" },

@@ -164,6 +164,8 @@ class MulticlockTests(unittest.TestCase):
             "FIFO_SCOREBOARD": (1, 27, 44),
             "APB_REGFILE": (1, 41, 80),
             "WATCHDOG_TIMEOUT": (1, 20, 44),
+            "FAULT_INJECTION": (1, 13, 7),
+            "RICH_DATA": (1, 17, 0),
         }
         for marker, (iterations, checks, sim_cycles) in examples.items():
             with self.subTest(marker=marker):
@@ -223,9 +225,9 @@ class RegistryTests(unittest.TestCase):
 
     def test_semantic_check_runs_only_selected_entry(self) -> None:
         runner = SerialRunner()
-        result = regression.run_semantic_check(feature("channel"), command_runner=runner)
+        result = regression.run_semantic_check(feature("queue"), command_runner=runner)
         self.assertEqual(result["status"], "passed")
-        self.assertEqual(runner.calls, [("semantic", "channel")])
+        self.assertEqual(runner.calls, [("semantic", "queue")])
 
     def test_registry_authoring_selection_passes_one_example(self) -> None:
         from benchmarks import registry

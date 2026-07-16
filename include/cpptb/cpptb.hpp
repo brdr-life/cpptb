@@ -1,5 +1,6 @@
 #pragma once
 
+#include "cpptb/diagnostic.hpp"
 #include "cpptb/coro_runtime.hpp"
 #include "cpptb/clock_discovery.hpp"
 #include "cpptb/dpi_runtime.hpp"
@@ -10,4 +11,5 @@
 #include "cpptb/packed_bits.hpp"
 #include "cpptb/probe.hpp"
 #include "cpptb/test_api.hpp"
+#include "cpptb/test_reporting.hpp"
 #include "cpptb/test_result.hpp"

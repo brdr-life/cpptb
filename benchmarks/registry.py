@@ -89,7 +89,7 @@ _AUTHORING_TEMPLATE_IDS = {
     "task_timeout": 8,
     "wait_until": 4,
     "event": 5,
-    "channel": 6,
+    "queue": 6,
     "all": 7,
     "wide64": 9,
     "wide_echo_137": 10,
@@ -110,6 +110,12 @@ _AUTHORING_TEMPLATE_IDS = {
     "force_direct": 25,
     "hier_data": 26,
     "timing_phases": 27,
+    "queue_sync": 28,
+    "test_lifecycle": 29,
+    "dynamic_spawn": 30,
+    "dynamic_task": 31,
+    "dynamic_spawn_scheduler": 32,
+    "dynamic_spawn_suspending": 33,
 }
 
 
@@ -117,6 +123,7 @@ def _authoring(
     name: str,
     label: str,
     *,
+    default_iterations: int = 100_000,
     gate_policy: GatePolicy = GatePolicy.HARD_1_10,
     waiver: PerformanceWaiver | None = None,
 ) -> Benchmark:
@@ -155,7 +162,7 @@ def _authoring(
             iterations_environment="AUTHORING_CORE_ITERS",
             kernel_argument="--example",
         ),
-        default_iterations=100_000,
+        default_iterations=default_iterations,
         gate_policy=gate_policy,
         template_id=_AUTHORING_TEMPLATE_IDS[name],
         waiver=waiver,
@@ -170,7 +177,8 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring("task_timeout", "Task timeout"),
     _authoring("wait_until", "Wait until"),
     _authoring("event", "Event"),
-    _authoring("channel", "Channel"),
+    _authoring("queue", "Queue"),
+    _authoring("queue_sync", "Bounded queue and synchronization"),
     _authoring("all", "All authoring features"),
     _authoring("wide64", "64-bit packed signal"),
     _authoring("wide_echo_137", "137-bit packed signal"),
@@ -208,6 +216,29 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     ),
     _authoring("hier_data", "Wide and four-state hierarchy data"),
     _authoring("timing_phases", "Simulator timing phases"),
+    _authoring(
+        "test_lifecycle", "Test lifecycle checks", default_iterations=5_000_000
+    ),
+    _authoring(
+        "dynamic_spawn",
+        "Repeated dynamic process creation",
+        default_iterations=5_000_000,
+    ),
+    _authoring(
+        "dynamic_task",
+        "Repeated direct task composition",
+        default_iterations=5_000_000,
+    ),
+    _authoring(
+        "dynamic_spawn_scheduler",
+        "Repeated low-level scheduler process creation",
+        default_iterations=5_000_000,
+    ),
+    _authoring(
+        "dynamic_spawn_suspending",
+        "Repeated suspending process creation",
+        default_iterations=5_000_000,
+    ),
     Benchmark(
         name="dpi_counter",
         label="DPI counter",
@@ -215,8 +246,8 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         adapter_kind=AdapterKind.DPI_COUNTER,
         build_targets=("cpp-dpi-counter-build", "cpp-dpi-counter-sv-build"),
         binaries=(
-            Binary("cpp_dpi", "build/cpptb/dpi_counter_obj/Vdpi_counter"),
-            Binary("pure_sv", "build/cpptb/dpi_counter_sv_obj/Vcounter_sv_tb"),
+            Binary("cpp_dpi", "build/cpptb/counter/obj/Vdpi_counter"),
+            Binary("pure_sv", "build/cpptb/counter/systemverilog_obj/Vcounter_sv_tb"),
         ),
         runner=Runner(
             commands=(
@@ -234,10 +265,10 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         adapter_kind=AdapterKind.DPI_MULTICLOCK,
         build_targets=("cpp-dpi-multiclock-build", "cpp-dpi-multiclock-sv-build"),
         binaries=(
-            Binary("cpp_dpi", "build/cpptb/dpi_multiclock_obj/Vdpi_dual_clock_mailbox"),
+            Binary("cpp_dpi", "build/cpptb/multiclock/obj/Vdpi_dual_clock_mailbox"),
             Binary(
                 "pure_sv",
-                "build/cpptb/dpi_multiclock_sv_obj/Vdual_clock_mailbox_sv_tb",
+                "build/cpptb/multiclock/systemverilog_obj/Vdual_clock_mailbox_sv_tb",
             ),
         ),
         runner=Runner(
@@ -261,11 +292,11 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         binaries=(
             Binary(
                 "cpp_dpi",
-                "build/cpptb/dpi_timer_only_obj/Vdpi_timer_only_probe",
+                "build/cpptb/timer_only/obj/Vdpi_timer_only_probe",
             ),
             Binary(
                 "pure_sv",
-                "build/cpptb/dpi_timer_only_sv_obj/Vtimer_only_probe_sv_tb",
+                "build/cpptb/timer_only/systemverilog_obj/Vtimer_only_probe_sv_tb",
             ),
         ),
         runner=Runner(
@@ -289,11 +320,11 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         binaries=(
             Binary(
                 "cpp_dpi",
-                "build/cpptb/dpi_fifo_scoreboard_obj/Vdpi_stream_fifo",
+                "build/cpptb/fifo_scoreboard/obj/Vdpi_stream_fifo",
             ),
             Binary(
                 "pure_sv",
-                "build/cpptb/dpi_fifo_scoreboard_sv_obj/Vstream_fifo_sv_tb",
+                "build/cpptb/fifo_scoreboard/systemverilog_obj/Vstream_fifo_sv_tb",
             ),
         ),
         runner=Runner(
@@ -317,11 +348,11 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         binaries=(
             Binary(
                 "cpp_dpi",
-                "build/cpptb/dpi_apb_regfile_obj/Vdpi_apb_regfile",
+                "build/cpptb/apb_regfile/obj/Vdpi_apb_regfile",
             ),
             Binary(
                 "pure_sv",
-                "build/cpptb/dpi_apb_regfile_sv_obj/Vapb_regfile_sv_tb",
+                "build/cpptb/apb_regfile/systemverilog_obj/Vapb_regfile_sv_tb",
             ),
         ),
         runner=Runner(
@@ -345,11 +376,11 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         binaries=(
             Binary(
                 "cpp_dpi",
-                "build/cpptb/dpi_watchdog_timeout_obj/Vdpi_stalling_responder",
+                "build/cpptb/watchdog_timeout/obj/Vdpi_stalling_responder",
             ),
             Binary(
                 "pure_sv",
-                "build/cpptb/dpi_watchdog_timeout_sv_obj/Vstalling_responder_sv_tb",
+                "build/cpptb/watchdog_timeout/systemverilog_obj/Vstalling_responder_sv_tb",
             ),
         ),
         runner=Runner(
@@ -373,11 +404,11 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         binaries=(
             Binary(
                 "cpp_dpi",
-                "build/cpptb/dpi_fault_injection_obj/Vdpi_fault_injection",
+                "build/cpptb/fault_injection/obj/Vdpi_fault_injection",
             ),
             Binary(
                 "pure_sv",
-                "build/cpptb/dpi_fault_injection_sv_obj/Vfault_injection_sv_tb",
+                "build/cpptb/fault_injection/systemverilog_obj/Vfault_injection_sv_tb",
             ),
         ),
         runner=Runner(
@@ -399,10 +430,10 @@ BENCHMARKS: tuple[Benchmark, ...] = (
             "cpp-dpi-rich-data-sv-build",
         ),
         binaries=(
-            Binary("cpp_dpi", "build/cpptb/dpi_rich_data_obj/Vdpi_rich_data"),
+            Binary("cpp_dpi", "build/cpptb/rich_data/obj/Vdpi_rich_data"),
             Binary(
                 "pure_sv",
-                "build/cpptb/dpi_rich_data_sv_obj/Vrich_data_sv_tb",
+                "build/cpptb/rich_data/systemverilog_obj/Vrich_data_sv_tb",
             ),
         ),
         runner=Runner(

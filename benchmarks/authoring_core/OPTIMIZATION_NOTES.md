@@ -30,7 +30,7 @@ Matched 300,000-iteration experiments measured:
 The full serial feature regression on 2026-07-11 completed without a hard
 failure. Valid paired medians ranged from `0.6695x` to `1.0711x` relative to
 the matching pure-SV testbenches. Clock cycles (`1.0619x`), wait-until
-(`1.0517x`), and channel (`1.0399x`) were `passed_inconclusive` after 32 pairs:
+(`1.0517x`), and queue (`1.0399x`) were `passed_inconclusive` after 32 pairs:
 their medians passed, but environmental variance left the one-sided 95% upper
 median bounds above `1.10x`.
 
@@ -626,3 +626,108 @@ sources, and suppressing an edge also requires preserving exact clock
 readback in later read/write and read-only phases. The measured path already
 passes the hard guard, so that broader clock-shadow change is not justified
 without a dedicated clock-idle workload and conformance contract.
+
+## Repeated dynamic-spawn profile (2026-07-16)
+
+The exact `dynamic_spawn` pair creates and immediately awaits one independently
+owned process per iteration. Its pure-SV twin uses `fork ... join`. At
+5,000,000 iterations the initial valid paired result was `1.823x` C++ DPI over
+pure SV, exposing a regression that shorter startup-dominated runs had not
+made stable.
+
+The generated Verilator implementation explains the unusually large gap. The
+zero-time SV child has no timing control, so Verilator emits its check directly
+inside the parent loop and creates no child coroutine. The generic C++ path
+creates a coroutine frame, process control, scheduler state, provenance,
+cancellation ownership, and completion state because the child may suspend or
+fail and the returned handle remains observable.
+
+Five retained changes reduced the paired result to `1.439x`:
+
+1. An immediately awaited child starts directly when it is the only remaining
+   runnable process. Existing runnable work preserves FIFO order, a child that
+   suspends falls back to the ordinary scheduler, and work woken by the child
+   runs before its awaiting parent.
+2. Successful coroutines carry a null lazy exception state. The comparatively
+   expensive `std::exception_ptr` is allocated only after a throw, preserving
+   exception attribution and rethrow behavior without taxing passing checks.
+3. Empty completion-waiter and single finished-root cases bypass their generic
+   vector paths.
+4. Test lifecycle ownership uses scheduler-confined non-atomic references.
+   This reduced the paired result from `1.500x` to `1.460x` while preserving
+   detached-process lifetime and exception attribution.
+5. A live-ready counter replaces two ready-state scans in the inline-await
+   path. Initial confirmation runs measured `1.455x` and `1.450x`; the final
+   post-regression formal batch measured `1.439x`.
+
+The inline optimization is capped at 64 nested host resumptions. A 10,001-level
+regression proves deeper zero-time process trees fall back to the ordinary
+ready queue without overflowing the C++ stack or changing completion order.
+
+A process-global frame pool improved a 100,000,000-iteration screen by only
+about 3% and was rejected because independent schedulers on different OS
+threads would share unsynchronized storage. Intrusively unlinking lifecycle
+ownership at completion was about 1% slower and was also removed. Keeping
+pooled `ProcessControl` objects constructed and resetting them in place
+measured `1.486x` and `1.505x` on top of the ownership improvement, versus its
+`1.460x` reference, so that experiment was removed as well.
+
+All unit tests, the 275-check conformance suite, focused timing cases, and 14
+negative diagnostics pass. The ordinary `test_lifecycle` pair passes at
+`0.983x`, the direct-coroutine `task_value` pair at `0.831x`, and the complete
+authoring aggregate at `0.797x`. The remaining hard failure is therefore
+specific to repeatedly requesting an independently owned process for work that
+the SV compiler can prove is sequential. Direct `co_await` remains the fast
+path for sequential helper composition; `spawn()` remains the correct API for
+real concurrency, cancellation, and independent process attribution.
+
+## Exact process-cost decomposition (2026-07-16)
+
+The earlier `dynamic_spawn` profile mixed scheduler mechanics with test
+lifecycle ownership. Four exact C++/pure-SV pairs now isolate the layers at
+5,000,000 iterations:
+
+| Pair | C++ DPI | Pure SV | Ratio |
+| --- | ---: | ---: | ---: |
+| `dynamic_task` | 23.03 ns | 3.26 ns | `7.052x` |
+| `dynamic_spawn_scheduler` | 43.88 ns | 40.88 ns | `1.080x` |
+| `dynamic_spawn` | 49.88 ns | 41.39 ns | `1.199x` |
+| `dynamic_spawn_suspending` | 181.35 ns | 272.55 ns | `0.661x` |
+
+The low-level scheduler pair and lifecycle-tracked pair use the same passing
+`TestContext::expect_eq()` child body. The only C++ difference is independent
+test ownership and diagnostics. Their pure-SV twins both use the same
+one-child `fork ... join`. The suspending pair uses two processes connected by
+an event handshake in both languages. All four pairs match exact counters and
+checksums.
+
+The retained architecture removes the lifecycle-owned `Process` vector and
+its per-completion scan. The scheduler remains the source of truth for live
+process controls. A compact `ProcessProvenance` record carries test ownership
+and diagnostic source information, comes from an intrusive free list, and
+retains the test state until an exactly-once completion finalizer runs.
+Cancellation scans scheduler controls only on the cold finish/error path.
+
+Before that change, the normalized tracked pair measured 56.68 ns against
+41.57 ns pure SV (`1.365x`). The retained implementation measures 49.88 ns,
+a 12.0% C++ improvement. Its lifecycle layer is now about 6.00 ns over the
+43.88 ns core scheduler path. The total remaining delta from pure SV is about
+8.49 ns.
+
+The following experiments were removed after paired screens:
+
+| Experiment | Result |
+| --- | --- |
+| Force TLS `local-exec` | Core scheduler regressed to 48.95 ns (`1.192x`) |
+| Namespace `constinit thread_local` pool | Core scheduler regressed to 46.17 ns (`1.144x`) |
+| Execution context in every process control | Core scheduler regressed to 46.03 ns |
+| Split/pooled process-control sidecar | Core scheduler remained at 46.55 ns and tracked spawn at 52.49 ns |
+
+A lazy scheduler-adoption path was not implemented. The exact core pair proves
+that scheduler adoption is already within the `1.10x` guard, so bypassing it
+would add semantic complexity while targeting the wrong layer. Matching the
+compiler-inlined zero-time SV case would require either weakening lifecycle
+and attribution semantics or introducing a specialized sequential operation.
+Neither belongs in the general `TestContext::spawn()` contract. Real
+suspending concurrency already amortizes the fixed bookkeeping and is faster
+than the exact pure-SV twin in this benchmark.

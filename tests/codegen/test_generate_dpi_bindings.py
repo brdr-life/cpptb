@@ -22,6 +22,7 @@ from cpptb_codegen.generate_dpi_bindings import (
     build_tree,
     compare_designs,
     discover_ports,
+    generate_sources,
     map_ports,
     main as codegen_main,
     render_cpp_binding,
@@ -63,6 +64,28 @@ def manifest():
 
 
 class CodegenTests(unittest.TestCase):
+    def test_source_defaults_keep_generated_files_in_build_tree(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            source = base / "counter.sv"
+            source.write_text("module counter(input logic clk); endmodule\n")
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                paths = generate_sources([source], base_dir=base)
+
+            expected = (
+                base / "build" / "cpptb" / "counter" / "generated"
+            ).resolve()
+            self.assertTrue(paths)
+            self.assertTrue(all(path.parent == expected for path in paths))
+            self.assertTrue((expected / "counter_dut.hpp").is_file())
+            public_header = (expected / "dut.hpp").read_text()
+            self.assertIn('#include "counter_dut.hpp"', public_header)
+            self.assertIn(
+                "using Dut = ::cpptb::generated::counter::Dut;",
+                public_header,
+            )
+
     def test_access_plan_loads_and_deduplicates_port_edges(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = Path(temp_dir) / "access.json"
@@ -541,6 +564,9 @@ class CodegenTests(unittest.TestCase):
 
         self.assertIn("enum class StateT : std::int64_t", header)
         self.assertIn("Negative = -1", header)
+        self.assertIn("cpptb_diagnostic_name(StateT value)", header)
+        self.assertIn('return "NEGATIVE"', header)
+        self.assertIn('return "RUN"', header)
         self.assertIn("class StateTValue", header)
         self.assertIn("from_raw_bits(raw_type bits)", header)
         self.assertIn("class PacketTValue", header)

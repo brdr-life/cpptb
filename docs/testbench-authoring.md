@@ -12,6 +12,10 @@ make cpp-dpi-fifo-scoreboard-run
 make cpp-dpi-apb-regfile-run
 ```
 
+See [Running tests](running-tests.md) for the zero-config project command,
+multiple registered tests, selection, nonfatal and fatal checks, and structured
+results.
+
 The APB example keeps protocol timing in a reusable helper, leaving the test
 sequence register-oriented:
 
@@ -31,6 +35,8 @@ CPPTB_REGISTER_TEST(register_sequence);
 ```
 
 `CPPTB_REGISTER_TEST` installs the test through a translation-unit initializer.
+Register one or more root tests in the same binary; each simulator invocation
+selects and runs exactly one of them in fresh simulation state.
 Link the testbench translation unit directly into the simulator executable. If
 it is packaged in a static archive, link that archive with whole-archive
 semantics (or force-link the object) so the linker does not discard its
@@ -90,25 +96,104 @@ wakes all current waiters in FIFO registration order; later waits also finish
 immediately until `clear()` is called. Both `co_await event.wait()` and
 `co_await event` are supported, and `is_set()` reports the current state.
 
-`Channel<T>` is an unbounded FIFO for move-constructible values.
-`put_nowait(value)` enqueues immediately, `co_await put(value)` is the
-coroutine form, and `co_await get()` waits for and moves out the oldest value.
-Move-only payloads are supported. A capacity limit and producer backpressure
-are not implemented.
+`Queue<T>` is a FIFO for move-constructible values. Its optional constructor
+argument sets the maximum number of queued items; zero means unbounded.
 
-An `Event` or `Channel` must outlive its active waiters; destroying one with
-live waiters aborts with a diagnostic. Current waiters must belong to one
-scheduler, although the object may be reused with another scheduler after its
-wait queue is empty. Scheduler destruction and process cancellation invalidate
-their registrations, which are removed during cleanup.
-Unused `Event` and `Channel` objects do not register scheduler waits. This is a
+```cpp
+Queue<Packet> requests{8};
+
+co_await requests.put(std::move(packet));  // waits only while full
+Packet next = co_await requests.get();
+
+const bool accepted = requests.put_nowait(std::move(another_packet));
+std::optional<Packet> available = requests.get_nowait();
+```
+
+`put_nowait()` returns `false` when a bounded queue is full and does not move
+from its argument on that path. `get_nowait()` returns an empty `optional` when
+no unreserved item is available. `empty()`, `full()`, `size()`, and `maxsize()`
+report the current state. Blocking producers and consumers resume in FIFO
+registration order. Move-only payloads are supported by every operation.
+
+## When to use a queue
+
+Use a queue when one coroutine produces typed data that another coroutine must
+consume in FIFO order. Common examples are a sequence feeding a driver, a
+monitor feeding a scoreboard, or a reference model publishing expected
+transactions. A bounded queue is useful when the producer must not outrun the
+consumer indefinitely:
+
+```cpp
+Task<void> source(Queue<Packet>& packets) {
+    for (uint32_t index = 0; index < kPacketCount; ++index) {
+        co_await packets.put(make_packet(index));
+    }
+}
+
+Task<void> driver(Dut dut, Queue<Packet>& packets) {
+    for (uint32_t index = 0; index < kPacketCount; ++index) {
+        Packet packet = co_await packets.get();
+        co_await drive_packet(dut, packet);
+    }
+}
+
+Queue<Packet> packets{4};
+co_await Join{source(packets), driver(dut, packets)};
+```
+
+Prefer blocking `put()` and `get()` for normal producer/consumer flow. Use
+`put_nowait()` or `get_nowait()` only when failure to transfer immediately is
+itself part of the test logic. Avoid polling `empty()` or `full()` around a
+blocking operation; another coroutine can change the queue before the next
+statement runs.
+
+A queue transfers one value to one consumer. Use `Event` for a payload-free
+broadcast notification, `Join` to wait for a fixed group of tasks, `Semaphore`
+to limit concurrent resource use, and `Lock` to serialize a short update to
+shared C++ state. Queue operations do not advance simulation time and do not
+model DUT protocol timing: the driver still writes signals and awaits edges or
+delays explicitly.
+
+`Semaphore` controls a count of available permits. `try_acquire()` is the
+nonblocking operation, `co_await acquire()` waits in FIFO order, `release()`
+returns one or more permits, and `available()` reports permits that have not
+already been handed to a waiter.
+
+```cpp
+Semaphore credits{4};
+
+co_await credits.acquire();
+co_await send_transaction();
+credits.release();
+```
+
+`Lock` provides `try_acquire()`, `co_await acquire()`, `release()`, and
+`locked()`. It performs direct FIFO ownership handoff to a waiting coroutine:
+
+```cpp
+co_await scoreboard_lock.acquire();
+model.apply(transaction);
+scoreboard_lock.release();
+```
+
+The lock does not track a coroutine owner. Code that has acquired a lock or
+semaphore permit remains responsible for releasing it, including on early
+returns. Cancellation safely removes tasks that are still waiting and returns
+any queue slot, lock handoff, or semaphore permit reserved for them.
+
+An `Event`, queue, lock, or semaphore must outlive its active waiters;
+destroying one with live waiters aborts with a diagnostic. Current waiters must
+belong to one scheduler, although the object may be reused with another
+scheduler after its wait queue is empty. Scheduler destruction and process
+cancellation invalidate their registrations, which are removed during cleanup.
+Unused synchronization objects do not register scheduler waits. This is a
 lifetime property of the API, not a benchmark claim about hot-path cost.
 
 `TimeoutResult<T>` stores its result in an `optional`, so `T` need only be
 move-constructible and does not need a default constructor. Calling `value()`
 after a timeout aborts with a diagnostic. A timed-out task is recursively
 cancelled, including nested tasks and waits on `Process`, `Event`, or
-`Channel`; its frames are destroyed at the existing scheduler cleanup
+`Queue`; its frames are destroyed at the existing scheduler cleanup
 boundary. If task completion and the deadline share a timestamp, completion
 wins when the task's result is present as the parent resumes. Zero and
 sub-precision timeout durations are rejected under the same rules as
@@ -121,8 +206,8 @@ following is the core of the runnable `fifo_scoreboard` example:
 constexpr uint32_t kWordCount = 24;
 
 Task<void> scoreboard(TestContext& test,
-                      Channel<uint32_t>& expected_words,
-                      Channel<uint32_t>& observed_words) {
+                      Queue<uint32_t>& expected_words,
+                      Queue<uint32_t>& observed_words) {
     for (uint32_t index = 0; index < kWordCount; ++index) {
         const uint32_t expected = co_await expected_words.get();
         const uint32_t actual = co_await observed_words.get();
@@ -132,8 +217,8 @@ Task<void> scoreboard(TestContext& test,
 
 Task<void> fifo_test(Dut dut, TestContext& test) {
     Event reset_done;
-    Channel<uint32_t> expected_words;
-    Channel<uint32_t> observed_words;
+    Queue<uint32_t> expected_words;
+    Queue<uint32_t> observed_words;
 
     co_await Join{reset_dut(dut, reset_done),
                   input_driver(dut, reset_done, expected_words),
@@ -200,9 +285,11 @@ returns control to the scheduler. Code still executing before that scheduler
 boundary observes the process as neither done nor cancelled.
 
 Use `spawn()` when callers need a handle for status, awaiting, or cancellation.
-Use `spawn_detached()` for fire-and-forget roots. Both forms reclaim completed
-root coroutine frames; detached roots omit the process-control metadata used
-for handles, status, awaiting, and cancellation.
+Use `TestContext::spawn_detached()` when user code needs no process handle. It
+is still owned by the current test so failures are attributed correctly and
+unfinished work is cancelled when that test ends. The lower-level scheduler
+has a metadata-free detached primitive, but user testbenches should use the
+context method for lifecycle ownership.
 
 `examples/watchdog_timeout/testbench.cpp` shows both forms of `with_timeout()`
 and a complete `spawn()`/`cancel()`/await lifecycle. Its deadlines are kept
@@ -219,7 +306,7 @@ and timing explicit:
 | Timed wait | `await Timer(1, unit="ns")` | `co_await Delay{1_ns}` | `#1ns` |
 | Signal edge | `await RisingEdge(dut.clk)` | `co_await RisingEdge{dut.clk}` | `@(posedge clk)` |
 | Concurrent work | `start_soon()` / task groups | `spawn()` or `Join{...}` | `fork ... join` |
-| FIFO communication | `Queue` | `Channel<T>` | `mailbox` |
+| FIFO communication | `Queue` | `Queue<T>` | `mailbox` |
 | Notification | `Event` | `Event` | `event` |
 | Deadline | `with_timeout()` | `with_timeout()` | explicit event/deadline race |
 
@@ -303,6 +390,12 @@ simulation precision abort with a diagnostic. Awaiting a default-constructed,
 expired, or otherwise invalid `Process` also aborts instead of silently
 continuing.
 
+Scheduler-facing objects are simulation-thread confined. Do not access a
+`Testbench`, `TestContext`, signal handle, synchronization primitive, or
+`Process` from a worker OS thread. Authored coroutine processes remain
+concurrent in simulation time while executing through the one scheduler that
+owns deterministic ordering.
+
 ## Scheduler performance
 
 A macOS sampling profile first identified full coroutine-state scans and
@@ -339,14 +432,15 @@ The end-to-end test suite currently targets Verilator. Scalar signal values use
 bits. Generated DPI bindings support fixed multidimensional unpacked arrays,
 packed enum and struct views, wide values, fixed-point helpers, and generated
 hierarchical probes with read, deposit, force, and release operations.
-Four-state X/Z propagation and bounded channels remain deferred. The generated
+Four-state X/Z propagation remains deferred. The generated
 transport uses standard SystemVerilog DPI, but additional simulator backends
 have not yet passed the conformance suite.
 
 The Authoring Core sources currently present under
 `benchmarks/authoring_core/` exercise typed tasks, cycle waits, edge timeouts,
-predicate waits, events, channels, wide packed signals, fixed-point arithmetic,
-fixed unpacked arrays, and a synchronous memory front door. Its C++ DPI testbench is
+predicate waits, events, bounded queues, locks, semaphores, wide packed
+signals, fixed-point arithmetic, fixed unpacked arrays, and a synchronous
+memory front door. Its C++ DPI testbench is
 `benchmarks/authoring_core/testbenches/cpp_dpi/testbench.cpp`, the corresponding pure-SV
 source is `benchmarks/authoring_core/testbenches/systemverilog/authoring_core_sv_tb.sv`, and the
 shared workload contract is `benchmarks/authoring_core/workload.py`. Runtime
@@ -366,9 +460,10 @@ API tests are in `tests/unit/coro_runtime_test.cpp`.
 - the standard init, step, output-pull, deadline, and edge-interest C exports
   expected by the generated wrapper.
 
-`include/cpptb/test_result.hpp` keeps the standard check/failure result contract
-independent of DPI, so user-facing fixtures do not include simulator transport
-headers.
+`include/cpptb/test_result.hpp` keeps status, check counts, timing, and
+structured failure records independent of DPI. `test_reporting.hpp` writes the
+versioned JSON result consumed by the optional launcher, so user-facing
+fixtures and embedding harnesses do not include simulator transport headers.
 
 A design supplies a small `DpiAdapter` containing its DUT and result types,
 generated signal metadata, binding call, testbench registration call, result

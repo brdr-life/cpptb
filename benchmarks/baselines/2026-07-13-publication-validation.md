@@ -18,7 +18,7 @@
 | `task_timeout` | 0.758x | passed |
 | `wait_until` | 0.944x | passed |
 | `event` | 0.949x | passed |
-| `channel` | 0.954x | passed |
+| `queue` | 0.954x | passed |
 | `all` | 0.924x | passed |
 | `wide64` | 1.006x | passed |
 | `wide_echo_137` | 1.037x | passed |

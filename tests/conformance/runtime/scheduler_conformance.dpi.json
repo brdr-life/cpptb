@@ -206,8 +206,8 @@
       },
       {
         "iterations": 6,
-        "case": "channel_active_waiter",
-        "message": "Channel destroyed with active waiters"
+        "case": "queue_active_waiter",
+        "message": "Queue destroyed with active waiters"
       },
       {
         "iterations": 7,

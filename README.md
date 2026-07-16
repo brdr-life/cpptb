@@ -7,13 +7,13 @@ simulator events directly:
 
 ```cpp
 #include <cpptb/cpptb.hpp>
-#include "generated/counter_dut.hpp"
+#include "dut.hpp"
 
 using cpptb::TestContext;
 using cpptb::coro::Delay;
 using cpptb::coro::RisingEdge;
 using cpptb::coro::Task;
-using cpptb::generated::counter::Dut;
+using cpptb::Dut;
 using namespace cpptb::coro;
 
 Task<void> sequence(Dut dut, TestContext& test) {
@@ -44,18 +44,22 @@ types.
 - Concurrent coroutine processes with `spawn`, `spawn_detached`, and `Join`.
 - Rising, falling, or either-edge waits and arbitrary-clock cycle waits.
 - Absolute `Delay`, trigger and task timeouts, and `First` races.
-- Events, typed channels, process cancellation, and typed task results.
+- Events, bounded typed queues, locks, semaphores, process cancellation, and
+  typed task results.
 - Typed scalar, wide packed, fixed-point, array, and hierarchical signals.
 - Read, deposit, force, release, and edge access through natural generated
   hierarchy paths with usage-pruned DPI transport.
 - Zero-, one-, and multi-clock designs with C++-owned input clocks and
   directly observed DUT-produced clocks.
 - Batched and on-demand DPI transport selected by generated bindings.
+- Multiple registered tests with one fresh simulator process per selection,
+  fatal and nonfatal checks, test-owned process cleanup, and JSON results.
 - An apples-to-apples C++ DPI versus SystemVerilog benchmark suite with a hard
   1.10 performance-ratio guard and one documented direct-force transport
   waiver.
 
 See [testbench authoring](docs/testbench-authoring.md),
+[running tests](docs/running-tests.md),
 [hierarchical DUT access](docs/hierarchy.md),
 [scheduling](docs/scheduling.md), and [code generation](docs/code-generation.md)
 for the detailed contracts.
@@ -93,24 +97,36 @@ find_package(cpptb CONFIG REQUIRED)
 target_link_libraries(my_testbench PRIVATE cpptb::cpptb)
 ```
 
-## Generate a binding
+## Build a testbench
 
-The checked-in examples include their generated output for readability and
-reproducible builds. Regenerate or verify one with:
+An ordinary project needs only RTL and a C++ testbench:
 
-```sh
-uv run --frozen cpptb-codegen \
-  examples/counter/counter.sv
-uv run --frozen cpptb-codegen \
-  examples/counter/counter.sv --check
+```text
+counter-project/
+|-- counter.sv
+`-- testbench.cpp
 ```
 
-Start with [the examples](examples/README.md). The generated wrapper and
-transport adapter are kept beside each example, while `testbench.cpp` contains
-the user-authored sequence. The examples progress from a counter and clockless
-delays through a ready/valid scoreboard, multiple clocks, APB transactions,
-and expected timeout/cancellation paths. Every example includes an equivalent
-pure-SystemVerilog testbench and runs under `make examples-test`.
+From that directory, the public command owns inference, binding generation,
+discovery, compilation, caching, and test selection:
+
+```sh
+cpptb build
+cpptb list
+cpptb test
+cpptb test counter_reset_defaults
+```
+
+The conventional `rtl/` and `tests/` directories are also discovered. Use an
+optional `cpptb.toml` or explicit `--source`, `--testbench`, and `--top` options
+only when the project is ambiguous. Generated source, metadata, logs, binaries,
+and results stay under `build/cpptb/<target>/`; user code always includes the
+stable generated `dut.hpp` header.
+
+Start with [the examples](examples/README.md). They progress from a counter and
+clockless delays through a ready/valid scoreboard, multiple clocks, APB
+transactions, and expected timeout/cancellation paths. Every example includes
+an equivalent pure-SystemVerilog testbench and runs under `make examples-test`.
 
 ## Documentation site
 
@@ -160,7 +176,7 @@ only the selected core.
 ## Repository map
 
 - `include/cpptb/`: installable C++ framework headers.
-- `tools/codegen/`: Slang-backed `cpptb-codegen` package.
+- `tools/codegen/`: public `cpptb` CLI and lower-level Slang code generator.
 - `examples/`: end-to-end C++ DPI examples and SystemVerilog equivalents.
 - `tests/`: unit, generator, and simulator conformance tests.
 - `benchmarks/`: reproducible feature and four-mode comparison suites.

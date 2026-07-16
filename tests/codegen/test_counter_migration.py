@@ -38,6 +38,11 @@ ORDINARY_EXAMPLES = {
         8,
     ),
 }
+GENERATED_MODULES = {
+    **{directory: values[0] for directory, values in ORDINARY_EXAMPLES.items()},
+    "fault_injection": "fault_injection",
+    "rich_data": "rich_data",
+}
 
 
 class OrdinaryExampleMigrationTests(unittest.TestCase):
@@ -65,34 +70,21 @@ class OrdinaryExampleMigrationTests(unittest.TestCase):
                 self.assertNotIn("iterations()", cpp)
                 self.assertNotIn("$value$plusargs", systemverilog)
 
-    def test_examples_use_only_public_and_generated_surfaces(self):
-        for directory, (module, _, _, _) in ORDINARY_EXAMPLES.items():
+    def test_examples_use_public_surface_and_clean_source_tree(self):
+        for directory, module in GENERATED_MODULES.items():
             with self.subTest(example=directory):
                 example = EXAMPLES / directory
                 testbench = (example / "testbench.cpp").read_text()
-                generated = example / "generated"
-                dut = (generated / f"{module}_dut.hpp").read_text()
-                adapter = (generated / f"dpi_{module}.cpp").read_text()
-                discovery = (
-                    generated / f"discover_{module}_clocks.cpp"
-                ).read_text()
-                wrapper = (generated / f"dpi_{module}.sv").read_text()
 
                 self.assertRegex(
                     testbench, r"Task<void>\s+\w+\(Dut dut, TestContext& test\)"
                 )
                 self.assertIn("CPPTB_REGISTER_TEST(", testbench)
                 self.assertNotRegex(testbench, r"class\s+\w+Tb\b")
-                self.assertIn(
-                    f"namespace cpptb::generated::{module}", dut
-                )
-                self.assertIn("struct Dut {", dut)
-                self.assertIn("cpptb::run_registered_test", adapter)
-                self.assertIn(f"cpptb_{module}_dpi_step", adapter)
-                self.assertIn("discover_registered_clocks", discovery)
-                self.assertNotIn("$value$plusargs", wrapper)
-                self.assertNotIn("drive_registered_clock_", wrapper)
-                self.assertNotIn("dpi_clock_config", wrapper)
+                self.assertIn('#include "dut.hpp"', testbench)
+                self.assertIn("using cpptb::Dut;", testbench)
+                self.assertNotIn(f'#include "{module}_dut.hpp"', testbench)
+                self.assertFalse((example / "generated").exists())
 
                 self.assertEqual(list(example.glob("*.dpi.json")), [])
                 for obsolete in (
@@ -101,6 +93,16 @@ class OrdinaryExampleMigrationTests(unittest.TestCase):
                     "dpi_transport.cpp",
                 ):
                     self.assertFalse((example / obsolete).exists())
+
+        makefile = (REPO / "Makefile").read_text()
+        self.assertIn("CPPTB_$(2)_GENERATED_DIR", makefile)
+        self.assertIn("$$(CPPTB) build $$(CPPTB_$(2)_PROJECT_ARGS)", makefile)
+        self.assertNotIn("CPPTB_$(2)_FINAL_CODEGEN_COMMAND", makefile)
+
+        standalone = (EXAMPLES / "counter" / "Makefile").read_text()
+        self.assertIn("cpptb\n", standalone)
+        self.assertNotIn("verilator --binary", standalone)
+        self.assertNotIn("discover_counter_clocks.cpp", standalone)
 
     def test_clock_timing_is_owned_by_cpp_testbenches(self):
         makefile = (REPO / "Makefile").read_text()

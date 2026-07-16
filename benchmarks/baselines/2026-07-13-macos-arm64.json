@@ -21,7 +21,7 @@
       "task_timeout": 0.740,
       "wait_until": 0.962,
       "event": 0.950,
-      "channel": 0.957,
+      "queue": 0.957,
       "all": 0.891,
       "wide64": 1.007,
       "wide_echo_137": 1.033,

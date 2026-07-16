@@ -1144,10 +1144,10 @@ Task<uint32_t> timeout_event_value(Event& event, TaskTimeoutProbe& probe) {
     co_return 0x23;
 }
 
-Task<uint32_t> timeout_channel_value(Channel<uint32_t>& channel,
+Task<uint32_t> timeout_queue_value(Queue<uint32_t>& queue,
                                      TaskTimeoutProbe& probe) {
     FrameCounter counter{&probe.frame_destructions};
-    const uint32_t value = co_await channel.get();
+    const uint32_t value = co_await queue.get();
     ++probe.resumes;
     co_return value;
 }
@@ -1266,20 +1266,20 @@ Task<void> task_with_timeout_contract(ConformanceTb tb) {
     tb.expect_eq("Event Task timeout destroys frame once",
                  event_probe.frame_destructions, 1);
 
-    Channel<uint32_t> channel;
-    TaskTimeoutProbe channel_probe;
-    auto channel_result = co_await with_timeout(
-        timeout_channel_value(channel, channel_probe), 2_ps);
-    tb.expect_true("Channel Task timeout reports timeout",
-                   channel_result.timed_out());
+    Queue<uint32_t> queue;
+    TaskTimeoutProbe queue_probe;
+    auto queue_result = co_await with_timeout(
+        timeout_queue_value(queue, queue_probe), 2_ps);
+    tb.expect_true("Queue Task timeout reports timeout",
+                   queue_result.timed_out());
     co_await Delay{1_ps};
-    channel.put_nowait(0x66);
-    tb.expect_eq("Channel Task timeout preserves item",
-                 co_await channel.get(), 0x66);
-    tb.expect_eq("Channel Task timeout removes stale consumer",
-                 channel_probe.resumes, 0);
-    tb.expect_eq("Channel Task timeout destroys frame once",
-                 channel_probe.frame_destructions, 1);
+    queue.put_nowait(0x66);
+    tb.expect_eq("Queue Task timeout preserves item",
+                 co_await queue.get(), 0x66);
+    tb.expect_eq("Queue Task timeout removes stale consumer",
+                 queue_probe.resumes, 0);
+    tb.expect_eq("Queue Task timeout destroys frame once",
+                 queue_probe.frame_destructions, 1);
 
     uint32_t process_target_resumes = 0;
     const auto process_target = tb.spawn(
@@ -1316,7 +1316,7 @@ Task<void> task_with_timeout_contract(ConformanceTb tb) {
     co_await Delay{30_ns};
     tb.expect_eq("Task timeout stale losers never resume",
                  leaf_probe.resumes + event_probe.resumes +
-                     channel_probe.resumes + process_wait_probe.resumes +
+                     queue_probe.resumes + process_wait_probe.resumes +
                      process_probe.resumes,
                  0);
     tb.expect_true("Process wait timeout target completes normally",
@@ -1326,7 +1326,7 @@ Task<void> task_with_timeout_contract(ConformanceTb tb) {
     tb.expect_eq("Task timeout loser frames remain exactly once",
                  parent_probe.frame_destructions + leaf_probe.frame_destructions +
                      event_probe.frame_destructions +
-                     channel_probe.frame_destructions +
+                     queue_probe.frame_destructions +
                      process_probe.frame_destructions,
                  5);
 }
@@ -1453,89 +1453,89 @@ Task<void> event_contract(ConformanceTb tb) {
     tb.expect_eq("Event clear and reuse count", probe.count, 5);
 }
 
-struct ChannelProbe {
+struct QueueProbe {
     std::array<uint32_t, 12> values{};
     uint32_t count = 0;
 };
 
-Task<void> channel_consumer(Channel<uint32_t>& channel, ChannelProbe& probe) {
-    probe.values[probe.count++] = co_await channel.get();
+Task<void> queue_consumer(Queue<uint32_t>& queue, QueueProbe& probe) {
+    probe.values[probe.count++] = co_await queue.get();
 }
 
-Task<void> channel_delayed_producer(Channel<uint32_t>& channel,
+Task<void> queue_delayed_producer(Queue<uint32_t>& queue,
                                     uint32_t value) {
     co_await Delay{1_ns};
-    co_await channel.put(value);
+    co_await queue.put(value);
 }
 
-Task<void> channel_put_then_cancel(Channel<uint32_t>& channel, uint32_t value,
+Task<void> queue_put_then_cancel(Queue<uint32_t>& queue, uint32_t value,
                                    coro::Process target) {
-    co_await channel.put(value);
+    co_await queue.put(value);
     target.cancel();
 }
 
-Task<void> channel_contract(ConformanceTb tb) {
-    Channel<uint32_t> channel;
-    ChannelProbe probe;
+Task<void> queue_contract(ConformanceTb tb) {
+    Queue<uint32_t> queue;
+    QueueProbe probe;
 
-    co_await channel.put(10);
-    tb.expect_eq("Channel put-before-get size", channel.size(), 1);
-    tb.expect_eq("Channel put-before-get value", co_await channel.get(), 10);
+    co_await queue.put(10);
+    tb.expect_eq("Queue put-before-get size", queue.size(), 1);
+    tb.expect_eq("Queue put-before-get value", co_await queue.get(), 10);
 
-    co_await channel.put(20);
-    co_await channel.put(21);
-    tb.expect_eq("Channel FIFO first queued value", co_await channel.get(), 20);
-    tb.expect_eq("Channel FIFO second queued value", co_await channel.get(),
+    co_await queue.put(20);
+    co_await queue.put(21);
+    tb.expect_eq("Queue FIFO first queued value", co_await queue.get(), 20);
+    tb.expect_eq("Queue FIFO second queued value", co_await queue.get(),
                  21);
 
-    const auto waiting = tb.spawn(channel_consumer(channel, probe));
+    const auto waiting = tb.spawn(queue_consumer(queue, probe));
     co_await Delay{1_ps};
-    tb.expect_true("Channel get-before-put remains pending", !waiting.done());
-    co_await channel.put(30);
+    tb.expect_true("Queue get-before-put remains pending", !waiting.done());
+    co_await queue.put(30);
     co_await waiting;
-    tb.expect_eq("Channel get-before-put value", probe.values[0], 30);
+    tb.expect_eq("Queue get-before-put value", probe.values[0], 30);
 
-    const auto consumer_one = tb.spawn(channel_consumer(channel, probe));
-    const auto consumer_two = tb.spawn(channel_consumer(channel, probe));
-    const auto consumer_three = tb.spawn(channel_consumer(channel, probe));
+    const auto consumer_one = tb.spawn(queue_consumer(queue, probe));
+    const auto consumer_two = tb.spawn(queue_consumer(queue, probe));
+    const auto consumer_three = tb.spawn(queue_consumer(queue, probe));
     const auto producer_one =
-        tb.spawn(channel_delayed_producer(channel, 40));
+        tb.spawn(queue_delayed_producer(queue, 40));
     const auto producer_two =
-        tb.spawn(channel_delayed_producer(channel, 41));
+        tb.spawn(queue_delayed_producer(queue, 41));
     const auto producer_three =
-        tb.spawn(channel_delayed_producer(channel, 42));
+        tb.spawn(queue_delayed_producer(queue, 42));
     co_await consumer_three;
-    tb.expect_eq("Channel multiple producer/consumer count", probe.count, 4);
-    tb.expect_eq("Channel multiple producer FIFO first", probe.values[1], 40);
-    tb.expect_eq("Channel multiple producer FIFO second", probe.values[2], 41);
-    tb.expect_eq("Channel multiple producer FIFO third", probe.values[3], 42);
-    tb.expect_true("Channel multiple consumers all complete",
+    tb.expect_eq("Queue multiple producer/consumer count", probe.count, 4);
+    tb.expect_eq("Queue multiple producer FIFO first", probe.values[1], 40);
+    tb.expect_eq("Queue multiple producer FIFO second", probe.values[2], 41);
+    tb.expect_eq("Queue multiple producer FIFO third", probe.values[3], 42);
+    tb.expect_true("Queue multiple consumers all complete",
                    consumer_one.done() && consumer_two.done());
-    tb.expect_true("Channel multiple producers all complete",
+    tb.expect_true("Queue multiple producers all complete",
                    producer_one.done() && producer_two.done() &&
                        producer_three.done());
 
-    Channel<uint32_t> cancellation_channel;
-    ChannelProbe cancelled_probe;
-    ChannelProbe survivor_probe;
+    Queue<uint32_t> cancellation_queue;
+    QueueProbe cancelled_probe;
+    QueueProbe survivor_probe;
     const auto cancelled =
-        tb.spawn(channel_consumer(cancellation_channel, cancelled_probe));
+        tb.spawn(queue_consumer(cancellation_queue, cancelled_probe));
     const auto survivor =
-        tb.spawn(channel_consumer(cancellation_channel, survivor_probe));
+        tb.spawn(queue_consumer(cancellation_queue, survivor_probe));
     const auto putter = tb.spawn(
-        channel_put_then_cancel(cancellation_channel, 55, cancelled));
+        queue_put_then_cancel(cancellation_queue, 55, cancelled));
     co_await survivor;
-    tb.expect_true("Channel reserved consumer cancellation status",
+    tb.expect_true("Queue reserved consumer cancellation status",
                    cancelled.cancelled());
-    tb.expect_eq("Channel cancelled consumer receives no item",
+    tb.expect_eq("Queue cancelled consumer receives no item",
                  cancelled_probe.count, 0);
-    tb.expect_eq("Channel cancellation preserves item count",
+    tb.expect_eq("Queue cancellation preserves item count",
                  survivor_probe.count, 1);
-    tb.expect_eq("Channel cancellation preserves item value",
+    tb.expect_eq("Queue cancellation preserves item value",
                  survivor_probe.values[0], 55);
-    tb.expect_true("Channel cancellation producer completes", putter.done());
-    tb.expect_true("Channel empty after cancellation handoff",
-                   cancellation_channel.empty());
+    tb.expect_true("Queue cancellation producer completes", putter.done());
+    tb.expect_true("Queue empty after cancellation handoff",
+                   cancellation_queue.empty());
 }
 
 Task<void> active_event_waiter(Event& event) {
@@ -1548,13 +1548,13 @@ Task<void> event_active_waiter_violation(ConformanceTb tb) {
     co_await Delay{1_ps};
 }
 
-Task<void> active_channel_waiter(Channel<uint32_t>& channel) {
-    static_cast<void>(co_await channel.get());
+Task<void> active_queue_waiter(Queue<uint32_t>& queue) {
+    static_cast<void>(co_await queue.get());
 }
 
-Task<void> channel_active_waiter_violation(ConformanceTb tb) {
-    Channel<uint32_t> channel;
-    tb.spawn(active_channel_waiter(channel));
+Task<void> queue_active_waiter_violation(ConformanceTb tb) {
+    Queue<uint32_t> queue;
+    tb.spawn(active_queue_waiter(queue));
     co_await Delay{1_ps};
 }
 
@@ -1708,8 +1708,8 @@ void register_user_testbench(ConformanceTb& tb) {
             tb.sequence(event_active_waiter_violation);
             return;
         }
-        if (selected == "channel_active_waiter") {
-            tb.sequence(channel_active_waiter_violation);
+        if (selected == "queue_active_waiter") {
+            tb.sequence(queue_active_waiter_violation);
             return;
         }
         if (selected == "invalid_task_timeout") {
@@ -1781,7 +1781,7 @@ void register_user_testbench(ConformanceTb& tb) {
     tb.sequence(task_with_timeout_contract);
     tb.sequence(wait_until_contract);
     tb.sequence(event_contract);
-    tb.sequence(channel_contract);
+    tb.sequence(queue_contract);
 }
 
 void register_subprecision_delay_violation(ConformanceTb& tb) {
