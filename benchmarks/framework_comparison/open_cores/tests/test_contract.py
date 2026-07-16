@@ -1,3 +1,4 @@
+import ast
 import hashlib
 import unittest
 from pathlib import Path
@@ -55,6 +56,23 @@ class OpenCoreContractTests(unittest.TestCase):
                 digest.update(b"\0")
                 digest.update(rtl.read_bytes())
             self.assertEqual(digest.hexdigest(), expected_digest)
+
+    def test_cocotb_example_exposes_every_open_core_workload(self):
+        suite = Path(__file__).resolve().parents[1]
+        source_path = suite / "testbenches" / "cocotb" / "test_open_cores.py"
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        async_functions = {
+            node.name for node in tree.body if isinstance(node, ast.AsyncFunctionDef)
+        }
+        self.assertTrue(
+            {
+                "run_picorv32",
+                "run_aes",
+                "run_fcs",
+                "open_cores_benchmark",
+            }.issubset(async_functions)
+        )
+        self.assertIn("cocotb", MODES)
 
 
 if __name__ == "__main__":
