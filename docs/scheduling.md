@@ -261,18 +261,40 @@ Use `with_timeout` when one operation either completes or exceeds a deadline.
 ### Control a long-lived process
 
 Use `spawn()` when a monitor or service should outlive the immediate sequence
-and needs an explicit handle. Awaiting the handle waits for normal completion
-or completed cancellation:
+and needs an explicit handle. A common verification shape is a background
+monitor feeding a queue while the foreground sequence drives and checks
+transactions:
 
 ```cpp
-auto monitor = test.spawn(dormant_monitor(dut));
+Task<void> response_monitor(Dut dut, Queue<uint32_t>& observed) {
+    while (true) {
+        co_await RisingEdge{dut.response_valid};
+        co_await ReadOnly{};
+        co_await observed.put(dut.response_data.get());
+    }
+}
 
-co_await Delay{3_ns};
-monitor.cancel();
-co_await monitor;
+Task<void> request_test(Dut dut, TestContext& test) {
+    Queue<uint32_t> observed{8};
+    auto monitor = test.spawn(response_monitor(dut, observed));
 
-test.expect_eq("monitor was cancelled", monitor.cancelled(), true);
+    for (uint32_t request = 0; request < 32; ++request) {
+        co_await drive_request(dut, request);
+        const uint32_t actual = co_await observed.get();
+        test.expect_eq("response payload", actual,
+                       expected_response(request));
+    }
+
+    monitor.cancel();
+    co_await monitor;
+    test.expect_eq("monitor cancelled", monitor.cancelled(), true);
+}
 ```
+
+The queue, monitor, and sequence overlap in simulation time. Cancelling and
+awaiting the monitor before `observed` leaves scope makes the ownership
+boundary explicit. An uncaught monitor exception is attributed to this test
+and to the monitor's spawn location.
 
 Use `Join` when the child set and lifetime are lexical. Use `spawn` when code
 must query, await, or cancel a process later. `spawn_detached()` is reserved for

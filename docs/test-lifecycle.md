@@ -98,16 +98,35 @@ test.warn("response used the protocol fallback");
 Start lifecycle-owned concurrency through the context:
 
 ```cpp
-auto driver = test.spawn(input_driver(dut, test));
-test.spawn_detached(output_monitor(dut, test));
+Task<void> protocol_watcher(Dut dut, TestContext test) {
+    while (true) {
+        co_await RisingEdge{dut.response_valid};
+        co_await ReadOnly{};
+        test.expect_eq("response reserved bits",
+                       dut.response_data.get() & 0xff00'0000u, 0u);
+    }
+}
 
-co_await driver;
+Task<void> traffic_test(Dut dut, TestContext& test) {
+    test.spawn_detached(protocol_watcher(dut, test));
+
+    auto driver = test.spawn(input_driver(dut));
+    co_await driver;
+    test.require_eq("driver completed", driver.done(), true);
+}
+
+CPPTB_REGISTER_TEST(traffic_test);
 ```
 
 Both forms attach the child to the current test. A detached process is
 detached only from a user-visible `Process` handle; it remains owned by the
 test. Normal completion, a fatal requirement, a timeout, or an uncaught child
 exception cancels unfinished owned processes.
+
+The watcher takes `TestContext` by value because it may remain alive until the
+root test completes. Its checks and uncaught exceptions still carry the
+watcher's process ID and spawn location. The finite driver retains a handle so
+the foreground sequence can await it and inspect its terminal state.
 
 Use `spawn()` when work must run concurrently, needs an independent process
 identity, or may be cancelled through a handle. A sequential helper can be
