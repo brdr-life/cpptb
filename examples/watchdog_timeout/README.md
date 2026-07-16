@@ -24,11 +24,11 @@ make feature-test FEATURE=dpi_watchdog_timeout
 
 Every response is separated from its deadline, so the result never depends on
 same-timestamp race ordering. Both peers use the fixed semantic workload
-`kTransactionCount = 8`. The source generator needs no clock or edge
-annotations:
+`kTransactionCount = 8`. The project build needs no clock or edge
+configuration:
 
 ```sh
-uv run --frozen cpptb-codegen stalling_responder.sv
+uv run --frozen cpptb build
 ```
 
 The testbench starts `dut.clk` and directly awaits

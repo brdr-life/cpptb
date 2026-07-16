@@ -1,17 +1,17 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/fifo_scoreboard/generated/stream_fifo_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::fifo_scoreboard {
 namespace {
 
-using cpptb::generated::stream_fifo::Dut;
-using coro::Channel;
+using cpptb::Dut;
 using coro::Delay;
 using coro::Event;
 using coro::FallingEdge;
 using coro::Join;
+using coro::Queue;
 using coro::RisingEdge;
 using coro::Task;
 using namespace coro;
@@ -36,7 +36,7 @@ Task<void> reset_dut(Dut dut, Event& reset_done) {
 }
 
 Task<void> input_driver(Dut dut, Event& reset_done,
-                        Channel<uint32_t>& expected_words,
+                        Queue<uint32_t>& expected_words,
                         uint32_t& input_stalls) {
     co_await reset_done;
 
@@ -84,7 +84,7 @@ Task<void> output_ready_driver(Dut dut, Event& reset_done) {
 }
 
 Task<void> output_monitor(Dut dut, Event& reset_done,
-                          Channel<uint32_t>& observed_words) {
+                          Queue<uint32_t>& observed_words) {
     co_await reset_done;
 
     uint32_t observed = 0;
@@ -99,8 +99,8 @@ Task<void> output_monitor(Dut dut, Event& reset_done,
 }
 
 Task<void> scoreboard(TestContext& test,
-                      Channel<uint32_t>& expected_words,
-                      Channel<uint32_t>& observed_words) {
+                      Queue<uint32_t>& expected_words,
+                      Queue<uint32_t>& observed_words) {
     for (uint32_t index = 0; index < kWordCount; ++index) {
         const uint32_t expected = co_await expected_words.get();
         const uint32_t actual = co_await observed_words.get();
@@ -113,8 +113,8 @@ Task<void> fifo_test(Dut dut, TestContext& test) {
     test.start_clock(dut.clk, 10_ns);
 
     Event reset_done;
-    Channel<uint32_t> expected_words;
-    Channel<uint32_t> observed_words;
+    Queue<uint32_t> expected_words;
+    Queue<uint32_t> observed_words;
     uint32_t input_stalls = 0;
 
     co_await Join{reset_dut(dut, reset_done),

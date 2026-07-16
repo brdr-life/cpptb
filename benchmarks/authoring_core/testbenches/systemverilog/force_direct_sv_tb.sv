@@ -25,7 +25,7 @@ module force_direct_sv_tb;
       release i_dut.force_target;
     end
 
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=force_direct iterations=%0d transactions=0 checks=%0d sim_cycles=0 checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 channel_send=0 channel_receive=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=%0d packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0",
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=force_direct iterations=%0d transactions=0 checks=%0d sim_cycles=0 checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=%0d packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=0 dynamic_spawn=0",
              iterations, iterations, failures, iterations);
     $finish;
   end

@@ -1,12 +1,12 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/multiclock/generated/dual_clock_mailbox_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::dpi_multiclock {
 namespace {
 
-using cpptb::generated::dual_clock_mailbox::Dut;
+using cpptb::Dut;
 using coro::Delay;
 using coro::Edge;
 using coro::First;

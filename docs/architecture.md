@@ -1,19 +1,49 @@
 # Architecture
 
-The runtime has four layers:
+The repository contains a reusable framework and an optional reference
+harness. The framework has four separable layers:
 
-1. `coro_runtime.hpp` owns tasks, processes, waits, timers, events, channels,
+1. `coro_runtime.hpp` owns tasks, processes, waits, timers, events, queues,
    and scheduler ordering.
-2. `dpi_runtime.hpp` translates simulator callbacks into scheduler steps and
+2. `test_api.hpp` owns the compiled test catalog, one-test selection,
+   assertions, process lifetime, and exception attribution.
+3. `dpi_runtime.hpp` translates simulator callbacks into scheduler steps and
    batches changed values across the DPI boundary.
-3. `cpptb-codegen` elaborates RTL and emits a typed DUT plus transport wrapper.
-4. A design adapter registers user testbench processes and defines result and
-   timeout policy.
+4. `cpptb-codegen` elaborates RTL and emits a typed DUT plus transport wrapper.
+
+The reference harness has two layers:
+
+1. The public `cpptb` project layer resolves source conventions or
+   `cpptb.toml`, owns the two-pass build, and caches simulator artifacts.
+2. The runner discovers tests and starts one fresh simulator process per
+   selection; `cpptb-run` exposes that lower-level executable protocol alone.
+
+`test_result.hpp` and `test_reporting.hpp` sit beside these layers as an
+embeddable result contract. A higher-level harness can call
+`registered_tests<Dut>()` and `run_registered_test(...)`, receive `ResultSink`
+callbacks, or consume versioned JSON without using the command-line launcher.
+The lifecycle contract and its current limitations are documented in
+[Framework test lifecycle](test-lifecycle.md).
 
 The generated SystemVerilog wrapper owns clocks and simulator callback timing.
 The C++ scheduler owns coroutine readiness and cancellation. Signal reads and
 writes use generated IDs and typed bindings; no runtime hierarchical-name
 lookup is required on the optimized DPI path.
+
+Every registered test invocation creates one shared lifecycle state. Processes
+started through its `TestContext` are retained as test-owned work. Normal root
+completion, a fatal requirement, or an uncaught child exception cancels any
+remaining owned processes before the result becomes terminal. Generic
+low-level scheduler roots still abort on an unobserved exception, so exceptions
+cannot disappear silently outside the test lifecycle boundary.
+
+`Scheduler`, `Testbench`, `TestContext`, and their `Process` handles are
+confined to the simulator thread that owns the testbench. They are not
+thread-safe and must not be copied to worker OS threads. This matches the
+single-threaded scheduler and simulator-callback contract and lets lifecycle
+ownership use non-atomic reference counting on the process hot path. Parallel
+host work must return its result through a simulator-thread integration point
+rather than calling framework APIs directly.
 
 Simulator-phase waits have a backend boundary below the public API. The
 portable path registers standard VPI callbacks for read/write synchronization,

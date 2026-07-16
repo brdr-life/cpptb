@@ -116,6 +116,18 @@ class ContractTests(unittest.TestCase):
             "$(eval $(call AUTHORING_CORE_DPI_template,force_direct,25))",
             makefile,
         )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,queue_sync,28))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,test_lifecycle,29))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn,30))",
+            makefile,
+        )
         self.assertIn("AUTHORING_CORE_OPT_FAST ?= -O3", makefile)
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)"'),
@@ -141,7 +153,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(integrated.task_timeouts, 1)
         self.assertEqual(integrated.task_timeout_hits, 0)
         self.assertEqual(integrated.event_set, 1)
-        self.assertEqual(integrated.channel_receive, 1)
+        self.assertEqual(integrated.queue_receive, 1)
         self.assertEqual(integrated.wide64, 1)
         self.assertEqual(integrated.wide_echo_137, 1)
         self.assertEqual(integrated.wide_slice, 1)
@@ -210,6 +222,110 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(counts.task_timeout_hits, 2)
         self.assertEqual(counts.timeouts, 0)
         self.assertEqual(counts.task_value, 0)
+
+    def test_queue_sync_has_exact_isolated_counts_and_twin(self):
+        counts = workload.expected_counts("queue_sync", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 12)
+        self.assertEqual(counts.queue_put, 5)
+        self.assertEqual(counts.queue_get, 5)
+        self.assertEqual(counts.lock_acquire, 5)
+        self.assertEqual(counts.semaphore_acquire, 5)
+        enabled = [
+            field
+            for field in workload.FEATURE_FIELDS
+            if getattr(counts, field) != 0
+        ]
+        self.assertEqual(
+            enabled,
+            ["queue_put", "queue_get", "lock_acquire", "semaphore_acquire"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Queue<uint32_t> queue{1};", cpp)
+        self.assertIn("Semaphore credits{2};", cpp)
+        self.assertIn("co_await lock.acquire();", cpp)
+        self.assertIn("bounded_queue = new(1);", sv)
+        self.assertIn("queue_credits = new(2);", sv)
+        self.assertIn("authored_lock.get(1);", sv)
+
+    def test_lifecycle_has_exact_systemverilog_twin(self):
+        counts = workload.expected_counts("test_lifecycle", 5)
+        self.assertEqual(counts.transactions, 0)
+        self.assertEqual(counts.checks, 15)
+        self.assertEqual(counts.test_lifecycle, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["test_lifecycle"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("test.expect(\"stimulus is nonzero\"", cpp)
+        self.assertIn("test.expect_eq(\"stimulus identity\"", cpp)
+        self.assertIn("test.spawn(lifecycle_process", cpp)
+        self.assertIn("co_await process;", cpp)
+        self.assertIn("task automatic lifecycle_process", sv)
+        self.assertIn("task automatic run_test_lifecycle();", sv)
+        self.assertIn('kernel != "test_lifecycle"', sv)
+        self.assertIn("kernel=test_lifecycle iterations=%0d", sv)
+
+    def test_dynamic_process_kernels_have_exact_systemverilog_twins(self):
+        for kernel in (
+            "dynamic_task",
+            "dynamic_spawn_scheduler",
+            "dynamic_spawn",
+            "dynamic_spawn_suspending",
+        ):
+            with self.subTest(kernel=kernel):
+                counts = workload.expected_counts(kernel, 5)
+                self.assertEqual(counts.transactions, 0)
+                self.assertEqual(counts.checks, 5)
+                self.assertEqual(counts.dynamic_spawn, 5)
+                self.assertEqual(
+                    [
+                        field
+                        for field in workload.FEATURE_FIELDS
+                        if getattr(counts, field) != 0
+                    ],
+                    ["dynamic_spawn"],
+                )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("test.spawn(dynamic_spawn_child", cpp)
+        self.assertIn("co_await child;", cpp)
+        self.assertIn("co_await dynamic_task_child", cpp)
+        self.assertIn("context.scheduler.spawn(\n            dynamic_scheduler_child", cpp)
+        self.assertIn("test.spawn(dynamic_suspending_child", cpp)
+        self.assertIn("test.spawn(dynamic_suspending_release", cpp)
+        self.assertIn("task automatic dynamic_spawn_child", sv)
+        self.assertIn("dynamic_spawn_child(value, i);", sv)
+        self.assertIn("task automatic report_dynamic_process();", sv)
+        self.assertIn("kernel=%s iterations=%0d", sv)
+        self.assertIn("task automatic run_dynamic_task();", sv)
+        self.assertIn("task automatic run_dynamic_spawn_scheduler();", sv)
+        self.assertIn("task automatic run_dynamic_spawn();", sv)
+        self.assertIn("task automatic run_dynamic_spawn_suspending();", sv)
+        self.assertIn("dynamic_suspending_child(value, i);", sv)
+        self.assertIn("dynamic_suspending_release();", sv)
 
     def test_probe_kernels_have_exact_isolated_counts(self):
         for kernel, enabled_fields in (
@@ -439,7 +555,7 @@ class ContractTests(unittest.TestCase):
     def test_parser_rejects_missing_duplicate_and_nonfinite_fields(self):
         complete = result_line()
         with self.assertRaisesRegex(ValueError, "missing fields"):
-            runner.parse_result(complete.replace(" channel_receive=0", ""))
+            runner.parse_result(complete.replace(" queue_receive=0", ""))
         with self.assertRaisesRegex(ValueError, "duplicate"):
             runner.parse_result(complete + " checks=3")
         with self.assertRaisesRegex(ValueError, "finite"):

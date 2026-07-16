@@ -4,9 +4,13 @@ This is the smallest end-to-end cpptb bench. It starts a C++-owned clock,
 drives reset and enable, explicitly allows the DUT to settle, and
 checks the counter output.
 
+Its authored files, generated files, and standalone Makefile are described in
+[Project layout and build ownership](../running-tests.md#project-layout-and-build-ownership).
+
 ```sh
 make cpp-dpi-counter-run
 make cpp-dpi-counter-sv-run
+make cpp-dpi-counter-suite-test
 ```
 
 ## Complete C++ testbench
@@ -17,12 +21,12 @@ The complete `examples/counter/testbench.cpp` stays self-contained:
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/counter/generated/counter_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::counter {
 namespace {
 
-using cpptb::generated::counter::Dut;
+using cpptb::Dut;
 using coro::Delay;
 using coro::FallingEdge;
 using coro::RisingEdge;
@@ -56,11 +60,33 @@ Task<void> counter_sequence(Dut dut, TestContext& test) {
     test.expect_eq("disabled count", dut.count.get(), kCountCycles);
 }
 
+Task<void> counter_reset_defaults(Dut dut, TestContext& test) {
+    dut.clk.set(0);
+    test.start_clock(dut.clk, 10_ns);
+
+    dut.rst_n.set(0);
+    dut.enable.set(1);
+
+    co_await RisingEdge{dut.clk};
+    co_await Delay{1_ps};
+    test.expect_eq("reset count", dut.count.get(), 0u);
+}
+
 CPPTB_REGISTER_TEST(counter_sequence);
+CPPTB_REGISTER_TEST(counter_reset_defaults);
 
 }  // namespace
 
 }  // namespace cpptb::examples::counter
+```
+
+`make cpp-dpi-counter-run` runs the registered catalog while the benchmark
+adapter selects the original `counter_sequence` workload for its pure-SV
+comparison. The same user flow is available directly:
+
+```sh
+uv run --frozen cpptb list --project examples/counter --build-dir build
+uv run --frozen cpptb test --project examples/counter --build-dir build
 ```
 
 `set()` changes driven values without advancing time. `RisingEdge` and
@@ -68,10 +94,12 @@ CPPTB_REGISTER_TEST(counter_sequence);
 `1_ps` delay after a rising edge lets sequential and downstream combinational
 logic settle before `get()` samples the result.
 
-Code generation needs only the RTL source:
+The build command generates the typed interface from RTL, discovers
+testbench-owned clock and hierarchy usage, finalizes the wrapper, and invokes
+Verilator:
 
 ```sh
-uv run --frozen cpptb-codegen examples/counter/counter.sv
+uv run --frozen cpptb build --project examples/counter --build-dir build
 ```
 
 `start_clock()` is the C++ equivalent of the pure-SV `initial` clock process.

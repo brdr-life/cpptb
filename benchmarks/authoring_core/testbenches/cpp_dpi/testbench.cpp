@@ -6,11 +6,13 @@
 namespace cpptb::benchmarks::authoring_core {
 namespace {
 
-using coro::Channel;
+using coro::Queue;
 using coro::Delay;
 using coro::Event;
 using coro::FallingEdge;
+using coro::Lock;
 using coro::RisingEdge;
+using coro::Semaphore;
 using coro::Task;
 using coro::TimeoutOutcome;
 using namespace coro;
@@ -563,8 +565,10 @@ void report(Context& context) {
         "transactions=%llu checks=%llu sim_cycles=%llu checksum=%u failures=%u "
         "task_value=%llu clock_cycles=%llu timeouts=%llu timeout_hits=%llu "
         "task_timeouts=%llu task_timeout_hits=%llu "
-        "wait_until=%llu event_set=%llu event_wait=%llu channel_send=%llu "
-        "channel_receive=%llu wide64=%llu wide_echo_137=%llu "
+        "wait_until=%llu event_set=%llu event_wait=%llu queue_send=%llu "
+        "queue_receive=%llu queue_put=%llu queue_get=%llu "
+        "lock_acquire=%llu semaphore_acquire=%llu "
+        "wide64=%llu wide_echo_137=%llu "
         "wide_slice=%llu fixed_mac=%llu array_index=%llu "
         "array_wide=%llu array_multidim=%llu mem_rw=%llu "
         "hier_probe_reads=%llu "
@@ -572,7 +576,7 @@ void report(Context& context) {
         "mem_backdoor_deposits=%llu probe_diag_reads=%llu "
         "probe_diag_deposits=%llu signal_edges=%llu force_release=%llu "
         "packed_view=%llu hier_data_reads=%llu hier_data_deposits=%llu "
-        "timing_phases=%llu "
+        "timing_phases=%llu test_lifecycle=%llu dynamic_spawn=%llu "
         "wall_ms=%.3f\n",
         kernel_name(), context.iterations,
         static_cast<unsigned long long>(context.result.transactions),
@@ -588,8 +592,12 @@ void report(Context& context) {
         static_cast<unsigned long long>(feature.wait_until),
         static_cast<unsigned long long>(feature.event_set),
         static_cast<unsigned long long>(feature.event_wait),
-        static_cast<unsigned long long>(feature.channel_send),
-        static_cast<unsigned long long>(feature.channel_receive),
+        static_cast<unsigned long long>(feature.queue_send),
+        static_cast<unsigned long long>(feature.queue_receive),
+        static_cast<unsigned long long>(feature.queue_put),
+        static_cast<unsigned long long>(feature.queue_get),
+        static_cast<unsigned long long>(feature.lock_acquire),
+        static_cast<unsigned long long>(feature.semaphore_acquire),
         static_cast<unsigned long long>(feature.wide64),
         static_cast<unsigned long long>(feature.wide_echo_137),
         static_cast<unsigned long long>(feature.wide_slice),
@@ -610,7 +618,174 @@ void report(Context& context) {
         static_cast<unsigned long long>(feature.hier_data_reads),
         static_cast<unsigned long long>(feature.hier_data_deposits),
         static_cast<unsigned long long>(feature.timing_phases),
+        static_cast<unsigned long long>(feature.test_lifecycle),
+        static_cast<unsigned long long>(feature.dynamic_spawn),
         static_cast<double>(elapsed_us) / 1000.0);
+}
+
+Task<void> lifecycle_process(TestContext test, uint32_t iterations) {
+    for (uint32_t iteration = 0; iteration < iterations; ++iteration) {
+        test.expect_eq("owned process value", stimulus(iteration),
+                       stimulus(iteration));
+    }
+    co_return;
+}
+
+Task<void> run_test_lifecycle(Context context) {
+    TestContext test{context.scheduler, context.result};
+    auto process =
+        test.spawn(lifecycle_process(test, context.iterations));
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+        ++context.result.features.test_lifecycle;
+        test.expect("stimulus is nonzero", value != 0);
+        test.expect_eq("stimulus identity", value, stimulus(iteration));
+    }
+    co_await process;
+    co_await Delay{1_ps};
+    report(context);
+}
+
+Task<void> dynamic_spawn_child(TestContext test, uint32_t value,
+                               uint32_t iteration) {
+    test.expect_eq("dynamic process value", value, stimulus(iteration));
+    co_return;
+}
+
+Task<void> dynamic_task_child(TestContext test, uint32_t value,
+                              uint32_t iteration) {
+    test.expect_eq("dynamic task value", value, stimulus(iteration));
+    co_return;
+}
+
+Task<void> run_dynamic_task(Context context) {
+    TestContext test{context.scheduler, context.result};
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+        ++context.result.features.dynamic_spawn;
+        co_await dynamic_task_child(test, value, iteration);
+    }
+    co_await Delay{1_ps};
+    report(context);
+}
+
+Task<void> dynamic_scheduler_child(TestContext test, uint32_t value,
+                                   uint32_t iteration) {
+    test.expect_eq("scheduler process value", value, stimulus(iteration));
+    co_return;
+}
+
+Task<void> run_dynamic_spawn_scheduler(Context context) {
+    TestContext test{context.scheduler, context.result};
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+        ++context.result.features.dynamic_spawn;
+        auto child = context.scheduler.spawn(
+            dynamic_scheduler_child(test, value, iteration));
+        co_await child;
+    }
+    co_await Delay{1_ps};
+    report(context);
+}
+
+Task<void> run_dynamic_spawn(Context context) {
+    TestContext test{context.scheduler, context.result};
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+        ++context.result.features.dynamic_spawn;
+        auto child =
+            test.spawn(dynamic_spawn_child(test, value, iteration));
+        co_await child;
+    }
+    co_await Delay{1_ps};
+    report(context);
+}
+
+Task<void> dynamic_suspending_child(TestContext test, Event& ready,
+                                    Event& release, uint32_t value,
+                                    uint32_t iteration) {
+    ready.set();
+    co_await release;
+    test.expect_eq("suspending process value", value, stimulus(iteration));
+}
+
+Task<void> dynamic_suspending_release(Event& ready, Event& release) {
+    co_await ready;
+    release.set();
+}
+
+Task<void> run_dynamic_spawn_suspending(Context context) {
+    TestContext test{context.scheduler, context.result};
+    Event ready;
+    Event release;
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+        ++context.result.features.dynamic_spawn;
+        auto child = test.spawn(dynamic_suspending_child(
+            test, ready, release, value, iteration));
+        auto releaser = test.spawn(dynamic_suspending_release(ready, release));
+        co_await child;
+        co_await releaser;
+        ready.clear();
+        release.clear();
+    }
+    co_await Delay{1_ps};
+    report(context);
+}
+
+Task<void> queue_sync_producer(Context context, Queue<uint32_t>& queue,
+                               Semaphore& credits) {
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        co_await credits.acquire();
+        ++context.result.features.semaphore_acquire;
+        co_await queue.put(stimulus(iteration));
+        ++context.result.features.queue_put;
+    }
+}
+
+Task<void> queue_sync_consumer(Context context, Queue<uint32_t>& queue,
+                               Semaphore& credits, Lock& lock) {
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t payload = co_await queue.get();
+        ++context.result.features.queue_get;
+        co_await lock.acquire();
+        ++context.result.features.lock_acquire;
+        check(context, "bounded queue payload", payload, stimulus(iteration));
+        lock.release();
+        credits.release();
+        co_await transact(context, iteration, payload);
+    }
+}
+
+Task<void> release_initial_lock(Lock& lock) {
+    lock.release();
+    co_return;
+}
+
+Task<void> run_queue_sync(Context context) {
+    context.dut.rst_n.set(0);
+    context.dut.req_valid.set(0);
+    context.dut.req_data.set(0);
+    context.dut.rsp_ready.set(1);
+    for (uint32_t cycle = 0; cycle < 4; ++cycle) {
+        co_await RisingEdge{context.dut.clk};
+    }
+    context.dut.rst_n.set(1);
+
+    Queue<uint32_t> queue{1};
+    Semaphore credits{2};
+    Lock lock;
+    static_cast<void>(lock.try_acquire());
+    co_await Join{queue_sync_producer(context, queue, credits),
+                  queue_sync_consumer(context, queue, credits, lock),
+                  release_initial_lock(lock)};
+
+    co_await wait_for_response_count(context);
+    check(context, "request count", context.dut.request_count.get(),
+          context.iterations);
+    check(context, "response count", context.dut.response_count.get(),
+          context.iterations);
+    report(context);
 }
 
 Task<void> run_force_direct(Context context) {
@@ -689,7 +864,7 @@ Task<void> run(Context context) {
     context.dut.rst_n.set(1);
 
     Event event;
-    Channel<uint32_t> channel;
+    Queue<uint32_t> queue;
     uint32_t previous_cycle_count = 0;
 
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEM_PROBE_READ || \
@@ -740,13 +915,13 @@ Task<void> run(Context context) {
         co_await event_roundtrip(context, event);
 #endif
 
-#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CHANNEL || \
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_QUEUE || \
     AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ALL
-        ++context.result.features.channel_send;
-        channel.put_nowait(payload);
-        ++context.result.features.channel_receive;
-        const uint32_t received = co_await channel.get();
-        check(context, "channel payload", received, payload);
+        ++context.result.features.queue_send;
+        queue.put_nowait(payload);
+        ++context.result.features.queue_receive;
+        const uint32_t received = co_await queue.get();
+        check(context, "queue payload", received, payload);
         payload = received;
 #endif
 
@@ -849,6 +1024,24 @@ void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TIMING_PHASES
     scheduler.spawn_detached(
         run_timing_phases(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_QUEUE_SYNC
+    scheduler.spawn_detached(
+        run_queue_sync(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TEST_LIFECYCLE
+    scheduler.spawn_detached(
+        run_test_lifecycle(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN
+    scheduler.spawn_detached(
+        run_dynamic_spawn(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_TASK
+    scheduler.spawn_detached(
+        run_dynamic_task(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SCHEDULER
+    scheduler.spawn_detached(run_dynamic_spawn_scheduler(
+        Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SUSPENDING
+    scheduler.spawn_detached(run_dynamic_spawn_suspending(
+        Context{scheduler, dut, iterations, result}));
 #else
     scheduler.spawn_detached(run(Context{scheduler, dut, iterations, result}));
 #endif

@@ -23,10 +23,10 @@ sample `PREADY`/`PRDATA` after the same explicit `1ps` settle delay. An
 unmapped read also verifies the APB error path.
 
 Both peers use the fixed semantic workload `kRegisterTransactions = 12`.
-Generate the typed `Dut`, wrapper, and transport directly from RTL:
+Build the typed `Dut`, wrapper, transport, and simulator with:
 
 ```sh
-uv run --frozen cpptb-codegen apb_regfile.sv
+uv run --frozen cpptb build
 ```
 
 | cpptb | SystemVerilog |

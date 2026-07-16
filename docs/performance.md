@@ -21,6 +21,123 @@ Historical scheduler experiments and their accepted or rejected rationale are
 recorded in `benchmarks/authoring_core/OPTIMIZATION_NOTES.md` in the source
 repository.
 
+## Coverage layers
+
+Performance and usability are checked at three different scales:
+
+1. **Authoring kernels** isolate one construct, run long enough to suppress
+   process-startup noise, and enforce the `1.10x` guard against an exact pure-SV
+   twin.
+2. **User-shaped examples** cover counter, multiclock, timer, FIFO scoreboard,
+   APB register access, watchdog cancellation, fault injection, and rich packed
+   data. Their C++ and pure-SV forms must match iterations, checks, simulation
+   cycles, and failures exactly. These short scenarios are semantic integration
+   tests rather than stable nanosecond gates.
+3. **Heavy and open-source-core suites** exercise longer protocol and compute
+   workloads where scheduler and transport costs can be measured in a realistic
+   testbench. See [Heavy benchmarks](examples/heavy-benchmarks.md) and
+   [Open-source core benchmarks](examples/open-source-cores.md).
+
+## Test lifecycle checks
+
+The `test_lifecycle` pair isolates the passing-check path. Each of 5,000,000
+iterations performs one boolean condition and one equality comparison in both
+C++ and pure SV, for 10,000,000 matching checks, no DUT transactions, and no
+clock cycles. Both forms use one final 1 ps reporting step after the complete
+loop; there is no per-check scheduler or DPI crossing.
+
+The valid July 16, 2026 serial run passed at `0.983x` C++ DPI over pure SV,
+with `0.976x` DPI-first, `1.021x` SV-first, `0.985x` independent, and `0.13%`
+paired/independent disagreement. This is a machine-specific measurement; the
+registry enforces the same `1.10x` hard guard as other non-waived features.
+
+```sh
+make feature-test FEATURE=test_lifecycle
+make feature-benchmark FEATURE=test_lifecycle
+```
+
+## Dynamic process creation
+
+Four exact C++/pure-SV pairs separate coroutine construction, core scheduling,
+test lifecycle tracking, and real suspension. Each immediate-process pair runs
+5,000,000 iterations; the suspending pair runs two communicating processes
+with an event handshake. The pure-SV process twins use `fork ... join`.
+
+| Pair | C++ DPI | Pure SV | C++ / SV |
+| --- | ---: | ---: | ---: |
+| Direct coroutine task | 23.03 ns | 3.26 ns | `7.052x` |
+| Core scheduler process | 43.88 ns | 40.88 ns | **`1.080x`** |
+| Lifecycle-tracked process | 49.88 ns | 41.39 ns | **`1.199x`** |
+| Two suspending processes | 181.35 ns | 272.55 ns | **`0.661x`** |
+
+These are machine-specific July 16, 2026 serial measurements. The direct-task
+ratio is intentionally harsh: Verilator inlines the zero-time SV task to about
+3 ns, while C++ still constructs and destroys a coroutine frame. Its absolute
+delta is more useful than its ratio.
+
+The core scheduler is within the `1.10x` guard. The remaining immediate-spawn
+gap is lifecycle ownership, process provenance, exactly-once finalization, and
+failure attribution. Replacing per-spawn ownership-vector maintenance with a
+small reusable provenance record reduced the lifecycle-tracked C++ result from
+56.68 ns to 49.88 ns, a 12.0% improvement. The lifecycle layer now costs about
+6.00 ns over the core scheduler. The suspending workload is faster than its
+pure-SV twin because useful scheduling work amortizes that fixed setup cost.
+
+TLS relocation changes, embedding execution context in every process control,
+and splitting process controls into pooled subclasses all regressed the core
+path and were removed. A lazy scheduler-adoption path was not retained because
+the decomposition showed that core scheduler adoption is already within the
+guard; it would optimize the wrong layer. The lifecycle-tracked zero-time case
+remains above the hard guard as an explicit performance issue.
+
+Use `spawn()` for actual concurrent work, cancellation, or an independently
+attributed process. For sequential helper composition, await the task directly:
+
+```cpp
+// Sequential composition: no independent process is needed.
+const uint32_t value = co_await authored_value(iteration);
+
+// Concurrent work: retain a cancellable, independently owned process.
+auto driver = test.spawn(input_driver(dut, test));
+co_await driver;
+```
+
+```sh
+make feature-test FEATURE=dynamic_spawn_scheduler
+make feature-benchmark FEATURE=dynamic_spawn_scheduler
+make feature-test FEATURE=dynamic_spawn
+make feature-benchmark FEATURE=dynamic_spawn
+make feature-test FEATURE=dynamic_spawn_suspending
+make feature-benchmark FEATURE=dynamic_spawn_suspending
+```
+
+## Bounded queue and synchronization
+
+The `queue_sync` pair runs a capacity-one FIFO under sustained producer
+backpressure. A two-credit semaphore bounds outstanding work, a deliberately
+contended lock protects the consumer check, and every consumed item drives the
+same DUT transaction. The C++ and pure-SV forms use `Queue`/`Semaphore`/`Lock`
+and `mailbox`/`semaphore` respectively.
+
+At 100,000 iterations, both forms reported 100,000 queue puts, queue gets,
+lock acquisitions, semaphore acquisitions, and DUT transactions. They matched
+200,002 checks, 500,003 simulated cycles, and the final checksum exactly.
+
+The valid July 15, 2026 serial run passed at `0.788x` C++ DPI over pure SV,
+with `0.784x` DPI-first, `0.803x` SV-first, `0.792x` independent, and `0.43%`
+paired/independent disagreement. After making `Queue` the sole public FIFO
+type, the unchanged unbounded `queue` control passed at `0.838x`; its earlier
+control result was `0.824x`, a `1.7%` shift and below the `5%` investigation
+threshold. These are machine-specific measurements; the registry continues to
+enforce `1.10x` for both features.
+
+```sh
+make feature-test FEATURE=queue
+make feature-benchmark FEATURE=queue
+make feature-test FEATURE=queue_sync
+make feature-benchmark FEATURE=queue_sync
+```
+
 ## Timing-phase dispatch
 
 The exact `timing_phases` pair performs one falling-edge wait, one

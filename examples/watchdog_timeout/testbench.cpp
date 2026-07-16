@@ -1,12 +1,12 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/watchdog_timeout/generated/stalling_responder_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::watchdog_timeout {
 namespace {
 
-using cpptb::generated::stalling_responder::Dut;
+using cpptb::Dut;
 using coro::Delay;
 using coro::FallingEdge;
 using coro::RisingEdge;

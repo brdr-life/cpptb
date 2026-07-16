@@ -98,7 +98,7 @@ composition primitives cover the cases where work must overlap:
 - `with_timeout(...)` adds a checked deadline to one trigger or task.
 - `spawn()` returns a `Process` handle for work whose lifetime is controlled
   dynamically.
-- `Event` broadcasts state changes; `Channel<T>` transfers FIFO data between
+- `Event` broadcasts state changes; `Queue<T>` transfers FIFO data between
   tasks.
 
 No composition primitive advances time by itself. Time advances only when a
@@ -116,8 +116,8 @@ Task<void> fifo_test(Dut dut, TestContext& test) {
     test.start_clock(dut.clk, 10_ns);
 
     Event reset_done;
-    Channel<uint32_t> expected_words;
-    Channel<uint32_t> observed_words;
+    Queue<uint32_t> expected_words;
+    Queue<uint32_t> observed_words;
     uint32_t input_stalls = 0;
 
     co_await Join{reset_dut(dut, reset_done),
@@ -142,7 +142,7 @@ Task<void> reset_dut(Dut dut, Event& reset_done) {
 }
 
 Task<void> input_driver(Dut dut, Event& reset_done,
-                        Channel<uint32_t>& expected_words) {
+                        Queue<uint32_t>& expected_words) {
     co_await reset_done;
 
     const uint32_t word = 0x1234;
@@ -154,13 +154,13 @@ Task<void> input_driver(Dut dut, Event& reset_done,
 }
 ```
 
-Channels decouple production from checking. `get()` suspends only while the
+Queues decouple production from checking. `get()` suspends only while the
 FIFO is empty, allowing the driver and monitor to run at different rates:
 
 ```cpp
 Task<void> scoreboard(TestContext& test,
-                      Channel<uint32_t>& expected_words,
-                      Channel<uint32_t>& observed_words) {
+                      Queue<uint32_t>& expected_words,
+                      Queue<uint32_t>& observed_words) {
     for (uint32_t index = 0; index < kWordCount; ++index) {
         const uint32_t expected = co_await expected_words.get();
         const uint32_t actual = co_await observed_words.get();
@@ -168,6 +168,47 @@ Task<void> scoreboard(TestContext& test,
     }
 }
 ```
+
+### Bound producer pressure and shared resources
+
+A capacity makes queue pressure part of the schedule. `put()` suspends only
+while all slots are occupied or reserved for earlier producers; `get()` frees
+one slot and hands it directly to the oldest producer waiter:
+
+```cpp
+Task<void> packet_source(Queue<Packet>& packets) {
+    for (uint32_t index = 0; index < kPacketCount; ++index) {
+        co_await packets.put(make_packet(index));
+    }
+}
+
+Task<void> packet_driver(Dut dut, Queue<Packet>& packets) {
+    for (uint32_t index = 0; index < kPacketCount; ++index) {
+        Packet packet = co_await packets.get();
+        co_await drive_packet(dut, packet);
+    }
+}
+
+Queue<Packet> packets{4};
+co_await Join{packet_source(packets), packet_driver(dut, packets)};
+```
+
+`Semaphore` is useful for a protocol with a bounded number of outstanding
+transactions. `Lock` serializes short updates to a shared reference model:
+
+```cpp
+co_await outstanding.acquire();
+co_await request_queue.put(request);
+
+co_await model_lock.acquire();
+model.apply(response);
+model_lock.release();
+outstanding.release();
+```
+
+Neither primitive advances simulation time. A task that has acquired a lock
+or permit must release it explicitly; cancellation automatically cleans up
+only tasks that are still waiting.
 
 ### Race an event against a deadline
 
