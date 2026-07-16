@@ -123,4 +123,4 @@ move-only results use `Task<T>` and are moved through `co_return`/`co_await`.
 Scheduler roots and `Join` children remain `Task<void>`. See
 `docs/testbench-authoring.md` for the live Authoring Core API, including
 `clock_cycles`, edge timeouts, predicate waits, sticky events, and unbounded
-FIFO channels.
+FIFO queues.

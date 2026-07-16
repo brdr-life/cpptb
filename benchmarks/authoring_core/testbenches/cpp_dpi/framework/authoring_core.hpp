@@ -6,6 +6,7 @@
 #include "benchmarks/authoring_core/testbenches/cpp_dpi/generated/authoring_core_dut.hpp"
 #include "cpptb/coro_runtime.hpp"
 #include "cpptb/fixed.hpp"
+#include "cpptb/test_api.hpp"
 #include "cpptb/test_result.hpp"
 
 #define AUTHORING_CORE_KERNEL_CONTROL 0
@@ -14,7 +15,7 @@
 #define AUTHORING_CORE_KERNEL_TIMEOUT 3
 #define AUTHORING_CORE_KERNEL_WAIT_UNTIL 4
 #define AUTHORING_CORE_KERNEL_EVENT 5
-#define AUTHORING_CORE_KERNEL_CHANNEL 6
+#define AUTHORING_CORE_KERNEL_QUEUE 6
 #define AUTHORING_CORE_KERNEL_ALL 7
 #define AUTHORING_CORE_KERNEL_TASK_TIMEOUT 8
 #define AUTHORING_CORE_KERNEL_WIDE64 9
@@ -36,6 +37,12 @@
 #define AUTHORING_CORE_KERNEL_FORCE_DIRECT 25
 #define AUTHORING_CORE_KERNEL_HIER_DATA 26
 #define AUTHORING_CORE_KERNEL_TIMING_PHASES 27
+#define AUTHORING_CORE_KERNEL_QUEUE_SYNC 28
+#define AUTHORING_CORE_KERNEL_TEST_LIFECYCLE 29
+#define AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN 30
+#define AUTHORING_CORE_KERNEL_DYNAMIC_TASK 31
+#define AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SCHEDULER 32
+#define AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SUSPENDING 33
 
 #ifndef AUTHORING_CORE_KERNEL
 #define AUTHORING_CORE_KERNEL AUTHORING_CORE_KERNEL_CONTROL
@@ -53,8 +60,12 @@ struct FeatureCounts {
     uint64_t wait_until = 0;
     uint64_t event_set = 0;
     uint64_t event_wait = 0;
-    uint64_t channel_send = 0;
-    uint64_t channel_receive = 0;
+    uint64_t queue_send = 0;
+    uint64_t queue_receive = 0;
+    uint64_t queue_put = 0;
+    uint64_t queue_get = 0;
+    uint64_t lock_acquire = 0;
+    uint64_t semaphore_acquire = 0;
     uint64_t wide64 = 0;
     uint64_t wide_echo_137 = 0;
     uint64_t wide_slice = 0;
@@ -75,6 +86,8 @@ struct FeatureCounts {
     uint64_t hier_data_reads = 0;
     uint64_t hier_data_deposits = 0;
     uint64_t timing_phases = 0;
+    uint64_t test_lifecycle = 0;
+    uint64_t dynamic_spawn = 0;
 };
 
 struct BenchResult : cpptb::TestResult {
@@ -99,8 +112,8 @@ constexpr const char* kernel_name() {
     return "wait_until";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_EVENT
     return "event";
-#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CHANNEL
-    return "channel";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_QUEUE
+    return "queue";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ALL
     return "all";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_WIDE64
@@ -141,6 +154,18 @@ constexpr const char* kernel_name() {
     return "hier_data";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TIMING_PHASES
     return "timing_phases";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_QUEUE_SYNC
+    return "queue_sync";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TEST_LIFECYCLE
+    return "test_lifecycle";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN
+    return "dynamic_spawn";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_TASK
+    return "dynamic_task";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SCHEDULER
+    return "dynamic_spawn_scheduler";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SUSPENDING
+    return "dynamic_spawn_suspending";
 #else
 #error "Unknown AUTHORING_CORE_KERNEL"
 #endif

@@ -21,38 +21,41 @@ of the way.
 
 ## Constructing a bench
 
-A stage-1 source-driven cpptb example keeps the hand-written DUT and testbench
-separate from generated framework-owned files:
+A cpptb project keeps the hand-written DUT and testbench separate from
+framework-owned files:
 
 ```text
 example/
 |-- README.md
 |-- design.sv
-|-- testbench.cpp
+`-- testbench.cpp
+
+build/cpptb/design/
 |-- generated/
-`-- systemverilog/
+|-- metadata/
+|-- obj/
+`-- results/
 ```
 
-`testbench.cpp` is the primary user-facing file. The generator infers ordinary
-target metadata from the SystemVerilog source and writes the typed DUT,
-wrapper, binding, and transport adapter under `generated/`. The
-`systemverilog/` directory holds the equivalent bench used for semantic and
-performance comparisons. Detailed v1 manifests remain supported for advanced
-targets and examples that have not migrated yet.
+`testbench.cpp` is the primary user-facing file. `cpptb build` infers target
+metadata from SystemVerilog and writes the typed DUT, wrapper, binding, and
+transport adapter under the ignored build directory. The repository examples
+add a `systemverilog/` comparison bench for semantic and performance
+regression; user projects do not need one.
 
-### 1. Generate typed access
+### 1. Build typed access
 
-Run the code generator after changing the RTL. It derives interface metadata,
-not testbench timing:
+Run the project command after changing RTL or C++. It derives interface
+metadata, discovers clock and hierarchy usage, and compiles the simulator:
 
 ```sh
-uv run --frozen cpptb-codegen examples/counter/counter.sv
+cpptb build
 ```
 
-It infers the unambiguous `counter` top and emits the target-scoped `Dut`,
-static signal binding, SystemVerilog DPI wrapper, and C++ transport adapter
-under `generated/`. Use `--top` when the sources contain more than one
-top-level module.
+It infers the unambiguous `counter` top and emits the target-scoped binding,
+stable `dut.hpp`, SystemVerilog DPI wrapper, and C++ transport adapter under
+`build/cpptb/counter/generated/`. Use `--top` when sources contain more than
+one top-level module.
 
 ### 2. Write and register the sequence
 

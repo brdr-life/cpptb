@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/probe.hpp"

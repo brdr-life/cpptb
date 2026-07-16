@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "cpptb/coro_runtime.hpp"
 #include "cpptb/hierarchy.hpp"

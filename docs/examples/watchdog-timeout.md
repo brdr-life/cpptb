@@ -1,11 +1,10 @@
 # Watchdogs and timeouts
 
 This bench treats completed responses and intentional timeouts as separate
-checked outcomes. Generation needs no clock or edge annotations:
+checked outcomes. The build needs no clock or edge configuration:
 
 ```sh
-uv run --frozen cpptb-codegen \
-  examples/watchdog_timeout/stalling_responder.sv
+uv run --frozen cpptb build --project examples/watchdog_timeout --build-dir build
 ```
 
 The test starts `dut.clk` at 10 ns and awaits the DUT-produced

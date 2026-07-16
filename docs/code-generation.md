@@ -1,16 +1,27 @@
 # Code generation
 
-`cpptb-codegen` elaborates the configured SystemVerilog sources with Slang and
-renders four design-specific files:
+`cpptb build` is the user-facing entry point. Internally, `cpptb-codegen`
+elaborates the configured SystemVerilog sources with Slang and renders the
+design-specific files needed by the simulator:
 
-- A typed C++ DUT hierarchy.
+- A typed C++ DUT hierarchy and stable `dut.hpp` include.
 - C++ binding metadata and access callbacks.
 - A SystemVerilog DPI wrapper containing the event hooks.
 - A C++ DPI adapter connecting the generated transport to the public test API.
+- A small C++ discovery translation unit used during the build.
+
+```sh
+cpptb build
+```
+
+The build backend invokes `cpptb-codegen` twice: once to create the typed
+interface used by testbench discovery, and again to finalize clock and
+hierarchy transport. This sequence is cached and does not belong in a user
+Makefile. The low-level source-first command remains available for custom build
+integrations and writes to `build/cpptb/<target>/generated` by default:
 
 ```sh
 uv run --frozen cpptb-codegen rtl/design.sv
-uv run --frozen cpptb-codegen rtl/design.sv --check
 ```
 
 Pass multiple RTL files together and use `--top` only when source elaboration
@@ -29,14 +40,16 @@ one-bit outputs. Input clocks registered by the C++ test use a simulator-side
 periodic process. DUT-produced clocks and handshake outputs can be awaited
 directly without an edge-observer option.
 
-The checked-in examples and conformance suite commit generated output so users
-can inspect the boundary and CI can detect stale files. Generated files begin
-with a `Do not edit by hand` notice.
+Source-driven generation writes to
+`build/cpptb/<target>/generated` by default. The directory is disposable and
+should remain ignored by version control. Generated files begin with a
+`Do not edit by hand` notice. Internal conformance fixtures may still commit
+generated snapshots when a regression specifically needs to compare them.
 
-The source-first CLI is the normal user workflow. Version-1 manifests remain
-supported for compatibility and build configuration such as include paths,
-defines, source lists, and parameter overrides; they are not required for
-ordinary targets. Hierarchy and internal objects are always inferred from the
-elaborated RTL. See [hierarchical DUT access](hierarchy.md) for the generated
-API and usage-pruned transport contract. The complete legacy schema and
-frontend notes remain in `tools/codegen/README.md`.
+The public project CLI is the normal user workflow. `cpptb-codegen` and
+version-1 manifests remain supported as lower-level compatibility surfaces;
+they are not required for ordinary targets. Hierarchy and internal objects are
+always inferred from the elaborated RTL. See
+[hierarchical DUT access](hierarchy.md) for the generated API and usage-pruned
+transport contract. The complete legacy schema and frontend notes remain in
+`tools/codegen/README.md`.

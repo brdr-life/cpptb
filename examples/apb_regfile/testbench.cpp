@@ -1,12 +1,12 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/apb_regfile/generated/apb_regfile_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::apb_regfile {
 namespace {
 
-using cpptb::generated::apb_regfile::Dut;
+using cpptb::Dut;
 using coro::Delay;
 using coro::FallingEdge;
 using coro::RisingEdge;

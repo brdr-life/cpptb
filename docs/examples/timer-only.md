@@ -1,11 +1,10 @@
 # Clockless timers
 
-`Delay` does not depend on a DUT clock. This example is generated directly
-from its RTL without a clock option:
+`Delay` does not depend on a DUT clock. The project needs no clock
+configuration:
 
 ```sh
-uv run --frozen cpptb-codegen \
-  examples/timer_only/timer_only_probe.sv
+uv run --frozen cpptb build --project examples/timer_only --build-dir build
 ```
 
 Two independent cadences share one fixed semantic workload and are joined by

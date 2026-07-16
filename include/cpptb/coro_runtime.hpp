@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <new>
@@ -644,10 +645,55 @@ inline CoroutineFramePool& coroutine_frame_pool() {
 
 }  // namespace detail
 
+// Keep successful coroutines free of exception-runtime traffic. The
+// exception_ptr exists only after a coroutine actually throws.
+class ExceptionState {
+   public:
+    ExceptionState() = default;
+
+    ExceptionState(const ExceptionState& other) {
+        if (other.value_) {
+            value_ = std::make_unique<std::exception_ptr>(*other.value_);
+        }
+    }
+
+    ExceptionState& operator=(const ExceptionState& other) {
+        if (this == &other) return *this;
+        if (!other.value_) {
+            value_.reset();
+        } else if (value_) {
+            *value_ = *other.value_;
+        } else {
+            value_ = std::make_unique<std::exception_ptr>(*other.value_);
+        }
+        return *this;
+    }
+
+    ExceptionState(ExceptionState&&) noexcept = default;
+    ExceptionState& operator=(ExceptionState&&) noexcept = default;
+
+    explicit operator bool() const noexcept {
+        return static_cast<bool>(value_);
+    }
+
+    void capture_current() {
+        value_ = std::make_unique<std::exception_ptr>(std::current_exception());
+    }
+
+    [[noreturn]] void rethrow() const {
+        std::rethrow_exception(*value_);
+    }
+
+   private:
+    std::unique_ptr<std::exception_ptr> value_;
+};
+
 struct TaskPromiseBase {
     Scheduler* scheduler = nullptr;
     std::coroutine_handle<> continuation = nullptr;
     std::shared_ptr<JoinState> join_state;
+    ExceptionState exception;
+    void* execution_context = nullptr;
     size_t state_index = std::numeric_limits<size_t>::max();
 
     static void* operator new(size_t size) {
@@ -672,10 +718,7 @@ struct TaskPromiseBase {
 
     FinalAwaiter final_suspend() noexcept { return {}; }
 
-    void unhandled_exception() {
-        std::fprintf(stderr, "cpptb: unhandled exception in coroutine\n");
-        std::abort();
-    }
+    void unhandled_exception() { exception.capture_current(); }
 };
 
 template <typename T>
@@ -772,6 +815,7 @@ class Process {
 struct JoinState {
     uint32_t remaining = 0;
     size_t parent_index = std::numeric_limits<size_t>::max();
+    ExceptionState exception;
 };
 
 struct WaitRegistration {
@@ -800,23 +844,146 @@ struct ExternalWaitRegistration {
     WaitRegistration wait;
 };
 
+namespace detail {
+class ProcessControlPool;
+}
+
+struct ProcessCompletionHandler {
+    using FinishFn = void (*)(void*, ExceptionState&, bool) noexcept;
+
+    ProcessCompletionHandler() = default;
+
+    ProcessCompletionHandler(void* owner, FinishFn finish)
+        : owner(owner), finish(finish) {}
+
+    ProcessCompletionHandler(const ProcessCompletionHandler&) = delete;
+    ProcessCompletionHandler& operator=(const ProcessCompletionHandler&) =
+        delete;
+
+    ProcessCompletionHandler(ProcessCompletionHandler&& other) noexcept
+        : owner(std::exchange(other.owner, nullptr)),
+          finish(std::exchange(other.finish, nullptr)) {}
+
+    ProcessCompletionHandler& operator=(
+        ProcessCompletionHandler&& other) noexcept {
+        if (this == &other) return *this;
+        reset();
+        owner = std::exchange(other.owner, nullptr);
+        finish = std::exchange(other.finish, nullptr);
+        return *this;
+    }
+
+    ~ProcessCompletionHandler() { reset(); }
+
+    void notify(ExceptionState& exception, bool cancelled) noexcept {
+        auto* completed_owner = std::exchange(owner, nullptr);
+        auto completed_finish = std::exchange(finish, nullptr);
+        if (completed_owner && completed_finish) {
+            completed_finish(completed_owner, exception, cancelled);
+        }
+    }
+
+    void reset() noexcept {
+        if (!owner || !finish) {
+            owner = nullptr;
+            finish = nullptr;
+            return;
+        }
+        ExceptionState exception;
+        notify(exception, true);
+    }
+
+    void* owner = nullptr;
+    FinishFn finish = nullptr;
+};
+
+using ProcessOwnerMatcher = bool (*)(void*, void*) noexcept;
+
 struct ProcessControl {
     Scheduler* scheduler = nullptr;
-    std::vector<WaitRegistration> completion_waiters;
+    detail::ProcessControlPool* pool = nullptr;
+    WaitRegistration completion_waiter;
+    std::vector<WaitRegistration> extra_completion_waiters;
+    ExceptionState exception;
+    ProcessCompletionHandler completion_handler;
     size_t state_index = std::numeric_limits<size_t>::max();
     size_t scheduler_slot = std::numeric_limits<size_t>::max();
     size_t references = 1;
+    bool has_completion_waiter = false;
     bool done = false;
     bool cancelled = false;
     bool cancellation_requested = false;
 };
+
+namespace detail {
+
+class ProcessControlPool {
+   public:
+    static constexpr size_t kMaxCached = 32;
+
+    ProcessControlPool() = default;
+    ProcessControlPool(const ProcessControlPool&) = delete;
+    ProcessControlPool& operator=(const ProcessControlPool&) = delete;
+
+    ~ProcessControlPool() {
+        while (free_list_) {
+            auto* next = free_list_->next;
+            ::operator delete(free_list_);
+            free_list_ = next;
+        }
+    }
+
+    ProcessControl* create() {
+        void* storage = nullptr;
+        if (free_list_) {
+            storage = free_list_;
+            free_list_ = free_list_->next;
+            --cached_;
+        } else {
+            storage = ::operator new(sizeof(ProcessControl));
+        }
+        auto* control = ::new (storage) ProcessControl{};
+        control->pool = this;
+        return control;
+    }
+
+    void destroy(ProcessControl* control) noexcept {
+        if (!control) return;
+        control->~ProcessControl();
+        if (cached_ == kMaxCached) {
+            ::operator delete(control);
+            return;
+        }
+        auto* node = static_cast<FreeNode*>(static_cast<void*>(control));
+        node->next = free_list_;
+        free_list_ = node;
+        ++cached_;
+    }
+
+   private:
+    struct FreeNode {
+        FreeNode* next = nullptr;
+    };
+
+    FreeNode* free_list_ = nullptr;
+    size_t cached_ = 0;
+};
+
+inline ProcessControlPool& process_control_pool() {
+    static thread_local ProcessControlPool pool;
+    return pool;
+}
+
+}  // namespace detail
 
 inline void retain_process_control(ProcessControl* control) noexcept {
     if (control) ++control->references;
 }
 
 inline void release_process_control(ProcessControl* control) noexcept {
-    if (control && --control->references == 0) delete control;
+    if (control && --control->references == 0) {
+        control->pool->destroy(control);
+    }
 }
 
 struct TimerRegistration {
@@ -853,6 +1020,7 @@ class Scheduler {
         for (size_t state_index = 0; state_index < states_.size(); ++state_index) {
             auto& state = states_[state_index];
             end_wait(state);
+            if (state.ready) --live_ready_count_;
             if (state.handle) {
                 state.promise->scheduler = nullptr;
                 handles.push_back(state.handle);
@@ -871,6 +1039,7 @@ class Scheduler {
                 control->cancelled = true;
                 control->cancellation_requested = false;
             }
+            control->completion_handler.notify(control->exception, true);
             control->state_index = std::numeric_limits<size_t>::max();
             control->scheduler_slot = std::numeric_limits<size_t>::max();
             release_process_control(std::exchange(control, nullptr));
@@ -884,7 +1053,8 @@ class Scheduler {
     Scheduler(const Scheduler&) = delete;
     Scheduler& operator=(const Scheduler&) = delete;
 
-    Process spawn(Task<void>&& task) {
+    Process spawn(Task<void>&& task, void* execution_context = nullptr,
+                  ProcessCompletionHandler completion_handler = {}) {
         if (shutting_down_) return {};
         auto handle = task.release();
         if (!handle) return {};
@@ -892,10 +1062,12 @@ class Scheduler {
         auto& promise = handle.promise();
         promise.scheduler = this;
         promise.continuation = nullptr;
+        promise.execution_context = execution_context;
         const size_t state_index = adopt(handle, promise);
-        auto* control = new ProcessControl{};
+        auto* control = process_control_pool_->create();
         control->scheduler = this;
         control->state_index = state_index;
+        control->completion_handler = std::move(completion_handler);
         if (free_process_slots_.empty()) {
             control->scheduler_slot = process_controls_.size();
             process_controls_.push_back(control);
@@ -914,7 +1086,7 @@ class Scheduler {
         return process;
     }
 
-    void spawn_detached(Task<void>&& task) {
+    void spawn_detached(Task<void>&& task, void* execution_context = nullptr) {
         if (shutting_down_) return;
         auto handle = task.release();
         if (!handle) return;
@@ -922,6 +1094,7 @@ class Scheduler {
         auto& promise = handle.promise();
         promise.scheduler = this;
         promise.continuation = nullptr;
+        promise.execution_context = execution_context;
         const size_t state_index = adopt(handle, promise);
         make_ready(state_index);
         drain_ready();
@@ -993,9 +1166,9 @@ class Scheduler {
     }
 
     template <size_t ChildCount>
-    void start_join(std::coroutine_handle<> parent,
-                    TaskPromiseBase& parent_promise,
-                    std::array<Task<void>, ChildCount>&& children) {
+    std::shared_ptr<JoinState> start_join(
+        std::coroutine_handle<> parent, TaskPromiseBase& parent_promise,
+        std::array<Task<void>, ChildCount>&& children) {
         static_assert(ChildCount >= 2, "Join requires at least two tasks");
         auto& parent_state = state_for(parent, parent_promise);
         begin_wait(parent_state);
@@ -1013,8 +1186,10 @@ class Scheduler {
             child.promise().scheduler = this;
             child.promise().continuation = nullptr;
             child.promise().join_state = join_state;
+            child.promise().execution_context = parent_promise.execution_context;
             make_ready(adopt(child, child.promise()));
         }
+        return join_state;
     }
 
     template <typename T>
@@ -1032,6 +1207,7 @@ class Scheduler {
         child.promise().scheduler = this;
         child.promise().continuation = nullptr;
         child.promise().join_state = std::move(join_state);
+        child.promise().execution_context = parent_promise.execution_context;
         adopt(child, child.promise());
         child.resume();
 
@@ -1052,15 +1228,87 @@ class Scheduler {
 
         auto& state = state_for(handle, promise);
         const uint64_t generation = begin_wait(state);
-        control->completion_waiters.push_back(
-            WaitRegistration{promise.state_index, generation, nullptr,
-                             0});
+        const WaitRegistration registration{promise.state_index, generation,
+                                            nullptr, 0};
+        const bool used_inline_waiter = !control->has_completion_waiter;
+        if (used_inline_waiter) {
+            control->completion_waiter = registration;
+            control->has_completion_waiter = true;
+        } else {
+            control->extra_completion_waiters.push_back(registration);
+        }
         if (control->done) {
-            control->completion_waiters.pop_back();
+            if (used_inline_waiter) {
+                control->has_completion_waiter = false;
+            } else {
+                control->extra_completion_waiters.pop_back();
+            }
             end_wait(state);
             return false;
         }
         return true;
+    }
+
+    bool run_process_if_only_ready(ProcessControl* control,
+                                   bool& defer_parent) {
+        defer_parent = false;
+        if (!draining_ || !control || control->scheduler != this ||
+            control->done || control->state_index >= states_.size()) {
+            return control && control->done;
+        }
+        if (inline_process_depth_ >= kMaxInlineProcessDepth) {
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+            ++inline_process_depth_fallback_count_;
+#endif
+            return false;
+        }
+
+        auto& target = states_[control->state_index];
+        if (!target.handle || !target.ready || target.done) return false;
+        if (live_ready_count_ != 1) return false;
+
+        // All remaining entries are either stale or this target. Consume them
+        // together so an inline await chain cannot grow the ready queue.
+        if (ready_.size() == ready_cursor_ + 1) {
+            ready_.pop_back();
+        } else {
+            ready_.resize(ready_cursor_);
+        }
+        target.ready = false;
+        --live_ready_count_;
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        ++inline_process_start_count_;
+        max_inline_process_depth_ =
+            std::max(max_inline_process_depth_, inline_process_depth_ + 1);
+#endif
+        void* previous_context = current_execution_context_;
+        current_execution_context_ = target.promise->execution_context;
+        ++inline_process_depth_;
+        target.handle.resume();
+        --inline_process_depth_;
+        current_execution_context_ = previous_context;
+        if (control->done && finished_root_states_.size() == 1 &&
+            finished_root_states_.back() == control->state_index) {
+            const size_t finished_index = finished_root_states_.back();
+            finished_root_states_.pop_back();
+            reclaiming_ = true;
+            reclaim_finished_state(finished_index);
+            reclaiming_ = false;
+        } else {
+            collect_finished_roots();
+        }
+        if (control->done) {
+            defer_parent = static_cast<bool>(control->exception) ||
+                           !pending_cancellations_.empty() ||
+                           live_ready_count_ != 0;
+        }
+        return control->done;
+    }
+
+    void defer_process_parent(std::coroutine_handle<> handle,
+                              TaskPromiseBase& promise) {
+        auto& state = state_for(handle, promise);
+        make_ready(promise.state_index);
     }
 
     void finish(std::coroutine_handle<> handle,
@@ -1068,8 +1316,8 @@ class Scheduler {
         const size_t state_index = promise.state_index;
         if (!state_matches(state_index, handle)) return;
         auto& state = states_[state_index];
-        end_wait(state);
-        state.ready = false;
+        if (state.waiting) end_wait(state);
+        clear_ready(state);
         state.done = true;
         if (active_coroutines_ != 0) --active_coroutines_;
         const bool child = promise.continuation != nullptr ||
@@ -1079,9 +1327,14 @@ class Scheduler {
         } else {
             if (state_index < process_by_state_.size() &&
                 process_by_state_[state_index]) {
-                complete_process(*process_by_state_[state_index], false);
+                auto& process = *process_by_state_[state_index];
+                process.exception = std::move(promise.exception);
+                complete_process(process, false);
+            } else if (promise.exception) {
+                std::fprintf(stderr, "cpptb: unhandled exception in coroutine\n");
+                std::abort();
             }
-            finished_states_.push_back(state_index);
+            finished_root_states_.push_back(state_index);
         }
     }
 
@@ -1101,8 +1354,28 @@ class Scheduler {
         drain_ready();
     }
 
-    void finish_join_child(const std::shared_ptr<JoinState>& join_state) noexcept {
+    void cancel_processes_owned_by(void* owner,
+                                   ProcessOwnerMatcher matcher = nullptr) {
+        if (!owner) return;
+        std::vector<ProcessControl*> owned;
+        for (auto* control : process_controls_) {
+            if (!control || control->done) continue;
+            void* process_owner = control->completion_handler.owner;
+            if (matcher ? !matcher(process_owner, owner)
+                        : process_owner != owner) continue;
+            retain_process_control(control);
+            owned.push_back(control);
+        }
+        for (auto* control : owned) cancel_process(control);
+        for (auto* control : owned) release_process_control(control);
+    }
+
+    void finish_join_child(const std::shared_ptr<JoinState>& join_state,
+                           const ExceptionState& exception) noexcept {
         if (!join_state || join_state->remaining == 0) return;
+        if (exception && !join_state->exception) {
+            join_state->exception = exception;
+        }
         --join_state->remaining;
         if (join_state->remaining != 0) return;
 
@@ -1155,10 +1428,15 @@ class Scheduler {
             std::abort();
         }
 
-        for (auto& finished : finished_states_) {
-            if (finished == state_index) {
-                finished = std::numeric_limits<size_t>::max();
-                break;
+        if (!finished_states_.empty() &&
+            finished_states_.back() == state_index) {
+            finished_states_.pop_back();
+        } else {
+            for (auto& finished : finished_states_) {
+                if (finished == state_index) {
+                    finished = std::numeric_limits<size_t>::max();
+                    break;
+                }
             }
         }
         states_[state_index] = CoroutineState{};
@@ -1317,6 +1595,8 @@ class Scheduler {
         return next_timer_->deadline;
     }
 
+    void* current_execution_context() const { return current_execution_context_; }
+
     uint64_t now() const { return now_; }
 
     SimTime now_time() const {
@@ -1343,14 +1623,42 @@ class Scheduler {
     }
 
     uint64_t compound_wait_park_count() const { return compound_wait_parks_; }
+
+    size_t max_ready_queue_entries() const { return max_ready_queue_entries_; }
+
+    uint64_t inline_process_start_count() const {
+        return inline_process_start_count_;
+    }
+
+    size_t max_inline_process_depth() const {
+        return max_inline_process_depth_;
+    }
+
+    uint64_t inline_process_depth_fallback_count() const {
+        return inline_process_depth_fallback_count_;
+    }
+
+    size_t live_ready_count() const { return live_ready_count_; }
+
+    bool live_ready_count_matches_states() const {
+        size_t ready_states = 0;
+        for (const auto& state : states_) {
+            ready_states += state.ready ? 1 : 0;
+        }
+        return ready_states == live_ready_count_;
+    }
 #endif
 
    private:
     void resume_completion_waiters(ProcessControl& process) {
-        for (const auto& registration : process.completion_waiters) {
+        if (process.has_completion_waiter) {
+            resume_registration(process.completion_waiter);
+            process.has_completion_waiter = false;
+        }
+        for (const auto& registration : process.extra_completion_waiters) {
             resume_registration(registration);
         }
-        process.completion_waiters.clear();
+        process.extra_completion_waiters.clear();
     }
 
     void complete_process(ProcessControl& process, bool cancelled) {
@@ -1358,7 +1666,11 @@ class Scheduler {
         process.done = true;
         process.cancelled = cancelled;
         process.cancellation_requested = false;
-        resume_completion_waiters(process);
+        process.completion_handler.notify(process.exception, cancelled);
+        if (process.has_completion_waiter ||
+            !process.extra_completion_waiters.empty()) {
+            resume_completion_waiters(process);
+        }
     }
 
     void apply_pending_cancellations() {
@@ -1394,10 +1706,12 @@ class Scheduler {
 
         end_wait(state);
         state.wait_generation = ++next_wait_generation_;
-        state.ready = false;
+        clear_ready(state);
         state.done = true;
         if (active_coroutines_ != 0) --active_coroutines_;
 
+        const bool child = state.promise->continuation != nullptr ||
+                           state.promise->join_state != nullptr;
         auto handle = state.handle;
         if (handle) {
             state.promise->continuation = nullptr;
@@ -1407,7 +1721,8 @@ class Scheduler {
             process_by_state_[state_index]) {
             complete_process(*process_by_state_[state_index], true);
         }
-        finished_states_.push_back(state_index);
+        (child ? finished_states_ : finished_root_states_)
+            .push_back(state_index);
     }
 
     static size_t edge_queue_index(uint32_t signal_id, EdgeKind edge) {
@@ -1505,7 +1820,7 @@ class Scheduler {
     uint64_t begin_wait(CoroutineState& state) {
         if (state.waiting) end_wait(state);
         state.waiting = true;
-        state.ready = false;
+        clear_ready(state);
         state.wait_generation = ++next_wait_generation_;
         return state.wait_generation;
     }
@@ -1514,6 +1829,11 @@ class Scheduler {
         if (!state.waiting) return;
         state.waiting = false;
         const size_t state_index = static_cast<size_t>(&state - states_.data());
+        auto& phase_counts = phase_wait_counts_by_state_[state_index];
+        if (state.edge_wait_count == 0 && phase_counts[0] == 0 &&
+            phase_counts[1] == 0 && phase_counts[2] == 0) {
+            return;
+        }
         remove_edge_interests(state_index);
         if (state.edge_wait_count != 0) {
             stale_edge_registrations_ += state.edge_wait_count;
@@ -1523,7 +1843,6 @@ class Scheduler {
             falling_edge_registrations_ -= state.falling_edge_wait_count;
             state.falling_edge_wait_count = 0;
         }
-        auto& phase_counts = phase_wait_counts_by_state_[state_index];
         for (size_t phase = 0; phase < phase_counts.size(); ++phase) {
             if (phase_counts[phase] >
                 phase_waiter_counts_[phase]) {
@@ -1705,27 +2024,46 @@ class Scheduler {
         auto& state = states_[state_index];
         if (state.done || state.ready) return;
         state.ready = true;
+        ++live_ready_count_;
         ready_.push_back(state_index);
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        if (ready_.size() > max_ready_queue_entries_) {
+            max_ready_queue_entries_ = ready_.size();
+        }
+#endif
     }
 
     void drain_ready() {
         if (draining_) return;
         draining_ = true;
+        ready_cursor_ = 0;
         drain_ready_queue();
         ready_.clear();
+        ready_cursor_ = 0;
         draining_ = false;
         scheduler_boundary();
     }
 
     void drain_ready_queue() {
-        for (size_t ready_index = 0; ready_index < ready_.size(); ++ready_index) {
-            const size_t state_index = ready_[ready_index];
+        constexpr size_t compact_after = 1'024;
+        while (ready_cursor_ < ready_.size()) {
+            const size_t state_index = ready_[ready_cursor_++];
+            if (ready_cursor_ >= compact_after &&
+                ready_cursor_ * 2 >= ready_.size()) {
+                ready_.erase(ready_.begin(), ready_.begin() + ready_cursor_);
+                ready_cursor_ = 0;
+            }
             if (state_index >= states_.size()) continue;
             auto& state = states_[state_index];
             if (!state.handle || state.done || !state.ready) continue;
             state.ready = false;
+            --live_ready_count_;
+            void* previous_context = current_execution_context_;
+            current_execution_context_ = state.promise->execution_context;
             state.handle.resume();
+            current_execution_context_ = previous_context;
             apply_pending_cancellations();
+            collect_finished_roots();
         }
     }
 
@@ -1740,6 +2078,12 @@ class Scheduler {
         return states_[state_index];
     }
 
+    void clear_ready(CoroutineState& state) noexcept {
+        if (!state.ready) return;
+        state.ready = false;
+        --live_ready_count_;
+    }
+
     bool state_matches(size_t state_index,
                        std::coroutine_handle<> handle) const {
         return state_index < states_.size() &&
@@ -1747,57 +2091,70 @@ class Scheduler {
     }
 
     void scheduler_boundary() {
+        collect_finished_roots();
         collect_finished_states();
         compact_stale_edge_queues();
     }
 
-    void collect_finished_states() {
+    void collect_finished_roots() {
+        collect_finished(finished_root_states_);
+    }
+
+    void collect_finished_states() { collect_finished(finished_states_); }
+
+    void collect_finished(std::vector<size_t>& finished_states) {
         if (reclaiming_) return;
         reclaiming_ = true;
         for (size_t finished_index = 0;
-             finished_index < finished_states_.size(); ++finished_index) {
-            const size_t state_index = finished_states_[finished_index];
-            if (state_index >= states_.size()) continue;
-            auto& state = states_[state_index];
-            if (!state.handle || !state.done) continue;
-
-            auto handle = state.handle;
-            auto* promise = state.promise;
-            ProcessControl* control = nullptr;
-            if (state_index < process_by_state_.size()) {
-                control = process_by_state_[state_index];
-                process_by_state_[state_index] = nullptr;
-            }
-            state = CoroutineState{};
-            free_states_.push_back(state_index);
-
-            if (control) {
-                control->state_index = std::numeric_limits<size_t>::max();
-                control->scheduler = nullptr;
-                const size_t slot = control->scheduler_slot;
-                control->scheduler_slot = std::numeric_limits<size_t>::max();
-                if (slot < process_controls_.size() &&
-                    process_controls_[slot] == control) {
-                    process_controls_[slot] = nullptr;
-                    free_process_slots_.push_back(slot);
-                }
-                release_process_control(control);
-            }
-
-            promise->scheduler = nullptr;
-            handle.destroy();
+             finished_index < finished_states.size(); ++finished_index) {
+            reclaim_finished_state(finished_states[finished_index]);
         }
-        finished_states_.clear();
+        finished_states.clear();
         reclaiming_ = false;
     }
 
+    void reclaim_finished_state(size_t state_index) {
+        if (state_index >= states_.size()) return;
+        auto& state = states_[state_index];
+        if (!state.handle || !state.done) return;
+
+        auto handle = state.handle;
+        auto* promise = state.promise;
+        ProcessControl* control = nullptr;
+        if (state_index < process_by_state_.size()) {
+            control = process_by_state_[state_index];
+            process_by_state_[state_index] = nullptr;
+        }
+        state = CoroutineState{};
+        free_states_.push_back(state_index);
+
+        if (control) {
+            control->state_index = std::numeric_limits<size_t>::max();
+            control->scheduler = nullptr;
+            const size_t slot = control->scheduler_slot;
+            control->scheduler_slot = std::numeric_limits<size_t>::max();
+            if (slot < process_controls_.size() &&
+                process_controls_[slot] == control) {
+                process_controls_[slot] = nullptr;
+                free_process_slots_.push_back(slot);
+            }
+            release_process_control(control);
+        }
+
+        promise->scheduler = nullptr;
+        handle.destroy();
+    }
+
     std::vector<CoroutineState> states_;
+    detail::ProcessControlPool* process_control_pool_ =
+        &detail::process_control_pool();
     std::vector<ProcessControl*> process_controls_;
     std::vector<ProcessControl*> process_by_state_;
     std::vector<ProcessControl*> pending_cancellations_;
     std::vector<size_t> free_states_;
     std::vector<size_t> free_process_slots_;
     std::vector<size_t> finished_states_;
+    std::vector<size_t> finished_root_states_;
     std::vector<std::vector<WaitRegistration>> edge_waiters_;
     std::array<std::vector<WaitRegistration>, 3> phase_waiters_;
     std::array<size_t, 3> phase_waiter_counts_{};
@@ -1812,10 +2169,15 @@ class Scheduler {
         timer_waiters_;
     std::optional<TimerRegistration> next_timer_;
     std::vector<size_t> ready_;
+    size_t ready_cursor_ = 0;
+    static constexpr size_t kMaxInlineProcessDepth = 64;
+    size_t inline_process_depth_ = 0;
     uint64_t now_ = 0;
     uint64_t next_wait_generation_ = 0;
     uint64_t next_timer_sequence_ = 0;
+    void* current_execution_context_ = nullptr;
     size_t active_coroutines_ = 0;
+    size_t live_ready_count_ = 0;
     size_t falling_edge_registrations_ = 0;
     size_t edge_queue_entries_ = 0;
     size_t stale_edge_registrations_ = 0;
@@ -1827,6 +2189,10 @@ class Scheduler {
     uint64_t compound_wait_parks_ = 0;
     uint64_t edge_notification_count_ = 0;
     uint64_t edge_notification_resume_count_ = 0;
+    uint64_t inline_process_start_count_ = 0;
+    uint64_t inline_process_depth_fallback_count_ = 0;
+    size_t max_inline_process_depth_ = 0;
+    size_t max_ready_queue_entries_ = 0;
 #endif
     bool timer_schedule_changed_ = false;
     bool draining_ = false;
@@ -1883,13 +2249,18 @@ inline void Process::cancel() const {
 
 struct Process::Awaiter {
     Process process;
+    bool defer_parent = false;
 
-    bool await_ready() const {
+    bool await_ready() {
         if (!process.valid()) {
             std::fprintf(stderr, "cpptb: cannot await an invalid process\n");
             std::abort();
         }
-        return process.done();
+        if (!process.done() && process.control_->scheduler) {
+            process.control_->scheduler->run_process_if_only_ready(
+                process.control_, defer_parent);
+        }
+        return process.done() && !defer_parent;
     }
 
     template <typename Promise>
@@ -1898,10 +2269,18 @@ struct Process::Awaiter {
         auto& promise = static_cast<TaskPromiseBase&>(handle.promise());
         auto* scheduler = promise.scheduler;
         if (!scheduler) return false;
+        if (defer_parent) {
+            scheduler->defer_process_parent(handle, promise);
+            return true;
+        }
         return scheduler->park_process(handle, promise, process.control_);
     }
 
-    void await_resume() const noexcept {}
+    void await_resume() const {
+        if (process.control_->exception) {
+            process.control_->exception.rethrow();
+        }
+    }
 };
 
 inline Process::Awaiter Process::operator co_await() const {
@@ -1916,7 +2295,10 @@ std::coroutine_handle<> TaskPromiseBase::FinalAwaiter::await_suspend(
     if (scheduler) scheduler->finish(handle, promise);
 
     if (promise.join_state) {
-        if (scheduler) scheduler->finish_join_child(promise.join_state);
+        if (scheduler) {
+            scheduler->finish_join_child(promise.join_state,
+                                         promise.exception);
+        }
         return std::noop_coroutine();
     }
 
@@ -1947,6 +2329,7 @@ struct Task<T>::Awaiter {
 
         child_.promise().scheduler = scheduler;
         child_.promise().continuation = parent;
+        child_.promise().execution_context = parent_promise.execution_context;
         scheduler->adopt(child_, child_.promise());
         return child_;
     }
@@ -1959,6 +2342,12 @@ struct Task<T>::Awaiter {
 
         auto& promise = child_.promise();
         auto* scheduler = promise.scheduler;
+        if (promise.exception) {
+            auto exception = std::move(promise.exception);
+            scheduler->reclaim_awaited(child_, promise);
+            child_ = nullptr;
+            exception.rethrow();
+        }
         if constexpr (std::is_void_v<T>) {
             scheduler->reclaim_awaited(child_, promise);
             child_ = nullptr;
@@ -2126,6 +2515,7 @@ Join(Children&&...) -> Join<sizeof...(Children)>;
 template <size_t ChildCount>
 struct JoinAwaiter {
     Join<ChildCount> trigger;
+    std::shared_ptr<JoinState> state;
 
     bool await_ready() const noexcept { return false; }
 
@@ -2138,10 +2528,15 @@ struct JoinAwaiter {
             std::fprintf(stderr, "cpptb: cannot wait on Join without a scheduler\n");
             std::abort();
         }
-        scheduler->start_join(handle, promise, std::move(trigger.children));
+        state = scheduler->start_join(handle, promise,
+                                      std::move(trigger.children));
     }
 
-    void await_resume() const noexcept {}
+    void await_resume() const {
+        if (state && state->exception) {
+            state->exception.rethrow();
+        }
+    }
 };
 
 template <size_t ChildCount>
@@ -2284,6 +2679,13 @@ struct TaskTimeoutAwaiter {
         if (!scheduler) {
             std::fprintf(stderr, "cpptb: timed task lost its scheduler\n");
             std::abort();
+        }
+
+        auto exception = promise.exception;
+        if (exception && scheduler->awaited_done(child, promise)) {
+            scheduler->reclaim_awaited(child, promise);
+            child = nullptr;
+            exception.rethrow();
         }
 
         if constexpr (std::is_void_v<T>) {
@@ -2429,23 +2831,25 @@ class Event {
 };
 
 template <typename T>
-class Channel {
+class Queue {
     static_assert(std::move_constructible<T>,
-                  "Channel values must be move constructible");
+                  "Queue values must be move constructible");
 
    public:
-    Channel() = default;
-    Channel(const Channel&) = delete;
-    Channel& operator=(const Channel&) = delete;
+    explicit Queue(size_t maxsize = 0) : maxsize_(maxsize) {}
+    Queue(const Queue&) = delete;
+    Queue& operator=(const Queue&) = delete;
 
-    ~Channel() {
+    ~Queue() {
         cleanup();
-        if (!waiters_.empty()) {
+        if (!get_waiters_.empty() || !put_waiters_.empty()) {
             std::fprintf(stderr,
-                         "cpptb: Channel destroyed with active waiters\n");
+                         "cpptb: Queue destroyed with active waiters\n");
             std::abort();
         }
     }
+
+    size_t maxsize() const { return maxsize_; }
 
     size_t size() {
         cleanup();
@@ -2454,31 +2858,49 @@ class Channel {
 
     bool empty() { return size() == 0; }
 
-    void put_nowait(T value) {
+    bool full() {
         cleanup();
-        items_.push_back(std::move(value));
-        wake_available();
+        return !has_unreserved_slot();
     }
 
-    Task<void> put(T value) {
-        put_nowait(std::move(value));
-        co_return;
+    template <typename U>
+        requires std::constructible_from<T, U&&>
+    bool put_nowait(U&& value) {
+        cleanup();
+        if (!has_unreserved_slot()) return false;
+        items_.emplace_back(std::forward<U>(value));
+        wake_consumers();
+        return true;
+    }
+
+    std::optional<T> get_nowait() {
+        cleanup();
+        if (!has_unreserved_item()) return std::nullopt;
+        auto item = items_.begin() +
+                    static_cast<std::ptrdiff_t>(reserved_items_);
+        T value = std::move(*item);
+        items_.erase(item);
+        wake_producers();
+        return std::optional<T>{std::move(value)};
     }
 
     struct GetAwaiter {
-        explicit GetAwaiter(Channel& owner) : channel(&owner) {}
+        explicit GetAwaiter(Queue& owner) : queue(&owner) {}
         GetAwaiter(const GetAwaiter&) = delete;
         GetAwaiter& operator=(const GetAwaiter&) = delete;
 
         GetAwaiter(GetAwaiter&& other) noexcept
-            : channel(other.channel), registration(std::move(other.registration)),
+            : queue(other.queue), registration(std::move(other.registration)),
               active(std::exchange(other.active, false)) {}
 
         ~GetAwaiter() {
-            if (active && registration) channel->abandon(*registration);
+            if (active && registration) queue->abandon_get(*registration);
         }
 
-        bool await_ready() { return channel->has_unreserved_item(); }
+        bool await_ready() {
+            queue->cleanup();
+            return queue->has_unreserved_item();
+        }
 
         template <typename Promise>
             requires std::derived_from<Promise, TaskPromiseBase>
@@ -2486,25 +2908,383 @@ class Channel {
             auto& promise = static_cast<TaskPromiseBase&>(handle.promise());
             if (!promise.scheduler) {
                 std::fprintf(stderr,
-                             "cpptb: cannot get from Channel without a scheduler\n");
+                             "cpptb: cannot get from Queue without a scheduler\n");
                 std::abort();
             }
-            return channel->suspend(handle, promise, *promise.scheduler,
-                                    registration);
+            return queue->suspend_get(handle, promise, *promise.scheduler,
+                                      registration);
         }
 
         T await_resume() {
-            T value = channel->consume(registration);
+            T value = queue->consume_get(registration);
             active = false;
             return value;
         }
 
-        Channel* channel;
+        Queue* queue;
+        std::optional<ExternalWaitRegistration> registration;
+        bool active = true;
+    };
+
+    struct PutAwaiter {
+        PutAwaiter(Queue& owner, T item)
+            : queue(&owner), value(std::move(item)) {}
+        PutAwaiter(const PutAwaiter&) = delete;
+        PutAwaiter& operator=(const PutAwaiter&) = delete;
+
+        PutAwaiter(PutAwaiter&& other) noexcept(
+            std::is_nothrow_move_constructible_v<T>)
+            : queue(other.queue),
+              value(std::move(other.value)),
+              registration(std::move(other.registration)),
+              active(std::exchange(other.active, false)) {}
+
+        ~PutAwaiter() {
+            if (active && registration) queue->abandon_put(*registration);
+        }
+
+        bool await_ready() {
+            queue->cleanup();
+            return queue->has_unreserved_slot();
+        }
+
+        template <typename Promise>
+            requires std::derived_from<Promise, TaskPromiseBase>
+        bool await_suspend(std::coroutine_handle<Promise> handle) {
+            auto& promise = static_cast<TaskPromiseBase&>(handle.promise());
+            if (!promise.scheduler) {
+                std::fprintf(stderr,
+                             "cpptb: cannot put into Queue without a scheduler\n");
+                std::abort();
+            }
+            return queue->suspend_put(handle, promise, *promise.scheduler,
+                                      registration);
+        }
+
+        void await_resume() {
+            queue->produce(registration, std::move(*value));
+            value.reset();
+            active = false;
+        }
+
+        Queue* queue;
+        std::optional<T> value;
         std::optional<ExternalWaitRegistration> registration;
         bool active = true;
     };
 
     Task<T> get() { co_return co_await GetAwaiter{*this}; }
+
+    Task<void> put(T value) {
+        co_await PutAwaiter{*this, std::move(value)};
+    }
+
+   private:
+    struct GetWaiter {
+        ExternalWaitRegistration registration;
+        bool reserved = false;
+    };
+
+    struct PutWaiter {
+        ExternalWaitRegistration registration;
+        bool reserved = false;
+    };
+
+    static bool same_wait(const ExternalWaitRegistration& left,
+                          const ExternalWaitRegistration& right) {
+        return left.scheduler == right.scheduler &&
+               left.wait.state_index == right.wait.state_index &&
+               left.wait.generation == right.wait.generation;
+    }
+
+    bool has_unreserved_item() {
+        return items_.size() > reserved_items_;
+    }
+
+    bool has_unreserved_slot() const {
+        return maxsize_ == 0 ||
+               items_.size() + reserved_put_slots_ < maxsize_;
+    }
+
+    bool suspend_get(
+        std::coroutine_handle<> handle, TaskPromiseBase& promise,
+        Scheduler& scheduler,
+        std::optional<ExternalWaitRegistration>& registration) {
+        cleanup();
+        if (items_.size() > reserved_items_) return false;
+        bind(scheduler);
+        registration = scheduler.park_external(handle, promise);
+        get_waiters_.push_back(GetWaiter{*registration, false});
+        return true;
+    }
+
+    bool suspend_put(
+        std::coroutine_handle<> handle, TaskPromiseBase& promise,
+        Scheduler& scheduler,
+        std::optional<ExternalWaitRegistration>& registration) {
+        cleanup();
+        if (has_unreserved_slot()) return false;
+        bind(scheduler);
+        registration = scheduler.park_external(handle, promise);
+        put_waiters_.push_back(PutWaiter{*registration, false});
+        return true;
+    }
+
+    T consume_get(
+        const std::optional<ExternalWaitRegistration>& registration) {
+        if (registration) {
+            auto waiter = get_waiters_.begin();
+            while (waiter != get_waiters_.end() &&
+                   !same_wait(waiter->registration, *registration)) {
+                ++waiter;
+            }
+            if (waiter == get_waiters_.end() || !waiter->reserved ||
+                items_.empty()) {
+                std::fprintf(stderr,
+                             "cpptb: Queue consumer resumed without an item\n");
+                std::abort();
+            }
+            T value = std::move(items_.front());
+            items_.pop_front();
+            --reserved_items_;
+            get_waiters_.erase(waiter);
+            cleanup();
+            wake_consumers();
+            wake_producers();
+            return value;
+        }
+
+        cleanup();
+        if (items_.size() <= reserved_items_) {
+            std::fprintf(stderr,
+                         "cpptb: Queue consumer resumed without an item\n");
+            std::abort();
+        }
+        auto item = items_.begin() + static_cast<std::ptrdiff_t>(reserved_items_);
+        T value = std::move(*item);
+        items_.erase(item);
+        wake_producers();
+        return value;
+    }
+
+    void produce(const std::optional<ExternalWaitRegistration>& registration,
+                 T value) {
+        if (registration) {
+            auto waiter = put_waiters_.begin();
+            while (waiter != put_waiters_.end() &&
+                   !same_wait(waiter->registration, *registration)) {
+                ++waiter;
+            }
+            if (waiter == put_waiters_.end() || !waiter->reserved) {
+                std::fprintf(stderr,
+                             "cpptb: Queue producer resumed without capacity\n");
+                std::abort();
+            }
+            --reserved_put_slots_;
+            put_waiters_.erase(waiter);
+        } else {
+            cleanup();
+            if (!has_unreserved_slot()) {
+                std::fprintf(stderr,
+                             "cpptb: Queue producer resumed while full\n");
+                std::abort();
+            }
+        }
+
+        items_.push_back(std::move(value));
+        cleanup();
+        wake_consumers();
+    }
+
+    void abandon_get(const ExternalWaitRegistration& registration) {
+        auto waiter = get_waiters_.begin();
+        while (waiter != get_waiters_.end() &&
+               !same_wait(waiter->registration, registration)) {
+            ++waiter;
+        }
+        if (waiter == get_waiters_.end()) return;
+        if (waiter->reserved) --reserved_items_;
+        get_waiters_.erase(waiter);
+        cleanup();
+        wake_consumers();
+    }
+
+    void abandon_put(const ExternalWaitRegistration& registration) {
+        auto waiter = put_waiters_.begin();
+        while (waiter != put_waiters_.end() &&
+               !same_wait(waiter->registration, registration)) {
+            ++waiter;
+        }
+        if (waiter == put_waiters_.end()) return;
+        if (waiter->reserved) --reserved_put_slots_;
+        put_waiters_.erase(waiter);
+        cleanup();
+        wake_producers();
+    }
+
+    void wake_consumers() {
+        cleanup();
+        Scheduler* scheduler = nullptr;
+        for (auto& waiter : get_waiters_) {
+            if (items_.size() <= reserved_items_) break;
+            if (waiter.reserved) continue;
+            waiter.reserved = true;
+            ++reserved_items_;
+            scheduler = waiter.registration.scheduler;
+            if (!scheduler->wake_external(waiter.registration)) {
+                waiter.reserved = false;
+                --reserved_items_;
+            }
+        }
+        if (scheduler) scheduler->flush_external_wakes();
+    }
+
+    void wake_producers() {
+        cleanup();
+        Scheduler* scheduler = nullptr;
+        for (auto& waiter : put_waiters_) {
+            if (!has_unreserved_slot()) break;
+            if (waiter.reserved) continue;
+            waiter.reserved = true;
+            ++reserved_put_slots_;
+            scheduler = waiter.registration.scheduler;
+            if (!scheduler->wake_external(waiter.registration)) {
+                waiter.reserved = false;
+                --reserved_put_slots_;
+            }
+        }
+        if (scheduler) scheduler->flush_external_wakes();
+    }
+
+    void bind(Scheduler& scheduler) {
+        if (scheduler_ && scheduler_ != &scheduler) {
+            std::fprintf(stderr,
+                         "cpptb: Queue cannot have waiters from multiple schedulers\n");
+            std::abort();
+        }
+        scheduler_ = &scheduler;
+        lifetime_ = scheduler.lifetime();
+    }
+
+    void cleanup() {
+        auto get_output = get_waiters_.begin();
+        for (auto& waiter : get_waiters_) {
+            const bool alive = !waiter.registration.lifetime.expired() &&
+                               waiter.registration.scheduler &&
+                               waiter.registration.scheduler->external_wait_alive(
+                                   waiter.registration);
+            if (alive) {
+                *get_output++ = std::move(waiter);
+            } else if (waiter.reserved) {
+                --reserved_items_;
+            }
+        }
+        get_waiters_.erase(get_output, get_waiters_.end());
+
+        auto put_output = put_waiters_.begin();
+        for (auto& waiter : put_waiters_) {
+            const bool alive = !waiter.registration.lifetime.expired() &&
+                               waiter.registration.scheduler &&
+                               waiter.registration.scheduler->external_wait_alive(
+                                   waiter.registration);
+            if (alive) {
+                *put_output++ = std::move(waiter);
+            } else if (waiter.reserved) {
+                --reserved_put_slots_;
+            }
+        }
+        put_waiters_.erase(put_output, put_waiters_.end());
+        if (get_waiters_.empty() && put_waiters_.empty()) reset_binding();
+    }
+
+    void reset_binding() {
+        scheduler_ = nullptr;
+        lifetime_.reset();
+    }
+
+    std::deque<T> items_;
+    std::deque<GetWaiter> get_waiters_;
+    std::deque<PutWaiter> put_waiters_;
+    Scheduler* scheduler_ = nullptr;
+    std::weak_ptr<SchedulerLifetime> lifetime_;
+    size_t reserved_items_ = 0;
+    size_t reserved_put_slots_ = 0;
+    size_t maxsize_ = 0;
+};
+
+class Semaphore {
+   public:
+    explicit Semaphore(size_t permits = 0) : permits_(permits) {}
+    Semaphore(const Semaphore&) = delete;
+    Semaphore& operator=(const Semaphore&) = delete;
+
+    ~Semaphore() {
+        cleanup();
+        if (!waiters_.empty()) {
+            std::fprintf(stderr,
+                         "cpptb: Semaphore destroyed with active waiters\n");
+            std::abort();
+        }
+    }
+
+    size_t available() {
+        cleanup();
+        return permits_;
+    }
+
+    bool try_acquire() {
+        cleanup();
+        if (permits_ == 0) return false;
+        --permits_;
+        return true;
+    }
+
+    struct AcquireAwaiter {
+        explicit AcquireAwaiter(Semaphore& owner) : semaphore(&owner) {}
+        AcquireAwaiter(const AcquireAwaiter&) = delete;
+        AcquireAwaiter& operator=(const AcquireAwaiter&) = delete;
+
+        AcquireAwaiter(AcquireAwaiter&& other) noexcept
+            : semaphore(other.semaphore),
+              registration(std::move(other.registration)),
+              active(std::exchange(other.active, false)) {}
+
+        ~AcquireAwaiter() {
+            if (active && registration) semaphore->abandon(*registration);
+        }
+
+        bool await_ready() { return semaphore->try_acquire(); }
+
+        template <typename Promise>
+            requires std::derived_from<Promise, TaskPromiseBase>
+        bool await_suspend(std::coroutine_handle<Promise> handle) {
+            auto& promise = static_cast<TaskPromiseBase&>(handle.promise());
+            if (!promise.scheduler) {
+                std::fprintf(stderr,
+                             "cpptb: cannot acquire Semaphore without a scheduler\n");
+                std::abort();
+            }
+            return semaphore->suspend(handle, promise, *promise.scheduler,
+                                      registration);
+        }
+
+        void await_resume() {
+            semaphore->finish_acquire(registration);
+            active = false;
+        }
+
+        Semaphore* semaphore;
+        std::optional<ExternalWaitRegistration> registration;
+        bool active = true;
+    };
+
+    AcquireAwaiter acquire() { return AcquireAwaiter{*this}; }
+
+    void release(size_t permits = 1) {
+        if (permits == 0) return;
+        cleanup();
+        dispatch(permits);
+    }
 
    private:
     struct Waiter {
@@ -2519,53 +3299,36 @@ class Channel {
                left.wait.generation == right.wait.generation;
     }
 
-    bool has_unreserved_item() {
+    bool suspend(
+        std::coroutine_handle<> handle, TaskPromiseBase& promise,
+        Scheduler& scheduler,
+        std::optional<ExternalWaitRegistration>& registration) {
         cleanup();
-        return items_.size() > reserved_items_;
-    }
-
-    bool suspend(std::coroutine_handle<> handle, TaskPromiseBase& promise,
-                 Scheduler& scheduler,
-                 std::optional<ExternalWaitRegistration>& registration) {
-        cleanup();
-        if (items_.size() > reserved_items_) return false;
+        if (permits_ != 0) {
+            --permits_;
+            return false;
+        }
         bind(scheduler);
         registration = scheduler.park_external(handle, promise);
         waiters_.push_back(Waiter{*registration, false});
         return true;
     }
 
-    T consume(const std::optional<ExternalWaitRegistration>& registration) {
-        if (registration) {
-            auto waiter = waiters_.begin();
-            while (waiter != waiters_.end() &&
-                   !same_wait(waiter->registration, *registration)) {
-                ++waiter;
-            }
-            if (waiter == waiters_.end() || !waiter->reserved || items_.empty()) {
-                std::fprintf(stderr,
-                             "cpptb: Channel consumer resumed without an item\n");
-                std::abort();
-            }
-            T value = std::move(items_.front());
-            items_.pop_front();
-            --reserved_items_;
-            waiters_.erase(waiter);
-            cleanup();
-            wake_available();
-            return value;
+    void finish_acquire(
+        const std::optional<ExternalWaitRegistration>& registration) {
+        if (!registration) return;
+        auto waiter = waiters_.begin();
+        while (waiter != waiters_.end() &&
+               !same_wait(waiter->registration, *registration)) {
+            ++waiter;
         }
-
-        cleanup();
-        if (items_.size() <= reserved_items_) {
+        if (waiter == waiters_.end() || !waiter->reserved) {
             std::fprintf(stderr,
-                         "cpptb: Channel consumer resumed without an item\n");
+                         "cpptb: Semaphore waiter resumed without a permit\n");
             std::abort();
         }
-        auto item = items_.begin() + static_cast<std::ptrdiff_t>(reserved_items_);
-        T value = std::move(*item);
-        items_.erase(item);
-        return value;
+        waiters_.erase(waiter);
+        cleanup();
     }
 
     void abandon(const ExternalWaitRegistration& registration) {
@@ -2575,24 +3338,30 @@ class Channel {
             ++waiter;
         }
         if (waiter == waiters_.end()) return;
-        if (waiter->reserved) --reserved_items_;
+        const bool return_permit = waiter->reserved;
         waiters_.erase(waiter);
         cleanup();
-        wake_available();
+        if (return_permit) dispatch(1);
     }
 
-    void wake_available() {
-        cleanup();
+    void dispatch(size_t permits) {
         Scheduler* scheduler = nullptr;
-        for (auto& waiter : waiters_) {
-            if (items_.size() <= reserved_items_) break;
-            if (waiter.reserved) continue;
-            waiter.reserved = true;
-            ++reserved_items_;
-            scheduler = waiter.registration.scheduler;
-            if (!scheduler->wake_external(waiter.registration)) {
-                waiter.reserved = false;
-                --reserved_items_;
+        for (size_t permit = 0; permit < permits; ++permit) {
+            auto waiter = waiters_.begin();
+            while (waiter != waiters_.end() && waiter->reserved) ++waiter;
+            while (waiter != waiters_.end()) {
+                waiter->reserved = true;
+                scheduler = waiter->registration.scheduler;
+                if (scheduler->wake_external(waiter->registration)) break;
+                waiter = waiters_.erase(waiter);
+                while (waiter != waiters_.end() && waiter->reserved) ++waiter;
+            }
+            if (waiter == waiters_.end()) {
+                if (permits_ == std::numeric_limits<size_t>::max()) {
+                    std::fprintf(stderr, "cpptb: Semaphore permit overflow\n");
+                    std::abort();
+                }
+                ++permits_;
             }
         }
         if (scheduler) scheduler->flush_external_wakes();
@@ -2600,8 +3369,9 @@ class Channel {
 
     void bind(Scheduler& scheduler) {
         if (scheduler_ && scheduler_ != &scheduler) {
-            std::fprintf(stderr,
-                         "cpptb: Channel cannot have waiters from multiple schedulers\n");
+            std::fprintf(
+                stderr,
+                "cpptb: Semaphore cannot have waiters from multiple schedulers\n");
             std::abort();
         }
         scheduler_ = &scheduler;
@@ -2609,6 +3379,7 @@ class Channel {
     }
 
     void cleanup() {
+        size_t returned_permits = 0;
         auto output = waiters_.begin();
         for (auto& waiter : waiters_) {
             const bool alive = !waiter.registration.lifetime.expired() &&
@@ -2618,11 +3389,12 @@ class Channel {
             if (alive) {
                 *output++ = std::move(waiter);
             } else if (waiter.reserved) {
-                --reserved_items_;
+                ++returned_permits;
             }
         }
         waiters_.erase(output, waiters_.end());
         if (waiters_.empty()) reset_binding();
+        if (returned_permits != 0) dispatch(returned_permits);
     }
 
     void reset_binding() {
@@ -2630,21 +3402,234 @@ class Channel {
         lifetime_.reset();
     }
 
-    std::deque<T> items_;
     std::deque<Waiter> waiters_;
     Scheduler* scheduler_ = nullptr;
     std::weak_ptr<SchedulerLifetime> lifetime_;
-    size_t reserved_items_ = 0;
+    size_t permits_ = 0;
+};
+
+class Lock {
+   public:
+    Lock() = default;
+    Lock(const Lock&) = delete;
+    Lock& operator=(const Lock&) = delete;
+
+    ~Lock() {
+        cleanup();
+        if (!waiters_.empty()) {
+            std::fprintf(stderr, "cpptb: Lock destroyed with active waiters\n");
+            std::abort();
+        }
+    }
+
+    bool locked() {
+        cleanup();
+        return locked_;
+    }
+
+    bool try_acquire() {
+        cleanup();
+        if (locked_) return false;
+        locked_ = true;
+        return true;
+    }
+
+    struct AcquireAwaiter {
+        explicit AcquireAwaiter(Lock& owner) : lock(&owner) {}
+        AcquireAwaiter(const AcquireAwaiter&) = delete;
+        AcquireAwaiter& operator=(const AcquireAwaiter&) = delete;
+
+        AcquireAwaiter(AcquireAwaiter&& other) noexcept
+            : lock(other.lock),
+              registration(std::move(other.registration)),
+              active(std::exchange(other.active, false)) {}
+
+        ~AcquireAwaiter() {
+            if (active && registration) lock->abandon(*registration);
+        }
+
+        bool await_ready() { return lock->try_acquire(); }
+
+        template <typename Promise>
+            requires std::derived_from<Promise, TaskPromiseBase>
+        bool await_suspend(std::coroutine_handle<Promise> handle) {
+            auto& promise = static_cast<TaskPromiseBase&>(handle.promise());
+            if (!promise.scheduler) {
+                std::fprintf(stderr,
+                             "cpptb: cannot acquire Lock without a scheduler\n");
+                std::abort();
+            }
+            return lock->suspend(handle, promise, *promise.scheduler,
+                                 registration);
+        }
+
+        void await_resume() {
+            lock->finish_acquire(registration);
+            active = false;
+        }
+
+        Lock* lock;
+        std::optional<ExternalWaitRegistration> registration;
+        bool active = true;
+    };
+
+    AcquireAwaiter acquire() { return AcquireAwaiter{*this}; }
+
+    void release() {
+        cleanup();
+        if (!locked_) {
+            std::fprintf(stderr, "cpptb: cannot release an unlocked Lock\n");
+            std::abort();
+        }
+        if (handoff_pending_) {
+            std::fprintf(stderr,
+                         "cpptb: cannot release Lock while ownership handoff "
+                         "is pending\n");
+            std::abort();
+        }
+        handoff_or_unlock();
+    }
+
+   private:
+    struct Waiter {
+        ExternalWaitRegistration registration;
+        bool reserved = false;
+    };
+
+    static bool same_wait(const ExternalWaitRegistration& left,
+                          const ExternalWaitRegistration& right) {
+        return left.scheduler == right.scheduler &&
+               left.wait.state_index == right.wait.state_index &&
+               left.wait.generation == right.wait.generation;
+    }
+
+    bool suspend(
+        std::coroutine_handle<> handle, TaskPromiseBase& promise,
+        Scheduler& scheduler,
+        std::optional<ExternalWaitRegistration>& registration) {
+        cleanup();
+        if (!locked_) {
+            locked_ = true;
+            return false;
+        }
+        bind(scheduler);
+        registration = scheduler.park_external(handle, promise);
+        waiters_.push_back(Waiter{*registration, false});
+        return true;
+    }
+
+    void finish_acquire(
+        const std::optional<ExternalWaitRegistration>& registration) {
+        if (!registration) return;
+        auto waiter = waiters_.begin();
+        while (waiter != waiters_.end() &&
+               !same_wait(waiter->registration, *registration)) {
+            ++waiter;
+        }
+        if (waiter == waiters_.end() || !waiter->reserved ||
+            !handoff_pending_) {
+            std::fprintf(stderr,
+                         "cpptb: Lock waiter resumed without ownership\n");
+            std::abort();
+        }
+        waiters_.erase(waiter);
+        handoff_pending_ = false;
+        cleanup();
+    }
+
+    void abandon(const ExternalWaitRegistration& registration) {
+        auto waiter = waiters_.begin();
+        while (waiter != waiters_.end() &&
+               !same_wait(waiter->registration, registration)) {
+            ++waiter;
+        }
+        if (waiter == waiters_.end()) return;
+        const bool return_ownership = waiter->reserved;
+        waiters_.erase(waiter);
+        if (return_ownership) handoff_pending_ = false;
+        cleanup();
+        if (return_ownership) handoff_or_unlock();
+    }
+
+    void handoff_or_unlock() {
+        Scheduler* scheduler = nullptr;
+        auto waiter = waiters_.begin();
+        while (waiter != waiters_.end()) {
+            if (waiter->reserved) {
+                ++waiter;
+                continue;
+            }
+            waiter->reserved = true;
+            handoff_pending_ = true;
+            scheduler = waiter->registration.scheduler;
+            if (scheduler->wake_external(waiter->registration)) break;
+            handoff_pending_ = false;
+            waiter = waiters_.erase(waiter);
+        }
+        if (waiter == waiters_.end()) locked_ = false;
+        if (scheduler) scheduler->flush_external_wakes();
+    }
+
+    void bind(Scheduler& scheduler) {
+        if (scheduler_ && scheduler_ != &scheduler) {
+            std::fprintf(stderr,
+                         "cpptb: Lock cannot have waiters from multiple "
+                         "schedulers\n");
+            std::abort();
+        }
+        scheduler_ = &scheduler;
+        lifetime_ = scheduler.lifetime();
+    }
+
+    void cleanup() {
+        bool return_ownership = false;
+        auto output = waiters_.begin();
+        for (auto& waiter : waiters_) {
+            const bool alive = !waiter.registration.lifetime.expired() &&
+                               waiter.registration.scheduler &&
+                               waiter.registration.scheduler->external_wait_alive(
+                                   waiter.registration);
+            if (alive) {
+                *output++ = std::move(waiter);
+            } else if (waiter.reserved) {
+                return_ownership = true;
+            }
+        }
+        waiters_.erase(output, waiters_.end());
+        if (return_ownership) handoff_pending_ = false;
+        if (waiters_.empty()) reset_binding();
+        if (return_ownership) handoff_or_unlock();
+    }
+
+    void reset_binding() {
+        scheduler_ = nullptr;
+        lifetime_.reset();
+    }
+
+    std::deque<Waiter> waiters_;
+    Scheduler* scheduler_ = nullptr;
+    std::weak_ptr<SchedulerLifetime> lifetime_;
+    bool locked_ = false;
+    bool handoff_pending_ = false;
 };
 
 class Testbench {
    public:
     explicit Testbench(SimTime precision = 1_ns) : scheduler_(precision) {}
 
-    Process spawn(Task<void>&& task) { return scheduler_.spawn(std::move(task)); }
+    Process spawn(Task<void>&& task, void* execution_context = nullptr,
+                  ProcessCompletionHandler completion_handler = {}) {
+        return scheduler_.spawn(std::move(task), execution_context,
+                                std::move(completion_handler));
+    }
 
-    void spawn_detached(Task<void>&& task) {
-        scheduler_.spawn_detached(std::move(task));
+    void spawn_detached(Task<void>&& task, void* execution_context = nullptr) {
+        scheduler_.spawn_detached(std::move(task), execution_context);
+    }
+
+    void cancel_processes_owned_by(void* owner,
+                                   ProcessOwnerMatcher matcher = nullptr) {
+        scheduler_.cancel_processes_owned_by(owner, matcher);
     }
 
     void notify_edge(uint32_t signal_id, EdgeKind edge) {
@@ -2658,6 +3643,32 @@ class Testbench {
     void notify_next_time_step() {
         scheduler_.resume_phase(WaitKind::NextTimeStep);
     }
+
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+    size_t max_ready_queue_entries() const {
+        return scheduler_.max_ready_queue_entries();
+    }
+
+    uint64_t inline_process_start_count() const {
+        return scheduler_.inline_process_start_count();
+    }
+
+    size_t max_inline_process_depth() const {
+        return scheduler_.max_inline_process_depth();
+    }
+
+    uint64_t inline_process_depth_fallback_count() const {
+        return scheduler_.inline_process_depth_fallback_count();
+    }
+
+    size_t live_ready_count() const {
+        return scheduler_.live_ready_count();
+    }
+
+    bool live_ready_count_matches_states() const {
+        return scheduler_.live_ready_count_matches_states();
+    }
+#endif
 
     bool has_read_write_waiters() const {
         return scheduler_.has_phase_waiters(WaitKind::ReadWrite);
@@ -2708,6 +3719,10 @@ class Testbench {
     }
 
     uint64_t next_timer_deadline() { return scheduler_.next_timer_deadline(); }
+
+    void* current_execution_context() const {
+        return scheduler_.current_execution_context();
+    }
 
     bool done() const { return scheduler_.all_done(); }
 

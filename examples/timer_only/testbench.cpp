@@ -1,12 +1,12 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/timer_only/generated/timer_only_probe_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::dpi_timer_only {
 namespace {
 
-using cpptb::generated::timer_only_probe::Dut;
+using cpptb::Dut;
 using coro::Delay;
 using coro::Join;
 using coro::Task;

@@ -50,9 +50,10 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event channel all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
+AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
 AUTHORING_CORE_EXTRA_CFLAGS ?=
 AUTHORING_CORE_EXTRA_LDFLAGS ?=
 FRAMEWORK_COMPARISON_DIR := benchmarks/framework_comparison
@@ -118,10 +119,15 @@ UV_CACHE_DIR ?= $(BUILD_DIR)/uv-cache
 CODEGEN_PYTHON := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen python
 DOCS_RUN := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen --group docs
 CPPTB_CODEGEN := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb-codegen
+CPPTB := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb
 CPPTB_CODEGEN_SOURCES := \
 	$(CPPTB_CODEGEN_ENTRY) \
 	tools/codegen/cpptb_codegen/__init__.py \
+	tools/codegen/cpptb_codegen/build.py \
+	tools/codegen/cpptb_codegen/cli.py \
 	tools/codegen/cpptb_codegen/design_ir.py \
+	tools/codegen/cpptb_codegen/project.py \
+	tools/codegen/cpptb_codegen/runner.py \
 	tools/codegen/cpptb_codegen/frontends/__init__.py \
 	tools/codegen/cpptb_codegen/frontends/slang.py \
 	tools/codegen/cpptb_codegen/frontends/verilator_json.py \
@@ -176,29 +182,30 @@ CPPTB_EXAMPLE_TEST_TARGETS :=
 CPPTB_EXAMPLE_FRONTEND_CHECK_TARGETS :=
 
 # $(1): target slug, $(2): variable prefix, $(3): directory name,
-# $(4): RTL basename, $(5): generated DPI top, $(6): pure-SV top,
-# $(7): optional advanced code-generation manifest.
+# $(4): RTL/top basename, $(5): generated DPI top, $(6): pure-SV top,
+# $(7): fixed semantic benchmark test.
 define CPPTB_EXAMPLE_template
 CPPTB_$(2)_DIR := examples/$(3)
-CPPTB_$(2)_CODEGEN_INPUT := $$(CPPTB_$(2)_DIR)/$(if $(7),$(7),$(4).sv)
-CPPTB_$(2)_OBJ_DIR := $$(CPPTB_BUILD_DIR)/dpi_$(3)_obj
-CPPTB_$(2)_SV_OBJ_DIR := $$(CPPTB_BUILD_DIR)/dpi_$(3)_sv_obj
+CPPTB_$(2)_BUILD_DIR := $$(CPPTB_BUILD_DIR)/$(3)
+CPPTB_$(2)_GENERATED_DIR := $$(CPPTB_$(2)_BUILD_DIR)/generated
+CPPTB_$(2)_OBJ_DIR := $$(CPPTB_$(2)_BUILD_DIR)/obj
+CPPTB_$(2)_SV_OBJ_DIR := $$(CPPTB_$(2)_BUILD_DIR)/systemverilog_obj
+CPPTB_$(2)_RESULT_DIR := $$(CPPTB_$(2)_BUILD_DIR)/results
 CPPTB_$(2)_SV_TB := $$(CPPTB_$(2)_DIR)/systemverilog/$(6).sv
+CPPTB_$(2)_DEFAULT_TEST := $(7)
 CPPTB_$(2)_GENERATED := \
-	$$(CPPTB_$(2)_DIR)/generated/$(4)_dut.hpp \
-	$$(CPPTB_$(2)_DIR)/generated/$(4)_binding.hpp \
-	$$(CPPTB_$(2)_DIR)/generated/$(5).sv \
-	$$(CPPTB_$(2)_DIR)/generated/$(5).cpp \
-	$$(CPPTB_$(2)_DIR)/generated/discover_$(4)_clocks.cpp
-CPPTB_$(2)_CODEGEN_STAMP := $$(CPPTB_BUILD_DIR)/dpi_$(3).codegen.stamp
-CPPTB_$(2)_CLOCK_CONFIG := $$(CPPTB_BUILD_DIR)/dpi_$(3).clocks.json
-CPPTB_$(2)_ACCESS_CONFIG := $$(CPPTB_BUILD_DIR)/dpi_$(3).access.json
-CPPTB_$(2)_CLOCK_DISCOVERY := $$(CPPTB_BUILD_DIR)/discover_$(3)_clocks
-CPPTB_$(2)_CODEGEN_COMMAND = $$(CPPTB_CODEGEN) \
-	$$(CPPTB_$(2)_CODEGEN_INPUT)
-CPPTB_$(2)_FINAL_CODEGEN_COMMAND = $$(CPPTB_$(2)_CODEGEN_COMMAND) \
-	--clock-config $$(CPPTB_$(2)_CLOCK_CONFIG) \
-	--access-config $$(CPPTB_$(2)_ACCESS_CONFIG)
+	$$(CPPTB_$(2)_GENERATED_DIR)/$(4)_dut.hpp \
+	$$(CPPTB_$(2)_GENERATED_DIR)/dut.hpp \
+	$$(CPPTB_$(2)_GENERATED_DIR)/$(4)_binding.hpp \
+	$$(CPPTB_$(2)_GENERATED_DIR)/$(5).sv \
+	$$(CPPTB_$(2)_GENERATED_DIR)/$(5).cpp \
+	$$(CPPTB_$(2)_GENERATED_DIR)/discover_$(4)_clocks.cpp
+CPPTB_$(2)_PROJECT_ARGS = \
+	--project $$(CPPTB_$(2)_DIR) \
+	--build-dir $$(abspath $$(BUILD_DIR)) \
+	--build-name $(3) \
+	--top $(4) \
+	--target $(4)
 
 CPPTB_EXAMPLE_PHONY_TARGETS += cpp-dpi-$(1)-codegen \
 	cpp-dpi-$(1)-codegen-check cpp-dpi-$(1)-frontend-check \
@@ -207,81 +214,22 @@ CPPTB_EXAMPLE_PHONY_TARGETS += cpp-dpi-$(1)-codegen \
 CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-$(1)-run cpp-dpi-$(1)-sv-run
 CPPTB_EXAMPLE_FRONTEND_CHECK_TARGETS += cpp-dpi-$(1)-frontend-check
 
-$$(CPPTB_$(2)_CODEGEN_STAMP): Makefile $$(CPPTB_CODEGEN_SOURCES) \
-		$$(CPPTB_$(2)_CODEGEN_INPUT) \
-		$$(CPPTB_$(2)_DIR)/$(4).sv \
-		$$(CPPTB_$(2)_DIR)/testbench.cpp \
-		include/cpptb/clock_discovery.hpp include/cpptb/hierarchy.hpp
-	mkdir -p $$(dir $$@)
-	$$(CPPTB_$(2)_CODEGEN_COMMAND)
-	$$(CXX) -std=c++20 -DCPPTB_HIERARCHY_DISCOVERY \
-		-I$$(CURDIR) -I$$(CURDIR)/include \
-		-I$$(VERILATOR_ROOT)/include/vltstd \
-		$$(CPPTB_$(2)_DIR)/generated/discover_$(4)_clocks.cpp \
-		$$(CPPTB_$(2)_DIR)/testbench.cpp \
-		-o $$(CPPTB_$(2)_CLOCK_DISCOVERY)
-	$$(CPPTB_$(2)_CLOCK_DISCOVERY) $$(CPPTB_$(2)_CLOCK_CONFIG) \
-		$$(CPPTB_$(2)_ACCESS_CONFIG)
-	$$(CPPTB_$(2)_FINAL_CODEGEN_COMMAND)
-	touch $$@
-
-$$(CPPTB_$(2)_GENERATED): $$(CPPTB_$(2)_CODEGEN_STAMP)
-	@if [ ! -f $$@ ]; then \
-		$$(CPPTB_$(2)_CODEGEN_COMMAND); \
-		$$(CXX) -std=c++20 -DCPPTB_HIERARCHY_DISCOVERY \
-			-I$$(CURDIR) -I$$(CURDIR)/include \
-			-I$$(VERILATOR_ROOT)/include/vltstd \
-			$$(CPPTB_$(2)_DIR)/generated/discover_$(4)_clocks.cpp \
-			$$(CPPTB_$(2)_DIR)/testbench.cpp \
-			-o $$(CPPTB_$(2)_CLOCK_DISCOVERY); \
-		$$(CPPTB_$(2)_CLOCK_DISCOVERY) $$(CPPTB_$(2)_CLOCK_CONFIG) \
-			$$(CPPTB_$(2)_ACCESS_CONFIG); \
-		$$(CPPTB_$(2)_FINAL_CODEGEN_COMMAND); \
-	fi
-	@touch $$@
-
-cpp-dpi-$(1)-codegen: $$(CPPTB_$(2)_GENERATED)
+cpp-dpi-$(1)-codegen:
+	$$(CPPTB) build $$(CPPTB_$(2)_PROJECT_ARGS)
 
 cpp-dpi-$(1)-codegen-check:
-	mkdir -p $$(CPPTB_BUILD_DIR)
-	$$(CXX) -std=c++20 -DCPPTB_HIERARCHY_DISCOVERY \
-		-I$$(CURDIR) -I$$(CURDIR)/include \
-		-I$$(VERILATOR_ROOT)/include/vltstd \
-		$$(CPPTB_$(2)_DIR)/generated/discover_$(4)_clocks.cpp \
-		$$(CPPTB_$(2)_DIR)/testbench.cpp \
-		-o $$(CPPTB_$(2)_CLOCK_DISCOVERY)
-	$$(CPPTB_$(2)_CLOCK_DISCOVERY) $$(CPPTB_$(2)_CLOCK_CONFIG) \
-		$$(CPPTB_$(2)_ACCESS_CONFIG)
-	$$(CPPTB_$(2)_FINAL_CODEGEN_COMMAND) --check
+	$$(CPPTB) build $$(CPPTB_$(2)_PROJECT_ARGS) --rebuild
 
 cpp-dpi-$(1)-frontend-check:
-	$$(MAKE) cpp-dpi-$(1)-codegen-check
-	$$(CPPTB_$(2)_FINAL_CODEGEN_COMMAND) \
-		--check --compare-frontend verilator_json
+	$$(CPPTB) build $$(CPPTB_$(2)_PROJECT_ARGS) \
+		--compare-frontend verilator_json
 
-$$(CPPTB_$(2)_OBJ_DIR)/V$(5): \
-		$$(CPPTB_$(2)_DIR)/$(4).sv \
-		$$(CPPTB_$(2)_DIR)/testbench.cpp \
-		$$(CPPTB_$(2)_GENERATED) include/cpptb/coro_runtime.hpp \
-		include/cpptb/packed_bits.hpp include/cpptb/dpi_runtime.hpp \
-		include/cpptb/dpi_static_binding.hpp include/cpptb/test_api.hpp \
-		include/cpptb/test_result.hpp
-	mkdir -p $$(CPPTB_$(2)_OBJ_DIR)
-	verilator --binary --timing --no-sched-zero-delay \
-		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL -Wno-BLKANDNBLK \
-		-Wno-MULTIDRIVEN \
-		-CFLAGS "-I$$(CURDIR) -I$$(CURDIR)/include" \
-		--Mdir $$(CPPTB_$(2)_OBJ_DIR) \
-		--top-module $(5) \
-		$$(CPPTB_$(2)_DIR)/$(4).sv \
-		$$(CPPTB_$(2)_DIR)/generated/$(5).sv \
-		$$(CPPTB_$(2)_DIR)/generated/$(5).cpp \
-		$$(CPPTB_$(2)_DIR)/testbench.cpp
+cpp-dpi-$(1)-build:
+	$$(CPPTB) build $$(CPPTB_$(2)_PROJECT_ARGS)
 
-cpp-dpi-$(1)-build: $$(CPPTB_$(2)_OBJ_DIR)/V$(5)
-
-cpp-dpi-$(1)-run: $$(CPPTB_$(2)_OBJ_DIR)/V$(5)
-	$$(CPPTB_$(2)_OBJ_DIR)/V$(5)
+cpp-dpi-$(1)-run: cpp-dpi-$(1)-build
+	CPPTB_TEST="$$(CPPTB_$(2)_DEFAULT_TEST)" \
+		$$(CPPTB_$(2)_OBJ_DIR)/V$(5)
 
 $$(CPPTB_$(2)_SV_OBJ_DIR)/V$(6): \
 		$$(CPPTB_$(2)_DIR)/$(4).sv $$(CPPTB_$(2)_SV_TB)
@@ -300,16 +248,17 @@ cpp-dpi-$(1)-sv-run: $$(CPPTB_$(2)_SV_OBJ_DIR)/V$(6)
 	$$(CPPTB_$(2)_SV_OBJ_DIR)/V$(6)
 endef
 
-$(eval $(call CPPTB_EXAMPLE_template,counter,COUNTER,counter,counter,dpi_counter,counter_sv_tb))
-$(eval $(call CPPTB_EXAMPLE_template,multiclock,MULTICLOCK,multiclock,dual_clock_mailbox,dpi_dual_clock_mailbox,dual_clock_mailbox_sv_tb))
-$(eval $(call CPPTB_EXAMPLE_template,timer-only,TIMER_ONLY,timer_only,timer_only_probe,dpi_timer_only_probe,timer_only_probe_sv_tb))
-$(eval $(call CPPTB_EXAMPLE_template,fifo-scoreboard,FIFO_SCOREBOARD,fifo_scoreboard,stream_fifo,dpi_stream_fifo,stream_fifo_sv_tb))
-$(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb))
-$(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_timeout,stalling_responder,dpi_stalling_responder,stalling_responder_sv_tb))
-$(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb))
-$(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb))
+$(eval $(call CPPTB_EXAMPLE_template,counter,COUNTER,counter,counter,dpi_counter,counter_sv_tb,counter_sequence))
+CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-counter-suite-test
+$(eval $(call CPPTB_EXAMPLE_template,multiclock,MULTICLOCK,multiclock,dual_clock_mailbox,dpi_dual_clock_mailbox,dual_clock_mailbox_sv_tb,multiclock_test))
+$(eval $(call CPPTB_EXAMPLE_template,timer-only,TIMER_ONLY,timer_only,timer_only_probe,dpi_timer_only_probe,timer_only_probe_sv_tb,timer_only_test))
+$(eval $(call CPPTB_EXAMPLE_template,fifo-scoreboard,FIFO_SCOREBOARD,fifo_scoreboard,stream_fifo,dpi_stream_fifo,stream_fifo_sv_tb,fifo_test))
+$(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb,register_sequence))
+$(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_timeout,stalling_responder,dpi_stalling_responder,stalling_responder_sv_tb,watchdog_sequence))
+$(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb,fault_injection_sequence))
+$(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb,rich_data_sequence))
 
-.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -345,6 +294,9 @@ codegen-test: cpptb-codegen-test cpptb-codegen-frontend-check
 conformance-test: cpptb-conformance-run
 
 examples-test: $(CPPTB_EXAMPLE_TEST_TARGETS)
+
+cpp-dpi-counter-suite-test:
+	$(CPPTB) test $(CPPTB_COUNTER_PROJECT_ARGS)
 
 docs-build: docs-sphinx-build docs-zensical-build
 
@@ -465,7 +417,8 @@ cpptb-packed-value-test: $(CPPTB_PACKED_VALUE_TEST)
 	$(CPPTB_PACKED_VALUE_TEST)
 
 $(CPPTB_TEST_API_TEST): include/cpptb/coro_runtime.hpp \
-		include/cpptb/test_api.hpp include/cpptb/test_result.hpp \
+		include/cpptb/test_api.hpp include/cpptb/test_reporting.hpp \
+		include/cpptb/test_result.hpp \
 		tests/unit/test_api_test.cpp
 	mkdir -p $(CPPTB_BUILD_DIR)
 	$(CXX) -std=c++20 -Iinclude -I. \
@@ -745,7 +698,7 @@ $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		$(AUTHORING_CORE_DPI_GENERATED) include/cpptb/coro_runtime.hpp \
 		include/cpptb/packed_bits.hpp include/cpptb/fixed.hpp include/cpptb/dpi_runtime.hpp include/cpptb/dpi_static_binding.hpp \
-		include/cpptb/test_result.hpp Makefile $(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
+		include/cpptb/test_result.hpp include/cpptb/test_api.hpp Makefile $(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
 	mkdir -p $$(dir $$@)
 	verilator $(if $(filter timing_phases,$(1)),--cc --exe --build --vpi,--binary) --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
@@ -768,7 +721,7 @@ $(eval $(call AUTHORING_CORE_DPI_template,clock_cycles,2))
 $(eval $(call AUTHORING_CORE_DPI_template,timeout,3))
 $(eval $(call AUTHORING_CORE_DPI_template,wait_until,4))
 $(eval $(call AUTHORING_CORE_DPI_template,event,5))
-$(eval $(call AUTHORING_CORE_DPI_template,channel,6))
+$(eval $(call AUTHORING_CORE_DPI_template,queue,6))
 $(eval $(call AUTHORING_CORE_DPI_template,all,7))
 $(eval $(call AUTHORING_CORE_DPI_template,task_timeout,8))
 $(eval $(call AUTHORING_CORE_DPI_template,wide64,9))
@@ -790,6 +743,12 @@ $(eval $(call AUTHORING_CORE_DPI_template,packed_view,24))
 $(eval $(call AUTHORING_CORE_DPI_template,force_direct,25))
 $(eval $(call AUTHORING_CORE_DPI_template,hier_data,26))
 $(eval $(call AUTHORING_CORE_DPI_template,timing_phases,27))
+$(eval $(call AUTHORING_CORE_DPI_template,queue_sync,28))
+$(eval $(call AUTHORING_CORE_DPI_template,test_lifecycle,29))
+$(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn,30))
+$(eval $(call AUTHORING_CORE_DPI_template,dynamic_task,31))
+$(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn_scheduler,32))
+$(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn_suspending,33))
 
 define AUTHORING_CORE_SV_DPI_TIMING_template
 $(2)/Vdpi_authoring_core: $(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
@@ -855,6 +814,7 @@ $(AUTHORING_CORE_SV_OBJ_DIR)/Vauthoring_core_sv_tb: \
 	verilator --binary --timing \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
 		-Wno-MULTIDRIVEN \
+		--converge-limit $(AUTHORING_CORE_CONVERGE_LIMIT) \
 		-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)" \
 		$(if $(strip $(AUTHORING_CORE_EXTRA_CFLAGS)),-CFLAGS "$(AUTHORING_CORE_EXTRA_CFLAGS)",) \
 		$(if $(strip $(AUTHORING_CORE_EXTRA_LDFLAGS)),-LDFLAGS "$(AUTHORING_CORE_EXTRA_LDFLAGS)",) \

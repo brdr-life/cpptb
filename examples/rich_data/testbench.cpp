@@ -2,12 +2,12 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/rich_data/generated/rich_data_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::rich_data {
 namespace {
 
-using cpptb::generated::rich_data::Dut;
+using cpptb::Dut;
 using cpptb::generated::rich_data::ModeT;
 using cpptb::generated::rich_data::PacketTValue;
 using coro::Delay;

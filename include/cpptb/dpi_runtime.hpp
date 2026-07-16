@@ -9,12 +9,14 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
 #include "cpptb/coro_runtime.hpp"
 #include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/probe.hpp"
+#include "cpptb/test_reporting.hpp"
 #include "cpptb/test_result.hpp"
 #include "svdpi.h"
 
@@ -212,7 +214,11 @@ class Runtime {
             Adapter::register_testbench(*scheduler_, dut_, iterations_,
                                         result_);
         }
-        validate_registered_clock_setup();
+        const char* list_tests = std::getenv("CPPTB_LIST_TESTS");
+        const bool listing = list_tests && list_tests[0] != '\0' &&
+                             std::string_view{list_tests} != "0" &&
+                             std::string_view{list_tests} != "false";
+        if (!listing) validate_registered_clock_setup();
         clock_registration_open_ = false;
     }
 
@@ -1195,14 +1201,43 @@ class Runtime {
         }
     }
 
+    bool result_succeeded() const {
+        if constexpr (std::is_base_of_v<TestResult, Result>) {
+            if (result_.status != TestStatus::NotRun &&
+                result_.status != TestStatus::Running) {
+                return test_status_successful(result_.status);
+            }
+        }
+        return result_.failures == 0;
+    }
+
     int report_if_done() {
         if (!scheduler_->done()) return 0;
-        if (reported_) return result_.failures == 0 ? 1 : -1;
+        if (reported_) return result_succeeded() ? 1 : -1;
 
         const auto elapsed = std::chrono::steady_clock::now() - start_;
         const auto wall_us =
             std::chrono::duration_cast<std::chrono::microseconds>(elapsed)
                 .count();
+        if constexpr (std::is_base_of_v<TestResult, Result>) {
+            result_.simulation_time_fs = scheduler_->now().femtoseconds;
+            result_.wall_time_ns = static_cast<uint64_t>(wall_us) * 1'000u;
+            if (result_.status == TestStatus::Running) {
+                result_.status = result_.failures == 0 ? TestStatus::Passed
+                                                       : TestStatus::Failed;
+                result_.finished = true;
+            }
+            if (const char* path = std::getenv("CPPTB_RESULT_FILE");
+                path && path[0] != '\0' &&
+                !write_test_result_json(path, result_)) {
+                std::fprintf(stderr,
+                             "cpptb: cannot write test result JSON to %s\n",
+                             path);
+                ++result_.failures;
+                result_.status = TestStatus::Error;
+                result_.finished = true;
+            }
+        }
         std::printf(
             "%s iterations=%u checks=%llu sim_cycles=%llu wall_ms=%.3f "
             "failures=%u\n",
@@ -1288,7 +1323,7 @@ class Runtime {
                 scheduler_->single_edge_park_count(coro::EdgeKind::Any)));
 #endif
         reported_ = true;
-        return result_.failures == 0 ? 1 : -1;
+        return result_succeeded() ? 1 : -1;
     }
 
     std::array<uint32_t, Adapter::signal_count> inputs_{};

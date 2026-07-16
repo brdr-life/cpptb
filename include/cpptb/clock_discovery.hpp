@@ -238,7 +238,12 @@ class ClockDiscoveryCollector {
         }
         for (const auto& clock : clocks_) {
             if (clock.signal_id == signal.id) {
-                fail("cpptb: clock '%s' was started more than once", name);
+                if (clock.period_fs == period.femtoseconds &&
+                    clock.phase_fs == phase.femtoseconds) {
+                    return;
+                }
+                fail("cpptb: clock '%s' has conflicting configurations across tests",
+                     name);
             }
         }
         clocks_.push_back(DiscoveredClock{signal.id, name,
@@ -279,12 +284,29 @@ template <typename Dut, size_t SignalCount, typename BindDut>
 int discover_registered_clocks(const char* output_path,
                                uint64_t timeprecision_fs,
                                BindDut&& bind_dut) {
-    return discover_clocks<Dut, SignalCount, TestResult>(
-        output_path, timeprecision_fs, std::forward<BindDut>(bind_dut),
-        [](coro::Testbench& scheduler, Dut dut, TestResult& result,
-           coro::ClockRegistrar clocks) {
-            return run_registered_test(scheduler, dut, result, clocks);
-        });
+    detail::ClockDiscoveryBinding<SignalCount> binding;
+    Dut dut = std::forward<BindDut>(bind_dut)([&binding](auto spec,
+                                                        const char* name) {
+        return binding.make_signal(spec, name);
+    });
+    detail::ClockDiscoveryCollector<SignalCount> collector(binding,
+                                                            timeprecision_fs);
+    const auto tests = registered_tests<Dut>();
+    if (tests.empty()) {
+        std::fprintf(stderr,
+                     "cpptb: no test is registered for clock discovery\n");
+        return 1;
+    }
+    for (const auto& test : tests) {
+        coro::Testbench scheduler{coro::SimTime{1}};
+        TestResult result{};
+        if (!run_registered_test(scheduler, dut, result,
+                                 RunRequest{.test_name = test.name},
+                                 collector.registrar())) {
+            return 1;
+        }
+    }
+    return collector.write_json(output_path) ? 0 : 1;
 }
 
 }  // namespace cpptb::dpi

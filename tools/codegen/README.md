@@ -1,10 +1,12 @@
 # C++ DPI binding generator
 
 `cpptb-codegen` turns SystemVerilog sources into the design-specific part of
-the C++ DPI framework. Ordinary targets use the source-first CLI; JSON
-manifests remain an advanced compatibility path:
+the C++ DPI framework. Ordinary projects use `cpptb build`; this lower-level
+generator remains available for custom integrations, while JSON manifests are
+an advanced compatibility path:
 
 - a typed C++ DUT hierarchy containing `coro::Signal` members;
+- a stable generated `dut.hpp` that aliases the target root as `cpptb::Dut`;
 - stable signal IDs, driven-input metadata, and the C++ binding function;
 - a complete SystemVerilog DPI wrapper with batched input/output transport,
   multiple clock generators, edge and delay callbacks, parameter wiring, and

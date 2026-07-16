@@ -97,6 +97,21 @@ class RegistryTests(unittest.TestCase):
                 if entry.name != "force_direct"
             )
         )
+        self.assertEqual(
+            registry.get_benchmark("test_lifecycle").default_iterations,
+            5_000_000,
+        )
+        for name in (
+            "dynamic_task",
+            "dynamic_spawn_scheduler",
+            "dynamic_spawn",
+            "dynamic_spawn_suspending",
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    registry.get_benchmark(name).default_iterations,
+                    5_000_000,
+                )
         waiver = registry.get_benchmark("force_direct").waiver
         self.assertIsNotNone(waiver)
         self.assertGreater(waiver.max_ratio, 1.10)

@@ -117,7 +117,6 @@ static_assert(std::convertible_to<StaticPackedScalar, Signal>);
 static_assert(std::convertible_to<StaticOnDemandScalar, Signal>);
 static_assert(StaticPackedScalar::transport_offset == 1);
 static_assert(StaticOnDemandMatrix::base_id == 7);
-
 constexpr std::array<uint32_t, 3> kStaticObservedWordIds{4, 8, 9};
 constexpr std::array<uint32_t, 3> kStaticDrivenWordIds{0, 1, 2};
 constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 3>
@@ -435,6 +434,85 @@ Task<void> immediate_root(uint32_t& runs, uint32_t& destructions) {
     co_return;
 }
 
+Task<void> repeated_process_chain(Testbench& tb, uint32_t count,
+                                  uint32_t& runs,
+                                  uint32_t& destructions) {
+    for (uint32_t iteration = 0; iteration < count; ++iteration) {
+        auto process = tb.spawn(immediate_root(runs, destructions));
+        co_await process;
+    }
+}
+
+Task<void> nested_process_chain(Testbench& tb, uint32_t depth,
+                                uint32_t& runs,
+                                uint32_t& destructions) {
+    DestructionCounter counter{&destructions};
+    ++runs;
+    if (depth != 0) {
+        auto child =
+            tb.spawn(nested_process_chain(tb, depth - 1, runs, destructions));
+        co_await child;
+    }
+}
+
+struct CompletionOwnerProbe {
+    uint32_t completions = 0;
+    uint32_t releases = 0;
+};
+
+void finish_process_completion(void* owner, ExceptionState&,
+                               bool cancelled) noexcept {
+    auto& probe = *static_cast<CompletionOwnerProbe*>(owner);
+    if (!cancelled) ++probe.completions;
+    ++probe.releases;
+}
+
+Task<void> append_immediately(std::vector<uint32_t>& order, uint32_t value) {
+    order.push_back(value);
+    co_return;
+}
+
+Task<void> await_with_queued_sibling(Testbench& tb,
+                                     std::vector<uint32_t>& order) {
+    auto child = tb.spawn(append_immediately(order, 1));
+    tb.spawn_detached(append_immediately(order, 2));
+    co_await child;
+    order.push_back(3);
+}
+
+Task<void> wait_then_append(Event& event, std::vector<uint32_t>& order,
+                            uint32_t value) {
+    co_await event;
+    order.push_back(value);
+}
+
+Task<void> set_event_immediately(Event& event,
+                                 std::vector<uint32_t>& order) {
+    order.push_back(1);
+    event.set();
+    co_return;
+}
+
+Task<void> await_child_that_wakes_waiter(Testbench& tb, Event& event,
+                                         std::vector<uint32_t>& order) {
+    auto child = tb.spawn(set_event_immediately(event, order));
+    co_await child;
+    order.push_back(3);
+}
+
+Task<void> append_after_delay(std::vector<uint32_t>& order) {
+    order.push_back(1);
+    co_await Delay{1_ns};
+    order.push_back(2);
+}
+
+Task<void> await_delayed_child(Testbench& tb,
+                               std::vector<uint32_t>& order) {
+    auto child = tb.spawn(append_after_delay(order));
+    co_await child;
+    order.push_back(3);
+}
+
 Task<void> ordered_timer(uint32_t id, std::vector<uint32_t>& order) {
     co_await Delay{5_ns};
     order.push_back(id);
@@ -650,6 +728,74 @@ Task<void> await_throwing_typed_value() {
     static_cast<void>(co_await throwing_typed_value());
 }
 
+struct ExceptionResults {
+    uint32_t direct = 0;
+    uint32_t process = 0;
+    uint32_t immediate_process = 0;
+    uint32_t join = 0;
+    uint32_t timeout = 0;
+    uint32_t join_sibling = 0;
+};
+
+Task<void> throw_after(SimTime delay, uint32_t value) {
+    co_await Delay{delay};
+    throw value;
+}
+
+Task<void> throw_immediately(uint32_t value) {
+    throw value;
+    co_return;
+}
+
+Task<void> catch_direct_exception(ExceptionResults& results) {
+    try {
+        static_cast<void>(co_await throwing_typed_value());
+    } catch (int value) {
+        results.direct = static_cast<uint32_t>(value);
+    }
+}
+
+Task<void> catch_process_exception(Process process,
+                                   ExceptionResults& results) {
+    try {
+        co_await process;
+    } catch (uint32_t value) {
+        results.process = value;
+    }
+}
+
+Task<void> spawn_and_catch_immediate_exception(Testbench& tb,
+                                                ExceptionResults& results) {
+    auto process = tb.spawn(throw_immediately(31));
+    try {
+        co_await process;
+    } catch (uint32_t value) {
+        results.immediate_process = value;
+    }
+}
+
+Task<void> mark_join_sibling(ExceptionResults& results) {
+    co_await Delay{2_ns};
+    results.join_sibling = 1;
+}
+
+Task<void> catch_join_exception(ExceptionResults& results) {
+    try {
+        co_await Join{throw_after(1_ns, 23), mark_join_sibling(results)};
+    } catch (uint32_t value) {
+        results.join = value;
+    }
+}
+
+Task<void> catch_timeout_exception(ExceptionResults& results) {
+    try {
+        static_cast<void>(
+            co_await with_timeout(throw_after(1_ns, 29), 5_ns));
+    } catch (uint32_t value) {
+        results.timeout = value;
+    }
+}
+
 Task<void> count_clock_cycles(Signal clock, uint64_t cycles,
                               uint32_t& completions) {
     co_await clock_cycles(clock, cycles);
@@ -726,10 +872,10 @@ Task<uint32_t> timed_event_value(Event& event, TimeoutProbe& probe) {
     co_return 23;
 }
 
-Task<uint32_t> timed_channel_value(Channel<uint32_t>& channel,
+Task<uint32_t> timed_queue_value(Queue<uint32_t>& queue,
                                    TimeoutProbe& probe) {
     DestructionCounter counter{&probe.frame_destructions};
-    const uint32_t value = co_await channel.get();
+    const uint32_t value = co_await queue.get();
     ++probe.resumes;
     co_return value;
 }
@@ -817,26 +963,26 @@ Task<void> wait_event_count(Event& event, uint32_t& count) {
     ++count;
 }
 
-Task<void> channel_get(Channel<uint32_t>& channel,
+Task<void> queue_get(Queue<uint32_t>& queue,
                        std::vector<uint32_t>& values) {
-    values.push_back(co_await channel.get());
+    values.push_back(co_await queue.get());
 }
 
-Task<void> channel_get_move_only(
-    Channel<std::unique_ptr<uint32_t>>& channel, uint32_t& value) {
-    auto item = co_await channel.get();
+Task<void> queue_get_move_only(
+    Queue<std::unique_ptr<uint32_t>>& queue, uint32_t& value) {
+    auto item = co_await queue.get();
     value = *item;
 }
 
-Task<void> channel_put(Channel<uint32_t>& channel, uint32_t value,
+Task<void> queue_put(Queue<uint32_t>& queue, uint32_t value,
                        SimTime delay = 1_ns) {
     co_await Delay{delay};
-    co_await channel.put(value);
+    co_await queue.put(value);
 }
 
-Task<void> put_then_cancel(Channel<uint32_t>& channel, uint32_t value,
+Task<void> put_then_cancel(Queue<uint32_t>& queue, uint32_t value,
                            Process target) {
-    co_await channel.put(value);
+    co_await queue.put(value);
     target.cancel();
 }
 
@@ -848,11 +994,11 @@ struct ChannelMoveProbe {
     bool destination_inactive_after_resume = false;
 };
 
-Task<void> channel_get_moved_awaiter(Channel<uint32_t>& channel,
+Task<void> queue_get_moved_awaiter(Queue<uint32_t>& queue,
                                      ChannelMoveProbe& probe) {
-    std::optional<Channel<uint32_t>::GetAwaiter> moved;
+    std::optional<Queue<uint32_t>::GetAwaiter> moved;
     {
-        Channel<uint32_t>::GetAwaiter source{channel};
+        Queue<uint32_t>::GetAwaiter source{queue};
         moved.emplace(std::move(source));
         probe.source_inactive = !source.active;
         probe.destination_active = moved->active;
@@ -863,27 +1009,57 @@ Task<void> channel_get_moved_awaiter(Channel<uint32_t>& channel,
     ++probe.completions;
 }
 
-Task<void> channel_tagged_get(Channel<uint32_t>& channel, uint32_t id,
+Task<void> queue_tagged_get(Queue<uint32_t>& queue, uint32_t id,
                               std::vector<uint32_t>& values,
                               std::vector<uint32_t>& order,
                               std::array<uint32_t, 3>& completions) {
-    values.push_back(co_await channel.get());
+    values.push_back(co_await queue.get());
     order.push_back(id);
     ++completions[id];
 }
 
-Task<void> channel_reentrant_get(Channel<uint32_t>& channel,
+Task<void> queue_reentrant_get(Queue<uint32_t>& queue,
                                  Process* cancel_reserved,
                                  std::vector<uint32_t>& values,
                                  std::vector<uint32_t>& order,
                                  std::array<uint32_t, 3>& completions) {
-    const uint32_t value = co_await channel.get();
+    const uint32_t value = co_await queue.get();
     values.push_back(value);
     order.push_back(0);
     ++completions[0];
 
-    channel.put_nowait(value + 1);
+    queue.put_nowait(value + 1);
     cancel_reserved->cancel();
+}
+
+Task<void> bounded_queue_put(Queue<uint32_t>& queue, uint32_t value,
+                             std::vector<uint32_t>& completed) {
+    co_await queue.put(value);
+    completed.push_back(value);
+}
+
+Task<void> bounded_queue_get_and_cancel(
+    Queue<uint32_t>& queue, Process* cancel_reserved,
+    std::vector<uint32_t>& values) {
+    values.push_back(co_await queue.get());
+    cancel_reserved->cancel();
+}
+
+Task<void> semaphore_wait(Semaphore& semaphore, uint32_t id,
+                          std::vector<uint32_t>& order,
+                          Process* cancel_reserved = nullptr) {
+    co_await semaphore.acquire();
+    order.push_back(id);
+    if (cancel_reserved) cancel_reserved->cancel();
+}
+
+Task<void> lock_worker(Lock& lock, uint32_t id,
+                       std::vector<uint32_t>& order,
+                       Process* cancel_waiter = nullptr) {
+    co_await lock.acquire();
+    order.push_back(id);
+    if (cancel_waiter) cancel_waiter->cancel();
+    lock.release();
 }
 
 void trigger_event_cross_scheduler() {
@@ -902,20 +1078,67 @@ void trigger_event_destroyed_with_waiter() {
     tb.spawn_detached(wait_event(event, 1, order));
 }
 
-void trigger_channel_cross_scheduler() {
-    Channel<uint32_t> channel;
+void trigger_queue_cross_scheduler() {
+    Queue<uint32_t> queue;
     Testbench first;
     Testbench second;
     std::vector<uint32_t> values;
-    first.spawn_detached(channel_get(channel, values));
-    second.spawn_detached(channel_get(channel, values));
+    first.spawn_detached(queue_get(queue, values));
+    second.spawn_detached(queue_get(queue, values));
 }
 
-void trigger_channel_destroyed_with_waiter() {
+void trigger_queue_destroyed_with_waiter() {
     Testbench tb;
     std::vector<uint32_t> values;
-    Channel<uint32_t> channel;
-    tb.spawn_detached(channel_get(channel, values));
+    Queue<uint32_t> queue;
+    tb.spawn_detached(queue_get(queue, values));
+}
+
+void trigger_queue_destroyed_with_blocked_producer() {
+    Testbench tb;
+    std::vector<uint32_t> completed;
+    Queue<uint32_t> queue{1};
+    queue.put_nowait(1);
+    tb.spawn_detached(bounded_queue_put(queue, 2, completed));
+}
+
+void trigger_semaphore_cross_scheduler() {
+    Semaphore semaphore;
+    Testbench first;
+    Testbench second;
+    std::vector<uint32_t> order;
+    first.spawn_detached(semaphore_wait(semaphore, 1, order));
+    second.spawn_detached(semaphore_wait(semaphore, 2, order));
+}
+
+void trigger_semaphore_destroyed_with_waiter() {
+    Testbench tb;
+    std::vector<uint32_t> order;
+    Semaphore semaphore;
+    tb.spawn_detached(semaphore_wait(semaphore, 1, order));
+}
+
+void trigger_lock_cross_scheduler() {
+    Lock lock;
+    lock.try_acquire();
+    Testbench first;
+    Testbench second;
+    std::vector<uint32_t> order;
+    first.spawn_detached(lock_worker(lock, 1, order));
+    second.spawn_detached(lock_worker(lock, 2, order));
+}
+
+void trigger_lock_destroyed_with_waiter() {
+    Testbench tb;
+    std::vector<uint32_t> order;
+    Lock lock;
+    lock.try_acquire();
+    tb.spawn_detached(lock_worker(lock, 1, order));
+}
+
+void trigger_unlocked_lock_release() {
+    Lock lock;
+    lock.release();
 }
 
 void trigger_typed_task_exception() {
@@ -1430,6 +1653,34 @@ int main() {
 
     {
         Testbench tb;
+        ExceptionResults results;
+        tb.spawn_detached(catch_direct_exception(results));
+        tb.spawn_detached(spawn_and_catch_immediate_exception(tb, results));
+        const Process throwing_process = tb.spawn(throw_after(1_ns, 19));
+        tb.spawn_detached(
+            catch_process_exception(throwing_process, results));
+        tb.spawn_detached(catch_join_exception(results));
+        tb.spawn_detached(catch_timeout_exception(results));
+
+        passed &= expect("awaited Task exception propagates", results.direct,
+                         1);
+        passed &= expect("inline Process exception propagates",
+                         results.immediate_process, 31);
+        tb.set_time(1);
+        passed &= expect("Process exception propagates", results.process, 19);
+        passed &= expect("Task timeout exception propagates", results.timeout,
+                         29);
+        passed &= expect("Join waits for remaining siblings", results.join, 0);
+        tb.set_time(2);
+        passed &= expect("Join exception propagates", results.join, 23);
+        passed &= expect("Join sibling completes", results.join_sibling, 1);
+        tb.set_time(5);
+        passed &= expect("caught exception paths leave no waits",
+                         tb.done() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
         const Signal clock{nullptr, 30, "clock_cycles"};
         uint32_t zero = 0;
         uint32_t one = 0;
@@ -1688,31 +1939,31 @@ int main() {
 
     {
         Testbench tb;
-        Channel<uint32_t> channel;
-        TimeoutProbe channel_probe;
+        Queue<uint32_t> queue;
+        TimeoutProbe queue_probe;
         uint32_t completed = 0;
         uint32_t timed_out = 0;
         uint32_t value = 0;
         uint32_t continuations = 0;
         std::vector<uint32_t> survivor_values;
         tb.spawn_detached(collect_timed_value(
-            timed_channel_value(channel, channel_probe), 2_ns, completed,
+            timed_queue_value(queue, queue_probe), 2_ns, completed,
             timed_out, value, continuations));
         tb.set_time(2);
-        channel.put_nowait(44);
-        tb.spawn_detached(channel_get(channel, survivor_values));
+        queue.put_nowait(44);
+        tb.spawn_detached(queue_get(queue, survivor_values));
 
-        passed &= expect("Channel task timeout reports timeout", timed_out, 1);
-        passed &= expect("Channel task timeout removes consumer",
-                         channel_probe.resumes, 0);
-        passed &= expect("Channel task timeout destroys frame once",
-                         channel_probe.frame_destructions, 1);
-        passed &= expect("Channel task timeout survivor receives one item",
+        passed &= expect("Queue task timeout reports timeout", timed_out, 1);
+        passed &= expect("Queue task timeout removes consumer",
+                         queue_probe.resumes, 0);
+        passed &= expect("Queue task timeout destroys frame once",
+                         queue_probe.frame_destructions, 1);
+        passed &= expect("Queue task timeout survivor receives one item",
                          static_cast<uint32_t>(survivor_values.size()), 1);
-        passed &= expect("Channel task timeout preserves queued item",
+        passed &= expect("Queue task timeout preserves queued item",
                          survivor_values.empty() ? 0 : survivor_values[0], 44);
-        passed &= expect("Channel task timeout drains cleanly",
-                         channel.empty() ? 1 : 0, 1);
+        passed &= expect("Queue task timeout drains cleanly",
+                         queue.empty() ? 1 : 0, 1);
     }
 
     {
@@ -1860,142 +2111,314 @@ int main() {
 
     {
         Testbench tb;
-        Channel<uint32_t> channel;
+        Queue<uint32_t> queue;
         std::vector<uint32_t> values;
-        channel.put_nowait(1);
-        channel.put_nowait(2);
-        tb.spawn_detached(channel_get(channel, values));
-        tb.spawn_detached(channel_get(channel, values));
-        passed &= expect("Channel queued-before-get count", values.size(), 2);
-        passed &= expect("Channel FIFO first", values[0], 1);
-        passed &= expect("Channel FIFO second", values[1], 2);
-        tb.spawn_detached(channel_get(channel, values));
-        channel.put_nowait(3);
-        passed &= expect("Channel waiting consumer", values.back(), 3);
-        passed &= expect("Channel empty after gets", channel.empty() ? 1 : 0,
+        queue.put_nowait(1);
+        queue.put_nowait(2);
+        tb.spawn_detached(queue_get(queue, values));
+        tb.spawn_detached(queue_get(queue, values));
+        passed &= expect("Queue queued-before-get count", values.size(), 2);
+        passed &= expect("Queue FIFO first", values[0], 1);
+        passed &= expect("Queue FIFO second", values[1], 2);
+        tb.spawn_detached(queue_get(queue, values));
+        queue.put_nowait(3);
+        passed &= expect("Queue waiting consumer", values.back(), 3);
+        passed &= expect("Queue empty after gets", queue.empty() ? 1 : 0,
                          1);
     }
 
     {
         Testbench tb;
-        Channel<std::unique_ptr<uint32_t>> channel;
+        Queue<std::unique_ptr<uint32_t>> queue;
         uint32_t value = 0;
-        channel.put_nowait(std::make_unique<uint32_t>(91));
-        tb.spawn_detached(channel_get_move_only(channel, value));
-        passed &= expect("Channel move-only value", value, 91);
+        queue.put_nowait(std::make_unique<uint32_t>(91));
+        tb.spawn_detached(queue_get_move_only(queue, value));
+        passed &= expect("Queue move-only value", value, 91);
     }
 
     {
         Testbench tb;
-        Channel<uint32_t> channel;
+        Queue<uint32_t> queue;
         ChannelMoveProbe probe;
-        tb.spawn_detached(channel_get_moved_awaiter(channel, probe));
-        passed &= expect("Channel moved GetAwaiter source inactive",
+        tb.spawn_detached(queue_get_moved_awaiter(queue, probe));
+        passed &= expect("Queue moved GetAwaiter source inactive",
                          probe.source_inactive ? 1 : 0, 1);
-        passed &= expect("Channel moved GetAwaiter destination active",
+        passed &= expect("Queue moved GetAwaiter destination active",
                          probe.destination_active ? 1 : 0, 1);
-        passed &= expect("Channel moved GetAwaiter remains parked",
+        passed &= expect("Queue moved GetAwaiter remains parked",
                          probe.completions, 0);
 
-        channel.put_nowait(92);
-        passed &= expect("Channel moved GetAwaiter receives reserved item",
+        queue.put_nowait(92);
+        passed &= expect("Queue moved GetAwaiter receives reserved item",
                          probe.value, 92);
-        passed &= expect("Channel moved GetAwaiter completes once",
+        passed &= expect("Queue moved GetAwaiter completes once",
                          probe.completions, 1);
-        passed &= expect("Channel moved GetAwaiter deactivates on resume",
+        passed &= expect("Queue moved GetAwaiter deactivates on resume",
                          probe.destination_inactive_after_resume ? 1 : 0, 1);
-        passed &= expect("Channel moved-from destructor consumes no item",
-                         channel.empty() ? 1 : 0, 1);
+        passed &= expect("Queue moved-from destructor consumes no item",
+                         queue.empty() ? 1 : 0, 1);
     }
 
     {
         Testbench tb;
-        Channel<uint32_t> channel;
+        Queue<uint32_t> queue;
         std::vector<uint32_t> values;
-        tb.spawn_detached(channel_get(channel, values));
-        tb.spawn_detached(channel_get(channel, values));
-        tb.spawn_detached(channel_get(channel, values));
-        tb.spawn_detached(channel_put(channel, 10));
-        tb.spawn_detached(channel_put(channel, 20));
-        tb.spawn_detached(channel_put(channel, 30));
+        tb.spawn_detached(queue_get(queue, values));
+        tb.spawn_detached(queue_get(queue, values));
+        tb.spawn_detached(queue_get(queue, values));
+        tb.spawn_detached(queue_put(queue, 10));
+        tb.spawn_detached(queue_put(queue, 20));
+        tb.spawn_detached(queue_put(queue, 30));
         tb.set_time(1);
-        passed &= expect("Channel multi producer/consumer count", values.size(),
+        passed &= expect("Queue multi producer/consumer count", values.size(),
                          3);
-        passed &= expect("Channel multi producer FIFO first", values[0], 10);
-        passed &= expect("Channel multi producer FIFO second", values[1], 20);
-        passed &= expect("Channel multi producer FIFO third", values[2], 30);
+        passed &= expect("Queue multi producer FIFO first", values[0], 10);
+        passed &= expect("Queue multi producer FIFO second", values[1], 20);
+        passed &= expect("Queue multi producer FIFO third", values[2], 30);
     }
 
     {
         Testbench tb;
-        Channel<uint32_t> channel;
+        Queue<uint32_t> queue;
         std::vector<uint32_t> cancelled_values;
         std::vector<uint32_t> surviving_values;
-        const auto cancelled = tb.spawn(channel_get(channel, cancelled_values));
-        tb.spawn_detached(channel_get(channel, surviving_values));
-        tb.spawn_detached(put_then_cancel(channel, 55, cancelled));
-        passed &= expect("Channel cancelled consumer gets no item",
+        const auto cancelled = tb.spawn(queue_get(queue, cancelled_values));
+        tb.spawn_detached(queue_get(queue, surviving_values));
+        tb.spawn_detached(put_then_cancel(queue, 55, cancelled));
+        passed &= expect("Queue cancelled consumer gets no item",
                          cancelled_values.size(), 0);
-        passed &= expect("Channel cancellation preserves item",
+        passed &= expect("Queue cancellation preserves item",
                          surviving_values.size(), 1);
-        passed &= expect("Channel cancellation preserves value",
+        passed &= expect("Queue cancellation preserves value",
                          surviving_values[0], 55);
-        passed &= expect("Channel cancellation status",
+        passed &= expect("Queue cancellation status",
                          cancelled.cancelled() ? 1 : 0, 1);
     }
 
     {
         Testbench tb;
-        Channel<uint32_t> channel;
+        Queue<uint32_t> queue;
         std::vector<uint32_t> values;
         std::vector<uint32_t> order;
         std::array<uint32_t, 3> completions{};
         Process cancel_reserved;
 
-        tb.spawn_detached(channel_reentrant_get(
-            channel, &cancel_reserved, values, order, completions));
+        tb.spawn_detached(queue_reentrant_get(
+            queue, &cancel_reserved, values, order, completions));
         cancel_reserved = tb.spawn(
-            channel_tagged_get(channel, 1, values, order, completions));
+            queue_tagged_get(queue, 1, values, order, completions));
         tb.spawn_detached(
-            channel_tagged_get(channel, 2, values, order, completions));
+            queue_tagged_get(queue, 2, values, order, completions));
 
-        channel.put_nowait(70);
-        passed &= expect("Channel reentrant delivery count", values.size(), 2);
-        passed &= expect("Channel reentrant first value", values[0], 70);
-        passed &= expect("Channel reentrant handed-off value", values[1], 71);
-        passed &= expect("Channel reentrant first consumer order", order[0], 0);
-        passed &= expect("Channel reentrant survivor order", order[1], 2);
-        passed &= expect("Channel reentrant producer-consumer completes once",
+        queue.put_nowait(70);
+        passed &= expect("Queue reentrant delivery count", values.size(), 2);
+        passed &= expect("Queue reentrant first value", values[0], 70);
+        passed &= expect("Queue reentrant handed-off value", values[1], 71);
+        passed &= expect("Queue reentrant first consumer order", order[0], 0);
+        passed &= expect("Queue reentrant survivor order", order[1], 2);
+        passed &= expect("Queue reentrant producer-consumer completes once",
                          completions[0], 1);
-        passed &= expect("Channel reentrant cancelled consumer never resumes",
+        passed &= expect("Queue reentrant cancelled consumer never resumes",
                          completions[1], 0);
-        passed &= expect("Channel reentrant survivor completes once",
+        passed &= expect("Queue reentrant survivor completes once",
                          completions[2], 1);
-        passed &= expect("Channel reentrant reserved consumer cancelled",
+        passed &= expect("Queue reentrant reserved consumer cancelled",
                          cancel_reserved.cancelled() ? 1 : 0, 1);
-        passed &= expect("Channel reentrant handoff loses no item",
-                         channel.empty() ? 1 : 0, 1);
-        passed &= expect("Channel reentrant wake queue drains once",
+        passed &= expect("Queue reentrant handoff loses no item",
+                         queue.empty() ? 1 : 0, 1);
+        passed &= expect("Queue reentrant wake queue drains once",
                          tb.done() ? 1 : 0, 1);
     }
 
     {
-        Channel<uint32_t> channel;
+        Queue<uint32_t> queue;
         std::vector<uint32_t> values;
         Process abandoned;
         {
             Testbench tb;
-            abandoned = tb.spawn(channel_get(channel, values));
+            abandoned = tb.spawn(queue_get(queue, values));
         }
-        passed &= expect("Channel scheduler destruction cancellation",
+        passed &= expect("Queue scheduler destruction cancellation",
                          abandoned.cancelled() ? 1 : 0, 1);
-        channel.put_nowait(88);
+        queue.put_nowait(88);
         {
             Testbench tb;
-            tb.spawn_detached(channel_get(channel, values));
+            tb.spawn_detached(queue_get(queue, values));
         }
-        passed &= expect("Channel reuse after scheduler destruction",
+        passed &= expect("Queue reuse after scheduler destruction",
                          values.back(), 88);
+    }
+
+    {
+        Queue<std::unique_ptr<uint32_t>> queue{1};
+        auto first = std::make_unique<uint32_t>(41);
+        auto rejected = std::make_unique<uint32_t>(42);
+        passed &= expect("bounded Queue maxsize", queue.maxsize(), 1);
+        passed &= expect("bounded Queue initially empty",
+                         queue.empty() ? 1 : 0, 1);
+        passed &= expect("bounded Queue initially not full",
+                         queue.full() ? 1 : 0, 0);
+        passed &= expect("bounded Queue nonblocking put succeeds",
+                         queue.put_nowait(std::move(first)) ? 1 : 0, 1);
+        passed &= expect("bounded Queue successful put consumes value",
+                         first ? 1 : 0, 0);
+        passed &= expect("bounded Queue reports full", queue.full() ? 1 : 0,
+                         1);
+        passed &= expect("bounded Queue nonblocking put rejects full queue",
+                         queue.put_nowait(std::move(rejected)) ? 1 : 0, 0);
+        passed &= expect("bounded Queue rejected put preserves move value",
+                         rejected ? 1 : 0, 1);
+        auto value = queue.get_nowait();
+        passed &= expect("bounded Queue nonblocking get has value",
+                         value.has_value() ? 1 : 0, 1);
+        passed &= expect("bounded Queue nonblocking get value", **value, 41);
+        passed &= expect("bounded Queue empty get has no value",
+                         queue.get_nowait().has_value() ? 1 : 0, 0);
+        passed &= expect("bounded Queue no longer full", queue.full() ? 1 : 0,
+                         0);
+    }
+
+    {
+        Testbench tb;
+        Queue<uint32_t> queue{1};
+        std::vector<uint32_t> completed;
+        queue.put_nowait(10);
+        const auto first = tb.spawn(bounded_queue_put(queue, 20, completed));
+        const auto second = tb.spawn(bounded_queue_put(queue, 30, completed));
+        passed &= expect("bounded Queue first producer blocks",
+                         first.done() ? 1 : 0, 0);
+        passed &= expect("bounded Queue second producer blocks",
+                         second.done() ? 1 : 0, 0);
+        passed &= expect("bounded Queue remains full while producers wait",
+                         queue.full() ? 1 : 0, 1);
+
+        auto value = queue.get_nowait();
+        passed &= expect("bounded Queue first queued value", *value, 10);
+        passed &= expect("bounded Queue wakes first producer",
+                         first.done() ? 1 : 0, 1);
+        passed &= expect("bounded Queue keeps second producer blocked",
+                         second.done() ? 1 : 0, 0);
+        value = queue.get_nowait();
+        passed &= expect("bounded Queue producer FIFO first", *value, 20);
+        passed &= expect("bounded Queue wakes second producer",
+                         second.done() ? 1 : 0, 1);
+        value = queue.get_nowait();
+        passed &= expect("bounded Queue producer FIFO second", *value, 30);
+        passed &= expect("bounded Queue producer completion order first",
+                         completed[0], 20);
+        passed &= expect("bounded Queue producer completion order second",
+                         completed[1], 30);
+    }
+
+    {
+        Testbench tb;
+        Queue<uint32_t> queue{1};
+        std::vector<uint32_t> completed;
+        std::vector<uint32_t> consumed;
+        queue.put_nowait(50);
+        Process cancelled = tb.spawn(bounded_queue_put(queue, 60, completed));
+        const auto survivor =
+            tb.spawn(bounded_queue_put(queue, 70, completed));
+        tb.spawn_detached(
+            bounded_queue_get_and_cancel(queue, &cancelled, consumed));
+
+        passed &= expect("bounded Queue reentrant consumer value", consumed[0],
+                         50);
+        passed &= expect("bounded Queue reserved producer cancellation",
+                         cancelled.cancelled() ? 1 : 0, 1);
+        passed &= expect("bounded Queue survivor receives returned slot",
+                         survivor.done() ? 1 : 0, 1);
+        passed &= expect("bounded Queue cancelled producer does not complete",
+                         static_cast<uint32_t>(completed.size()), 1);
+        passed &= expect("bounded Queue surviving producer completes",
+                         completed[0], 70);
+        const auto value = queue.get_nowait();
+        passed &= expect("bounded Queue cancellation loses no slot", *value,
+                         70);
+    }
+
+    {
+        Queue<uint32_t> queue{1};
+        queue.put_nowait(80);
+        std::vector<uint32_t> completed;
+        Process abandoned;
+        {
+            Testbench tb;
+            abandoned = tb.spawn(bounded_queue_put(queue, 81, completed));
+        }
+        passed &= expect("bounded Queue scheduler destruction cancels producer",
+                         abandoned.cancelled() ? 1 : 0, 1);
+        passed &= expect("bounded Queue cancelled producer never completes",
+                         completed.empty() ? 1 : 0, 1);
+        passed &= expect("bounded Queue preserves existing item",
+                         *queue.get_nowait(), 80);
+        passed &= expect("bounded Queue reusable after scheduler destruction",
+                         queue.put_nowait(82) ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        Semaphore semaphore{2};
+        passed &= expect("Semaphore initial permit count",
+                         semaphore.available(), 2);
+        passed &= expect("Semaphore first try_acquire",
+                         semaphore.try_acquire() ? 1 : 0, 1);
+        passed &= expect("Semaphore second try_acquire",
+                         semaphore.try_acquire() ? 1 : 0, 1);
+        passed &= expect("Semaphore empty try_acquire",
+                         semaphore.try_acquire() ? 1 : 0, 0);
+
+        std::vector<uint32_t> order;
+        Process cancelled;
+        const auto first =
+            tb.spawn(semaphore_wait(semaphore, 0, order, &cancelled));
+        cancelled = tb.spawn(semaphore_wait(semaphore, 1, order));
+        const auto survivor = tb.spawn(semaphore_wait(semaphore, 2, order));
+        semaphore.release(2);
+        passed &= expect("Semaphore first FIFO waiter completes",
+                         first.done() ? 1 : 0, 1);
+        passed &= expect("Semaphore reserved waiter cancellation",
+                         cancelled.cancelled() ? 1 : 0, 1);
+        passed &= expect("Semaphore returns cancelled reserved permit",
+                         survivor.done() ? 1 : 0, 1);
+        passed &= expect("Semaphore completion count",
+                         static_cast<uint32_t>(order.size()), 2);
+        passed &= expect("Semaphore FIFO first waiter", order[0], 0);
+        passed &= expect("Semaphore cancellation survivor", order[1], 2);
+        passed &= expect("Semaphore acquired permits unavailable",
+                         semaphore.available(), 0);
+        semaphore.release(2);
+        passed &= expect("Semaphore release restores permits",
+                         semaphore.available(), 2);
+    }
+
+    {
+        Testbench tb;
+        Lock lock;
+        passed &= expect("Lock first try_acquire", lock.try_acquire() ? 1 : 0,
+                         1);
+        passed &= expect("Lock reports locked", lock.locked() ? 1 : 0, 1);
+        passed &= expect("Lock second try_acquire", lock.try_acquire() ? 1 : 0,
+                         0);
+
+        std::vector<uint32_t> order;
+        Process cancelled;
+        const auto first = tb.spawn(lock_worker(lock, 0, order, &cancelled));
+        cancelled = tb.spawn(lock_worker(lock, 1, order));
+        const auto survivor = tb.spawn(lock_worker(lock, 2, order));
+        lock.release();
+        passed &= expect("Lock first FIFO waiter completes",
+                         first.done() ? 1 : 0, 1);
+        passed &= expect("Lock waiting cancellation",
+                         cancelled.cancelled() ? 1 : 0, 1);
+        passed &= expect("Lock survivor receives ownership",
+                         survivor.done() ? 1 : 0, 1);
+        passed &= expect("Lock worker completion count",
+                         static_cast<uint32_t>(order.size()), 2);
+        passed &= expect("Lock FIFO first waiter", order[0], 0);
+        passed &= expect("Lock cancellation survivor", order[1], 2);
+        passed &= expect("Lock released after worker chain",
+                         lock.locked() ? 1 : 0, 0);
     }
 
     {
@@ -2403,6 +2826,129 @@ int main() {
         passed &= expect("coroutine frame pool bounds system allocations",
                          pool_stats.system_allocations < 8 ? 1 : 0, 1);
 #endif
+    }
+
+    {
+        Testbench tb;
+        uint32_t runs = 0;
+        uint32_t destructions = 0;
+        CompletionOwnerProbe completed;
+        auto process = tb.spawn(
+            immediate_root(runs, destructions), nullptr,
+            ProcessCompletionHandler{&completed, finish_process_completion});
+        passed &= expect("completion owner process completes",
+                         process.done() ? 1 : 0, 1);
+        passed &= expect("completion owner callback runs once",
+                         completed.completions, 1);
+        passed &= expect("completion owner releases once",
+                         completed.releases, 1);
+
+        CompletionOwnerProbe cancelled;
+        auto pending = tb.spawn(
+            delay_marker(10_ns, 1, runs), nullptr,
+            ProcessCompletionHandler{&cancelled, finish_process_completion});
+        pending.cancel();
+        passed &= expect("cancelled completion owner process completes",
+                         pending.done() ? 1 : 0, 1);
+        passed &= expect("cancelled owner skips completion callback",
+                         cancelled.completions, 0);
+        passed &= expect("cancelled completion owner releases once",
+                         cancelled.releases, 1);
+    }
+
+
+    {
+        Testbench tb;
+        uint32_t runs = 0;
+        uint32_t destructions = 0;
+        constexpr uint32_t kNestedDepth = 10'000;
+        const auto chain = tb.spawn(
+            nested_process_chain(tb, kNestedDepth, runs, destructions));
+        passed &= expect("deeply nested process chain completes",
+                         chain.done() ? 1 : 0, 1);
+        passed &= expect("deeply nested process chain runs", runs,
+                         kNestedDepth + 1);
+        passed &= expect("deeply nested process chain destroys frames",
+                         destructions, kNestedDepth + 1);
+        passed &= expect("deeply nested process chain leaves no work",
+                         tb.done() ? 1 : 0, 1);
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        passed &= expect("nested inline process depth remains bounded",
+                         tb.max_inline_process_depth() <= 64 ? 1 : 0, 1);
+        passed &= expect("nested process chain uses queued fallback",
+                         tb.inline_process_depth_fallback_count() > 0 ? 1 : 0,
+                         1);
+        passed &= expect("nested process ready count returns to zero",
+                         tb.live_ready_count(), 0);
+        passed &= expect("nested process ready count matches states",
+                         tb.live_ready_count_matches_states() ? 1 : 0, 1);
+#endif
+    }
+
+    {
+        Testbench tb;
+        uint32_t runs = 0;
+        uint32_t destructions = 0;
+        const auto chain = tb.spawn(
+            repeated_process_chain(tb, 4'096, runs, destructions));
+        passed &= expect("zero-time process chain completes",
+                         chain.done() ? 1 : 0, 1);
+        passed &= expect("zero-time process chain runs", runs, 4'096);
+        passed &= expect("zero-time process chain destroys frames",
+                         destructions, 4'096);
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        passed &= expect("zero-time ready queue remains bounded",
+                         tb.max_ready_queue_entries() <= 1'024 ? 1 : 0, 1);
+        passed &= expect("zero-time process chain uses inline starts",
+                         tb.inline_process_start_count(), 4'096);
+#endif
+    }
+
+    {
+        Testbench tb;
+        std::vector<uint32_t> order;
+        const auto parent = tb.spawn(await_with_queued_sibling(tb, order));
+        passed &= expect("queued sibling process completes parent",
+                         parent.done() ? 1 : 0, 1);
+        passed &= expect("queued sibling preserves child order", order[0], 1);
+        passed &= expect("queued sibling preserves FIFO order", order[1], 2);
+        passed &= expect("queued sibling precedes awaiting parent", order[2],
+                         3);
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        passed &= expect("sibling ready count returns to zero",
+                         tb.live_ready_count(), 0);
+        passed &= expect("sibling ready count matches states",
+                         tb.live_ready_count_matches_states() ? 1 : 0, 1);
+#endif
+    }
+
+    {
+        Testbench tb;
+        Event event;
+        std::vector<uint32_t> order;
+        tb.spawn_detached(wait_then_append(event, order, 2));
+        const auto parent =
+            tb.spawn(await_child_that_wakes_waiter(tb, event, order));
+        passed &= expect("inline child wake completes parent",
+                         parent.done() ? 1 : 0, 1);
+        passed &= expect("inline child runs before event waiter", order[0], 1);
+        passed &= expect("event waiter precedes awaiting parent", order[1], 2);
+        passed &= expect("awaiting parent resumes last", order[2], 3);
+    }
+
+    {
+        Testbench tb;
+        std::vector<uint32_t> order;
+        const auto parent = tb.spawn(await_delayed_child(tb, order));
+        passed &= expect("inline-started delayed child suspends parent",
+                         parent.done() ? 1 : 0, 0);
+        passed &= expect("inline-started delayed child reaches delay",
+                         order[0], 1);
+        tb.set_time(1);
+        passed &= expect("delayed child resumes before parent", order[1], 2);
+        passed &= expect("delayed child parent resumes last", order[2], 3);
+        passed &= expect("delayed child completes parent",
+                         parent.done() ? 1 : 0, 1);
     }
 
 #ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
@@ -2929,11 +3475,31 @@ int main() {
         "Event active lifetime abort", trigger_event_destroyed_with_waiter,
         "Event destroyed with active waiters");
     passed &= expect_abort(
-        "Channel cross-scheduler abort", trigger_channel_cross_scheduler,
-        "Channel cannot have waiters from multiple schedulers");
+        "Queue cross-scheduler abort", trigger_queue_cross_scheduler,
+        "Queue cannot have waiters from multiple schedulers");
     passed &= expect_abort(
-        "Channel active lifetime abort", trigger_channel_destroyed_with_waiter,
-        "Channel destroyed with active waiters");
+        "Queue active lifetime abort", trigger_queue_destroyed_with_waiter,
+        "Queue destroyed with active waiters");
+    passed &= expect_abort(
+        "Queue blocked producer lifetime abort",
+        trigger_queue_destroyed_with_blocked_producer,
+        "Queue destroyed with active waiters");
+    passed &= expect_abort(
+        "Semaphore cross-scheduler abort", trigger_semaphore_cross_scheduler,
+        "Semaphore cannot have waiters from multiple schedulers");
+    passed &= expect_abort(
+        "Semaphore active lifetime abort",
+        trigger_semaphore_destroyed_with_waiter,
+        "Semaphore destroyed with active waiters");
+    passed &= expect_abort(
+        "Lock cross-scheduler abort", trigger_lock_cross_scheduler,
+        "Lock cannot have waiters from multiple schedulers");
+    passed &= expect_abort(
+        "Lock active lifetime abort", trigger_lock_destroyed_with_waiter,
+        "Lock destroyed with active waiters");
+    passed &= expect_abort("unlocked Lock release abort",
+                           trigger_unlocked_lock_release,
+                           "cannot release an unlocked Lock");
     passed &= expect_abort("unpacked array bounds abort",
                            trigger_unpacked_array_oob,
                            "array_i' dimension 1 index 3 is out of bounds [4:7]");

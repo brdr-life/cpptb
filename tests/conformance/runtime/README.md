@@ -34,7 +34,7 @@ The suite covers:
 - immediate and delayed `wait_until()` predicates with exact evaluation counts
   and timestamps;
 - sticky, reusable `Event` state, FIFO wakeup, and cancelled-waiter cleanup;
-- unbounded `Channel<T>` item/waiter FIFO behavior, producer/consumer ordering,
+- unbounded `Queue<T>` item/waiter FIFO behavior, producer/consumer ordering,
   and cancellation without item loss;
 - rejection of writes to DUT outputs.
 
@@ -99,7 +99,7 @@ supports optional-style state and value access; `TimeoutResult<void>` carries
 the same completion/timeout state without value storage. The optional-backed
 typed result supports move-only, non-default-constructible values. A timed-out
 task is recursively cancelled and reclaimed at the normal scheduler boundary,
-including nested task frames and `Process`, `Event`, or `Channel` waits. Task
+including nested task frames and `Process`, `Event`, or `Queue` waits. Task
 completion wins a same-timestamp race when its result exists by the time the
 parent resumes. A stale loser cannot resume later, and invalid tasks, invalid
 value access, zero durations, and sub-precision durations abort with explicit
@@ -116,18 +116,20 @@ completes immediately; `set()` wakes already-registered waiters in FIFO order.
 The same event can be cleared and reused. Cancelled waiters are removed and do
 not resume on a later set.
 
-`Channel<T>` is an unbounded FIFO in Authoring Core v1. Puts may precede gets or
+`Queue<T>` is an unbounded FIFO in Authoring Core v1. Puts may precede gets or
 vice versa, queued items and waiting consumers preserve FIFO order, and
 multiple delayed producers preserve production order. Cancelling a consumer
 that has been assigned an item transfers availability to the next waiter, so
 the item is neither lost nor delivered to the cancelled process. Moving a
-`Channel<T>::GetAwaiter` transfers responsibility for its active registration;
+`Queue<T>::GetAwaiter` transfers responsibility for its active registration;
 destroying the moved-from awaiter neither abandons that registration nor
 consumes an item. Reentrant `put_nowait()` and cancellation from a resumed
 consumer preserve reserved-item handoff and exactly-once wakeup while external
-wakes are being flushed. Bounded channel behavior is outside the v1 surface.
+wakes are being flushed. This contract exercises unbounded mode; bounded
+producer backpressure is covered by the `queue_sync` authoring workload and
+the runtime unit suite.
 
-Destroying an `Event` or `Channel<T>` with an active waiter aborts with a
+Destroying an `Event` or `Queue<T>` with an active waiter aborts with a
 diagnostic. The conformance runner checks both lifetime violations in addition
 to sub-precision delay, output-write, zero-delay, and task-timeout negative
 cases.

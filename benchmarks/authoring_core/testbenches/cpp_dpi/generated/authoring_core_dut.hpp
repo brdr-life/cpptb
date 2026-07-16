@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <string_view>
 
 #include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/hierarchy.hpp"
@@ -53,6 +54,13 @@ enum class StateT : std::int64_t {
     StateIdle = 0,
     StateRun = 3,
 };
+
+[[nodiscard]] inline constexpr std::string_view cpptb_diagnostic_name(StateT value) {
+    if (value == StateT::StateNegative) return "STATE_NEGATIVE";
+    if (value == StateT::StateIdle) return "STATE_IDLE";
+    if (value == StateT::StateRun) return "STATE_RUN";
+    return {};
+}
 
 class StateTValue {
 public:

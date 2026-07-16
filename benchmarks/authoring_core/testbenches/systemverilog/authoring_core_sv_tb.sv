@@ -52,8 +52,12 @@ module authoring_core_sv_tb;
   longint unsigned wait_until_count;
   longint unsigned event_set_count;
   longint unsigned event_wait_count;
-  longint unsigned channel_send_count;
-  longint unsigned channel_receive_count;
+  longint unsigned queue_send_count;
+  longint unsigned queue_receive_count;
+  longint unsigned queue_put_count;
+  longint unsigned queue_get_count;
+  longint unsigned lock_acquire_count;
+  longint unsigned semaphore_acquire_count;
   longint unsigned wide64_count;
   longint unsigned wide_echo_137_count;
   longint unsigned wide_slice_count;
@@ -74,11 +78,18 @@ module authoring_core_sv_tb;
   longint unsigned hier_data_reads;
   longint unsigned hier_data_deposits;
   longint unsigned timing_phases_count;
+  longint unsigned test_lifecycle_count;
+  longint unsigned dynamic_spawn_count;
+  bit dynamic_process_ready;
+  bit dynamic_process_release;
   event authored_event;
   bit authored_event_set;
-  event channel_available;
+  event queue_available;
   logic [31:0] event_token;
-  logic [31:0] channel_queue[$];
+  logic [31:0] queue_items[$];
+  mailbox #(logic [31:0]) bounded_queue;
+  semaphore queue_credits;
+  semaphore authored_lock;
 
   always begin
     #1ns clk = ~clk;
@@ -328,14 +339,37 @@ module authoring_core_sv_tb;
     authored_event_set = 1'b0;
   endtask
 
-  task automatic channel_feature(input logic [31:0] payload,
+  task automatic queue_feature(input logic [31:0] payload,
                                  output logic [31:0] received);
-    channel_queue.push_back(payload);
-    channel_send_count++;
-    -> channel_available;
-    channel_receive_count++;
-    while (channel_queue.size() == 0) @channel_available;
-    received = channel_queue.pop_front();
+    queue_items.push_back(payload);
+    queue_send_count++;
+    -> queue_available;
+    queue_receive_count++;
+    while (queue_items.size() == 0) @queue_available;
+    received = queue_items.pop_front();
+  endtask
+
+  task automatic queue_sync_producer();
+    for (int unsigned i = 0; i < iterations; i++) begin
+      queue_credits.get(1);
+      semaphore_acquire_count++;
+      bounded_queue.put(stimulus(i));
+      queue_put_count++;
+    end
+  endtask
+
+  task automatic queue_sync_consumer();
+    logic [31:0] payload;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      bounded_queue.get(payload);
+      queue_get_count++;
+      authored_lock.get(1);
+      lock_acquire_count++;
+      check32(payload, stimulus(i), "bounded queue payload");
+      authored_lock.put(1);
+      queue_credits.put(1);
+      transact(i, payload, 1'b0);
+    end
   endtask
 
   task automatic wide64_feature(input int unsigned iteration);
@@ -647,6 +681,103 @@ module authoring_core_sv_tb;
       transact(i, stimulus(i), 1'b0);
   endtask
 
+  task automatic lifecycle_process();
+    for (int unsigned i = 0; i < iterations; i++)
+      check32(stimulus(i), stimulus(i), "owned process value");
+  endtask
+
+  task automatic run_test_lifecycle();
+    fork
+      lifecycle_process();
+      begin
+        logic [31:0] value;
+        for (int unsigned i = 0; i < iterations; i++) begin
+          value = stimulus(i);
+          test_lifecycle_count++;
+          check32(value != 0, 1, "stimulus is nonzero");
+          check32(value, stimulus(i), "stimulus identity");
+        end
+      end
+    join
+    #1ps;
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=test_lifecycle iterations=%0d transactions=0 checks=%0d sim_cycles=0 checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=%0d dynamic_spawn=0",
+             iterations, checks, failures, test_lifecycle_count);
+    $finish;
+  endtask
+
+  task automatic dynamic_spawn_child(input logic [31:0] value,
+                                     input int unsigned iteration);
+    check32(value, stimulus(iteration), "dynamic process value");
+  endtask
+
+  task automatic report_dynamic_process();
+    #1ps;
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=0 checks=%0d sim_cycles=0 checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=0 dynamic_spawn=%0d",
+             kernel, iterations, checks, failures, dynamic_spawn_count);
+    $finish;
+  endtask
+
+  task automatic run_dynamic_task();
+    logic [31:0] value;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      value = stimulus(i);
+      dynamic_spawn_count++;
+      dynamic_spawn_child(value, i);
+    end
+    report_dynamic_process();
+  endtask
+
+  task automatic run_dynamic_spawn_scheduler();
+    logic [31:0] value;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      value = stimulus(i);
+      dynamic_spawn_count++;
+      fork
+        dynamic_spawn_child(value, i);
+      join
+    end
+    report_dynamic_process();
+  endtask
+
+  task automatic run_dynamic_spawn();
+    logic [31:0] value;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      value = stimulus(i);
+      dynamic_spawn_count++;
+      fork
+        dynamic_spawn_child(value, i);
+      join
+    end
+    report_dynamic_process();
+  endtask
+
+  task automatic dynamic_suspending_child(input logic [31:0] value,
+                                           input int unsigned iteration);
+    dynamic_process_ready = 1'b1;
+    wait (dynamic_process_release);
+    check32(value, stimulus(iteration), "suspending process value");
+  endtask
+
+  task automatic dynamic_suspending_release();
+    wait (dynamic_process_ready);
+    dynamic_process_release = 1'b1;
+  endtask
+
+  task automatic run_dynamic_spawn_suspending();
+    logic [31:0] value;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      dynamic_process_ready = 1'b0;
+      dynamic_process_release = 1'b0;
+      value = stimulus(i);
+      dynamic_spawn_count++;
+      fork
+        dynamic_suspending_child(value, i);
+        dynamic_suspending_release();
+      join
+    end
+    report_dynamic_process();
+  endtask
+
   task automatic run_task_value();
     logic [31:0] payload;
     for (int unsigned i = 0; i < iterations; i++) begin
@@ -695,13 +826,25 @@ module authoring_core_sv_tb;
     end
   endtask
 
-  task automatic run_channel();
+  task automatic run_queue();
     logic [31:0] payload;
     for (int unsigned i = 0; i < iterations; i++) begin
-      channel_feature(stimulus(i), payload);
-      check32(payload, stimulus(i), "channel payload");
+      queue_feature(stimulus(i), payload);
+      check32(payload, stimulus(i), "queue payload");
       transact(i, payload, 1'b0);
     end
+  endtask
+
+  task automatic run_queue_sync();
+    bounded_queue = new(1);
+    queue_credits = new(2);
+    authored_lock = new(1);
+    authored_lock.get(1);
+    fork
+      queue_sync_producer();
+      queue_sync_consumer();
+      authored_lock.put(1);
+    join
   endtask
 
   task automatic run_wide64();
@@ -864,8 +1007,8 @@ module authoring_core_sv_tb;
       task_timeout_feature(i, payload, payload);
       wait_until_feature();
       event_feature();
-      channel_feature(payload, received);
-      check32(received, payload, "channel payload");
+      queue_feature(payload, received);
+      check32(received, payload, "queue payload");
       payload = received;
       wide64_feature(i);
       wide137_feature(i);
@@ -903,8 +1046,12 @@ module authoring_core_sv_tb;
     event_set_count = 0;
     event_wait_count = 0;
     authored_event_set = 1'b0;
-    channel_send_count = 0;
-    channel_receive_count = 0;
+    queue_send_count = 0;
+    queue_receive_count = 0;
+    queue_put_count = 0;
+    queue_get_count = 0;
+    lock_acquire_count = 0;
+    semaphore_acquire_count = 0;
     wide64_count = 0;
     wide_echo_137_count = 0;
     wide_slice_count = 0;
@@ -925,6 +1072,10 @@ module authoring_core_sv_tb;
     hier_data_reads = 0;
     hier_data_deposits = 0;
     timing_phases_count = 0;
+    test_lifecycle_count = 0;
+    dynamic_spawn_count = 0;
+    dynamic_process_ready = 1'b0;
+    dynamic_process_release = 1'b0;
     wide64_i = '0;
     wide137_i = '0;
     fixed_a_i = '0;
@@ -939,8 +1090,13 @@ module authoring_core_sv_tb;
     mem_we_i = 1'b0;
     void'($value$plusargs("AUTHORING_CORE_ITERS=%d", iterations));
     void'($value$plusargs("AUTHORING_CORE_KERNEL=%s", kernel));
-    repeat (4) @(posedge clk);
-    rst_n = 1'b1;
+    if (kernel != "test_lifecycle" && kernel != "dynamic_spawn" &&
+        kernel != "dynamic_task" &&
+        kernel != "dynamic_spawn_scheduler" &&
+        kernel != "dynamic_spawn_suspending") begin
+      repeat (4) @(posedge clk);
+      rst_n = 1'b1;
+    end
 
     case (kernel)
       "control": run_control();
@@ -950,7 +1106,8 @@ module authoring_core_sv_tb;
       "task_timeout": run_task_timeout();
       "wait_until": run_wait_until();
       "event": run_event();
-      "channel": run_channel();
+      "queue": run_queue();
+      "queue_sync": run_queue_sync();
       "all": run_all();
       "wide64": run_wide64();
       "wide_echo_137": run_wide_echo_137();
@@ -970,10 +1127,18 @@ module authoring_core_sv_tb;
       "packed_view": run_packed_view();
       "hier_data": run_hier_data();
       "timing_phases": run_timing_phases();
+      "test_lifecycle": run_test_lifecycle();
+      "dynamic_spawn": run_dynamic_spawn();
+      "dynamic_task": run_dynamic_task();
+      "dynamic_spawn_scheduler": run_dynamic_spawn_scheduler();
+      "dynamic_spawn_suspending": run_dynamic_spawn_suspending();
       default: $fatal(1, "unknown AUTHORING_CORE_KERNEL=%s", kernel);
     endcase
 
-    if (kernel != "timing_phases") begin
+    if (kernel != "timing_phases" && kernel != "test_lifecycle" &&
+        kernel != "dynamic_spawn" && kernel != "dynamic_task" &&
+        kernel != "dynamic_spawn_scheduler" &&
+        kernel != "dynamic_spawn_suspending") begin
       while (response_count != iterations) begin
         @(posedge clk);
         #1ps;
@@ -981,20 +1146,28 @@ module authoring_core_sv_tb;
       check32(request_count, iterations, "request count");
       check32(response_count, iterations, "response count");
     end
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d channel_send=%0d channel_receive=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d",
+    if (kernel != "test_lifecycle" && kernel != "dynamic_spawn" &&
+        kernel != "dynamic_task" &&
+        kernel != "dynamic_spawn_scheduler" &&
+        kernel != "dynamic_spawn_suspending") begin
+      $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d queue_send=%0d queue_receive=%0d queue_put=%0d queue_get=%0d lock_acquire=%0d semaphore_acquire=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d test_lifecycle=%0d dynamic_spawn=%0d",
              kernel, iterations, transactions, checks, sim_cycles, checksum,
              failures, task_value_count, clock_cycles_count, timeout_count,
              timeout_hits, task_timeout_count, task_timeout_hits,
              wait_until_count, event_set_count, event_wait_count,
-             channel_send_count, channel_receive_count, wide64_count,
+             queue_send_count, queue_receive_count, queue_put_count,
+             queue_get_count, lock_acquire_count, semaphore_acquire_count,
+             wide64_count,
              wide_echo_137_count, wide_slice_count, fixed_mac_count,
              array_index_count, array_wide_count, array_multidim_count,
              mem_rw_count,
              hier_probe_reads, hier_probe_deposits, mem_backdoor_reads,
              mem_backdoor_deposits, probe_diag_reads, probe_diag_deposits,
              signal_edges, force_release_count, packed_view_count,
-             hier_data_reads, hier_data_deposits, timing_phases_count);
-    $finish;
+             hier_data_reads, hier_data_deposits, timing_phases_count,
+             test_lifecycle_count, dynamic_spawn_count);
+      $finish;
+    end
   end
 
   authoring_core_dut i_dut (.*);

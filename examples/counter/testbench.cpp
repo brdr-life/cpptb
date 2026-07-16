@@ -1,12 +1,12 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/counter/generated/counter_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::counter {
 namespace {
 
-using cpptb::generated::counter::Dut;
+using cpptb::Dut;
 using coro::Delay;
 using coro::FallingEdge;
 using coro::RisingEdge;
@@ -40,7 +40,20 @@ Task<void> counter_sequence(Dut dut, TestContext& test) {
     test.expect_eq("disabled count", dut.count.get(), kCountCycles);
 }
 
+Task<void> counter_reset_defaults(Dut dut, TestContext& test) {
+    dut.clk.set(0);
+    test.start_clock(dut.clk, 10_ns);
+
+    dut.rst_n.set(0);
+    dut.enable.set(1);
+
+    co_await RisingEdge{dut.clk};
+    co_await Delay{1_ps};
+    test.expect_eq("reset count", dut.count.get(), 0u);
+}
+
 CPPTB_REGISTER_TEST(counter_sequence);
+CPPTB_REGISTER_TEST(counter_reset_defaults);
 
 }  // namespace
 

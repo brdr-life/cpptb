@@ -14,13 +14,13 @@ make cpp-dpi-fault-injection-sv-run
 The hand-written file imports the generated `Dut`, defines one coroutine, and
 registers it. Clock generation, reset stimulus, hierarchy operations, and
 checks are all visible in that user-facing sequence; generated DPI scheduling
-and transport stay under `generated/`.
+and transport stay under the target's ignored build directory.
 
 ```cpp
 #include "cpptb/cpptb.hpp"
-#include "examples/fault_injection/generated/fault_injection_dut.hpp"
+#include "dut.hpp"
 
-using cpptb::generated::fault_injection::Dut;
+using cpptb::Dut;
 using coro::Delay;
 using coro::FallingEdge;
 using coro::RisingEdge;

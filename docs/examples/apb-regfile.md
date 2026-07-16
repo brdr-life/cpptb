@@ -43,7 +43,7 @@ Task<void> register_sequence(Dut dut, TestContext& test) {
 CPPTB_REGISTER_TEST(register_sequence);
 ```
 
-Generate it with
-`cpptb-codegen examples/apb_regfile/apb_regfile.sv`.
+Build and run it with
+`cpptb test --project examples/apb_regfile --build-dir build`.
 Signal writes do not insert protocol delays; the helper explicitly drives,
 waits, settles, and samples.

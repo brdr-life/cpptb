@@ -1,17 +1,15 @@
 # Multiple clocks
 
 The dual-clock mailbox declares clock timing in the C++ testbench. Port names
-carry no timing semantics, and generation needs only the RTL:
+carry no timing semantics, and the project command infers the RTL and top:
 
 ```sh
-uv run --frozen cpptb-codegen \
-  examples/multiclock/dual_clock_mailbox.sv
+uv run --frozen cpptb build --project examples/multiclock --build-dir build
 ```
 
-The target-unique generated type is
-`cpptb::generated::dual_clock_mailbox::Dut`. Producer and consumer coroutines
-wait on the clock that owns their interface, then the registered test composes
-them with reset and a phase probe:
+The testbench imports the stable generated `cpptb::Dut`. Producer and consumer
+coroutines wait on the clock that owns their interface, then the registered
+test composes them with reset and a phase probe:
 
 ```cpp
 constexpr uint32_t kTransferCount = 16;

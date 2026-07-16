@@ -49,7 +49,8 @@ feature.
 | `task_timeout` | `task_timeouts=N`, `task_timeout_hits=floor(N/2)` | `2N + 2` |
 | `wait_until` | `wait_until=N` | `2N + 2` |
 | `event` | `event_set=N`, `event_wait=N` | `2N + 2` |
-| `channel` | `channel_send=N`, `channel_receive=N` | `2N + 2` |
+| `queue` | `queue_send=N`, `queue_receive=N` | `2N + 2` |
+| `queue_sync` | `queue_put=N`, `queue_get=N`, `lock_acquire=N`, `semaphore_acquire=N` | `2N + 2` |
 | `wide64` | `wide64=N` | `2N + 2` |
 | `wide_echo_137` | `wide_echo_137=N` | `2N + 2` |
 | `wide_slice` | `wide_slice=N` | `2N + 2` |
@@ -67,6 +68,11 @@ feature.
 | `force_release` | `force_release=N` | `3N + 2` |
 | `packed_view` | `packed_view=N` | `5N + 2` |
 | `force_direct` | `force_release=N`, zero transactions and cycles | `N` |
+| `test_lifecycle` | `test_lifecycle=N`, zero transactions and cycles | `3N` |
+| `dynamic_task` | `dynamic_spawn=N`, zero transactions and cycles | `N` |
+| `dynamic_spawn_scheduler` | `dynamic_spawn=N`, zero transactions and cycles | `N` |
+| `dynamic_spawn` | `dynamic_spawn=N`, zero transactions and cycles | `N` |
+| `dynamic_spawn_suspending` | `dynamic_spawn=N`, zero transactions and cycles | `N` |
 | `all` | all aggregate usage counts enabled, both timeout-hit counts `floor(N/2)` | `28N + 2` |
 
 ## Semantic mapping
@@ -79,7 +85,8 @@ feature.
 | `with_timeout(Task<uint32_t>, timeout)` returning `TimeoutResult<uint32_t>` | named-block `fork...join_any`, a delayed value task versus `#timeout`, then `disable block` |
 | `wait_until(req_ready, predicate, clk)` | `while (!req_ready) @(posedge clk)` |
 | sticky `Event::clear/set/wait` | a sticky bit plus a SystemVerilog event; the waiter first tests the bit |
-| unbounded `Channel<uint32_t>::put_nowait/get` | an unbounded SV queue push/pop plus its queue predicate |
+| unbounded `Queue<uint32_t>::put_nowait/get` | an unbounded SV queue push/pop plus its queue predicate |
+| bounded `Queue`, `Semaphore`, and `Lock` contention | bounded mailbox, semaphore credits, and semaphore lock |
 | `Bits<W>` packed access and slices | packed vectors and indexed part-selects |
 | `Fixed` multiply and quantize | signed packed arithmetic with matching nearest-even saturation |
 | `array.at(index).get()/set()` | fixed unpacked-array element access with the same SV index |
@@ -90,6 +97,10 @@ feature.
 | rank-2 `.at(row).at(column).set()/get()` with 65-bit elements | nested unpacked-array indexed writes/reads |
 | internal `.force(value)`, explicit `Delay{1_ps}`, `.release()`, explicit `Delay{1_ps}` | `force`, `#1ps`, `release`, `#1ps` on the same internal net |
 | internal `.force(value)`, immediate `.get()`, `.release()` | zero-time `force`, hierarchical readback, and `release` in a standalone SV top |
+| direct `co_await Task<void>` | blocking call to an automatic SV task |
+| low-level scheduler process | one-child `fork ... join` |
+| lifecycle-tracked `TestContext::spawn()` | the same one-child `fork ... join` plus framework ownership on the C++ side |
+| two event-suspending processes | two forked SV tasks with the same event handshake |
 
 The `signal_edge`, `array_multidim`, `force_release`, `packed_view`, and
 `force_direct` kernels are intentionally isolated and are not included in
@@ -101,13 +112,19 @@ the task after `500ps` against a `3ns` limit and consume `value()`; odd
 iterations time out after `500ps` while the task would take `3ns`. Both sides
 check the completion/timeout state, retain the same stimulus on timeout, and
 therefore issue the identical DUT workload and checksum. It uses
-`triggered()`, `timed_out()`, and `value()` from `TimeoutResult<T>`. Bounded
-channels are deliberately not benchmarked. The channel kernel measures the
-finalized unbounded FIFO semantics exactly; it does not model backpressure or
-capacity.
-The Event kernel exercises sticky set-before-wait behavior, and the Channel
+`triggered()`, `timed_out()`, and `value()` from `TimeoutResult<T>`. The
+`queue` kernel measures unbounded FIFO semantics; `queue_sync` adds bounded
+producer backpressure, semaphore credits, and lock contention.
+The Event kernel exercises sticky set-before-wait behavior, and the Queue
 kernel exercises queued-before-get behavior, so neither kernel includes an
 unrequested process-spawn or producer-scheduling cost.
+
+The four dynamic-process kernels deliberately decompose direct task creation,
+core scheduler process creation, lifecycle-tracked `spawn()`, and processes
+that genuinely suspend. They default to 5,000,000 iterations so startup noise
+cannot hide a per-process regression. Each has an exact pure-SV twin and the
+runner rejects mismatched checks, feature counts, or checksums before applying
+the performance guard.
 
 The C++ kernel is selected at compile time with `AUTHORING_CORE_KERNEL`, so
 feature dispatch is absent from its hot loop. The pure-SV testbench selects one

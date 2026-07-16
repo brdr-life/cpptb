@@ -1,12 +1,12 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
-#include "examples/fault_injection/generated/fault_injection_dut.hpp"
+#include "dut.hpp"
 
 namespace cpptb::examples::fault_injection {
 namespace {
 
-using cpptb::generated::fault_injection::Dut;
+using cpptb::Dut;
 using coro::Delay;
 using coro::FallingEdge;
 using coro::RisingEdge;
