@@ -41,6 +41,20 @@ python3 benchmarks/framework_comparison/open_cores/run_benchmark.py \
   --skip-build --workload secworks_aes128 --iters 10000
 ```
 
+Run only its Cocotb implementation while developing or inspecting the test:
+
+```sh
+make framework-comparison-open-cores-cocotb-run \
+  OPEN_CORES_COCOTB_WORKLOAD=secworks_aes128 \
+  OPEN_CORES_COCOTB_ITERS=100
+```
+
+The complete runnable Cocotb bench is
+`testbenches/cocotb/test_open_cores.py`. Its three workload coroutines drive
+the same RTL wrapper, stimulus, edge sequence, checks, and checksum contract
+as the other modes. `testbenches/cocotb/run_cocotb.py` contains only the
+Verilator/Cocotb build and launch adapter.
+
 Processes are serialized and mode order rotates over four rounds. A sample is
 rejected unless transactions, checks, simulation cycles, checksum, and
 failures match across all four modes.

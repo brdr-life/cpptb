@@ -271,19 +271,19 @@ comparison honest: unused third-party RTL cannot increase model evaluation or
 DPI transport cost. See [Open-source core benchmarks](examples/open-source-cores.md)
 for the user-facing sequences and provenance.
 
-The following reference run used Verilator 5.050 and Cocotb 2.0.1. Values are
-median whole-process wall time over four serialized, mode-rotated samples.
+The July 16, 2026 reference run used Verilator 5.050 and Cocotb 2.0.1. Values
+are median whole-process wall time over four serialized, mode-rotated samples.
 
 | Workload | Work units | Sim cycles | Pure SV | C++ DPI | C++ VPI | Cocotb |
 |---|---:|---:|---:|---:|---:|---:|
-| PicoRV32 firmware kernel | 20,000 loops | 920,043 | 490.5 ms / 1.00x | 603.4 ms / 1.23x | 1092.8 ms / 2.23x | 4062.0 ms / 8.28x |
-| secworks AES-128 | 4,000 blocks | 252,032 | 202.5 ms / 1.00x | 290.1 ms / 1.43x | 512.2 ms / 2.53x | 7000.4 ms / 34.57x |
-| 64-bit Ethernet FCS | 2,000 frames | 209,616 | 407.9 ms / 1.00x | 366.9 ms / 0.90x | 1325.6 ms / 3.25x | 13111.4 ms / 32.14x |
+| PicoRV32 firmware kernel | 20,000 loops | 920,043 | 274.8 ms / 1.00x | 357.7 ms / 1.30x | 625.2 ms / 2.27x | 2434.2 ms / 8.86x |
+| secworks AES-128 | 4,000 blocks | 252,032 | 122.2 ms / 1.00x | 172.6 ms / 1.41x | 315.1 ms / 2.58x | 3986.8 ms / 32.62x |
+| 64-bit Ethernet FCS | 2,000 frames | 209,616 | 261.3 ms / 1.00x | 251.6 ms / 0.96x | 841.6 ms / 3.22x | 7110.3 ms / 27.21x |
 
 The DPI/pure-SV advisory guard passes for Ethernet and reports the PicoRV32
 and AES ratios above `1.10`. The raw journal records every sample and its
 one-minute load average under
 `benchmarks/framework_comparison/open_cores/results/latest.jsonl`; this run
-observed load averages from 5.7 to 9.2 on an 8-logical-CPU host. Treat the
+observed load averages from 3.21 to 4.31 on an 8-logical-CPU host. Treat the
 absolute times as a local reference and the within-row ratios as the useful
 comparison.

@@ -112,6 +112,8 @@ OPEN_CORES_RTL := \
 	$(OPEN_CORES_DIR)/rtl/open_cores_benchmark_dut.sv
 OPEN_CORES_WORKLOADS := picorv32_firmware secworks_aes128 ethernet_fcs64
 OPEN_CORES_COCOTB_RUNNER := $(OPEN_CORES_DIR)/testbenches/cocotb/run_cocotb.py
+OPEN_CORES_COCOTB_WORKLOAD ?= picorv32_firmware
+OPEN_CORES_COCOTB_ITERS ?= 100
 COCOTB_BENCH_PYTHON ?= /opt/homebrew/bin/python3.12
 FEATURE ?=
 FEATURE_REGRESSION_RUNNER := python3 benchmarks/run_regression.py
@@ -980,6 +982,7 @@ framework-comparison-heavy-benchmark: framework-comparison-heavy-build
 	framework-comparison-open-cores-sv-build \
 	framework-comparison-open-cores-vpi-build \
 	framework-comparison-open-cores-cocotb-build \
+	framework-comparison-open-cores-cocotb-run \
 	framework-comparison-open-cores-build \
 	framework-comparison-open-cores-test \
 	framework-comparison-open-cores-benchmark
@@ -1089,6 +1092,13 @@ framework-comparison-open-cores-cocotb-build:
 	UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --offline --no-project \
 		--python $(COCOTB_BENCH_PYTHON) --with cocotb==2.0.1 \
 		python $(OPEN_CORES_COCOTB_RUNNER) --build-only --workload ethernet_fcs64
+
+framework-comparison-open-cores-cocotb-run:
+	UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --offline --no-project \
+		--python $(COCOTB_BENCH_PYTHON) --with cocotb==2.0.1 \
+		python $(OPEN_CORES_COCOTB_RUNNER) \
+		--workload $(OPEN_CORES_COCOTB_WORKLOAD) \
+		--iters $(OPEN_CORES_COCOTB_ITERS)
 
 framework-comparison-open-cores-build: \
 	framework-comparison-open-cores-codegen-check \
