@@ -36,7 +36,7 @@ inline constexpr std::array<uint32_t, 1> kEdgeObserverSignalIds = {
 };
 inline constexpr std::array<uint32_t, 0> kTransportlessEdgeSignalIds = {
 };
-inline constexpr std::array<std::pair<uint32_t, uint32_t>, 16> kDrivenSignalSpans = {{
+inline constexpr std::array<std::pair<uint32_t, uint32_t>, 22> kDrivenSignalSpans = {{
     {kSignalRstN, 1},
     {kSignalReqValid, 1},
     {kSignalReqData, 1},
@@ -53,8 +53,14 @@ inline constexpr std::array<std::pair<uint32_t, uint32_t>, 16> kDrivenSignalSpan
     {kSignalMemAddrI, 1},
     {kSignalMemWdataI, 1},
     {kSignalMemWeI, 1},
+    {kSignalApbPselI, 1},
+    {kSignalApbPenableI, 1},
+    {kSignalApbPwriteI, 1},
+    {kSignalApbPaddrI, 1},
+    {kSignalApbPwdataI, 1},
+    {kSignalApbPstrbI, 1},
 }};
-inline constexpr std::array<uint32_t, 39> kObservedSignalWordIds = {
+inline constexpr std::array<uint32_t, 42> kObservedSignalWordIds = {
     kSignalClk,
     kSignalReqReady,
     kSignalRspValid,
@@ -94,8 +100,11 @@ inline constexpr std::array<uint32_t, 39> kObservedSignalWordIds = {
     kSignalForceFanoutO,
     kSignalPackedViewO,
     kSignalMemRdataO,
+    kSignalApbPrdataO,
+    kSignalApbPreadyO,
+    kSignalApbPslverrO,
 };
-inline constexpr std::array<uint32_t, 39> kDrivenSignalWordIds = {
+inline constexpr std::array<uint32_t, 45> kDrivenSignalWordIds = {
     kSignalRstN,
     kSignalReqValid,
     kSignalReqData,
@@ -135,9 +144,15 @@ inline constexpr std::array<uint32_t, 39> kDrivenSignalWordIds = {
     kSignalMemAddrI,
     kSignalMemWdataI,
     kSignalMemWeI,
+    kSignalApbPselI,
+    kSignalApbPenableI,
+    kSignalApbPwriteI,
+    kSignalApbPaddrI,
+    kSignalApbPwdataI,
+    kSignalApbPstrbI,
 };
 
-inline constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 28> kStaticPackedBindingSpans = {{
+inline constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 37> kStaticPackedBindingSpans = {{
     {kSignalClk, 1, 0, false},
     {kSignalReqReady, 1, 1, false},
     {kSignalRspValid, 1, 2, false},
@@ -152,6 +167,9 @@ inline constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 28> kStaticPack
     {kSignalForceFanoutO, 1, 36, false},
     {kSignalPackedViewO, 1, 37, false},
     {kSignalMemRdataO, 1, 38, false},
+    {kSignalApbPrdataO, 1, 39, false},
+    {kSignalApbPreadyO, 1, 40, false},
+    {kSignalApbPslverrO, 1, 41, false},
     {kSignalRstN, 1, 0, true},
     {kSignalReqValid, 1, 1, true},
     {kSignalReqData, 1, 2, true},
@@ -166,6 +184,12 @@ inline constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, 28> kStaticPack
     {kSignalMemAddrI, 1, 36, true},
     {kSignalMemWdataI, 1, 37, true},
     {kSignalMemWeI, 1, 38, true},
+    {kSignalApbPselI, 1, 39, true},
+    {kSignalApbPenableI, 1, 40, true},
+    {kSignalApbPwriteI, 1, 41, true},
+    {kSignalApbPaddrI, 1, 42, true},
+    {kSignalApbPwdataI, 1, 43, true},
+    {kSignalApbPstrbI, 1, 44, true},
 }};
 static_assert(cpptb::dpi::validate_static_packed_binding_spans(
     kStaticPackedBindingSpans, kObservedSignalWordIds,
@@ -313,7 +337,16 @@ AuthoringCoreDut bind_dut(MakeSignal&& make_signal) {
         make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalMemAddrI, 36>{}, "mem_addr_i"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalMemWdataI, 37>{}, "mem_wdata_i"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalMemWeI, 38>{}, "mem_we_i"),
-        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalMemRdataO, 38>{}, "mem_rdata_o")
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalMemRdataO, 38>{}, "mem_rdata_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalApbPselI, 39>{}, "apb_psel_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalApbPenableI, 40>{}, "apb_penable_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalApbPwriteI, 41>{}, "apb_pwrite_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalApbPaddrI, 42>{}, "apb_paddr_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalApbPwdataI, 43>{}, "apb_pwdata_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<4, true, true, kSignalApbPstrbI, 44>{}, "apb_pstrb_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalApbPrdataO, 39>{}, "apb_prdata_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalApbPreadyO, 40>{}, "apb_pready_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalApbPslverrO, 41>{}, "apb_pslverr_o")
     };
 }
 
@@ -351,7 +384,16 @@ AuthoringCoreDut bind_dut_for_clock_discovery(MakeSignal&& make_signal) {
         make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalMemAddrI, 36>{}, "mem_addr_i"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalMemWdataI, 37>{}, "mem_wdata_i"),
         make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalMemWeI, 38>{}, "mem_we_i"),
-        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalMemRdataO, 38>{}, "mem_rdata_o")
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalMemRdataO, 38>{}, "mem_rdata_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalApbPselI, 39>{}, "apb_psel_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalApbPenableI, 40>{}, "apb_penable_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, true, true, kSignalApbPwriteI, 41>{}, "apb_pwrite_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<8, true, true, kSignalApbPaddrI, 42>{}, "apb_paddr_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, true, true, kSignalApbPwdataI, 43>{}, "apb_pwdata_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<4, true, true, kSignalApbPstrbI, 44>{}, "apb_pstrb_i"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<32, false, false, kSignalApbPrdataO, 39>{}, "apb_prdata_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalApbPreadyO, 40>{}, "apb_pready_o"),
+        make_signal(cpptb::dpi::StaticPackedSignalSpec<1, false, false, kSignalApbPslverrO, 41>{}, "apb_pslverr_o")
     };
 }
 

@@ -24,6 +24,7 @@ include = ["cpptb_codegen*"]
 
 [tool.setuptools.data-files]
 "include/cpptb" = ["include/cpptb/*.hpp"]
+"include/cpptb_vc" = ["include/cpptb_vc/*.hpp"]
 
 [dependency-groups]
 docs = [

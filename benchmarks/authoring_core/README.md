@@ -77,6 +77,7 @@ feature.
 | `dynamic_spawn_suspending` | `dynamic_spawn=N`, `spawned_processes=2N`, zero transactions and cycles | `N` |
 | `dynamic_monitor` | `queue_put=N`, `queue_get=N`, `spawned_processes=2`, `transactions=N` | `N + 3` |
 | `analysis_fanout` | `analysis_write=2N`, `analysis_delivery=3N`, `spawned_processes=1`, `transactions=N` | `N + 6` |
+| `apb_component` | `apb_component=2N`, `transactions=2N` | `5N + 4` |
 | `all` | all aggregate usage counts enabled, both timeout-hit counts `floor(N/2)` | `28N + 2` |
 
 ## Semantic mapping
@@ -107,6 +108,13 @@ feature.
 | two event-suspending processes | two forked SV tasks with the same event handshake |
 | two long-lived response observers, bounded `Queue`, and cancellation | named `fork...join_none`, bounded mailbox handoff, and `disable` after the same DUT traffic |
 | synchronous `AnalysisPort` fan-out to a scoreboard and bounded audit buffer | direct expected/actual queues plus a bounded mailbox audit subscriber |
+| `cpptb_vc` APB master, passive monitor, checker, and scoreboard | matching APB tasks, passive forked processes, and expected/actual transaction queues |
+
+`dynamic_spawn_scheduler` and `dynamic_spawn` intentionally share the same
+one-child `fork ... join` SystemVerilog baseline. Their C++ difference is the
+thing under measurement: direct scheduler ownership versus `TestContext`
+lifecycle attribution. Separate SV bodies would add unrelated work and make
+that comparison less exact.
 
 The `signal_edge`, `array_multidim`, `force_release`, `packed_view`, and
 `force_direct` kernels are intentionally isolated and are not included in

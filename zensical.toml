@@ -14,6 +14,17 @@ nav = [
   { "Getting started" = "getting-started.md" },
   { "Guides" = [
     { "Testbench authoring" = "testbench-authoring.md" },
+    { "Verification components" = "verification-components.md" },
+    { "Randomization" = [
+      { "Overview" = "random-stimulus.md" },
+      { "Side-by-side examples" = "randomization/examples.md" },
+      { "Random value generation" = "randomization/value-generation.md" },
+      { "Constrained transactions" = "randomization/constrained-transactions.md" },
+      { "Policies and composite fields" = "randomization/policies-and-composition.md" },
+      { "Solvers and diagnostics" = "randomization/solvers-and-diagnostics.md" },
+      { "Functional coverage" = "randomization/functional-coverage.md" },
+      { "Seeds and replay" = "randomization/reproducibility.md" },
+    ] },
     { "Framework test lifecycle" = "test-lifecycle.md" },
     { "Running tests" = "running-tests.md" },
     { "Hierarchical DUT access" = "hierarchy.md" },
