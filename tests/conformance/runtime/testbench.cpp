@@ -1,5 +1,7 @@
 #include "tests/conformance/runtime/framework.hpp"
 
+#include "cpptb/components.hpp"
+
 #include <cstdlib>
 #include <string_view>
 #include <thread>
@@ -1538,6 +1540,90 @@ Task<void> queue_contract(ConformanceTb tb) {
                    cancellation_queue.empty());
 }
 
+struct AnalysisRecorder {
+    std::array<uint32_t, 8> values{};
+    uint32_t count = 0;
+
+    void write(const uint32_t& value) { values[count++] = value; }
+};
+
+Task<void> port_consumer(GetPort<uint32_t> input, QueueProbe& probe) {
+    probe.values[probe.count++] = co_await input.get();
+}
+
+Task<void> transaction_component_contract(ConformanceTb tb) {
+    Queue<uint32_t> queue{1};
+    PutPort output{queue};
+    GetPort input{queue};
+
+    tb.expect_true("PutPort nonblocking write", output.put_nowait(10));
+    tb.expect_true("PutPort preserves bounded capacity",
+                   !output.put_nowait(11));
+    tb.expect_eq("GetPort nonblocking read", *input.get_nowait(), 10);
+
+    QueueProbe cancelled_probe;
+    QueueProbe survivor_probe;
+    const auto cancelled = tb.spawn(port_consumer(input, cancelled_probe));
+    const auto survivor = tb.spawn(port_consumer(input, survivor_probe));
+    cancelled.cancel();
+    co_await output.put(12);
+    co_await survivor;
+    tb.expect_true("GetPort cancellation status", cancelled.cancelled());
+    tb.expect_eq("GetPort cancelled consumer receives no item",
+                 cancelled_probe.count, 0);
+    tb.expect_eq("GetPort surviving consumer receives item",
+                 survivor_probe.values[0], 12);
+
+    AnalysisPort<uint32_t> analysis;
+    AnalysisRecorder first;
+    AnalysisRecorder second;
+    auto first_connection = analysis.connect(first);
+    auto second_connection = analysis.connect(second);
+    const auto publish_time = tb.now();
+    analysis.write(20);
+    tb.expect_time("AnalysisPort publication is zero-time", tb.now(),
+                   publish_time);
+    tb.expect_eq("AnalysisPort first subscriber delivery", first.values[0],
+                 20);
+    tb.expect_eq("AnalysisPort second subscriber delivery", second.values[0],
+                 20);
+    first_connection.disconnect();
+    analysis.write(21);
+    tb.expect_eq("AnalysisPort disconnect stops delivery", first.count, 1);
+    tb.expect_eq("AnalysisPort remaining subscriber delivery",
+                 second.values[1], 21);
+    tb.expect_eq("AnalysisPort live subscriber count",
+                 analysis.subscriber_count(), 1);
+
+    AnalysisPort<uint32_t> buffered_analysis;
+    AnalysisBuffer<uint32_t> buffer{
+        1, AnalysisOverflowPolicy::DropNewest};
+    AnalysisRecorder unbuffered;
+    auto buffer_connection = buffered_analysis.connect(buffer);
+    auto recorder_connection = buffered_analysis.connect(unbuffered);
+    buffered_analysis.write(30);
+    buffered_analysis.write(31);
+    tb.expect_eq("AnalysisBuffer explicit drop count", buffer.dropped(), 1);
+    tb.expect_eq("AnalysisBuffer preserves accepted value",
+                 *buffer.get_nowait(), 30);
+    tb.expect_eq("AnalysisBuffer does not backpressure other subscribers",
+                 unbuffered.count, 2);
+    tb.expect_eq("AnalysisBuffer preserves fan-out order",
+                 unbuffered.values[1], 31);
+
+    AnalysisBuffer<uint32_t> error_buffer{
+        1, AnalysisOverflowPolicy::Error};
+    error_buffer.write(40);
+    bool overflow_reported = false;
+    try {
+        error_buffer.write(41);
+    } catch (const std::overflow_error&) {
+        overflow_reported = true;
+    }
+    tb.expect_true("AnalysisBuffer error policy reports overflow",
+                   overflow_reported);
+}
+
 Task<void> active_event_waiter(Event& event) {
     co_await event;
 }
@@ -1782,6 +1868,7 @@ void register_user_testbench(ConformanceTb& tb) {
     tb.sequence(wait_until_contract);
     tb.sequence(event_contract);
     tb.sequence(queue_contract);
+    tb.sequence(transaction_component_contract);
 }
 
 void register_subprecision_delay_violation(ConformanceTb& tb) {

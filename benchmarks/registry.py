@@ -21,6 +21,7 @@ class Category(str, Enum):
 class AdapterKind(str, Enum):
     AUTHORING_CORE = "authoring_core"
     DPI_APB_REGFILE = "dpi_apb_regfile"
+    DPI_COMPONENT_FIFO = "dpi_component_fifo"
     DPI_COUNTER = "dpi_counter"
     DPI_FAULT_INJECTION = "dpi_fault_injection"
     DPI_FIFO_SCOREBOARD = "dpi_fifo_scoreboard"
@@ -117,6 +118,7 @@ _AUTHORING_TEMPLATE_IDS = {
     "dynamic_spawn_scheduler": 32,
     "dynamic_spawn_suspending": 33,
     "dynamic_monitor": 34,
+    "analysis_fanout": 35,
 }
 
 
@@ -245,6 +247,10 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         "dynamic_monitor",
         "Long-lived monitor processes",
     ),
+    _authoring(
+        "analysis_fanout",
+        "Transaction analysis fan-out",
+    ),
     Benchmark(
         name="dpi_counter",
         label="DPI counter",
@@ -337,6 +343,35 @@ BENCHMARKS: tuple[Benchmark, ...] = (
             commands=(
                 ("make", "cpp-dpi-fifo-scoreboard-run"),
                 ("make", "cpp-dpi-fifo-scoreboard-sv-run"),
+            ),
+        ),
+        default_iterations=1,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_component_fifo",
+        label="DPI component FIFO",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_COMPONENT_FIFO,
+        build_targets=(
+            "cpp-dpi-component-fifo-build",
+            "cpp-dpi-component-fifo-sv-build",
+        ),
+        binaries=(
+            Binary(
+                "cpp_dpi",
+                "build/cpptb/component_fifo/obj/Vdpi_component_fifo",
+            ),
+            Binary(
+                "pure_sv",
+                "build/cpptb/component_fifo/systemverilog_obj/"
+                "Vcomponent_fifo_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-component-fifo-run"),
+                ("make", "cpp-dpi-component-fifo-sv-run"),
             ),
         ),
         default_iterations=1,

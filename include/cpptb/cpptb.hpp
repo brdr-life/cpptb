@@ -3,6 +3,7 @@
 #include "cpptb/diagnostic.hpp"
 #include "cpptb/coro_runtime.hpp"
 #include "cpptb/clock_discovery.hpp"
+#include "cpptb/components.hpp"
 #include "cpptb/dpi_runtime.hpp"
 #include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/fixed.hpp"

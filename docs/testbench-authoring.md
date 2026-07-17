@@ -230,6 +230,68 @@ Task<void> fifo_test(Dut dut, TestContext& test) {
 CPPTB_REGISTER_TEST(fifo_test);
 ```
 
+## Reusable transaction components
+
+Use the optional component layer when a sequence, driver, monitor, or
+scoreboard should depend on a typed endpoint instead of concrete storage.
+`PutPort<T>` and `GetPort<T>` are borrowed views: constructing one allocates
+nothing, and the connected backend must outlive the port and its active calls.
+A `Queue<T>` works directly, and another backend can implement the same
+`put`/`put_nowait` or `get`/`get_nowait` methods. A custom blocking `put` must
+accept `T` by value so ownership remains in its coroutine frame; the
+`PutPort` constructor enforces that signature.
+
+```cpp
+Queue<Packet> storage{8};
+PutPort<Packet> input{storage};
+GetPort<Packet> output{storage};
+
+co_await input.put(packet);
+Packet next = co_await output.get();
+```
+
+`AnalysisPort<T>` publishes one const transaction synchronously to every live
+subscriber in connection order. `write()` is a zero-time C++ call: it neither
+suspends nor advances the simulator. Keep the returned move-only connection
+for as long as the subscription should remain active; destroying or explicitly
+disconnecting it removes that subscriber.
+
+```cpp
+AnalysisPort<Packet> observed;
+InOrderScoreboard<Packet> scoreboard{test, "packet"};
+AnalysisBuffer<Packet> audit{8, AnalysisOverflowPolicy::Error};
+
+auto score_connection = observed.connect(scoreboard.actual());
+auto audit_connection = observed.connect(audit);
+
+observed.write(packet);  // immediate fan-out; no hidden await or delay
+```
+
+Subscribers are borrowed and must outlive their connections. A subscriber's
+`write(const T&)` must not wait. Connect `AnalysisBuffer<T>` when a coroutine
+needs to consume observations asynchronously. Its required overflow policy is
+explicit: `DropNewest`, `DropOldest`, or `Error`. The two drop policies do not
+block or interrupt later subscribers. `Error` throws synchronously and stops
+that publication, so connect an Error-policy buffer after subscribers that
+must always observe the transaction. Other subscriber exceptions follow the
+same connection-order rule. `output()` exposes the buffer's consumer side as
+a `GetPort<T>`.
+
+`InOrderScoreboard<T>` accepts expected and actual transactions in either
+arrival order, compares pairs with nonfatal `expect_eq()`, and reports any
+unpaired values from `finalize()`. It is intentionally noncopyable and
+nonmovable because its typed inputs refer back to the owning scoreboard.
+`ReadyValidDriver` and
+`ReadyValidMonitor` translate transactions to pin activity. Their constructor
+requires the sampling delay, and the monitor also requires the sample edge;
+they do not reset signals, start clocks, or spawn themselves. `send()` drives
+one transfer and deasserts `valid` before returning; repeated calls therefore
+include an idle cycle rather than implying a maximum-throughput burst driver.
+
+The complete [component FIFO example](examples/component-fifo.md) shows these
+objects alongside the direct [FIFO scoreboard](examples/fifo-scoreboard.md).
+Both are runnable, and each has an exact pure-SystemVerilog twin.
+
 A spawned process can be awaited or cancelled explicitly:
 
 ```cpp

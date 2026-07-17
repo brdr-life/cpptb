@@ -115,6 +115,7 @@ _EXAMPLES_TOCTREE = """
 examples/counter
 examples/timer-only
 examples/fifo-scoreboard
+examples/component-fifo
 examples/multiclock
 examples/apb-regfile
 examples/watchdog-timeout

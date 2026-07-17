@@ -81,6 +81,8 @@ module authoring_core_sv_tb;
   longint unsigned timing_phases_count;
   longint unsigned test_lifecycle_count;
   longint unsigned dynamic_spawn_count;
+  longint unsigned analysis_write_count;
+  longint unsigned analysis_delivery_count;
   longint unsigned dynamic_monitor_edges;
   bit dynamic_process_ready;
   bit dynamic_process_release;
@@ -91,6 +93,11 @@ module authoring_core_sv_tb;
   logic [31:0] queue_items[$];
   mailbox #(logic [31:0]) bounded_queue;
   mailbox #(logic [31:0]) dynamic_monitor_queue;
+  mailbox #(logic [31:0]) analysis_buffer;
+  logic [31:0] analysis_expected[$];
+  logic [31:0] analysis_actual[$];
+  int unsigned analysis_buffer_drops;
+  bit analysis_monitor_complete;
   semaphore queue_credits;
   semaphore authored_lock;
 
@@ -837,6 +844,55 @@ module authoring_core_sv_tb;
     check64(dynamic_monitor_edges, iterations, "observed response edges");
   endtask
 
+  task automatic analysis_response_monitor();
+    logic [31:0] response;
+    logic [31:0] expected;
+    logic [31:0] actual;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      @(posedge rsp_valid);
+      #1ps;
+      response = rsp_data;
+      analysis_actual.push_back(response);
+      expected = analysis_expected.pop_front();
+      actual = analysis_actual.pop_front();
+      check32(actual, expected, "analysis response");
+      if (!analysis_buffer.try_put(response)) begin
+        analysis_buffer_drops++;
+        failures++;
+      end
+      analysis_write_count++;
+      analysis_delivery_count += 2;
+      queue_put_count++;
+    end
+    analysis_monitor_complete = 1'b1;
+  endtask
+
+  task automatic run_analysis_fanout();
+    logic [31:0] response;
+    analysis_buffer = new(8);
+    spawned_processes++;
+    fork
+      analysis_response_monitor();
+    join_none
+
+    for (int unsigned i = 0; i < iterations; i++) begin
+      analysis_expected.push_back(expected_response(i));
+      analysis_write_count++;
+      analysis_delivery_count++;
+      drive_request(stimulus(i));
+      analysis_buffer.get(response);
+      queue_get_count++;
+      checksum = (checksum ^ response) * 32'h0100_0193;
+      transactions++;
+    end
+
+    wait (analysis_monitor_complete);
+    check32(analysis_expected.size(), 0, "analysis response expected pending");
+    check32(analysis_actual.size(), 0, "analysis response actual pending");
+    check32(analysis_buffer_drops, 0, "analysis buffer drops");
+    check32(analysis_buffer.num(), 0, "analysis buffer empty");
+  endtask
+
   task automatic run_task_value();
     logic [31:0] payload;
     for (int unsigned i = 0; i < iterations; i++) begin
@@ -1134,7 +1190,12 @@ module authoring_core_sv_tb;
     timing_phases_count = 0;
     test_lifecycle_count = 0;
     dynamic_spawn_count = 0;
+    analysis_write_count = 0;
+    analysis_delivery_count = 0;
     dynamic_monitor_edges = 0;
+    analysis_buffer_drops = 0;
+    analysis_monitor_complete = 1'b0;
+    analysis_expected = {};
     dynamic_process_ready = 1'b0;
     dynamic_process_release = 1'b0;
     wide64_i = '0;
@@ -1194,6 +1255,7 @@ module authoring_core_sv_tb;
       "dynamic_spawn_scheduler": run_dynamic_spawn_scheduler();
       "dynamic_spawn_suspending": run_dynamic_spawn_suspending();
       "dynamic_monitor": run_dynamic_monitor();
+      "analysis_fanout": run_analysis_fanout();
       default: $fatal(1, "unknown AUTHORING_CORE_KERNEL=%s", kernel);
     endcase
 
@@ -1212,7 +1274,7 @@ module authoring_core_sv_tb;
         kernel != "dynamic_task" &&
         kernel != "dynamic_spawn_scheduler" &&
         kernel != "dynamic_spawn_suspending") begin
-      $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d spawned_processes=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d queue_send=%0d queue_receive=%0d queue_put=%0d queue_get=%0d lock_acquire=%0d semaphore_acquire=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d test_lifecycle=%0d dynamic_spawn=%0d",
+      $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d spawned_processes=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d queue_send=%0d queue_receive=%0d queue_put=%0d queue_get=%0d lock_acquire=%0d semaphore_acquire=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d test_lifecycle=%0d dynamic_spawn=%0d analysis_write=%0d analysis_delivery=%0d",
              kernel, iterations, transactions, checks, sim_cycles,
              spawned_processes, checksum,
              failures, task_value_count, clock_cycles_count, timeout_count,
@@ -1228,7 +1290,8 @@ module authoring_core_sv_tb;
              mem_backdoor_deposits, probe_diag_reads, probe_diag_deposits,
              signal_edges, force_release_count, packed_view_count,
              hier_data_reads, hier_data_deposits, timing_phases_count,
-             test_lifecycle_count, dynamic_spawn_count);
+             test_lifecycle_count, dynamic_spawn_count,
+             analysis_write_count, analysis_delivery_count);
       $finish;
     end
   end

@@ -25,6 +25,12 @@ ORDINARY_EXAMPLES = {
         "kWordCount",
         24,
     ),
+    "component_fifo": (
+        "component_fifo",
+        "component_fifo_sv_tb.sv",
+        "kWordCount",
+        24,
+    ),
     "apb_regfile": (
         "apb_regfile",
         "apb_regfile_sv_tb.sv",
@@ -115,6 +121,7 @@ class OrdinaryExampleMigrationTests(unittest.TestCase):
         single_clock_examples = (
             "counter",
             "fifo_scoreboard",
+            "component_fifo",
             "apb_regfile",
             "watchdog_timeout",
         )

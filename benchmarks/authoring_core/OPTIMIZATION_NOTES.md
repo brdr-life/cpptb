@@ -757,3 +757,15 @@ creation of zero-time lifecycle-owned children, not ordinary monitor usage.
 Semantic-only runs now write `semantic.json`, `semantic.md`, and
 `semantic.jsonl`. They no longer replace the `latest.*` artifacts used as the
 performance baseline.
+
+## Transaction analysis fan-out (2026-07-16)
+
+The `analysis_fanout` pair covers synchronous publication from one persistent
+monitor to an in-order scoreboard and a bounded audit buffer. At 100,000 DUT
+transactions, C++ and pure SV matched 200,000 publications, 300,000 subscriber
+deliveries, 100,006 checks, one spawned process, cycle count, and checksum.
+
+The valid 16-pair run passed at `0.712x` C++ DPI over pure SV (`0.719x`
+DPI-first, `0.707x` SV-first, `0.716x` independent, `0.54%` disagreement).
+This establishes a retained performance baseline for the transaction endpoint
+layer under the repository's `1.10x` hard guard.
