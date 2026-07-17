@@ -39,11 +39,19 @@ class RunnerTest(unittest.TestCase):
             with self.assertRaisesRegex(runner.RunnerError, "duplicate"):
                 runner.discover_tests(["sim"], None)
 
+    def test_result_stems_cannot_collide_after_sanitizing(self) -> None:
+        bracketed = runner._result_stem("packet[3]")
+        underscored = runner._result_stem("packet_3")
+
+        self.assertNotEqual(bracketed, underscored)
+        self.assertEqual(underscored, "packet_3")
+        self.assertEqual(bracketed, runner._result_stem("packet[3]"))
+
     def test_run_tests_writes_logs_and_aggregates_results(self) -> None:
         def fake_run(command, environment, timeout):
             test_name = environment["CPPTB_TEST"]
             result = {
-                "schema_version": 2,
+                "schema_version": 4,
                 "test_name": test_name,
                 "status": "passed",
                 "checks": 4,
@@ -52,6 +60,10 @@ class RunnerTest(unittest.TestCase):
                 "simulation_time_fs": 1000,
                 "wall_time_ns": 2000,
                 "failure_records": [],
+                "constraint_backend": "adaptive",
+                "constraint_backend_version": "4.13.3.0",
+                "random_sampling_solves": 4,
+                "random_solver_solves": 0,
             }
             Path(environment["CPPTB_RESULT_FILE"]).write_text(
                 json.dumps(result), encoding="utf-8"
@@ -66,6 +78,11 @@ class RunnerTest(unittest.TestCase):
                 )
             self.assertEqual(status, 0)
             self.assertTrue((result_dir / "reset_defaults.json").is_file())
+            recorded = json.loads(
+                (result_dir / "reset_defaults.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(recorded["constraint_backend"], "adaptive")
+            self.assertEqual(recorded["random_sampling_solves"], 4)
             self.assertEqual(
                 (result_dir / "counter_wraps.log").read_text(encoding="utf-8"),
                 "ran counter_wraps\n",
@@ -80,6 +97,8 @@ class RunnerTest(unittest.TestCase):
                 (2, "expected_failure"),
                 (2, "unexpected_pass"),
                 (2, "timed_out"),
+                (3, "passed"),
+                (4, "passed"),
             ):
                 with self.subTest(schema_version=schema_version, status=status):
                     path.write_text(
@@ -149,6 +168,64 @@ class RunnerTest(unittest.TestCase):
             self.assertEqual(runner.main(["run", "--all", "--", "sim"]), 0)
         discover.assert_called_once_with(["sim"], None)
         self.assertEqual(run.call_args.args[1], ["first", "second"])
+        self.assertIsNone(run.call_args.args[4])
+
+    def test_seed_is_forwarded_to_each_simulator_invocation(self) -> None:
+        seen_seeds = []
+
+        def fake_run(command, environment, timeout):
+            seen_seeds.append(environment.get("CPPTB_RANDOM_SEED"))
+            test_name = environment["CPPTB_TEST"]
+            Path(environment["CPPTB_RESULT_FILE"]).write_text(
+                json.dumps(
+                    {
+                        "schema_version": 3,
+                        "test_name": test_name,
+                        "status": "passed",
+                        "checks": 0,
+                        "wall_time_ns": 0,
+                        "random_seed": int(environment["CPPTB_RANDOM_SEED"]),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return runner.Invocation(0, "", "")
+
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch.object(runner, "_run_command", side_effect=fake_run):
+                status = runner.run_tests(
+                    ["sim"], ["first", "second"], Path(directory), 1.0, 0x1234
+                )
+        self.assertEqual(status, 0)
+        self.assertEqual(seen_seeds, ["4660", "4660"])
+
+    def test_main_parses_hex_seed(self) -> None:
+        with mock.patch.object(runner, "run_tests", return_value=0) as run:
+            self.assertEqual(
+                runner.main(["run", "--seed", "0x2a", "case", "--", "sim"]),
+                0,
+            )
+        self.assertEqual(run.call_args.args[4], 42)
+
+    def test_main_parses_leading_zero_seed_as_decimal(self) -> None:
+        with mock.patch.object(runner, "run_tests", return_value=0) as run:
+            self.assertEqual(
+                runner.main(["run", "--seed", "012", "case", "--", "sim"]),
+                0,
+            )
+        self.assertEqual(run.call_args.args[4], 12)
+
+    def test_main_rejects_seed_outside_uint64(self) -> None:
+        self.assertEqual(
+            runner.main(["run", "--seed", "-1", "case", "--", "sim"]),
+            2,
+        )
+
+    def test_main_rejects_whitespace_prefixed_negative_seed(self) -> None:
+        self.assertEqual(
+            runner.main(["run", "--seed", " -1", "case", "--", "sim"]),
+            2,
+        )
 
 
 if __name__ == "__main__":

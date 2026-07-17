@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -14,7 +15,7 @@ from typing import Sequence
 
 
 TEST_PREFIX = "CPPTB_TEST "
-RESULT_SCHEMA_VERSIONS = {1, 2}
+RESULT_SCHEMA_VERSIONS = {1, 2, 3, 4}
 RESULT_STATUSES = {
     "passed",
     "failed",
@@ -85,7 +86,10 @@ def discover_tests(command: Sequence[str], timeout: float | None) -> list[str]:
 
 def _result_stem(test_name: str) -> str:
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", test_name).strip("._")
-    return stem or "unnamed_test"
+    if stem == test_name:
+        return stem
+    digest = hashlib.sha256(test_name.encode("utf-8")).hexdigest()[:8]
+    return f"{stem or 'unnamed_test'}-{digest}"
 
 
 def _read_result(path: Path, expected_test: str) -> dict[str, object]:
@@ -111,6 +115,7 @@ def run_tests(
     tests: Sequence[str],
     result_dir: Path,
     timeout: float | None,
+    seed: int | None = None,
 ) -> int:
     result_dir.mkdir(parents=True, exist_ok=True)
     passed = 0
@@ -126,6 +131,8 @@ def run_tests(
         environment.pop("CPPTB_LIST_TESTS", None)
         environment["CPPTB_TEST"] = test_name
         environment["CPPTB_RESULT_FILE"] = str(result_path.resolve())
+        if seed is not None:
+            environment["CPPTB_RANDOM_SEED"] = str(seed)
 
         try:
             invocation = _run_command(command, environment, timeout)
@@ -156,7 +163,12 @@ def run_tests(
                 label = "ERROR"
             checks = result.get("checks", 0)
             wall_ms = int(result.get("wall_time_ns", 0)) / 1_000_000.0
-            print(f"{label:<5} {test_name} checks={checks} wall_ms={wall_ms:.3f}")
+            random_seed = result.get("random_seed")
+            seed_text = f" seed={random_seed}" if random_seed is not None else ""
+            print(
+                f"{label:<5} {test_name} checks={checks}{seed_text} "
+                f"wall_ms={wall_ms:.3f}"
+            )
         except RunnerError as error:
             errored += 1
             print(f"ERROR {test_name}: {error}", file=sys.stderr)
@@ -183,6 +195,25 @@ def _split_command(arguments: Sequence[str]) -> tuple[list[str], list[str]]:
     return options, command
 
 
+def _parse_seed(value: str) -> int:
+    if value.startswith(("0x", "0X")):
+        digits = value[2:]
+        valid = bool(re.fullmatch(r"[0-9A-Fa-f]+", digits))
+        base = 16
+    else:
+        digits = value
+        valid = bool(re.fullmatch(r"[0-9]+", digits))
+        base = 10
+    if not valid:
+        raise RunnerError(
+            "--seed must be a decimal or 0x-prefixed unsigned 64-bit integer"
+        )
+    seed = int(digits, base)
+    if seed > (1 << 64) - 1:
+        raise RunnerError("--seed must fit in an unsigned 64-bit integer")
+    return seed
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cpptb-run",
@@ -197,6 +228,10 @@ def _parser() -> argparse.ArgumentParser:
     run_parser.add_argument("tests", nargs="*")
     run_parser.add_argument("--all", action="store_true")
     run_parser.add_argument("--timeout", type=float)
+    run_parser.add_argument(
+        "--seed",
+        help="master random seed (decimal or 0x-prefixed)",
+    )
     run_parser.add_argument("--result-dir", type=Path, default=Path("cpptb-results"))
     return parser
 
@@ -208,6 +243,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parsed = _parser().parse_args(options)
         if parsed.timeout is not None and parsed.timeout <= 0:
             raise RunnerError("--timeout must be greater than zero")
+        seed = _parse_seed(parsed.seed) if getattr(parsed, "seed", None) else None
 
         if parsed.operation == "list":
             for test_name in discover_tests(command, parsed.timeout):
@@ -224,7 +260,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise RunnerError("no tests selected; provide names or --all")
         if len(tests) != len(set(tests)):
             raise RunnerError("the requested test list contains duplicates")
-        return run_tests(command, tests, parsed.result_dir, parsed.timeout)
+        return run_tests(
+            command, tests, parsed.result_dir, parsed.timeout, seed
+        )
     except RunnerError as error:
         print(f"cpptb-run: {error}", file=sys.stderr)
         return 2
