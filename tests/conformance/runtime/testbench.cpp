@@ -1,6 +1,6 @@
 #include "tests/conformance/runtime/framework.hpp"
 
-#include "cpptb/components.hpp"
+#include "cpptb_vc/cpptb_vc.hpp"
 
 #include <cstdlib>
 #include <string_view>
@@ -19,6 +19,7 @@ using coro::RisingEdge;
 using coro::Signal;
 using coro::Task;
 using namespace coro;
+using namespace cpptb::vc;
 
 template <size_t Width, size_t WordCount>
 Bits<Width> xor_words(Bits<Width> value,

@@ -201,18 +201,24 @@ formatting, and embedding callbacks.
 
 ## Structured results
 
-Each test result uses schema version 2 and records lifecycle metadata, its
+Each test result uses schema version 4 and records lifecycle metadata, its
 terminal status, check counts, simulation and wall time, and structured
 failure and warning records:
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 4,
   "test_name": "reset_defaults",
   "case_name": "",
   "status": "passed",
   "status_reason": "",
   "tags": ["smoke"],
+  "random_seed": 4660,
+  "random_algorithm": "xoshiro256ss-v1",
+  "constraint_backend": "adaptive",
+  "constraint_backend_version": "",
+  "random_sampling_solves": 1,
+  "random_solver_solves": 0,
   "checks": 1,
   "failures": 0,
   "warnings": 0,
@@ -226,13 +232,17 @@ failure and warning records:
 Failure records distinguish expectations, requirements, exceptions, timeouts,
 unexpected passes, and test selection errors. Failure and warning records
 include the source location, simulation time, stable process ID, process spawn
-location, and formatted comparison values when applicable. Schema version 1
-remains readable by the reference runner. The runner writes a JSON result and
-combined simulator log for every test, prints a compact summary, and returns
+location, and formatted comparison values when applicable. Schema versions 1
+through 3 remain readable by the reference runner. The runner writes a JSON
+result and combined simulator log for every test, prints a compact summary, and returns
 nonzero when any test fails or encounters an infrastructure error.
 
 CLI filtering, JUnit output, waveform-on-failure reruns, wall-time policy, and
 presentation of build or infrastructure failures remain harness work. The
 framework now exposes tags and parameterized case descriptors for a harness to
 consume; CLI tag expressions are not yet part of the reference harness.
-Deterministic random services remain framework roadmap work.
+
+Use `cpptb-run run --seed 0x1234 ...` or `CPPTB_RANDOM_SEED=0x1234` to replay
+the deterministic random stream recorded in a result. See
+[Seeds, streams, and replay](randomization/reproducibility.md) for random
+process-stream semantics.

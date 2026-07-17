@@ -1,5 +1,6 @@
 #pragma once
 
+#include <charconv>
 #include <concepts>
 #include <cstdint>
 #include <cstdio>
@@ -19,6 +20,7 @@
 
 #include "cpptb/coro_runtime.hpp"
 #include "cpptb/diagnostic.hpp"
+#include "cpptb/randomized.hpp"
 #include "cpptb/test_result.hpp"
 
 namespace cpptb {
@@ -29,6 +31,8 @@ struct RunRequest {
     std::string_view test_name;
     bool list_only = false;
     std::optional<coro::SimTime> simulation_timeout;
+    std::optional<uint64_t> random_seed;
+    std::string_view configuration_error;
 };
 
 struct TestOptions {
@@ -76,11 +80,40 @@ inline bool environment_enabled(const char* name) {
            std::string_view{value} != "false";
 }
 
+inline bool parse_random_seed(std::string_view text, uint64_t& value) {
+    int base = 10;
+    if (text.starts_with("0x") || text.starts_with("0X")) {
+        base = 16;
+        text.remove_prefix(2);
+    }
+    if (text.empty()) return false;
+
+    const auto result =
+        std::from_chars(text.data(), text.data() + text.size(), value, base);
+    return result.ec == std::errc{} &&
+           result.ptr == text.data() + text.size();
+}
+
 inline RunRequest environment_run_request() {
     const char* selected = std::getenv("CPPTB_TEST");
+    const char* seed_text = std::getenv("CPPTB_RANDOM_SEED");
+    std::optional<uint64_t> random_seed;
+    std::string_view configuration_error;
+    if (seed_text && seed_text[0] != '\0') {
+        uint64_t seed = 0;
+        if (parse_random_seed(seed_text, seed)) {
+            random_seed = seed;
+        } else {
+            configuration_error =
+                "CPPTB_RANDOM_SEED must be a decimal or 0x-prefixed "
+                "unsigned 64-bit integer";
+        }
+    }
     return RunRequest{
         .test_name = selected ? std::string_view{selected} : std::string_view{},
         .list_only = environment_enabled("CPPTB_LIST_TESTS"),
+        .random_seed = random_seed,
+        .configuration_error = configuration_error,
     };
 }
 
@@ -104,6 +137,7 @@ struct ProcessProvenance {
     std::string_view description;
     const char* source_file = "";
     uint32_t source_line = 0;
+    Random random;
 };
 
 class TestRunState {
@@ -118,7 +152,8 @@ class TestRunState {
         if (--references_ == 0) delete this;
     }
 
-    void begin(std::string_view name, const TestMetadata& metadata = {}) {
+    void begin(std::string_view name, const TestMetadata& metadata = {},
+               uint64_t random_seed = kDefaultRandomSeed) {
         result_->checks = 0;
         result_->failures = 0;
         result_->warnings = 0;
@@ -129,11 +164,19 @@ class TestRunState {
         result_->tags = metadata.tags;
         result_->failure_records.clear();
         result_->warning_records.clear();
+        result_->random_seed = random_seed;
+        result_->random_algorithm = kRandomAlgorithm;
+        result_->constraint_backend.clear();
+        result_->constraint_backend_version.clear();
+        result_->random_sampling_solves = 0;
+        result_->random_solver_solves = 0;
         result_->simulation_time_fs = scheduler_->now().femtoseconds;
         result_->wall_time_ns = 0;
         result_->finished = false;
         expected_failure_ = metadata.expected_failure;
         expected_failure_reason_ = metadata.expected_failure_reason;
+        master_random_seed_ = random_seed;
+        fallback_random_.reseed(random_seed);
         if (sink_) sink_->test_started(*result_);
     }
 
@@ -149,12 +192,15 @@ class TestRunState {
             provenance = free_process_provenance_;
             free_process_provenance_ = provenance->next_free;
         }
+        const uint64_t process_id = next_process_id_++;
         *provenance = ProcessProvenance{
             .owner = this,
-            .id = next_process_id_++,
+            .id = process_id,
             .description = description,
             .source_file = location.file_name(),
             .source_line = location.line(),
+            .random = Random{random_detail::derive_seed(master_random_seed_,
+                                                        process_id)},
         };
         return provenance;
     }
@@ -311,6 +357,38 @@ class TestRunState {
     TestResult& result() const { return *result_; }
     coro::ClockRegistrar clocks() const { return clocks_; }
 
+    Random& current_random() {
+        auto* process = static_cast<ProcessProvenance*>(
+            scheduler_->current_execution_context());
+        if (process && process->owner == this) return process->random;
+        return fallback_random_;
+    }
+
+    ConstraintBackend& random_backend() const { return *random_backend_; }
+    void set_random_backend(ConstraintBackend& backend) {
+        random_backend_ = &backend;
+    }
+
+    void record_randomization(const RandomizeResult& randomization,
+                              const ConstraintBackend& backend) {
+        const auto record_text = [](std::string& destination,
+                                    std::string_view value) {
+            if (value.empty()) return;
+            if (destination.empty()) {
+                destination.assign(value);
+            } else if (destination != value) {
+                destination = "mixed";
+            }
+        };
+        record_text(result_->constraint_backend, backend.name());
+        record_text(result_->constraint_backend_version, backend.version());
+        if (randomization.engine == RandomizeEngine::Sampling) {
+            ++result_->random_sampling_solves;
+        } else if (randomization.engine == RandomizeEngine::Solver) {
+            ++result_->random_solver_solves;
+        }
+    }
+
    private:
     template <typename Record>
     void attach_current_process(Record& record) const {
@@ -330,6 +408,9 @@ class TestRunState {
     std::deque<ProcessProvenance> process_provenance_;
     ProcessProvenance* free_process_provenance_ = nullptr;
     uint64_t next_process_id_ = 1;
+    uint64_t master_random_seed_ = kDefaultRandomSeed;
+    Random fallback_random_;
+    ConstraintBackend* random_backend_ = &default_constraint_backend();
     bool expected_failure_ = false;
     std::string expected_failure_reason_;
     size_t references_ = 1;
@@ -481,10 +562,47 @@ class TestContext {
 
     coro::SimTime now() const { return state_->scheduler().now(); }
 
+    Random& random() const { return state_->current_random(); }
+
+    ConstraintBackend& random_backend() const {
+        return state_->random_backend();
+    }
+
+    void set_random_backend(ConstraintBackend& backend) const {
+        state_->set_random_backend(backend);
+    }
+
+    void randomize(
+        Randomized& item,
+        std::source_location location = std::source_location::current()) const {
+        const auto result = item.randomize(random(), random_backend());
+        state_->record_randomization(result, random_backend());
+        require_randomized(result, random_backend(), location);
+    }
+
+    void randomize_with(
+        Randomized& item, Constraint constraint,
+        std::source_location location = std::source_location::current()) const {
+        const auto result = item.randomize_with(
+            random(), std::move(constraint), random_backend());
+        state_->record_randomization(result, random_backend());
+        require_randomized(result, random_backend(), location);
+    }
+
     explicit TestContext(detail::TestRunStatePtr state)
         : state_(std::move(state)) {}
 
    private:
+    void require_randomized(const RandomizeResult& result,
+                            const ConstraintBackend& backend,
+                            std::source_location location) const {
+        if (result) return;
+        std::string message = "randomize() failed using '" +
+                              std::string{backend.name()} + "'";
+        if (!result.message.empty()) message += ": " + result.message;
+        require(message, false, location);
+    }
+
     static FailureRecord boolean_failure(FailureKind kind,
                                          std::string_view label,
                                          std::source_location location) {
@@ -630,6 +748,12 @@ inline void reset_selection_result(TestResult& result) {
     result.tags.clear();
     result.failure_records.clear();
     result.warning_records.clear();
+    result.random_seed.reset();
+    result.random_algorithm.clear();
+    result.constraint_backend.clear();
+    result.constraint_backend_version.clear();
+    result.random_sampling_solves = 0;
+    result.random_solver_solves = 0;
     result.simulation_time_fs = 0;
     result.wall_time_ns = 0;
     result.finished = false;
@@ -705,6 +829,13 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
         return true;
     }
 
+    if (!request.configuration_error.empty()) {
+        const std::string message{request.configuration_error};
+        std::fprintf(stderr, "cpptb: %s\n", message.c_str());
+        detail::record_selection_error(result, message, sink);
+        return false;
+    }
+
     if (!request.test_name.empty()) {
         result.test_name.assign(request.test_name);
     }
@@ -769,7 +900,8 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
 
     detail::TestRunStatePtr state{
         new detail::TestRunState(scheduler, result, clocks, sink)};
-    state->begin(selected->name, selected->metadata);
+    state->begin(selected->name, selected->metadata,
+                 request.random_seed.value_or(kDefaultRandomSeed));
     if (!selected->metadata.skip_reason.empty()) {
         state->record_skip(selected->metadata.skip_reason,
                            selected->declaration);

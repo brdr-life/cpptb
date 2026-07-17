@@ -88,6 +88,27 @@ struct ParameterizedDut {
     uint32_t* observed;
 };
 struct SpawnStressDut {};
+struct RandomDut {
+    uint64_t* root_value;
+    uint64_t* child_value;
+};
+
+class ContextRandomized final : public cpptb::Randomized {
+   public:
+    cpptb::Rand<uint8_t> value{*this, "value", 0, 7};
+
+    ContextRandomized() { constraint(value == 3); }
+};
+
+class FailingRandomBackend final : public cpptb::ConstraintBackend {
+   public:
+    std::string_view name() const noexcept override { return "test-backend"; }
+    cpptb::RandomizeResult solve(const cpptb::ConstraintProblem&,
+                                 cpptb::Random&) override {
+        return {.status = cpptb::RandomizeStatus::Unsatisfiable,
+                .message = "deliberate contradiction"};
+    }
+};
 
 struct ParameterCase {
     uint32_t value;
@@ -254,6 +275,19 @@ cpptb::coro::Task<void> spawn_stress_test(SpawnStressDut,
     }
 }
 
+cpptb::coro::Task<void> random_child(cpptb::TestContext test,
+                                     uint64_t& value) {
+    value = test.random().next_u64();
+    co_return;
+}
+
+cpptb::coro::Task<void> random_test(RandomDut dut,
+                                    cpptb::TestContext& test) {
+    *dut.root_value = test.random().next_u64();
+    auto child = test.spawn(random_child(test, *dut.child_value));
+    co_await child;
+}
+
 cpptb::coro::Task<void> duplicate_first(DuplicateDut,
                                         cpptb::TestContext&) {
     co_return;
@@ -299,6 +333,67 @@ int main() {
     passed &= expect("check count", result.checks, 4);
     passed &= expect("failure count", result.failures, 0);
 
+    const auto random_registration =
+        cpptb::register_test("random_test", random_test);
+    uint64_t first_root_random = 0;
+    uint64_t first_child_random = 0;
+    cpptb::coro::Testbench first_random_scheduler;
+    cpptb::TestResult first_random_result;
+    passed &= cpptb::run_registered_test(
+        first_random_scheduler,
+        RandomDut{&first_root_random, &first_child_random},
+        first_random_result, cpptb::RunRequest{.random_seed = 0x1234});
+    passed &= expect("explicit seed recorded",
+                     first_random_result.random_seed.value_or(0), 0x1234);
+    passed &= expect("random algorithm recorded",
+                     first_random_result.random_algorithm ==
+                         cpptb::kRandomAlgorithm,
+                     true);
+    passed &= expect("process streams differ",
+                     first_root_random != first_child_random, true);
+
+    uint64_t parsed_seed = 0;
+    passed &= expect("decimal seed parsing",
+                     cpptb::detail::parse_random_seed("012", parsed_seed) &&
+                         parsed_seed == 12,
+                     true);
+    passed &= expect("hex seed parsing",
+                     cpptb::detail::parse_random_seed("0Xfeed", parsed_seed) &&
+                         parsed_seed == 0xfeed,
+                     true);
+    passed &= expect("whitespace-prefixed negative seed rejected",
+                     cpptb::detail::parse_random_seed(" -1", parsed_seed),
+                     false);
+    passed &= expect("overflowing seed rejected",
+                     cpptb::detail::parse_random_seed(
+                         "18446744073709551616", parsed_seed),
+                     false);
+
+    cpptb::coro::Testbench invalid_seed_scheduler;
+    cpptb::TestResult invalid_seed_result;
+    passed &= !cpptb::run_registered_test(
+        invalid_seed_scheduler,
+        RandomDut{&first_root_random, &first_child_random},
+        invalid_seed_result,
+        cpptb::RunRequest{
+            .configuration_error = "invalid CPPTB_RANDOM_SEED"});
+    passed &= expect("invalid seed is a selection error",
+                     invalid_seed_result.status == cpptb::TestStatus::Error,
+                     true);
+
+    uint64_t replay_root_random = 0;
+    uint64_t replay_child_random = 0;
+    cpptb::coro::Testbench replay_random_scheduler;
+    cpptb::TestResult replay_random_result;
+    passed &= cpptb::run_registered_test(
+        replay_random_scheduler,
+        RandomDut{&replay_root_random, &replay_child_random},
+        replay_random_result, cpptb::RunRequest{.random_seed = 0x1234});
+    passed &= expect("root process random replay", replay_root_random,
+                     first_root_random);
+    passed &= expect("child process random replay", replay_child_random,
+                     first_child_random);
+
     cpptb::coro::Testbench checking_scheduler;
     checking_scheduler.set_time(37);
     cpptb::TestResult checking_result;
@@ -315,6 +410,40 @@ int main() {
     passed &= expect("clock signal", clock_capture.signal_id, 7);
     passed &= expect("clock period", clock_capture.period.in_nanoseconds(), 8);
     passed &= expect("clock phase", clock_capture.phase.in_nanoseconds(), 1);
+
+    cpptb::coro::Testbench randomized_scheduler;
+    cpptb::TestResult randomized_result;
+    cpptb::TestContext randomized_context{randomized_scheduler,
+                                           randomized_result};
+    ContextRandomized randomized;
+    randomized_context.randomize(randomized);
+    passed &= expect("context randomize assignment", randomized.value.get(), 3);
+    passed &= expect("context randomize backend metadata",
+                     randomized_result.constraint_backend == "adaptive" &&
+                         randomized_result.random_sampling_solves == 1 &&
+                         randomized_result.random_solver_solves == 0,
+                     true);
+    FailingRandomBackend failing_random_backend;
+    randomized_context.set_random_backend(failing_random_backend);
+    passed &= expect("context backend selection",
+                     &randomized_context.random_backend() ==
+                         &failing_random_backend,
+                     true);
+    bool randomize_aborted = false;
+    try {
+        randomized_context.randomize(randomized);
+    } catch (...) {
+        randomize_aborted = true;
+    }
+    passed &= expect("failed context randomize aborts", randomize_aborted, true);
+    passed &= expect(
+        "failed context randomize diagnostic",
+        !randomized_result.failure_records.empty() &&
+            randomized_result.failure_records.back().label.find(
+                "test-backend") != std::string::npos &&
+            randomized_result.failure_records.back().label.find(
+                "deliberate contradiction") != std::string::npos,
+        true);
 
     FILE* diagnostic = std::tmpfile();
     cpptb::detail::print_diagnostic_integral(diagnostic, -7);
@@ -363,7 +492,7 @@ int main() {
     passed &= expect("failed check count", checking_result.checks, 1);
     passed &= expect("failed check failure count", checking_result.failures, 1);
 
-    const char* json_path = "build/cpptb/test_result_test.json";
+    const char* json_path = "test_result_test.json";
     cpptb::TestResult json_result{
         .checks = 3,
         .failures = 1,
@@ -394,6 +523,12 @@ int main() {
             .source_line = 19,
             .process_source_line = 17,
         }},
+        .random_seed = 0xfeedbeef,
+        .random_algorithm = cpptb::kRandomAlgorithm,
+        .constraint_backend = "adaptive",
+        .constraint_backend_version = "4.13.3",
+        .random_sampling_solves = 11,
+        .random_solver_solves = 2,
         .simulation_time_fs = 250,
         .wall_time_ns = 500,
         .finished = true,
@@ -413,7 +548,7 @@ int main() {
     }
     passed &= expect("result JSON readable", !json_text.empty(), true);
     passed &= expect("result JSON schema",
-                     json_text.find("\"schema_version\":2") !=
+                     json_text.find("\"schema_version\":4") !=
                          std::string::npos,
                      true);
     passed &= expect("result JSON status",
@@ -437,6 +572,25 @@ int main() {
                          json_text.find("\"tags\":[\"smoke\",\"json\"]") !=
                              std::string::npos,
                      true);
+    passed &= expect("result JSON replay metadata",
+                     json_text.find("\"random_seed\":4276993775") !=
+                             std::string::npos &&
+                         json_text.find(
+                             "\"random_algorithm\":\"xoshiro256ss-v1\"") !=
+                             std::string::npos,
+                     true);
+    passed &= expect(
+        "result JSON constraint backend metadata",
+        json_text.find("\"constraint_backend\":\"adaptive\"") !=
+                std::string::npos &&
+            json_text.find(
+                "\"constraint_backend_version\":\"4.13.3\"") !=
+                std::string::npos &&
+            json_text.find("\"random_sampling_solves\":11") !=
+                std::string::npos &&
+            json_text.find("\"random_solver_solves\":2") !=
+                std::string::npos,
+        true);
     passed &= expect("result JSON warning record",
                      json_text.find("\"label\":\"warning text\"") !=
                              std::string::npos &&
