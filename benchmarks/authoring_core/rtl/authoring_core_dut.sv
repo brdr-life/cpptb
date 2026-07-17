@@ -49,7 +49,16 @@ module authoring_core_dut (
     input  logic [7:0] mem_addr_i,
     input  logic [31:0] mem_wdata_i,
     input  logic mem_we_i,
-    output logic [31:0] mem_rdata_o
+    output logic [31:0] mem_rdata_o,
+    input  logic        apb_psel_i,
+    input  logic        apb_penable_i,
+    input  logic        apb_pwrite_i,
+    input  logic [7:0]  apb_paddr_i,
+    input  logic [31:0] apb_pwdata_i,
+    input  logic [3:0]  apb_pstrb_i,
+    output logic [31:0] apb_prdata_o,
+    output logic        apb_pready_o,
+    output logic        apb_pslverr_o
 );
   logic pending;
   logic [1:0] delay_count;
@@ -61,6 +70,7 @@ module authoring_core_dut (
   logic [13:0] fixed_remainder;
   logic signed [32:0] fixed_rounded;
   logic [31:0] memory [0:255];
+  logic [31:0] apb_memory [0:15];
   bit [136:0] hierarchy_wide;
   logic [3:0] hierarchy_logic;
   wire [31:0] force_target = force_source_i ^ 32'h5a5a_a5a5;
@@ -71,6 +81,11 @@ module authoring_core_dut (
   assign wide137_o = wide137_i ^
       137'h1a5_5aa55aa5_01234567_89abcdef_deadbeef;
   assign force_fanout_o = force_target;
+  assign apb_pready_o = 1'b1;
+  assign apb_pslverr_o =
+      apb_psel_i && apb_penable_i && (apb_paddr_i[7:6] != 2'b00);
+  assign apb_prdata_o = apb_paddr_i[7:6] == 2'b00
+      ? apb_memory[apb_paddr_i[5:2]] : 32'd0;
 
   always_comb begin
     for (int index = 1; index <= 8; index++) begin
@@ -124,6 +139,9 @@ module authoring_core_dut (
       request_count <= '0;
       response_count <= '0;
       mem_rdata_o <= '0;
+      for (int apb_index = 0; apb_index < 16; apb_index++) begin
+        apb_memory[apb_index] <= '0;
+      end
     end else begin
       cycle_count <= cycle_count + 1'b1;
 
@@ -153,6 +171,16 @@ module authoring_core_dut (
         memory[mem_addr_i] <= mem_wdata_i;
       end else begin
         mem_rdata_o <= memory[mem_addr_i];
+      end
+
+      if (apb_psel_i && apb_penable_i && apb_pwrite_i &&
+          apb_pready_o && !apb_pslverr_o) begin
+        for (int byte_index = 0; byte_index < 4; byte_index++) begin
+          if (apb_pstrb_i[byte_index]) begin
+            apb_memory[apb_paddr_i[5:2]][byte_index * 8 +: 8] <=
+                apb_pwdata_i[byte_index * 8 +: 8];
+          end
+        end
       end
     end
   end

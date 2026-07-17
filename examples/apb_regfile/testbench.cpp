@@ -1,19 +1,25 @@
 #include <cstdint>
+#include <limits>
+#include <utility>
 
 #include "cpptb/cpptb.hpp"
+#include "cpptb_vc/cpptb_vc.hpp"
 #include "dut.hpp"
 
 namespace cpptb::examples::apb_regfile {
 namespace {
 
 using cpptb::Dut;
-using coro::Delay;
+using coro::Event;
 using coro::FallingEdge;
-using coro::RisingEdge;
+using coro::Join;
 using coro::Task;
 using namespace coro;
+using namespace cpptb::vc;
 
 constexpr uint32_t kRegisterTransactions = 12;
+constexpr uint32_t kObservedTransactions =
+    kRegisterTransactions * 2u + 2u;
 constexpr uint32_t kIdAddress = 0x10u;
 constexpr uint32_t kIdValue = 0x4350'5054u;
 
@@ -22,84 +28,33 @@ uint32_t next_word(uint32_t& state) {
     return state;
 }
 
-struct ApbReadResult {
-    uint32_t data;
-    uint32_t error;
-};
+auto make_apb_bus(Dut dut) {
+    return ApbBus{dut.clk,           dut.apb_select,    dut.apb_enable,
+                  dut.apb_write,     dut.apb_address,   dut.apb_write_data,
+                  dut.apb_read_data, dut.apb_ready,     dut.apb_error};
+}
 
-class ApbMaster {
-   public:
-    ApbMaster(Dut dut, TestContext& test) : dut_(dut), test_(&test) {}
+using Bus = decltype(make_apb_bus(std::declval<Dut>()));
+using Master = ApbMaster<
+    decltype(std::declval<Bus>().clock),
+    decltype(std::declval<Bus>().select),
+    decltype(std::declval<Bus>().enable),
+    decltype(std::declval<Bus>().write),
+    decltype(std::declval<Bus>().address),
+    decltype(std::declval<Bus>().write_data),
+    decltype(std::declval<Bus>().read_data),
+    decltype(std::declval<Bus>().ready),
+    decltype(std::declval<Bus>().error), NoApbStrobe>;
+using Transaction = typename Master::transaction_type;
 
-    Task<void> write(uint32_t address, uint32_t data) const {
-        co_await FallingEdge{dut_.clk};
-        dut_.apb_address.set(address);
-        dut_.apb_write_data.set(data);
-        dut_.apb_write.set(1);
-        dut_.apb_select.set(1);
-        dut_.apb_enable.set(0);
+static_assert(MemoryMappedMaster<Master>);
 
-        co_await RisingEdge{dut_.clk};
-        co_await FallingEdge{dut_.clk};
-        dut_.apb_enable.set(1);
+struct CoverageSubscriber {
+    Covergroup<Transaction>& coverage;
 
-        co_await RisingEdge{dut_.clk};
-        co_await Delay{1_ps};
-        test_->expect_eq("APB write ready", dut_.apb_ready.get(), 1u);
-
-        co_await FallingEdge{dut_.clk};
-        idle();
+    void write(const Transaction& transaction) {
+        coverage.sample(transaction);
     }
-
-    Task<ApbReadResult> read_with_status(uint32_t address) const {
-        co_await FallingEdge{dut_.clk};
-        dut_.apb_address.set(address);
-        dut_.apb_write.set(0);
-        dut_.apb_select.set(1);
-        dut_.apb_enable.set(0);
-
-        co_await RisingEdge{dut_.clk};
-        co_await FallingEdge{dut_.clk};
-        dut_.apb_enable.set(1);
-
-        co_await RisingEdge{dut_.clk};
-        co_await Delay{1_ps};
-        test_->expect_eq("APB read ready", dut_.apb_ready.get(), 1u);
-        const ApbReadResult result{dut_.apb_read_data.get(),
-                                   dut_.apb_error.get()};
-
-        co_await FallingEdge{dut_.clk};
-        idle();
-        co_return result;
-    }
-
-    Task<uint32_t> read(uint32_t address) const {
-        const auto result = co_await read_with_status(address);
-        co_return result.data;
-    }
-
-    Task<void> read_expect(const char* label, uint32_t address,
-                           uint32_t expected) const {
-        const uint32_t actual = co_await read(address);
-        test_->expect_eq(label, actual, expected);
-    }
-
-    Task<void> read_error_expect(const char* label, uint32_t address,
-                                 uint32_t expected_data) const {
-        const auto result = co_await read_with_status(address);
-        test_->expect_eq(label, result.data, expected_data);
-        test_->expect_eq("APB error asserted", result.error, 1u);
-    }
-
-    void idle() const {
-        dut_.apb_select.set(0);
-        dut_.apb_enable.set(0);
-        dut_.apb_write.set(0);
-    }
-
-   private:
-    Dut dut_;
-    TestContext* test_;
 };
 
 Task<void> reset_dut(Dut dut) {
@@ -115,26 +70,85 @@ Task<void> reset_dut(Dut dut) {
     dut.rst_n.set(1);
 }
 
-Task<void> register_sequence(Dut dut, TestContext& test) {
-    dut.clk.set(0);
-    test.start_clock(dut.clk, 10_ns);
-
-    co_await reset_dut(dut);
-    const ApbMaster apb{dut, test};
+template <MemoryMappedMaster BusMaster>
+Task<void> register_sequence(
+    BusMaster& apb, TestContext& test,
+    AnalysisPort<typename BusMaster::transaction_type>& expected) {
+    const auto all_bytes = std::numeric_limits<uint64_t>::max();
     uint32_t state = 0x1020'3040u;
 
     for (uint32_t index = 0; index < kRegisterTransactions; ++index) {
         const uint32_t address = (index % 4u) * 4u;
         const uint32_t value = next_word(state);
-        co_await apb.write(address, value);
-        co_await apb.read_expect("APB register readback", address, value);
+        const auto write = co_await apb.write(address, value);
+        test.expect_eq("APB write status", write.status, MemoryStatus::Okay);
+        expected.write(Transaction{MemoryOperation::Write, address, value,
+                                   all_bytes, MemoryStatus::Okay, 0});
+
+        const auto read = co_await apb.read(address);
+        test.expect_eq("APB register readback", read.data, value);
+        test.expect_eq("APB read status", read.status, MemoryStatus::Okay);
+        expected.write(Transaction{MemoryOperation::Read, address, value,
+                                   all_bytes, MemoryStatus::Okay, 0});
     }
 
-    co_await apb.read_expect("APB read-only ID", kIdAddress, kIdValue);
-    co_await apb.read_error_expect("APB unmapped read data", 0xfcu, 0u);
+    const auto id = co_await apb.read(kIdAddress);
+    test.expect_eq("APB read-only ID", id.data, kIdValue);
+    test.expect_eq("APB ID status", id.status, MemoryStatus::Okay);
+    expected.write(Transaction{MemoryOperation::Read, kIdAddress, kIdValue,
+                               all_bytes, MemoryStatus::Okay, 0});
+
+    const auto unmapped = co_await apb.read(0xfcu);
+    test.expect_eq("APB unmapped read data", unmapped.data, 0u);
+    test.expect_eq("APB unmapped status", unmapped.status,
+                   MemoryStatus::SlaveError);
+    expected.write(Transaction{MemoryOperation::Read, 0xfcu, 0u, all_bytes,
+                               MemoryStatus::SlaveError, 0});
 }
 
-CPPTB_REGISTER_TEST(register_sequence);
+Task<void> component_apb_test(Dut dut, TestContext& test) {
+    dut.clk.set(0);
+    test.start_clock(dut.clk, 10_ns);
+    co_await reset_dut(dut);
+
+    const auto bus = make_apb_bus(dut);
+    Master master{bus, ApbConfig{.sample_delay = 1_ps}};
+    ApbMonitor monitor{bus, 1_ps};
+    ApbProtocolChecker checker{test, bus, 1_ps};
+    AnalysisPort<Transaction> expected;
+    AnalysisPort<Transaction> observed;
+    InOrderScoreboard<Transaction> scoreboard{test, "APB transaction"};
+    Covergroup<Transaction> coverage{"apb_transactions"};
+    auto& operation = coverage.coverpoint("operation", &Transaction::operation);
+    operation.bin("read", MemoryOperation::Read)
+        .bin("write", MemoryOperation::Write);
+    auto& status = coverage.coverpoint("status", &Transaction::status);
+    status.bin("okay", MemoryStatus::Okay)
+        .bin("slave_error", MemoryStatus::SlaveError);
+    coverage.cross("operation_x_status", operation, status);
+    CoverageSubscriber coverage_subscriber{coverage};
+
+    auto expected_connection = expected.connect(scoreboard.expected());
+    auto actual_connection = observed.connect(scoreboard.actual());
+    auto coverage_connection = observed.connect(coverage_subscriber);
+    test.spawn_detached(checker.run_forever());
+
+    co_await Join{register_sequence(master, test, expected),
+                  monitor.run(observed, kObservedTransactions)};
+
+    scoreboard.finalize();
+    const auto snapshot = coverage.snapshot();
+    test.expect_eq("APB monitored transactions", scoreboard.compared(),
+                   std::size_t{kObservedTransactions});
+    test.expect_eq("APB protocol violations", checker.violations(),
+                   uint64_t{0});
+    test.expect_eq("APB coverage samples", snapshot.samples,
+                   uint64_t{kObservedTransactions});
+    test.expect_eq("APB operation coverage", snapshot.points[0].bins[0].hits,
+                   uint64_t{kRegisterTransactions + 2u});
+}
+
+CPPTB_REGISTER_TEST(component_apb_test);
 
 }  // namespace
 }  // namespace cpptb::examples::apb_regfile

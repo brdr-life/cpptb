@@ -1,6 +1,7 @@
 #include <cstdint>
 
 #include "cpptb/cpptb.hpp"
+#include "cpptb_vc/cpptb_vc.hpp"
 #include "dut.hpp"
 
 namespace cpptb::examples::component_fifo {
@@ -14,6 +15,7 @@ using coro::Join;
 using coro::RisingEdge;
 using coro::Task;
 using namespace coro;
+using namespace cpptb::vc;
 
 constexpr uint32_t kWordCount = 24;
 

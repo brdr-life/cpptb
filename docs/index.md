@@ -30,9 +30,9 @@ CPPTB_REGISTER_TEST(count_sequence);
 |---|---|
 | [Framework test lifecycle and structured results](roadmap.md#1-framework-test-lifecycle-and-structured-results) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
 | [Bounded queues and synchronization](roadmap.md#2-bounded-queues-and-synchronization) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
-| [Reusable verification components](roadmap.md#3-reusable-verification-components) | <span class="roadmap-status roadmap-status--next">In progress</span> |
-| [Random stimulus and functional coverage](roadmap.md#4-reproducible-random-stimulus-and-functional-coverage) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
-| [Register abstraction](roadmap.md#5-register-abstraction) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
+| [Reusable verification components](roadmap.md#3-reusable-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
+| [Random stimulus and functional coverage](roadmap.md#4-reproducible-random-stimulus-and-functional-coverage) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
+| [Memory and register abstraction](roadmap.md#5-memory-and-register-abstraction) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Interfaces and simulator portability](roadmap.md#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Debugging and release tooling](roadmap.md#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Coherent clock and reset control](roadmap.md#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
@@ -48,6 +48,12 @@ delivery process behind each milestone.
   concurrency, timeouts, events, queues, and process control.
 - [Framework test lifecycle](test-lifecycle.md) covers registration, checks,
   process ownership, terminal states, and structured results.
+- [Verification components](verification-components.md) covers the optional
+  `cpptb_vc` package, transaction interfaces, scoreboards, streams, and APB.
+- [Randomization](random-stimulus.md) provides a multi-page guide to direct
+  generators, constrained transactions, composite fields, solver backends,
+  replay, [functional coverage](randomization/functional-coverage.md), and
+  [side-by-side framework examples](randomization/examples.md).
 - [Running tests](running-tests.md) covers the optional command-line build and
   execution harness.
 - [Hierarchical DUT access](hierarchy.md) covers natural instance paths,
@@ -75,9 +81,12 @@ delivery process behind each milestone.
 
 The current implementation supports concurrent processes, edge and delay
 triggers, typed tasks, timeouts, events, bounded queues, locks, semaphores,
-typed transaction endpoints, analysis fan-out, an in-order scoreboard,
-ready/valid components, wide packed and fixed-point values, multidimensional
-arrays, and source-inferred hierarchical access. Compiled test catalogs,
+typed transaction endpoints, analysis fan-out, in-order and keyed scoreboards,
+ready/valid and APB components, wide packed and fixed-point values, multidimensional
+arrays, deterministic and constrained-random stimulus with membership,
+distributions, soft constraints, adaptive optional solver fallback, composite
+fields, functional coverpoints, crosses, transitions, and source-inferred
+hierarchical access. Compiled test catalogs,
 one-test-per-run selection, test-owned process cleanup, fatal and nonfatal
 checks, and JSON results are also supported.
 Verilator is the end-to-end reference simulator. Direct Verilator timing

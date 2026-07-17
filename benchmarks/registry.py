@@ -119,6 +119,11 @@ _AUTHORING_TEMPLATE_IDS = {
     "dynamic_spawn_suspending": 33,
     "dynamic_monitor": 34,
     "analysis_fanout": 35,
+    "random_stimulus": 36,
+    "constrained_packet": 37,
+    "constraint_extensions": 38,
+    "coverage_sampling": 39,
+    "apb_component": 40,
 }
 
 
@@ -250,6 +255,26 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring(
         "analysis_fanout",
         "Transaction analysis fan-out",
+    ),
+    _authoring(
+        "random_stimulus",
+        "Deterministic random stimulus",
+    ),
+    _authoring(
+        "constrained_packet",
+        "Constrained-random packet stimulus",
+    ),
+    _authoring(
+        "constraint_extensions",
+        "Extended constrained-random fields and policies",
+    ),
+    _authoring(
+        "coverage_sampling",
+        "Functional coverage sampling",
+    ),
+    _authoring(
+        "apb_component",
+        "APB verification components",
     ),
     Benchmark(
         name="dpi_counter",

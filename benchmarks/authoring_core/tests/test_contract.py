@@ -132,6 +132,26 @@ class ContractTests(unittest.TestCase):
             "$(eval $(call AUTHORING_CORE_DPI_template,dynamic_monitor,34))",
             makefile,
         )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,random_stimulus,36))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,constrained_packet,37))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,constraint_extensions,38))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,coverage_sampling,39))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,apb_component,40))",
+            makefile,
+        )
         self.assertIn("AUTHORING_CORE_OPT_FAST ?= -O3", makefile)
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)"'),
@@ -226,6 +246,166 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(counts.task_timeout_hits, 2)
         self.assertEqual(counts.timeouts, 0)
         self.assertEqual(counts.task_value, 0)
+
+    def test_random_stimulus_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("random_stimulus", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 7)
+        self.assertEqual(counts.random_stimulus, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["random_stimulus"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("auto& random = random_test.random();", cpp)
+        self.assertIn("random.randint<uint32_t>", cpp)
+        self.assertIn("random.weighted_choice(random_masks)", cpp)
+        self.assertIn("random.randbits<65>()", cpp)
+        self.assertIn("random.shuffle(order)", cpp)
+        self.assertIn("function automatic logic [63:0] random_next_u64", sv)
+        self.assertIn('"random_stimulus": run_random_stimulus();', sv)
+
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="random_stimulus"),
+            0xA0CE3058,
+        )
+
+    def test_constrained_packet_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("constrained_packet", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 7)
+        self.assertEqual(counts.constrained_packet, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["constrained_packet"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("class PacketStimulus final : public Randomized", cpp)
+        self.assertIn("constrained_test.randomize(packet);", cpp)
+        self.assertIn("length % uint16_t{4} == uint16_t{0}", cpp)
+        self.assertIn(
+            "function automatic logic [31:0] constrained_packet_payload", sv
+        )
+        self.assertIn('"constrained_packet": run_constrained_packet();', sv)
+
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="constrained_packet"),
+            0xD9EDB167,
+        )
+
+    def test_constraint_extensions_have_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("constraint_extensions", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 7)
+        self.assertEqual(counts.constraint_extensions, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["constraint_extensions"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("class ExtendedPacketStimulus final : public Randomized", cpp)
+        self.assertIn("inside(opcode, {1, 3, 5})", cpp)
+        self.assertIn("dist(length", cpp)
+        self.assertIn("RandArray<uint8_t, 2>", cpp)
+        self.assertIn("RandBits<65>", cpp)
+        self.assertIn("legacy_opcode.disable()", cpp)
+        self.assertIn(
+            "function automatic logic [31:0] constraint_extensions_payload", sv
+        )
+        self.assertIn(
+            '"constraint_extensions": run_constraint_extensions();', sv
+        )
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="constraint_extensions"),
+            0x38D6D2B5,
+        )
+
+    def test_coverage_sampling_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("coverage_sampling", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 12)
+        self.assertEqual(counts.coverage_sampling, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["coverage_sampling"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn('Covergroup<CoverageTransaction>', cpp)
+        self.assertIn('transition_bin("read_to_write"', cpp)
+        self.assertIn('functional_coverage.cross("opcode_x_length"', cpp)
+        self.assertIn("task automatic coverage_sample", sv)
+        self.assertIn('"coverage_sampling": run_coverage_sampling();', sv)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="coverage_sampling"),
+            workload.expected_checksum(5),
+        )
+
+    def test_apb_component_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("apb_component", 5)
+        self.assertEqual(counts.transactions, 10)
+        self.assertEqual(counts.checks, 29)
+        self.assertEqual(counts.apb_component, 10)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["apb_component"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("ApbMaster master{bus}", cpp)
+        self.assertIn("ApbMonitor monitor{bus}", cpp)
+        self.assertIn("ApbProtocolChecker checker{test, bus}", cpp)
+        self.assertIn("task automatic run_apb_monitor", sv)
+        self.assertIn("task automatic run_apb_checker", sv)
+        self.assertIn('"apb_component": run_apb_component();', sv)
 
     def test_queue_sync_has_exact_isolated_counts_and_twin(self):
         counts = workload.expected_counts("queue_sync", 5)

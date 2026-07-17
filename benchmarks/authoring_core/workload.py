@@ -42,6 +42,11 @@ KERNELS = (
     "dynamic_spawn_suspending",
     "dynamic_monitor",
     "analysis_fanout",
+    "random_stimulus",
+    "constrained_packet",
+    "constraint_extensions",
+    "coverage_sampling",
+    "apb_component",
 )
 
 FEATURE_FIELDS = (
@@ -84,6 +89,11 @@ FEATURE_FIELDS = (
     "dynamic_spawn",
     "analysis_write",
     "analysis_delivery",
+    "random_stimulus",
+    "constrained_packet",
+    "constraint_extensions",
+    "coverage_sampling",
+    "apb_component",
 )
 
 RESULT_FIELDS = (
@@ -145,6 +155,11 @@ class ExpectedCounts:
     dynamic_spawn: int = 0
     analysis_write: int = 0
     analysis_delivery: int = 0
+    random_stimulus: int = 0
+    constrained_packet: int = 0
+    constraint_extensions: int = 0
+    coverage_sampling: int = 0
+    apb_component: int = 0
 
     def fields(self) -> dict[str, int]:
         return asdict(self)
@@ -344,6 +359,46 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             analysis_delivery=3 * iterations,
         )
 
+    if kernel == "random_stimulus":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 2,
+            random_stimulus=iterations,
+        )
+
+    if kernel == "constrained_packet":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 2,
+            constrained_packet=iterations,
+        )
+
+    if kernel == "constraint_extensions":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 2,
+            constraint_extensions=iterations,
+        )
+
+    if kernel == "coverage_sampling":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 7,
+            coverage_sampling=iterations,
+        )
+
+    if kernel == "apb_component":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=2 * iterations,
+            checks=5 * iterations + 4,
+            apb_component=2 * iterations,
+        )
+
     return ExpectedCounts(
         iterations=iterations,
         transactions=iterations,
@@ -394,6 +449,176 @@ def response(iteration: int) -> int:
     return ((stimulus(iteration) ^ 0xA5A55A5A) + iteration) & 0xFFFFFFFF
 
 
+_MASK64 = (1 << 64) - 1
+
+
+def _rotate_left64(value: int, shift: int) -> int:
+    return ((value << shift) | (value >> (64 - shift))) & _MASK64
+
+
+def random_payloads(iterations: int):
+    splitmix_state = 1
+    state = []
+    for _ in range(4):
+        splitmix_state = (splitmix_state + 0x9E3779B97F4A7C15) & _MASK64
+        value = splitmix_state
+        value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & _MASK64
+        value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & _MASK64
+        state.append((value ^ (value >> 31)) & _MASK64)
+
+    def next_u64() -> int:
+        result = (_rotate_left64((state[1] * 5) & _MASK64, 7) * 9) & _MASK64
+        shifted = (state[1] << 17) & _MASK64
+        state[2] ^= state[0]
+        state[3] ^= state[1]
+        state[1] ^= state[2]
+        state[0] ^= state[3]
+        state[2] ^= shifted
+        state[3] = _rotate_left64(state[3], 45)
+        return result
+
+    def below(bound: int) -> int:
+        threshold = ((-bound) & _MASK64) % bound
+        while True:
+            value = next_u64()
+            if value >= threshold:
+                return value % bound
+
+    weighted_masks = (
+        0,
+        0x01010101,
+        0x01010101,
+        0x13579BDF,
+        0x13579BDF,
+        0x13579BDF,
+        0xA5A55A5A,
+        0xA5A55A5A,
+        0xA5A55A5A,
+        0xA5A55A5A,
+    )
+    for _ in range(iterations):
+        payload = next_u64() & 0xFFFFFFFF
+        payload ^= weighted_masks[below(10)]
+        first_wide = next_u64()
+        second_wide = next_u64()
+        payload ^= first_wide & 0xFFFFFFFF
+        payload ^= (first_wide >> 32) & 0xFFFFFFFF
+        if second_wide & 1:
+            payload ^= 0x80000000
+        order = [0, 1, 2, 3]
+        for remaining in range(4, 1, -1):
+            selected = below(remaining)
+            order[remaining - 1], order[selected] = (
+                order[selected], order[remaining - 1]
+            )
+        payload ^= order[0] | (order[1] << 4) | (order[2] << 8) | (order[3] << 12)
+        yield payload & 0xFFFFFFFF
+
+
+def constrained_packet_payloads(iterations: int):
+    splitmix_state = 1
+    state = []
+    for _ in range(4):
+        splitmix_state = (splitmix_state + 0x9E3779B97F4A7C15) & _MASK64
+        value = splitmix_state
+        value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & _MASK64
+        value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & _MASK64
+        state.append((value ^ (value >> 31)) & _MASK64)
+
+    def next_u64() -> int:
+        result = (_rotate_left64((state[1] * 5) & _MASK64, 7) * 9) & _MASK64
+        shifted = (state[1] << 17) & _MASK64
+        state[2] ^= state[0]
+        state[3] ^= state[1]
+        state[1] ^= state[2]
+        state[0] ^= state[3]
+        state[2] ^= shifted
+        state[3] = _rotate_left64(state[3], 45)
+        return result
+
+    def below(bound: int) -> int:
+        threshold = ((-bound) & _MASK64) % bound
+        while True:
+            value = next_u64()
+            if value >= threshold:
+                return value % bound
+
+    for _ in range(iterations):
+        while True:
+            opcode = below(7)
+            length = 64 + below(1437)
+            address = 0x1000 + below(4096)
+            tag = below(256)
+            if length % 4 != 0:
+                continue
+            if address % 4 != 0:
+                continue
+            if opcode == 6 and length > 256:
+                continue
+            yield (
+                (opcode << 29) ^ (length << 16) ^ (address << 1) ^ tag
+            ) & 0xFFFFFFFF
+            break
+
+
+def constraint_extension_payloads(iterations: int):
+    splitmix_state = 1
+    state = []
+    for _ in range(4):
+        splitmix_state = (splitmix_state + 0x9E3779B97F4A7C15) & _MASK64
+        value = splitmix_state
+        value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & _MASK64
+        value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & _MASK64
+        state.append((value ^ (value >> 31)) & _MASK64)
+
+    def next_u64() -> int:
+        result = (_rotate_left64((state[1] * 5) & _MASK64, 7) * 9) & _MASK64
+        shifted = (state[1] << 17) & _MASK64
+        state[2] ^= state[0]
+        state[3] ^= state[1]
+        state[1] ^= state[2]
+        state[0] ^= state[3]
+        state[2] ^= shifted
+        state[3] = _rotate_left64(state[3], 45)
+        return result
+
+    def below(bound: int) -> int:
+        threshold = ((-bound) & _MASK64) % bound
+        while True:
+            value = next_u64()
+            if value >= threshold:
+                return value % bound
+
+    opcodes = (1, 3, 5)
+    for _ in range(iterations):
+        while True:
+            opcode = opcodes[below(3)]
+            selected = below(4)
+            if selected == 0:
+                length = 64 + below(1)
+            else:
+                length = 128 + below(4)
+            route = 2 + below(1)
+            byte0 = below(256)
+            byte1 = below(256)
+            token0 = below(1 << 32)
+            token1 = below(1 << 32)
+            token2 = 1 + below(1)
+            if byte0 == byte1:
+                continue
+            yield (
+                (opcode << 29)
+                ^ (length << 16)
+                ^ (route << 24)
+                ^ (byte0 << 8)
+                ^ byte1
+                ^ token0
+                ^ token1
+                ^ (token2 << 31)
+            ) & 0xFFFFFFFF
+            break
+
+
 def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
     if iterations <= 0:
         raise ValueError("iterations must be greater than zero")
@@ -408,6 +633,29 @@ def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
     ):
         return 0x811C9DC5
     checksum = 0x811C9DC5
-    for iteration in range(iterations):
-        checksum = ((checksum ^ response(iteration)) * 0x01000193) & 0xFFFFFFFF
+    if kernel == "random_stimulus":
+        responses = (
+            ((payload ^ 0xA5A55A5A) + iteration) & 0xFFFFFFFF
+            for iteration, payload in enumerate(random_payloads(iterations))
+        )
+    elif kernel == "constrained_packet":
+        responses = (
+            ((payload ^ 0xA5A55A5A) + iteration) & 0xFFFFFFFF
+            for iteration, payload in enumerate(
+                constrained_packet_payloads(iterations)
+            )
+        )
+    elif kernel == "constraint_extensions":
+        responses = (
+            ((payload ^ 0xA5A55A5A) + iteration) & 0xFFFFFFFF
+            for iteration, payload in enumerate(
+                constraint_extension_payloads(iterations)
+            )
+        )
+    elif kernel == "apb_component":
+        responses = (stimulus(iteration) for iteration in range(iterations))
+    else:
+        responses = (response(iteration) for iteration in range(iterations))
+    for value in responses:
+        checksum = ((checksum ^ value) * 0x01000193) & 0xFFFFFFFF
     return checksum

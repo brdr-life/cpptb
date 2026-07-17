@@ -63,6 +63,15 @@ module dpi_authoring_core;
   localparam int SIGNAL_MEMWDATAI = 101;
   localparam int SIGNAL_MEMWEI = 102;
   localparam int SIGNAL_MEMRDATAO = 103;
+  localparam int SIGNAL_APBPSELI = 104;
+  localparam int SIGNAL_APBPENABLEI = 105;
+  localparam int SIGNAL_APBPWRITEI = 106;
+  localparam int SIGNAL_APBPADDRI = 107;
+  localparam int SIGNAL_APBPWDATAI = 108;
+  localparam int SIGNAL_APBPSTRBI = 109;
+  localparam int SIGNAL_APBPRDATAO = 110;
+  localparam int SIGNAL_APBPREADYO = 111;
+  localparam int SIGNAL_APBPSLVERRO = 112;
   localparam int INPUT_SIGNAL_CLK = 0;
   localparam int INPUT_SIGNAL_REQREADY = 1;
   localparam int INPUT_SIGNAL_RSPVALID = 2;
@@ -77,6 +86,9 @@ module dpi_authoring_core;
   localparam int INPUT_SIGNAL_FORCEFANOUTO = 36;
   localparam int INPUT_SIGNAL_PACKEDVIEWO = 37;
   localparam int INPUT_SIGNAL_MEMRDATAO = 38;
+  localparam int INPUT_SIGNAL_APBPRDATAO = 39;
+  localparam int INPUT_SIGNAL_APBPREADYO = 40;
+  localparam int INPUT_SIGNAL_APBPSLVERRO = 41;
   localparam int OUTPUT_SIGNAL_RSTN = 0;
   localparam int OUTPUT_SIGNAL_REQVALID = 1;
   localparam int OUTPUT_SIGNAL_REQDATA = 2;
@@ -91,9 +103,15 @@ module dpi_authoring_core;
   localparam int OUTPUT_SIGNAL_MEMADDRI = 36;
   localparam int OUTPUT_SIGNAL_MEMWDATAI = 37;
   localparam int OUTPUT_SIGNAL_MEMWEI = 38;
-  localparam int CPPTB_SIGNAL_COUNT = 104;
-  localparam int INPUT_WORD_COUNT = 39;
-  localparam int OUTPUT_WORD_COUNT = 39;
+  localparam int OUTPUT_SIGNAL_APBPSELI = 39;
+  localparam int OUTPUT_SIGNAL_APBPENABLEI = 40;
+  localparam int OUTPUT_SIGNAL_APBPWRITEI = 41;
+  localparam int OUTPUT_SIGNAL_APBPADDRI = 42;
+  localparam int OUTPUT_SIGNAL_APBPWDATAI = 43;
+  localparam int OUTPUT_SIGNAL_APBPSTRBI = 44;
+  localparam int CPPTB_SIGNAL_COUNT = 113;
+  localparam int INPUT_WORD_COUNT = 42;
+  localparam int OUTPUT_WORD_COUNT = 45;
 
   import "DPI-C" context function void authoring_core_dpi_init(
       input int unsigned iterations,
@@ -147,6 +165,15 @@ module dpi_authoring_core;
   logic [31:0] mem_wdata_i;
   logic mem_we_i;
   logic [31:0] mem_rdata_o;
+  logic apb_psel_i;
+  logic apb_penable_i;
+  logic apb_pwrite_i;
+  logic [7:0] apb_paddr_i;
+  logic [31:0] apb_pwdata_i;
+  logic [3:0] apb_pstrb_i;
+  logic [31:0] apb_prdata_o;
+  logic apb_pready_o;
+  logic apb_pslverr_o;
 
   int unsigned iterations;
   longint unsigned sim_cycles;
@@ -205,6 +232,9 @@ module dpi_authoring_core;
     in_words[INPUT_SIGNAL_FORCEFANOUTO] = force_fanout_o;
     in_words[INPUT_SIGNAL_PACKEDVIEWO] = packed_view_o;
     in_words[INPUT_SIGNAL_MEMRDATAO] = mem_rdata_o;
+    in_words[INPUT_SIGNAL_APBPRDATAO] = apb_prdata_o;
+    in_words[INPUT_SIGNAL_APBPREADYO] = apb_pready_o;
+    in_words[INPUT_SIGNAL_APBPSLVERRO] = apb_pslverr_o;
   endtask
 
   task automatic apply_outputs();
@@ -228,6 +258,12 @@ module dpi_authoring_core;
     mem_addr_i = out_words[OUTPUT_SIGNAL_MEMADDRI][7:0];
     mem_wdata_i = out_words[OUTPUT_SIGNAL_MEMWDATAI];
     mem_we_i = out_words[OUTPUT_SIGNAL_MEMWEI][0];
+    apb_psel_i = out_words[OUTPUT_SIGNAL_APBPSELI][0];
+    apb_penable_i = out_words[OUTPUT_SIGNAL_APBPENABLEI][0];
+    apb_pwrite_i = out_words[OUTPUT_SIGNAL_APBPWRITEI][0];
+    apb_paddr_i = out_words[OUTPUT_SIGNAL_APBPADDRI][7:0];
+    apb_pwdata_i = out_words[OUTPUT_SIGNAL_APBPWDATAI];
+    apb_pstrb_i = out_words[OUTPUT_SIGNAL_APBPSTRBI][3:0];
   endtask
 
   always @(phase_outputs_pending) begin
@@ -614,6 +650,12 @@ module dpi_authoring_core;
     mem_addr_i = '0;
     mem_wdata_i = '0;
     mem_we_i = '0;
+    apb_psel_i = '0;
+    apb_penable_i = '0;
+    apb_pwrite_i = '0;
+    apb_paddr_i = '0;
+    apb_pwdata_i = '0;
+    apb_pstrb_i = '0;
     sim_cycles = 0;
     timer_generation = 0;
     timer_deadline = NO_TIMER;
@@ -703,7 +745,16 @@ module dpi_authoring_core;
       .mem_addr_i(mem_addr_i),
       .mem_wdata_i(mem_wdata_i),
       .mem_we_i(mem_we_i),
-      .mem_rdata_o(mem_rdata_o)
+      .mem_rdata_o(mem_rdata_o),
+      .apb_psel_i(apb_psel_i),
+      .apb_penable_i(apb_penable_i),
+      .apb_pwrite_i(apb_pwrite_i),
+      .apb_paddr_i(apb_paddr_i),
+      .apb_pwdata_i(apb_pwdata_i),
+      .apb_pstrb_i(apb_pstrb_i),
+      .apb_prdata_o(apb_prdata_o),
+      .apb_pready_o(apb_pready_o),
+      .apb_pslverr_o(apb_pslverr_o)
   );
 
   export "DPI-C" function dpi_authoring_core_port_13_get;
@@ -736,66 +787,66 @@ module dpi_authoring_core;
     dpi_authoring_core_port_21_get = $unsigned(array_wide_o[index_0]);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_1_get;
-  function int unsigned dpi_authoring_core_hierarchy_1_get(input int index);
-    dpi_authoring_core_hierarchy_1_get = $unsigned(i_dut.cycle_count);
+  export "DPI-C" function dpi_authoring_core_hierarchy_4_get;
+  function int unsigned dpi_authoring_core_hierarchy_4_get(input int index);
+    dpi_authoring_core_hierarchy_4_get = $unsigned(i_dut.cycle_count);
   endfunction
 
-  bit [31:0] hierarchy_8_force_shadow;
+  bit [31:0] hierarchy_11_force_shadow;
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_8_get;
-  function int unsigned dpi_authoring_core_hierarchy_8_get(input int index);
-    dpi_authoring_core_hierarchy_8_get = $unsigned(i_dut.force_target);
+  export "DPI-C" function dpi_authoring_core_hierarchy_11_get;
+  function int unsigned dpi_authoring_core_hierarchy_11_get(input int index);
+    dpi_authoring_core_hierarchy_11_get = $unsigned(i_dut.force_target);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_8_force;
-  function void dpi_authoring_core_hierarchy_8_force(input int index, input int unsigned value);
-    hierarchy_8_force_shadow = value;
-    force i_dut.force_target = hierarchy_8_force_shadow;
+  export "DPI-C" function dpi_authoring_core_hierarchy_11_force;
+  function void dpi_authoring_core_hierarchy_11_force(input int index, input int unsigned value);
+    hierarchy_11_force_shadow = value;
+    force i_dut.force_target = hierarchy_11_force_shadow;
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_8_release;
-  function void dpi_authoring_core_hierarchy_8_release(input int index);
+  export "DPI-C" function dpi_authoring_core_hierarchy_11_release;
+  function void dpi_authoring_core_hierarchy_11_release(input int index);
     release i_dut.force_target;
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_9_get_logic;
-  function void dpi_authoring_core_hierarchy_9_get_logic(input int index, output logic [3:0] value);
+  export "DPI-C" function dpi_authoring_core_hierarchy_12_get_logic;
+  function void dpi_authoring_core_hierarchy_12_get_logic(input int index, output logic [3:0] value);
     value = i_dut.hierarchy_logic;
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_9_deposit_logic;
-  function void dpi_authoring_core_hierarchy_9_deposit_logic(input int index, input logic [3:0] value);
+  export "DPI-C" function dpi_authoring_core_hierarchy_12_deposit_logic;
+  function void dpi_authoring_core_hierarchy_12_deposit_logic(input int index, input logic [3:0] value);
     i_dut.hierarchy_logic = value;
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_10_get;
-  function void dpi_authoring_core_hierarchy_10_get(input int index, output bit [136:0] value);
+  export "DPI-C" function dpi_authoring_core_hierarchy_13_get;
+  function void dpi_authoring_core_hierarchy_13_get(input int index, output bit [136:0] value);
     value = $unsigned(i_dut.hierarchy_wide);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_10_deposit;
-  function void dpi_authoring_core_hierarchy_10_deposit(input int index, input bit [136:0] value);
+  export "DPI-C" function dpi_authoring_core_hierarchy_13_deposit;
+  function void dpi_authoring_core_hierarchy_13_deposit(input int index, input bit [136:0] value);
     i_dut.hierarchy_wide = value;
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_12_get;
-  function int unsigned dpi_authoring_core_hierarchy_12_get(input int index);
-    dpi_authoring_core_hierarchy_12_get = $unsigned(i_dut.memory[index]);
+  export "DPI-C" function dpi_authoring_core_hierarchy_15_get;
+  function int unsigned dpi_authoring_core_hierarchy_15_get(input int index);
+    dpi_authoring_core_hierarchy_15_get = $unsigned(i_dut.memory[index]);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_12_deposit;
-  function void dpi_authoring_core_hierarchy_12_deposit(input int index, input int unsigned value);
+  export "DPI-C" function dpi_authoring_core_hierarchy_15_deposit;
+  function void dpi_authoring_core_hierarchy_15_deposit(input int index, input int unsigned value);
     i_dut.memory[index] = value;
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_14_get;
-  function int unsigned dpi_authoring_core_hierarchy_14_get(input int index);
-    dpi_authoring_core_hierarchy_14_get = $unsigned(i_dut.pending_data);
+  export "DPI-C" function dpi_authoring_core_hierarchy_17_get;
+  function int unsigned dpi_authoring_core_hierarchy_17_get(input int index);
+    dpi_authoring_core_hierarchy_17_get = $unsigned(i_dut.pending_data);
   endfunction
 
-  export "DPI-C" function dpi_authoring_core_hierarchy_14_deposit;
-  function void dpi_authoring_core_hierarchy_14_deposit(input int index, input int unsigned value);
+  export "DPI-C" function dpi_authoring_core_hierarchy_17_deposit;
+  function void dpi_authoring_core_hierarchy_17_deposit(input int index, input int unsigned value);
     i_dut.pending_data = value;
   endfunction
 

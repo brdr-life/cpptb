@@ -6,8 +6,14 @@ MOJOTB_BUILD_DIR := $(BUILD_DIR)/mojotb
 MOJOTB_OBJ_DIR := $(MOJOTB_BUILD_DIR)/obj
 CPPTB_BUILD_DIR := $(BUILD_DIR)/cpptb
 CPPTB_OBJ_DIR := $(CPPTB_BUILD_DIR)/obj
+CPPTB_PUBLIC_HEADERS := $(wildcard include/cpptb/*.hpp) \
+	$(wildcard include/cpptb_vc/*.hpp)
 CPPTB_CORO_RUNTIME_TEST := $(CPPTB_BUILD_DIR)/coro_runtime_test
 CPPTB_PACKED_VALUE_TEST := $(CPPTB_BUILD_DIR)/packed_value_test
+CPPTB_RANDOM_TEST := $(CPPTB_BUILD_DIR)/random_test
+CPPTB_RANDOMIZED_TEST := $(CPPTB_BUILD_DIR)/randomized_test
+CPPTB_Z3_RANDOM_TEST := $(CPPTB_BUILD_DIR)/z3_random_backend_test
+CPPTB_COVERAGE_TEST := $(CPPTB_BUILD_DIR)/coverage_test
 CPPTB_TEST_API_TEST := $(CPPTB_BUILD_DIR)/test_api_test
 CPPTB_COMPONENTS_TEST := $(CPPTB_BUILD_DIR)/components_test
 CPPTB_HIERARCHY_TEST := $(CPPTB_BUILD_DIR)/hierarchy_test
@@ -51,7 +57,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor analysis_fanout
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
 AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
@@ -257,12 +263,12 @@ $(eval $(call CPPTB_EXAMPLE_template,multiclock,MULTICLOCK,multiclock,dual_clock
 $(eval $(call CPPTB_EXAMPLE_template,timer-only,TIMER_ONLY,timer_only,timer_only_probe,dpi_timer_only_probe,timer_only_probe_sv_tb,timer_only_test))
 $(eval $(call CPPTB_EXAMPLE_template,fifo-scoreboard,FIFO_SCOREBOARD,fifo_scoreboard,stream_fifo,dpi_stream_fifo,stream_fifo_sv_tb,fifo_test))
 $(eval $(call CPPTB_EXAMPLE_template,component-fifo,COMPONENT_FIFO,component_fifo,component_fifo,dpi_component_fifo,component_fifo_sv_tb,component_fifo_test))
-$(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb,register_sequence))
+$(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb,component_apb_test))
 $(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_timeout,stalling_responder,dpi_stalling_responder,stalling_responder_sv_tb,watchdog_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb,fault_injection_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb,rich_data_sequence))
 
-.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test cpptb-components-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -282,7 +288,7 @@ all: test
 
 test: unit-test python-test codegen-test conformance-test examples-test registry-check
 
-unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test \
+unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test \
 	cpptb-components-test cpptb-hierarchy-test
 
 python-test:
@@ -420,9 +426,46 @@ $(CPPTB_PACKED_VALUE_TEST): include/cpptb/packed_bits.hpp include/cpptb/fixed.hp
 cpptb-packed-value-test: $(CPPTB_PACKED_VALUE_TEST)
 	$(CPPTB_PACKED_VALUE_TEST)
 
+$(CPPTB_RANDOM_TEST): include/cpptb/random.hpp include/cpptb/packed_bits.hpp \
+		tests/unit/random_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -O3 -Iinclude -I. tests/unit/random_test.cpp -o $@
+
+cpptb-random-test: $(CPPTB_RANDOM_TEST)
+	$(CPPTB_RANDOM_TEST)
+
+$(CPPTB_RANDOMIZED_TEST): include/cpptb/randomized.hpp include/cpptb/random.hpp \
+		tests/unit/randomized_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -O3 -Iinclude -I. tests/unit/randomized_test.cpp -o $@
+
+cpptb-randomized-test: $(CPPTB_RANDOMIZED_TEST)
+	$(CPPTB_RANDOMIZED_TEST)
+
+$(CPPTB_Z3_RANDOM_TEST): include/cpptb/z3_random_backend.hpp \
+		include/cpptb/randomized.hpp tests/unit/z3_random_backend_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -O3 -Iinclude -I. $$(pkg-config --cflags z3) \
+		tests/unit/z3_random_backend_test.cpp $$(pkg-config --libs z3) -o $@
+
+cpptb-z3-random-test:
+	@if pkg-config --exists z3; then \
+		$(MAKE) $(CPPTB_Z3_RANDOM_TEST) && $(CPPTB_Z3_RANDOM_TEST); \
+	else \
+		echo "Z3 not installed; skipping optional backend test"; \
+	fi
+
+$(CPPTB_COVERAGE_TEST): include/cpptb/coverage.hpp \
+		tests/unit/coverage_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -O3 -Iinclude -I. tests/unit/coverage_test.cpp -o $@
+
+cpptb-coverage-test: $(CPPTB_COVERAGE_TEST)
+	$(CPPTB_COVERAGE_TEST)
+
 $(CPPTB_TEST_API_TEST): include/cpptb/coro_runtime.hpp \
 		include/cpptb/test_api.hpp include/cpptb/test_reporting.hpp \
-		include/cpptb/test_result.hpp \
+		include/cpptb/test_result.hpp include/cpptb/randomized.hpp \
 		tests/unit/test_api_test.cpp
 	mkdir -p $(CPPTB_BUILD_DIR)
 	$(CXX) -std=c++20 -Iinclude -I. \
@@ -433,9 +476,7 @@ $(CPPTB_TEST_API_TEST): include/cpptb/coro_runtime.hpp \
 cpptb-test-api-test: $(CPPTB_TEST_API_TEST)
 	$(CPPTB_TEST_API_TEST)
 
-$(CPPTB_COMPONENTS_TEST): include/cpptb/components.hpp \
-		include/cpptb/coro_runtime.hpp include/cpptb/test_api.hpp \
-		include/cpptb/test_result.hpp tests/unit/components_test.cpp
+$(CPPTB_COMPONENTS_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/components_test.cpp
 	mkdir -p $(CPPTB_BUILD_DIR)
 	$(CXX) -std=c++20 -Iinclude -I. \
 		-I$(VERILATOR_ROOT)/include \
@@ -712,9 +753,8 @@ authoring-core-dpi-codegen-check:
 define AUTHORING_CORE_DPI_template
 $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
-		$(AUTHORING_CORE_DPI_GENERATED) include/cpptb/coro_runtime.hpp \
-		include/cpptb/packed_bits.hpp include/cpptb/fixed.hpp include/cpptb/dpi_runtime.hpp include/cpptb/dpi_static_binding.hpp \
-		include/cpptb/test_result.hpp include/cpptb/test_api.hpp Makefile $(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
+		$(AUTHORING_CORE_DPI_GENERATED) $(CPPTB_PUBLIC_HEADERS) \
+		Makefile $(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
 	mkdir -p $$(dir $$@)
 	verilator $(if $(filter timing_phases,$(1)),--cc --exe --build --vpi,--binary) --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
@@ -767,6 +807,11 @@ $(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn_scheduler,32))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn_suspending,33))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_monitor,34))
 $(eval $(call AUTHORING_CORE_DPI_template,analysis_fanout,35))
+$(eval $(call AUTHORING_CORE_DPI_template,random_stimulus,36))
+$(eval $(call AUTHORING_CORE_DPI_template,constrained_packet,37))
+$(eval $(call AUTHORING_CORE_DPI_template,constraint_extensions,38))
+$(eval $(call AUTHORING_CORE_DPI_template,coverage_sampling,39))
+$(eval $(call AUTHORING_CORE_DPI_template,apb_component,40))
 
 define AUTHORING_CORE_SV_DPI_TIMING_template
 $(2)/Vdpi_authoring_core: $(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \

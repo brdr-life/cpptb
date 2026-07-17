@@ -11,7 +11,7 @@ twin with the same stimulus, checks, and primary-clock cycle count.
 | [`fifo_scoreboard`](fifo_scoreboard/) | Ready/valid traffic, `Event`, `Queue`, driver, monitor, scoreboard, and `Join` | `make cpp-dpi-fifo-scoreboard-run` |
 | [`component_fifo`](component_fifo/) | Typed ports, analysis fan-out, buffered observation, reusable scoreboard, and ready/valid components | `make cpp-dpi-component-fifo-run` |
 | [`multiclock`](multiclock/) | Independent input clocks, a DUT output clock, producer/consumer traffic, and `First` | `make cpp-dpi-multiclock-run` |
-| [`apb_regfile`](apb_regfile/) | Reusable protocol transactions and typed `Task<uint32_t>` results | `make cpp-dpi-apb-regfile-run` |
+| [`apb_regfile`](apb_regfile/) | `cpptb_vc` APB master, monitor, checker, scoreboard, and coverage | `make cpp-dpi-apb-regfile-run` |
 | [`watchdog_timeout`](watchdog_timeout/) | Trigger/task timeouts, expected stalls, process handles, and cancellation | `make cpp-dpi-watchdog-timeout-run` |
 | [`fault_injection`](fault_injection/) | Internal `get()`/`deposit()`/`force()`/`release()` on nets, variables, and memory | `make cpp-dpi-fault-injection-run` |
 | [`rich_data`](rich_data/) | Wide values and slices, fixed point, arrays, packed structs, and enums | `make cpp-dpi-rich-data-run` |
@@ -25,6 +25,8 @@ twin with the same stimulus, checks, and primary-clock cycle count.
   verification written from primitives.
 - Start from `component_fifo` when drivers, monitors, and scoreboards should be
   connected through reusable transaction endpoints.
+- Start from `apb_regfile` for protocol-neutral memory-mapped sequences and a
+  complete active/passive bus component composition.
 - Start from `multiclock` for independent clock domains.
 - Start from `apb_regfile` when a bus-functional model should hide pin-level
   protocol phases from the test sequence.

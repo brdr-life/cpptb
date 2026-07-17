@@ -1,7 +1,9 @@
 #include "benchmarks/authoring_core/testbenches/cpp_dpi/framework/authoring_core.hpp"
 
 #include <chrono>
+#include <array>
 #include <cstdio>
+#include <limits>
 
 namespace cpptb::benchmarks::authoring_core {
 namespace {
@@ -16,12 +18,18 @@ using coro::Semaphore;
 using coro::Task;
 using coro::TimeoutOutcome;
 using namespace coro;
+using namespace cpptb::vc;
 
 struct Context {
     coro::Testbench& scheduler;
     AuthoringCoreDut dut;
     uint32_t iterations;
     BenchResult& result;
+};
+
+struct CoverageTransaction {
+    uint8_t opcode;
+    uint16_t length;
 };
 
 uint32_t stimulus(uint32_t iteration) {
@@ -31,6 +39,85 @@ uint32_t stimulus(uint32_t iteration) {
 uint32_t expected_response(uint32_t iteration) {
     return (stimulus(iteration) ^ 0xa5a5'5a5au) + iteration;
 }
+
+uint32_t expected_response(uint32_t iteration, uint32_t payload) {
+    return (payload ^ 0xa5a5'5a5au) + iteration;
+}
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CONSTRAINED_PACKET
+class PacketStimulus final : public Randomized {
+   public:
+    Rand<uint8_t> opcode{*this, "opcode"};
+    Rand<uint16_t> length{*this, "length"};
+    Rand<uint16_t> address{*this, "address"};
+    Rand<uint8_t> tag{*this, "tag"};
+
+    PacketStimulus() {
+        constraint("supported opcode", opcode <= uint8_t{6});
+        constraint("packet length",
+                   length >= uint16_t{64} && length <= uint16_t{1500});
+        constraint("address window",
+                   address >= uint16_t{0x1000} &&
+                       address <= uint16_t{0x1fff});
+        constraint("word-sized packet", length % uint16_t{4} == uint16_t{0});
+        constraint("aligned address",
+                   address % uint16_t{4} == uint16_t{0});
+        constraint("short control packet",
+                   opcode != uint8_t{6} || length <= uint16_t{256});
+    }
+
+    uint32_t payload() const {
+        return (static_cast<uint32_t>(opcode.get()) << 29u) ^
+               (static_cast<uint32_t>(length.get()) << 16u) ^
+               (static_cast<uint32_t>(address.get()) << 1u) ^ tag.get();
+    }
+};
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CONSTRAINT_EXTENSIONS
+class ExtensionHeader final : public Randomized {
+   public:
+    Rand<uint8_t> route{*this, "route"};
+
+    explicit ExtensionHeader(Randomized& parent)
+        : Randomized(parent, "header") {
+        soft_constraint("default route", route == uint8_t{2});
+    }
+};
+
+class ExtendedPacketStimulus final : public Randomized {
+   public:
+    Rand<uint8_t> opcode{*this, "opcode"};
+    Rand<uint16_t> length{*this, "length"};
+    ExtensionHeader header{*this};
+    RandArray<uint8_t, 2> bytes{*this, "bytes"};
+    RandBits<65> token{*this, "token"};
+
+    ExtendedPacketStimulus() {
+        constraint("selected opcode", inside(opcode, {1, 3, 5}));
+        distribution(
+            "packet length mix",
+            dist(length, weighted(uint16_t{64}, 1),
+                 weighted(range(uint16_t{128}, uint16_t{131}), 3)));
+        constraint("distinct byte prefix", bytes[0] != bytes[1]);
+        constraint("high token bit", token.word(2) == uint32_t{1});
+        auto legacy_opcode =
+            constraint("disabled legacy opcode", opcode == uint8_t{7});
+        legacy_opcode.disable();
+    }
+
+    uint32_t payload() const {
+        const auto byte_values = bytes.get();
+        const auto token_value = token.get();
+        return (static_cast<uint32_t>(opcode.get()) << 29u) ^
+               (static_cast<uint32_t>(length.get()) << 16u) ^
+               (static_cast<uint32_t>(header.route.get()) << 24u) ^
+               (static_cast<uint32_t>(byte_values[0]) << 8u) ^
+               byte_values[1] ^ token_value.word(0) ^ token_value.word(1) ^
+               (token_value.word(2) << 31u);
+    }
+};
+#endif
 
 void check(Context& context, const char* label, uint32_t actual,
            uint32_t expected) {
@@ -477,7 +564,8 @@ Task<void> transact(Context& context, uint32_t iteration, uint32_t payload,
     }
 
     const uint32_t response = context.dut.rsp_data.get();
-    check(context, "response", response, expected_response(iteration));
+    check(context, "response", response,
+          expected_response(iteration, payload));
     context.result.checksum =
         (context.result.checksum ^ response) * 0x0100'0193u;
     ++context.result.transactions;
@@ -511,7 +599,8 @@ Task<void> transact_signal_edge(Context& context, uint32_t iteration,
     ++context.result.features.signal_edges;
 
     const uint32_t response = context.dut.rsp_data.get();
-    check(context, "response", response, expected_response(iteration));
+    check(context, "response", response,
+          expected_response(iteration, payload));
     context.result.checksum =
         (context.result.checksum ^ response) * 0x0100'0193u;
     ++context.result.transactions;
@@ -598,7 +687,9 @@ void report(Context& context) {
         "probe_diag_deposits=%llu signal_edges=%llu force_release=%llu "
         "packed_view=%llu hier_data_reads=%llu hier_data_deposits=%llu "
         "timing_phases=%llu test_lifecycle=%llu dynamic_spawn=%llu "
-        "analysis_write=%llu analysis_delivery=%llu "
+        "analysis_write=%llu analysis_delivery=%llu random_stimulus=%llu "
+        "constrained_packet=%llu constraint_extensions=%llu "
+        "coverage_sampling=%llu apb_component=%llu "
         "wall_ms=%.3f\n",
         kernel_name(), context.iterations,
         static_cast<unsigned long long>(context.result.transactions),
@@ -645,6 +736,11 @@ void report(Context& context) {
         static_cast<unsigned long long>(feature.dynamic_spawn),
         static_cast<unsigned long long>(feature.analysis_write),
         static_cast<unsigned long long>(feature.analysis_delivery),
+        static_cast<unsigned long long>(feature.random_stimulus),
+        static_cast<unsigned long long>(feature.constrained_packet),
+        static_cast<unsigned long long>(feature.constraint_extensions),
+        static_cast<unsigned long long>(feature.coverage_sampling),
+        static_cast<unsigned long long>(feature.apb_component),
         static_cast<double>(elapsed_us) / 1000.0);
 }
 
@@ -978,6 +1074,86 @@ Task<void> run_timing_phases(Context context) {
     report(context);
 }
 
+template <MemoryMappedMaster Master>
+Task<void> run_apb_sequence(
+    Context context, Master& master,
+    AnalysisPort<typename Master::transaction_type>& expected, Event& done) {
+    using Transaction = typename Master::transaction_type;
+    using ByteEnable = typename Master::byte_enable_type;
+    const auto all_bytes = Master::all_bytes();
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const auto address = static_cast<typename Master::address_type>(
+            (iteration & 15u) * 4u);
+        const auto value =
+            static_cast<typename Master::data_type>(stimulus(iteration));
+
+        const auto write = co_await master.write(address, value, all_bytes);
+        check(context, "APB write status",
+              static_cast<uint32_t>(write.status),
+              static_cast<uint32_t>(MemoryStatus::Okay));
+        expected.write(Transaction{MemoryOperation::Write, address, value,
+                                   all_bytes, MemoryStatus::Okay, 0});
+        ++context.result.transactions;
+        ++context.result.features.apb_component;
+
+        const auto read = co_await master.read(address);
+        check(context, "APB read data", read.data, value);
+        check(context, "APB read status", static_cast<uint32_t>(read.status),
+              static_cast<uint32_t>(MemoryStatus::Okay));
+        expected.write(Transaction{MemoryOperation::Read, address, value,
+                                   all_bytes, MemoryStatus::Okay, 0});
+        ++context.result.transactions;
+        ++context.result.features.apb_component;
+        context.result.checksum =
+            (context.result.checksum ^ read.data) * 0x0100'0193u;
+    }
+    done.set();
+}
+
+Task<void> run_apb_component(Context context) {
+    context.dut.rst_n.set(0);
+    context.dut.apb_psel_i.set(0);
+    context.dut.apb_penable_i.set(0);
+    context.dut.apb_pwrite_i.set(0);
+    context.dut.apb_paddr_i.set(0);
+    context.dut.apb_pwdata_i.set(0);
+    context.dut.apb_pstrb_i.set(0);
+    for (uint32_t cycle = 0; cycle < 4; ++cycle) {
+        co_await RisingEdge{context.dut.clk};
+    }
+    context.dut.rst_n.set(1);
+
+    const auto bus = ApbBus{
+        context.dut.clk,          context.dut.apb_psel_i,
+        context.dut.apb_penable_i, context.dut.apb_pwrite_i,
+        context.dut.apb_paddr_i,   context.dut.apb_pwdata_i,
+        context.dut.apb_prdata_o,  context.dut.apb_pready_o,
+        context.dut.apb_pslverr_o, context.dut.apb_pstrb_i};
+    ApbMaster master{bus};
+    using Transaction = typename decltype(master)::transaction_type;
+    TestContext test{context.scheduler, context.result};
+    AnalysisPort<Transaction> expected;
+    AnalysisPort<Transaction> observed;
+    InOrderScoreboard<Transaction> scoreboard{test, "APB transaction"};
+    ApbMonitor monitor{bus};
+    ApbProtocolChecker checker{test, bus};
+    Event done;
+    auto expected_connection = expected.connect(scoreboard.expected());
+    auto actual_connection = observed.connect(scoreboard.actual());
+
+    co_await Join{
+        run_apb_sequence(context, master, expected, done),
+        monitor.run(observed, static_cast<std::size_t>(context.iterations) * 2u),
+        checker.run_until([&done] { return done.is_set(); })};
+
+    scoreboard.finalize();
+    check64(context, "APB scoreboard comparisons", scoreboard.compared(),
+            static_cast<uint64_t>(context.iterations) * 2u);
+    check64(context, "APB protocol violations", checker.violations(), 0);
+    report(context);
+}
+
 Task<void> run(Context context) {
     context.dut.rst_n.set(0);
     context.dut.req_valid.set(0);
@@ -1003,6 +1179,12 @@ Task<void> run(Context context) {
     context.dut.mem_addr_i.set(0);
     context.dut.mem_wdata_i.set(0);
     context.dut.mem_we_i.set(0);
+    context.dut.apb_psel_i.set(0);
+    context.dut.apb_penable_i.set(0);
+    context.dut.apb_pwrite_i.set(0);
+    context.dut.apb_paddr_i.set(0);
+    context.dut.apb_pwdata_i.set(0);
+    context.dut.apb_pstrb_i.set(0);
     for (uint32_t cycle = 0; cycle < 4; ++cycle) {
         co_await RisingEdge{context.dut.clk};
     }
@@ -1012,6 +1194,45 @@ Task<void> run(Context context) {
     Queue<uint32_t> queue;
     uint32_t previous_cycle_count = 0;
 
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_RANDOM_STIMULUS
+    TestContext random_test{context.scheduler, context.result};
+    auto& random = random_test.random();
+    constexpr std::array random_masks{
+        weighted(0x0000'0000u, 1), weighted(0x0101'0101u, 2),
+        weighted(0x1357'9bdfu, 3), weighted(0xa5a5'5a5au, 4)};
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CONSTRAINED_PACKET
+    TestContext constrained_test{context.scheduler, context.result};
+    PacketStimulus packet;
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CONSTRAINT_EXTENSIONS
+    TestContext extension_test{context.scheduler, context.result};
+    ExtendedPacketStimulus extended_packet;
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_COVERAGE_SAMPLING
+    Covergroup<CoverageTransaction> functional_coverage{"transactions"};
+    auto& opcode_coverage = functional_coverage.coverpoint(
+        "opcode", &CoverageTransaction::opcode);
+    opcode_coverage.bin("read", uint8_t{0})
+        .bin("write", uint8_t{1})
+        .bin("atomic", uint8_t{2})
+        .illegal_bin("reserved", uint8_t{3})
+        .transition_bin("read_to_write", uint8_t{0}, uint8_t{1});
+    auto& length_coverage = functional_coverage.coverpoint(
+        "length", &CoverageTransaction::length);
+    length_coverage.ignore_bin("empty", uint16_t{0})
+        .bin("short", uint16_t{1}, uint16_t{63})
+        .bin("medium", uint16_t{64}, uint16_t{511})
+        .bin("long", uint16_t{512}, uint16_t{1500})
+        .illegal_bin("oversize", uint16_t{1501}, uint16_t{1599});
+    functional_coverage.cross("opcode_x_length", opcode_coverage,
+                              length_coverage);
+    uint64_t expected_coverage_cross_hits = 0;
+#endif
+
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEM_PROBE_READ || \
     AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEM_PROBE_DEPOSIT || \
     AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEM_PROBE_READ_DEPOSIT
@@ -1020,6 +1241,46 @@ Task<void> run(Context context) {
 
     for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
         uint32_t payload = stimulus(iteration);
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_RANDOM_STIMULUS
+        payload = random.randint<uint32_t>(
+            0, std::numeric_limits<uint32_t>::max());
+        payload ^= random.weighted_choice(random_masks);
+        const auto wide_random = random.randbits<65>();
+        payload ^= wide_random.word(0) ^ wide_random.word(1);
+        if (wide_random.word(2) != 0) payload ^= 0x8000'0000u;
+        std::array<uint32_t, 4> order{0, 1, 2, 3};
+        random.shuffle(order);
+        payload ^= order[0] | (order[1] << 4) | (order[2] << 8) |
+                   (order[3] << 12);
+        ++context.result.features.random_stimulus;
+#endif
+
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CONSTRAINED_PACKET
+        constrained_test.randomize(packet);
+        payload = packet.payload();
+        ++context.result.features.constrained_packet;
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CONSTRAINT_EXTENSIONS
+        extension_test.randomize(extended_packet);
+        payload = extended_packet.payload();
+        ++context.result.features.constraint_extensions;
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_COVERAGE_SAMPLING
+        const auto coverage_opcode = static_cast<uint8_t>(iteration & 3u);
+        const auto coverage_length =
+            static_cast<uint16_t>((iteration * 37u) % 1600u);
+        static_cast<void>(functional_coverage.sample(
+            CoverageTransaction{coverage_opcode, coverage_length}));
+        if (coverage_opcode != 3u && coverage_length != 0u &&
+            coverage_length <= 1500u) {
+            ++expected_coverage_cross_hits;
+        }
+        ++context.result.features.coverage_sampling;
+#endif
 
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TASK_VALUE || \
     AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ALL
@@ -1146,6 +1407,31 @@ Task<void> run(Context context) {
 #endif
     }
 
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_COVERAGE_SAMPLING
+    const auto coverage = functional_coverage.snapshot();
+    uint64_t opcode_accounted = 0;
+    for (std::size_t index = 0; index < 4; ++index) {
+        opcode_accounted += coverage.points[0].bins[index].hits;
+    }
+    uint64_t length_accounted = 0;
+    for (std::size_t index = 0; index < 5; ++index) {
+        length_accounted += coverage.points[1].bins[index].hits;
+    }
+    uint64_t cross_hits = 0;
+    for (const auto& bin : coverage.crosses[0].bins) cross_hits += bin.hits;
+    check64(context, "coverage samples", coverage.samples,
+            context.iterations);
+    check64(context, "coverage opcode accounting", opcode_accounted,
+            context.iterations);
+    check64(context, "coverage length accounting", length_accounted,
+            context.iterations);
+    check64(context, "coverage transition hits",
+            coverage.points[0].bins[4].hits,
+            (static_cast<uint64_t>(context.iterations) + 2u) / 4u);
+    check64(context, "coverage cross hits", cross_hits,
+            expected_coverage_cross_hits);
+#endif
+
     co_await wait_for_response_count(context);
     check(context, "request count", context.dut.request_count.get(),
           context.iterations);
@@ -1193,6 +1479,9 @@ void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ANALYSIS_FANOUT
     scheduler.spawn_detached(
         run_analysis_fanout(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_APB_COMPONENT
+    scheduler.spawn_detached(
+        run_apb_component(Context{scheduler, dut, iterations, result}));
 #else
     scheduler.spawn_detached(run(Context{scheduler, dut, iterations, result}));
 #endif

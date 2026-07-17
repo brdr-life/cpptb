@@ -80,6 +80,8 @@ getting-started
 :caption: Guides
 
 testbench-authoring
+verification-components
+random-stimulus
 test-lifecycle
 running-tests
 hierarchy
@@ -126,9 +128,25 @@ examples/open-source-cores
 ```
 """
 
+_RANDOMIZATION_TOCTREE = """
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+randomization/examples
+randomization/value-generation
+randomization/constrained-transactions
+randomization/policies-and-composition
+randomization/solvers-and-diagnostics
+randomization/functional-coverage
+randomization/reproducibility
+```
+"""
+
 _NAVIGATION_TOCTREES = {
     "index": _ROOT_TOCTREE,
     "examples": _EXAMPLES_TOCTREE,
+    "random-stimulus": _RANDOMIZATION_TOCTREE,
 }
 
 

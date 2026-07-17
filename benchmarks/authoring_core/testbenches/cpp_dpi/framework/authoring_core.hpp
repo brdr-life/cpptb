@@ -5,10 +5,11 @@
 
 #include "benchmarks/authoring_core/testbenches/cpp_dpi/generated/authoring_core_dut.hpp"
 #include "cpptb/coro_runtime.hpp"
-#include "cpptb/components.hpp"
+#include "cpptb/coverage.hpp"
 #include "cpptb/fixed.hpp"
 #include "cpptb/test_api.hpp"
 #include "cpptb/test_result.hpp"
+#include "cpptb_vc/cpptb_vc.hpp"
 
 #define AUTHORING_CORE_KERNEL_CONTROL 0
 #define AUTHORING_CORE_KERNEL_TASK_VALUE 1
@@ -46,6 +47,11 @@
 #define AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SUSPENDING 33
 #define AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR 34
 #define AUTHORING_CORE_KERNEL_ANALYSIS_FANOUT 35
+#define AUTHORING_CORE_KERNEL_RANDOM_STIMULUS 36
+#define AUTHORING_CORE_KERNEL_CONSTRAINED_PACKET 37
+#define AUTHORING_CORE_KERNEL_CONSTRAINT_EXTENSIONS 38
+#define AUTHORING_CORE_KERNEL_COVERAGE_SAMPLING 39
+#define AUTHORING_CORE_KERNEL_APB_COMPONENT 40
 
 #ifndef AUTHORING_CORE_KERNEL
 #define AUTHORING_CORE_KERNEL AUTHORING_CORE_KERNEL_CONTROL
@@ -93,6 +99,11 @@ struct FeatureCounts {
     uint64_t dynamic_spawn = 0;
     uint64_t analysis_write = 0;
     uint64_t analysis_delivery = 0;
+    uint64_t random_stimulus = 0;
+    uint64_t constrained_packet = 0;
+    uint64_t constraint_extensions = 0;
+    uint64_t coverage_sampling = 0;
+    uint64_t apb_component = 0;
 };
 
 struct BenchResult : cpptb::TestResult {
@@ -176,6 +187,16 @@ constexpr const char* kernel_name() {
     return "dynamic_monitor";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ANALYSIS_FANOUT
     return "analysis_fanout";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_RANDOM_STIMULUS
+    return "random_stimulus";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CONSTRAINED_PACKET
+    return "constrained_packet";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_CONSTRAINT_EXTENSIONS
+    return "constraint_extensions";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_COVERAGE_SAMPLING
+    return "coverage_sampling";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_APB_COMPONENT
+    return "apb_component";
 #else
 #error "Unknown AUTHORING_CORE_KERNEL"
 #endif
