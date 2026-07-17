@@ -36,6 +36,8 @@ The suite covers:
 - sticky, reusable `Event` state, FIFO wakeup, and cancelled-waiter cleanup;
 - unbounded `Queue<T>` item/waiter FIFO behavior, producer/consumer ordering,
   and cancellation without item loss;
+- typed put/get endpoints, zero-time analysis fan-out, disconnectable
+  subscribers, and explicit buffered-analysis overflow;
 - rejection of writes to DUT outputs.
 
 An edge resumes at the edge's timestamp. A subsequent `Delay{1_ps}` advances
@@ -170,7 +172,7 @@ Run the configured backend:
 make cpptb-conformance-run
 ```
 
-The main exact positive result contract is 275 checks, eight primary
+The main exact positive result contract is 292 checks, eight primary
 generated-clock cycles, and zero failures. Four isolated timer-dispatch
 contracts additionally freeze R1 at 12 checks/two cycles, R2 at 11 checks/one
 cycle, chained earlier deadlines at 12 checks/three cycles, and idle rearm at

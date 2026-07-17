@@ -41,6 +41,7 @@ KERNELS = (
     "dynamic_spawn_scheduler",
     "dynamic_spawn_suspending",
     "dynamic_monitor",
+    "analysis_fanout",
 )
 
 FEATURE_FIELDS = (
@@ -81,6 +82,8 @@ FEATURE_FIELDS = (
     "timing_phases",
     "test_lifecycle",
     "dynamic_spawn",
+    "analysis_write",
+    "analysis_delivery",
 )
 
 RESULT_FIELDS = (
@@ -140,6 +143,8 @@ class ExpectedCounts:
     timing_phases: int = 0
     test_lifecycle: int = 0
     dynamic_spawn: int = 0
+    analysis_write: int = 0
+    analysis_delivery: int = 0
 
     def fields(self) -> dict[str, int]:
         return asdict(self)
@@ -325,6 +330,18 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             spawned_processes=2,
             queue_put=iterations,
             queue_get=iterations,
+        )
+
+    if kernel == "analysis_fanout":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 6,
+            spawned_processes=1,
+            queue_put=iterations,
+            queue_get=iterations,
+            analysis_write=2 * iterations,
+            analysis_delivery=3 * iterations,
         )
 
     return ExpectedCounts(

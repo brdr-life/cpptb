@@ -258,6 +258,27 @@ make feature-test FEATURE=queue_sync
 make feature-benchmark FEATURE=queue_sync
 ```
 
+## Transaction analysis fan-out
+
+The `analysis_fanout` pair measures the first reusable component slice without
+mixing in repeated process creation. For every one of 100,000 DUT responses,
+the test publishes one expected transaction, then publishes the observed
+transaction to both an in-order scoreboard and a capacity-eight audit buffer.
+A single persistent monitor performs the DUT sampling in both implementations.
+
+The C++ and pure-SV forms match `200,000` analysis writes, `300,000`
+deliveries, `100,000` transactions, `100,006` checks, one spawned process,
+and the final checksum. The valid July 16, 2026 run passed at `0.712x` C++ DPI
+over pure SV, with `0.719x` DPI-first, `0.707x` SV-first, `0.716x`
+independent, and `0.54%` paired/independent disagreement. These values are
+machine-specific; the registry enforces the same `1.10x` hard guard as other
+framework features.
+
+```sh
+make feature-test FEATURE=analysis_fanout
+make feature-benchmark FEATURE=analysis_fanout
+```
+
 ## Timing-phase dispatch
 
 The exact `timing_phases` pair performs one falling-edge wait, one

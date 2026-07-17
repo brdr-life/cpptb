@@ -11,6 +11,7 @@ of the way.
 | [Counter](examples/counter.md) | A small, single-clock DUT | Complete testbench |
 | [Clockless timers](examples/timer-only.md) | Combinational or clockless models | Complete testbench |
 | [FIFO scoreboard](examples/fifo-scoreboard.md) | Streaming drivers, monitors, and scoreboards | Key processes and composition |
+| [Component FIFO](examples/component-fifo.md) | Reusable transaction endpoints and analysis fan-out | Complete component composition |
 | [Multiple clocks](examples/multiclock.md) | Independent clock domains | Producer, consumer, and trigger probe |
 | [APB register file](examples/apb-regfile.md) | Reusable protocol transactions | Bus-functional methods and sequence |
 | [Watchdogs and timeouts](examples/watchdog-timeout.md) | Operations that may stall or need cancellation | Transaction, timeout, and process lifecycle |

@@ -22,6 +22,7 @@ nav = [
       { "Counter" = "examples/counter.md" },
       { "Clockless timers" = "examples/timer-only.md" },
       { "FIFO scoreboard" = "examples/fifo-scoreboard.md" },
+      { "Component FIFO" = "examples/component-fifo.md" },
       { "Multiple clocks" = "examples/multiclock.md" },
       { "APB register file" = "examples/apb-regfile.md" },
       { "Watchdogs and timeouts" = "examples/watchdog-timeout.md" },

@@ -39,9 +39,9 @@ milestone blockers. The current development priority is the framework.
 | # | Milestone | Status | Outcome |
 |---:|---|---|---|
 | - | [Foundation](#foundation) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Typed DUT access, timing, concurrency, hierarchy, data types, and simulator backends |
-| 1 | [Framework test lifecycle and structured results](#1-framework-test-lifecycle-and-structured-results) | <span class="roadmap-status roadmap-status--next">In progress</span> | Owned test processes, terminal states, checks, and harness-neutral diagnostics |
+| 1 | [Framework test lifecycle and structured results](#1-framework-test-lifecycle-and-structured-results) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Owned test processes, terminal states, checks, and harness-neutral diagnostics |
 | 2 | [Bounded queues and synchronization](#2-bounded-queues-and-synchronization) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Bounded FIFO communication, locks, semaphores, and cancellation-safe handoff |
-| 3 | [Reusable verification components](#3-reusable-verification-components) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Typed endpoints, drivers, monitors, scoreboards, and analysis fan-out |
+| 3 | [Reusable verification components](#3-reusable-verification-components) | <span class="roadmap-status roadmap-status--next">In progress</span> | Typed endpoints, drivers, monitors, scoreboards, and analysis fan-out |
 | 4 | [Random stimulus and functional coverage](#4-reproducible-random-stimulus-and-functional-coverage) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Reproducible random streams and mergeable functional coverage |
 | 5 | [Register abstraction](#5-register-abstraction) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Typed register models with explicit frontdoor and backdoor adapters |
 | 6 | [Interfaces and simulator portability](#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Interfaces, resolved signals, four-state values, and another simulator |
@@ -52,7 +52,7 @@ Select a milestone to jump to its detailed scope below.
 
 ## Foundation
 
-**Status:** <span class="roadmap-status roadmap-status--next">In progress</span>
+**Status:** <strong class="roadmap-status roadmap-status--done">Done</strong>
 
 The simulator timing model is implemented. `ReadWrite{}`, `ReadOnly{}`, and
 `NextTimeStep{}` are backed by the direct Verilator timing backend and the
@@ -87,10 +87,11 @@ The framework lifecycle milestone includes:
 - an exact C++/pure-SV `test_lifecycle` performance pair under the standard
   `1.10x` hard guard.
 
-The API and semantic coverage are implemented. Final qualification is blocked
-on the performance guard for the process-provenance workload; the benchmark
-must distinguish long-lived verification processes from repeated dynamic
-process creation before this milestone is marked done.
+The API, semantic coverage, and performance qualification are implemented.
+The benchmark suite distinguishes persistent verification processes from
+repeated dynamic process creation. The realistic persistent-monitor workload
+passes the standard hard guard; repeated zero-time child creation remains a
+separately documented scheduler cost rather than a lifecycle blocker.
 
 See [Framework test lifecycle](test-lifecycle.md) for the API, terminal-state
 rules, metadata model, and formatter extension point. Diagnostic strings are
@@ -125,26 +126,32 @@ multi-process example demonstrates semantics that are not already covered by
 
 ## 3. Reusable verification components
 
-**Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>
+**Status:** <span class="roadmap-status roadmap-status--next">In progress</span>
 
-Provide lightweight, typed patterns for transaction-level reuse:
+The first lightweight transaction-component slice is implemented:
 
 - `PutPort<T>` producer endpoints and `GetPort<T>` consumer endpoints;
 - connectable queue-backed implementations without requiring components to
   depend on a concrete `Queue<T>`;
 - `AnalysisPort<T>` for nonblocking fan-out from a passive monitor to multiple
   subscribers, plus an explicit queue adapter for subscribers that need
-  buffering or backpressure;
-- transaction producers and consumers;
-- drivers that translate transactions into explicit pin activity;
-- passive monitors that publish observed transactions;
-- reference models and scoreboards; and
-- active or passive protocol components.
+  asynchronous consumption;
+- `InOrderScoreboard<T>` for immediate transaction pairing and structured
+  nonfatal mismatch reporting; and
+- ready/valid driver and monitor helpers with explicit sample edge and delay.
 
-These should be ordinary C++ objects and coroutines, not a second scheduler or
-a mandatory component hierarchy. Start with ready/valid and APB components,
-then add AXI-Lite, streaming, UART, or SPI only when backed by complete runnable
-examples.
+The runnable [component FIFO example](examples/component-fifo.md) composes
+these pieces without replacing the lower-level `fifo_scoreboard` example. An
+exact `analysis_fanout` C++/pure-SV benchmark covers every publication and
+delivery and remains below the repository's `1.10x` performance guard.
+
+Remaining scope includes transaction producers and consumers, reference-model
+adapters, and reusable active or passive protocol components. Start with APB,
+then add AXI-Lite, streaming, UART, or SPI only when backed by complete
+runnable examples.
+
+These remain ordinary C++ objects and coroutines, not a second scheduler or a
+mandatory component hierarchy.
 
 The endpoint layer should separate connectivity from storage in the useful
 part of the UVM TLM model. A producer calls a put interface, a consumer calls a

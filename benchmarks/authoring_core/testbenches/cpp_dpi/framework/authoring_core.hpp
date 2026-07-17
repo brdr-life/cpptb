@@ -5,6 +5,7 @@
 
 #include "benchmarks/authoring_core/testbenches/cpp_dpi/generated/authoring_core_dut.hpp"
 #include "cpptb/coro_runtime.hpp"
+#include "cpptb/components.hpp"
 #include "cpptb/fixed.hpp"
 #include "cpptb/test_api.hpp"
 #include "cpptb/test_result.hpp"
@@ -44,6 +45,7 @@
 #define AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SCHEDULER 32
 #define AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SUSPENDING 33
 #define AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR 34
+#define AUTHORING_CORE_KERNEL_ANALYSIS_FANOUT 35
 
 #ifndef AUTHORING_CORE_KERNEL
 #define AUTHORING_CORE_KERNEL AUTHORING_CORE_KERNEL_CONTROL
@@ -89,6 +91,8 @@ struct FeatureCounts {
     uint64_t timing_phases = 0;
     uint64_t test_lifecycle = 0;
     uint64_t dynamic_spawn = 0;
+    uint64_t analysis_write = 0;
+    uint64_t analysis_delivery = 0;
 };
 
 struct BenchResult : cpptb::TestResult {
@@ -170,6 +174,8 @@ constexpr const char* kernel_name() {
     return "dynamic_spawn_suspending";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR
     return "dynamic_monitor";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ANALYSIS_FANOUT
+    return "analysis_fanout";
 #else
 #error "Unknown AUTHORING_CORE_KERNEL"
 #endif

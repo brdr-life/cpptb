@@ -28,9 +28,9 @@ CPPTB_REGISTER_TEST(count_sequence);
 
 | Milestone | Status |
 |---|---|
-| [Framework test lifecycle and structured results](roadmap.md#1-framework-test-lifecycle-and-structured-results) | <span class="roadmap-status roadmap-status--next">In progress</span> |
+| [Framework test lifecycle and structured results](roadmap.md#1-framework-test-lifecycle-and-structured-results) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
 | [Bounded queues and synchronization](roadmap.md#2-bounded-queues-and-synchronization) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
-| [Reusable verification components](roadmap.md#3-reusable-verification-components) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
+| [Reusable verification components](roadmap.md#3-reusable-verification-components) | <span class="roadmap-status roadmap-status--next">In progress</span> |
 | [Random stimulus and functional coverage](roadmap.md#4-reproducible-random-stimulus-and-functional-coverage) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Register abstraction](roadmap.md#5-register-abstraction) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Interfaces and simulator portability](roadmap.md#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
@@ -75,10 +75,11 @@ delivery process behind each milestone.
 
 The current implementation supports concurrent processes, edge and delay
 triggers, typed tasks, timeouts, events, bounded queues, locks, semaphores,
-wide packed and fixed-point values, multidimensional arrays, and
-source-inferred hierarchical access. Compiled test catalogs, one-test-per-run
-selection, test-owned process cleanup, fatal and nonfatal checks, and JSON
-results are also supported.
+typed transaction endpoints, analysis fan-out, an in-order scoreboard,
+ready/valid components, wide packed and fixed-point values, multidimensional
+arrays, and source-inferred hierarchical access. Compiled test catalogs,
+one-test-per-run selection, test-owned process cleanup, fatal and nonfatal
+checks, and JSON results are also supported.
 Verilator is the end-to-end reference simulator. Direct Verilator timing
 dispatch and the standard VPI fallback implement the complete scheduling
 contract; the faster generated SV-DPI calendar remains experimental. Broader

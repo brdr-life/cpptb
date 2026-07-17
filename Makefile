@@ -9,6 +9,7 @@ CPPTB_OBJ_DIR := $(CPPTB_BUILD_DIR)/obj
 CPPTB_CORO_RUNTIME_TEST := $(CPPTB_BUILD_DIR)/coro_runtime_test
 CPPTB_PACKED_VALUE_TEST := $(CPPTB_BUILD_DIR)/packed_value_test
 CPPTB_TEST_API_TEST := $(CPPTB_BUILD_DIR)/test_api_test
+CPPTB_COMPONENTS_TEST := $(CPPTB_BUILD_DIR)/components_test
 CPPTB_HIERARCHY_TEST := $(CPPTB_BUILD_DIR)/hierarchy_test
 CPPTB_APB_EVENT_OBJ_DIR := $(CPPTB_BUILD_DIR)/apb_event_obj
 CPPTB_CONFORMANCE_DIR := tests/conformance/runtime
@@ -50,7 +51,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor analysis_fanout
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
 AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
@@ -255,12 +256,13 @@ CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-counter-suite-test
 $(eval $(call CPPTB_EXAMPLE_template,multiclock,MULTICLOCK,multiclock,dual_clock_mailbox,dpi_dual_clock_mailbox,dual_clock_mailbox_sv_tb,multiclock_test))
 $(eval $(call CPPTB_EXAMPLE_template,timer-only,TIMER_ONLY,timer_only,timer_only_probe,dpi_timer_only_probe,timer_only_probe_sv_tb,timer_only_test))
 $(eval $(call CPPTB_EXAMPLE_template,fifo-scoreboard,FIFO_SCOREBOARD,fifo_scoreboard,stream_fifo,dpi_stream_fifo,stream_fifo_sv_tb,fifo_test))
+$(eval $(call CPPTB_EXAMPLE_template,component-fifo,COMPONENT_FIFO,component_fifo,component_fifo,dpi_component_fifo,component_fifo_sv_tb,component_fifo_test))
 $(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb,register_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_timeout,stalling_responder,dpi_stalling_responder,stalling_responder_sv_tb,watchdog_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb,fault_injection_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb,rich_data_sequence))
 
-.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test cpptb-components-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -281,7 +283,7 @@ all: test
 test: unit-test python-test codegen-test conformance-test examples-test registry-check
 
 unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-test-api-test \
-	cpptb-hierarchy-test
+	cpptb-components-test cpptb-hierarchy-test
 
 python-test:
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/tests
@@ -430,6 +432,18 @@ $(CPPTB_TEST_API_TEST): include/cpptb/coro_runtime.hpp \
 
 cpptb-test-api-test: $(CPPTB_TEST_API_TEST)
 	$(CPPTB_TEST_API_TEST)
+
+$(CPPTB_COMPONENTS_TEST): include/cpptb/components.hpp \
+		include/cpptb/coro_runtime.hpp include/cpptb/test_api.hpp \
+		include/cpptb/test_result.hpp tests/unit/components_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -Iinclude -I. \
+		-I$(VERILATOR_ROOT)/include \
+		-I$(VERILATOR_ROOT)/include/vltstd \
+		tests/unit/components_test.cpp -o $@
+
+cpptb-components-test: $(CPPTB_COMPONENTS_TEST)
+	$(CPPTB_COMPONENTS_TEST)
 
 $(CPPTB_HIERARCHY_TEST): include/cpptb/hierarchy.hpp include/cpptb/probe.hpp \
 		include/cpptb/packed_bits.hpp tests/unit/hierarchy_test.cpp
@@ -752,6 +766,7 @@ $(eval $(call AUTHORING_CORE_DPI_template,dynamic_task,31))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn_scheduler,32))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn_suspending,33))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_monitor,34))
+$(eval $(call AUTHORING_CORE_DPI_template,analysis_fanout,35))
 
 define AUTHORING_CORE_SV_DPI_TIMING_template
 $(2)/Vdpi_authoring_core: $(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \

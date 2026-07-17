@@ -146,7 +146,7 @@
   },
   "conformance": {
     "expected_iterations": 1,
-    "expected_checks": 275,
+    "expected_checks": 292,
     "expected_sim_cycles": 8,
     "expected_failures": 0,
     "positive_cases": [
