@@ -90,11 +90,19 @@ class RegistryTests(unittest.TestCase):
             ),
             ("force_direct",),
         )
+        self.assertEqual(
+            tuple(
+                entry.name
+                for entry in authoring
+                if entry.gate_policy is registry.GatePolicy.DIAGNOSTIC
+            ),
+            ("dynamic_task",),
+        )
         self.assertTrue(
             all(
                 entry.gate_policy is registry.GatePolicy.HARD_1_10
                 for entry in authoring
-                if entry.name != "force_direct"
+                if entry.name not in {"force_direct", "dynamic_task"}
             )
         )
         self.assertEqual(
@@ -112,6 +120,10 @@ class RegistryTests(unittest.TestCase):
                     registry.get_benchmark(name).default_iterations,
                     5_000_000,
                 )
+        self.assertEqual(
+            registry.get_benchmark("dynamic_monitor").default_iterations,
+            100_000,
+        )
         waiver = registry.get_benchmark("force_direct").waiver
         self.assertIsNotNone(waiver)
         self.assertGreater(waiver.max_ratio, 1.10)

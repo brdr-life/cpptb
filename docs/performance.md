@@ -49,7 +49,7 @@ loop; there is no per-check scheduler or DPI crossing.
 The valid July 16, 2026 serial run passed at `0.983x` C++ DPI over pure SV,
 with `0.976x` DPI-first, `1.021x` SV-first, `0.985x` independent, and `0.13%`
 paired/independent disagreement. This is a machine-specific measurement; the
-registry enforces the same `1.10x` hard guard as other non-waived features.
+registry enforces the `1.10x` hard guard for this feature.
 
 ```sh
 make feature-test FEATURE=test_lifecycle
@@ -63,7 +63,7 @@ test lifecycle tracking, and real suspension. Each immediate-process pair runs
 5,000,000 iterations; the suspending pair runs two communicating processes
 with an event handshake. The pure-SV process twins use `fork ... join`.
 
-| Pair | C++ DPI | Pure SV | C++ / SV |
+| Pair | C++ DPI median | Pure SV median | Paired C++ / SV |
 | --- | ---: | ---: | ---: |
 | Direct coroutine task | 23.03 ns | 3.26 ns | `7.052x` |
 | Core scheduler process | 43.88 ns | 40.88 ns | **`1.080x`** |
@@ -73,7 +73,8 @@ with an event handshake. The pure-SV process twins use `fork ... join`.
 These are machine-specific July 16, 2026 serial measurements. The direct-task
 ratio is intentionally harsh: Verilator inlines the zero-time SV task to about
 3 ns, while C++ still constructs and destroys a coroutine frame. Its absolute
-delta is more useful than its ratio.
+delta is more useful than its ratio. The two time columns are independent
+per-mode medians; the ratio column is the median of adjacent paired ratios.
 
 The core scheduler is within the `1.10x` guard. The remaining immediate-spawn
 gap is lifecycle ownership, process provenance, exactly-once finalization, and
@@ -89,6 +90,123 @@ path and were removed. A lazy scheduler-adoption path was not retained because
 the decomposition showed that core scheduler adoption is already within the
 guard; it would optimize the wrong layer. The lifecycle-tracked zero-time case
 remains above the hard guard as an explicit performance issue.
+
+`dynamic_task` is a diagnostic control rather than a framework gate. Verilator
+can inline its zero-time SV task while C++ must still construct a coroutine, so
+the ratio describes a compiler optimization mismatch rather than spawned
+process overhead.
+
+The `dynamic_monitor` pair covers the common verification shape that the
+microbenchmarks omit. Two long-lived lifecycle-owned processes observe every
+`rsp_valid` edge, one transfers response values through a capacity-eight
+`Queue`, foreground stimulus drives 100,000 DUT requests, and teardown cancels
+both observers. The pure-SV twin uses the same edge waits, a bounded mailbox,
+`fork...join_none`, and `disable`.
+
+Both forms reported two spawned processes, 100,000 queue puts and gets,
+100,000 transactions, 100,003 checks, 500,003 cycles, and the same checksum.
+The final valid July 16, 2026 run passed at **`0.744x`** C++ DPI over pure SV,
+with `0.742x` DPI-first, `0.748x` SV-first, `0.742x` independent, and `0.29%`
+paired/independent disagreement. Median process time was 2.85 us per
+transaction for C++ DPI and 3.85 us for pure SV on this machine.
+
+The tabs below show the authored process bodies from the complete runnable
+benchmark pair. Common DUT reset, deterministic stimulus helpers, final DUT
+count checks, and result reporting are omitted from the excerpts. The commands
+below build and execute the complete C++ DPI and pure-SV sources.
+
+<div class="cpptb-code-tabs" data-tabs="2" data-tab-group="simulator" data-tab-label="Persistent monitor benchmark implementation"></div>
+
+<div class="cpptb-code-tab-label">cpptb (C++ DPI)</div>
+
+```cpp
+Task<void> response_monitor(Context context, Queue<uint32_t>& observed) {
+    while (true) {
+        co_await RisingEdge{context.dut.rsp_valid};
+        co_await Delay{1_ps};
+        co_await observed.put(context.dut.rsp_data.get());
+        ++context.result.features.queue_put;
+    }
+}
+
+Task<void> response_edge_watcher(Context context, uint64_t& response_edges) {
+    while (true) {
+        co_await RisingEdge{context.dut.rsp_valid};
+        ++response_edges;
+    }
+}
+
+Task<void> run_dynamic_monitor(Context context) {
+    TestContext test{context.scheduler, context.result};
+    Queue<uint32_t> observed{8};
+    uint64_t response_edges = 0;
+    context.result.spawned_processes += 2;
+    auto monitor = test.spawn(response_monitor(context, observed));
+    auto watcher = test.spawn(response_edge_watcher(context, response_edges));
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        co_await drive_request(context, stimulus(iteration));
+        const uint32_t response = co_await observed.get();
+        ++context.result.features.queue_get;
+        check(context, "monitored response", response,
+              expected_response(iteration));
+        context.result.checksum =
+            (context.result.checksum ^ response) * 0x0100'0193u;
+        ++context.result.transactions;
+    }
+
+    monitor.cancel();
+    watcher.cancel();
+    co_await monitor;
+    co_await watcher;
+    check64(context, "observed response edges", response_edges,
+            context.iterations);
+}
+```
+
+<div class="cpptb-code-tab-label">Pure SystemVerilog</div>
+
+```systemverilog
+task automatic dynamic_response_monitor();
+  logic [31:0] response;
+  forever begin
+    @(posedge rsp_valid);
+    #1ps;
+    response = rsp_data;
+    dynamic_monitor_queue.put(response);
+    queue_put_count++;
+  end
+endtask
+
+task automatic dynamic_response_watcher();
+  forever begin
+    @(posedge rsp_valid);
+    dynamic_monitor_edges++;
+  end
+endtask
+
+task automatic run_dynamic_monitor();
+  logic [31:0] response;
+  dynamic_monitor_queue = new(8);
+  spawned_processes += 2;
+  fork : dynamic_monitor_processes
+    dynamic_response_monitor();
+    dynamic_response_watcher();
+  join_none
+
+  for (int unsigned i = 0; i < iterations; i++) begin
+    drive_request(stimulus(i));
+    dynamic_monitor_queue.get(response);
+    queue_get_count++;
+    check32(response, expected_response(i), "monitored response");
+    checksum = (checksum ^ response) * 32'h0100_0193;
+    transactions++;
+  end
+
+  disable dynamic_monitor_processes;
+  check64(dynamic_monitor_edges, iterations, "observed response edges");
+endtask
+```
 
 Use `spawn()` for actual concurrent work, cancellation, or an independently
 attributed process. For sequential helper composition, await the task directly:
@@ -109,6 +227,8 @@ make feature-test FEATURE=dynamic_spawn
 make feature-benchmark FEATURE=dynamic_spawn
 make feature-test FEATURE=dynamic_spawn_suspending
 make feature-benchmark FEATURE=dynamic_spawn_suspending
+make feature-test FEATURE=dynamic_monitor
+make feature-benchmark FEATURE=dynamic_monitor
 ```
 
 ## Bounded queue and synchronization

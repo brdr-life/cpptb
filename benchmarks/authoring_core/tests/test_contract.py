@@ -128,6 +128,10 @@ class ContractTests(unittest.TestCase):
             "$(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn,30))",
             makefile,
         )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,dynamic_monitor,34))",
+            makefile,
+        )
         self.assertIn("AUTHORING_CORE_OPT_FAST ?= -O3", makefile)
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)"'),
@@ -258,6 +262,7 @@ class ContractTests(unittest.TestCase):
         counts = workload.expected_counts("test_lifecycle", 5)
         self.assertEqual(counts.transactions, 0)
         self.assertEqual(counts.checks, 15)
+        self.assertEqual(counts.spawned_processes, 1)
         self.assertEqual(counts.test_lifecycle, 5)
         self.assertEqual(
             [
@@ -295,6 +300,12 @@ class ContractTests(unittest.TestCase):
                 self.assertEqual(counts.transactions, 0)
                 self.assertEqual(counts.checks, 5)
                 self.assertEqual(counts.dynamic_spawn, 5)
+                expected_processes = 5
+                if kernel == "dynamic_task":
+                    expected_processes = 0
+                elif kernel == "dynamic_spawn_suspending":
+                    expected_processes = 10
+                self.assertEqual(counts.spawned_processes, expected_processes)
                 self.assertEqual(
                     [
                         field
@@ -326,6 +337,30 @@ class ContractTests(unittest.TestCase):
         self.assertIn("task automatic run_dynamic_spawn_suspending();", sv)
         self.assertIn("dynamic_suspending_child(value, i);", sv)
         self.assertIn("dynamic_suspending_release();", sv)
+
+    def test_dynamic_monitor_has_exact_systemverilog_twin(self):
+        counts = workload.expected_counts("dynamic_monitor", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 8)
+        self.assertEqual(counts.spawned_processes, 2)
+        self.assertEqual(counts.queue_put, 5)
+        self.assertEqual(counts.queue_get, 5)
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("test.spawn(response_monitor", cpp)
+        self.assertIn("test.spawn(response_edge_watcher", cpp)
+        self.assertIn("Queue<uint32_t> observed{8};", cpp)
+        self.assertIn("monitor.cancel();", cpp)
+        self.assertIn("watcher.cancel();", cpp)
+        self.assertIn("dynamic_monitor_queue = new(8);", sv)
+        self.assertIn("fork : dynamic_monitor_processes", sv)
+        self.assertIn("disable dynamic_monitor_processes;", sv)
+        self.assertIn('"dynamic_monitor": run_dynamic_monitor();', sv)
 
     def test_probe_kernels_have_exact_isolated_counts(self):
         for kernel, enabled_fields in (
@@ -539,7 +574,7 @@ class ContractTests(unittest.TestCase):
         source = (
             BENCH_DIR / "testbenches/systemverilog/force_direct_sv_tb.sv"
         ).read_text(encoding="utf-8")
-        for field in workload.FEATURE_FIELDS:
+        for field in workload.RESULT_FIELDS:
             self.assertIn(f"{field}=", source)
 
     def test_expected_checksum_is_stable(self):
