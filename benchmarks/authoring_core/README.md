@@ -76,6 +76,7 @@ feature.
 | `dynamic_spawn` | `dynamic_spawn=N`, `spawned_processes=N`, zero transactions and cycles | `N` |
 | `dynamic_spawn_suspending` | `dynamic_spawn=N`, `spawned_processes=2N`, zero transactions and cycles | `N` |
 | `dynamic_monitor` | `queue_put=N`, `queue_get=N`, `spawned_processes=2`, `transactions=N` | `N + 3` |
+| `analysis_fanout` | `analysis_write=2N`, `analysis_delivery=3N`, `spawned_processes=1`, `transactions=N` | `N + 6` |
 | `all` | all aggregate usage counts enabled, both timeout-hit counts `floor(N/2)` | `28N + 2` |
 
 ## Semantic mapping
@@ -105,6 +106,7 @@ feature.
 | lifecycle-tracked `TestContext::spawn()` | the same one-child `fork ... join` plus framework ownership on the C++ side |
 | two event-suspending processes | two forked SV tasks with the same event handshake |
 | two long-lived response observers, bounded `Queue`, and cancellation | named `fork...join_none`, bounded mailbox handoff, and `disable` after the same DUT traffic |
+| synchronous `AnalysisPort` fan-out to a scoreboard and bounded audit buffer | direct expected/actual queues plus a bounded mailbox audit subscriber |
 
 The `signal_edge`, `array_multidim`, `force_release`, `packed_view`, and
 `force_direct` kernels are intentionally isolated and are not included in
@@ -133,6 +135,12 @@ control; it is not a framework performance gate. `dynamic_monitor` is the
 realistic companion workload: two persistent observers exchange every DUT
 response through a bounded queue and are cancelled after 100,000 foreground
 transactions.
+
+`analysis_fanout` publishes one expected and one observed transaction per DUT
+response. The observed stream reaches both an in-order scoreboard and a
+bounded audit buffer synchronously; one persistent monitor process drains the
+DUT response. The pure-SV twin performs the same three deliveries, buffer
+operation, checks, transaction count, and checksum.
 
 `spawned_processes` counts explicit independently scheduled process operations
 authored by these lifecycle and dynamic-process kernels. It does not count the

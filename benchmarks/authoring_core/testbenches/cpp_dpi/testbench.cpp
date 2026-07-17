@@ -572,6 +572,14 @@ void report(Context& context) {
     const auto elapsed_us =
         std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
     const auto& feature = context.result.features;
+    for (std::size_t index = 0;
+         index < context.result.failure_records.size() && index < 8; ++index) {
+        const auto& failure = context.result.failure_records[index];
+        std::printf("AUTHORING_CORE_MISMATCH mode=cpp_dpi kernel=%s "
+                    "label=%s actual=%s expected=%s\n",
+                    kernel_name(), failure.label.c_str(),
+                    failure.actual.c_str(), failure.expected.c_str());
+    }
     std::printf(
         "AUTHORING_CORE_RESULT mode=cpp_dpi kernel=%s iterations=%u "
         "transactions=%llu checks=%llu sim_cycles=%llu spawned_processes=%llu "
@@ -590,6 +598,7 @@ void report(Context& context) {
         "probe_diag_deposits=%llu signal_edges=%llu force_release=%llu "
         "packed_view=%llu hier_data_reads=%llu hier_data_deposits=%llu "
         "timing_phases=%llu test_lifecycle=%llu dynamic_spawn=%llu "
+        "analysis_write=%llu analysis_delivery=%llu "
         "wall_ms=%.3f\n",
         kernel_name(), context.iterations,
         static_cast<unsigned long long>(context.result.transactions),
@@ -634,6 +643,8 @@ void report(Context& context) {
         static_cast<unsigned long long>(feature.timing_phases),
         static_cast<unsigned long long>(feature.test_lifecycle),
         static_cast<unsigned long long>(feature.dynamic_spawn),
+        static_cast<unsigned long long>(feature.analysis_write),
+        static_cast<unsigned long long>(feature.analysis_delivery),
         static_cast<double>(elapsed_us) / 1000.0);
 }
 
@@ -802,6 +813,64 @@ Task<void> run_dynamic_monitor(Context context) {
     co_await wait_for_response_count(context);
     check64(context, "observed response edges", response_edges,
             context.iterations);
+    check(context, "request count", context.dut.request_count.get(),
+          context.iterations);
+    check(context, "response count", context.dut.response_count.get(),
+          context.iterations);
+    report(context);
+}
+
+Task<void> analysis_response_monitor(Context context,
+                                     AnalysisPort<uint32_t>& observed) {
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        co_await RisingEdge{context.dut.rsp_valid};
+        co_await Delay{1_ps};
+        observed.write(context.dut.rsp_data.get());
+        ++context.result.features.analysis_write;
+        context.result.features.analysis_delivery += 2;
+        ++context.result.features.queue_put;
+    }
+}
+
+Task<void> run_analysis_fanout(Context context) {
+    context.dut.rst_n.set(0);
+    context.dut.req_valid.set(0);
+    context.dut.req_data.set(0);
+    context.dut.rsp_ready.set(1);
+    for (uint32_t cycle = 0; cycle < 4; ++cycle) {
+        co_await RisingEdge{context.dut.clk};
+    }
+    context.dut.rst_n.set(1);
+
+    TestContext test{context.scheduler, context.result};
+    AnalysisPort<uint32_t> expected;
+    AnalysisPort<uint32_t> observed;
+    InOrderScoreboard<uint32_t> scoreboard{test, "analysis response"};
+    AnalysisBuffer<uint32_t> buffer{8, AnalysisOverflowPolicy::DropNewest};
+    auto expected_connection = expected.connect(scoreboard.expected());
+    auto actual_connection = observed.connect(scoreboard.actual());
+    auto buffer_connection = observed.connect(buffer);
+    ++context.result.spawned_processes;
+    auto monitor =
+        test.spawn(analysis_response_monitor(context, observed));
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        expected.write(expected_response(iteration));
+        ++context.result.features.analysis_write;
+        ++context.result.features.analysis_delivery;
+        co_await drive_request(context, stimulus(iteration));
+        const uint32_t response = co_await buffer.get();
+        ++context.result.features.queue_get;
+        context.result.checksum =
+            (context.result.checksum ^ response) * 0x0100'0193u;
+        ++context.result.transactions;
+    }
+
+    co_await monitor;
+    scoreboard.finalize();
+    check64(context, "analysis buffer drops", buffer.dropped(), 0);
+    check(context, "analysis buffer empty", buffer.empty(), 1);
+    co_await wait_for_response_count(context);
     check(context, "request count", context.dut.request_count.get(),
           context.iterations);
     check(context, "response count", context.dut.response_count.get(),
@@ -1121,6 +1190,9 @@ void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR
     scheduler.spawn_detached(
         run_dynamic_monitor(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ANALYSIS_FANOUT
+    scheduler.spawn_detached(
+        run_analysis_fanout(Context{scheduler, dut, iterations, result}));
 #else
     scheduler.spawn_detached(run(Context{scheduler, dut, iterations, result}));
 #endif
