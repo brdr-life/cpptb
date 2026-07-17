@@ -25,10 +25,17 @@ Task<void> register_sequence(Dut dut, TestContext& test) {
     test.start_clock(dut.clk, 10_ns);
 
     co_await reset_dut(dut);
-    const ApbMaster apb{dut, test};
+    const auto bus = ApbBus{
+        dut.clk,           dut.apb_select,    dut.apb_enable,
+        dut.apb_write,     dut.apb_address,   dut.apb_write_data,
+        dut.apb_read_data, dut.apb_ready,     dut.apb_error};
+    ApbMaster apb{bus};
 
-    co_await apb.write(0x04, 0x1234'5678);
-    co_await apb.read_expect("register readback", 0x04, 0x1234'5678);
+    const auto write = co_await apb.write(0x04, 0x1234'5678);
+    test.require_eq("register write", write.status, MemoryStatus::Okay);
+
+    const auto read = co_await apb.read(0x04);
+    test.expect_eq("register readback", read.data, 0x1234'5678u);
 }
 
 CPPTB_REGISTER_TEST(register_sequence);
@@ -56,6 +63,10 @@ The user-facing primitives are deliberately small:
 - `dut.signal.set(value)` and `dut.signal.get()` for explicit signal access.
 - `dut.block1.block2.name.get()`, `deposit(value)`, `force(value)`, and
   `release()` for any supported object in the inferred RTL hierarchy.
+- `test.random()` for the current process's deterministic random stream.
+- `test.randomize(item)` and `test.randomize_with(item, constraint)` for
+  user-defined constrained-random transactions.
+- `coverage.sample(transaction)` for explicit in-process functional coverage.
 - `co_await helper_task(...)` for reusable bus operations such as APB writes
   and read/check transactions.
 
@@ -65,6 +76,48 @@ move-only values. Tasks themselves are move-only and can only be awaited as
 rvalues; a completed result is moved to the awaiting coroutine. Scheduler
 roots passed to `spawn()` or `spawn_detached()` remain `Task<void>`, and every
 child passed to `Join` must also be a `Task<void>`.
+
+Random stimulus uses familiar value-oriented operations:
+
+```cpp
+auto& random = test.random();
+const auto address = random.randint<uint32_t>(0x1000, 0x1fff);
+const auto opcode = random.choice(kOpcodes);
+const auto payload = random.randbits<256>();
+random.shuffle(transaction_order);
+```
+
+The result records the master seed needed for replay, and spawned processes
+receive independent deterministic streams. See
+[Randomization](random-stimulus.md) for generators, constrained transactions,
+solver policy, replay, and side-by-side framework examples.
+
+Constrained transactions retain the same process stream and replay contract:
+
+```cpp
+Packet packet;
+test.randomize(packet);
+test.randomize_with(packet, packet.length == 256);
+```
+
+The default adaptive backend is deterministic and dependency-free. It samples
+ordinary constraints and can invoke an application-configured Z3 fallback only
+after search exhaustion. Authored transaction classes remain unchanged. See
+[Solver backends](randomization/solvers-and-diagnostics.md) for direct and
+adaptive configuration.
+
+Functional coverage remains separate from stimulus and scheduling:
+
+```cpp
+Covergroup<Packet> coverage{"packets"};
+auto& opcode = coverage.coverpoint("opcode", &Packet::opcode);
+opcode.bin("read", Opcode::Read).bin("write", Opcode::Write);
+
+coverage.sample(packet);
+```
+
+See [Functional coverage](randomization/functional-coverage.md) for ranges,
+illegal and ignore bins, transitions, crosses, merge, and JSON reporting.
 
 The coroutine scheduler also supports:
 
@@ -232,8 +285,15 @@ CPPTB_REGISTER_TEST(fifo_test);
 
 ## Reusable transaction components
 
-Use the optional component layer when a sequence, driver, monitor, or
+Use the optional `cpptb_vc` package when a sequence, driver, monitor, or
 scoreboard should depend on a typed endpoint instead of concrete storage.
+It is not included by `cpptb/cpptb.hpp`:
+
+```cpp
+#include "cpptb_vc/cpptb_vc.hpp"
+using namespace cpptb::vc;
+```
+
 `PutPort<T>` and `GetPort<T>` are borrowed views: constructing one allocates
 nothing, and the connected backend must outlive the port and its active calls.
 A `Queue<T>` works directly, and another backend can implement the same
@@ -291,6 +351,9 @@ include an idle cycle rather than implying a maximum-throughput burst driver.
 The complete [component FIFO example](examples/component-fifo.md) shows these
 objects alongside the direct [FIFO scoreboard](examples/fifo-scoreboard.md).
 Both are runnable, and each has an exact pure-SystemVerilog twin.
+Protocol-neutral memory transactions, keyed scoreboards, reference models,
+and APB components are described in
+[Verification components](verification-components.md).
 
 A spawned process can be awaited or cancelled explicitly:
 

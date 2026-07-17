@@ -61,7 +61,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf bison flex help2man
+          sudo apt-get install -y autoconf bison flex help2man libz3-dev pkg-config
           git clone --depth 1 --branch "v${VERILATOR_VERSION}" \
             https://github.com/verilator/verilator.git build/verilator-source
           cd build/verilator-source
@@ -72,7 +72,7 @@ jobs:
 
       - name: Install Verilator (macOS)
         if: runner.os == 'macOS'
-        run: brew install verilator
+        run: brew install verilator z3
 
       - name: Report tool versions
         run: |
@@ -83,8 +83,13 @@ jobs:
       - name: Sync Python tools
         run: uv sync --frozen
 
+      - name: Verify wheel contents
+        run: |
+          uv build --wheel --out-dir build/wheel
+          python3 tests/package/check_wheel.py build/wheel/*.whl
+
       - name: Configure CMake
-        run: cmake -S . -B build/cmake -DBUILD_TESTING=ON
+        run: cmake -S . -B build/cmake -DBUILD_TESTING=ON -DCPPTB_WITH_Z3=ON
 
       - name: Build CMake tests
         run: cmake --build build/cmake --parallel 2

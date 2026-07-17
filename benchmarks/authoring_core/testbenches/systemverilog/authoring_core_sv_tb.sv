@@ -35,6 +35,15 @@ module authoring_core_sv_tb;
   logic [31:0] mem_wdata_i;
   logic mem_we_i;
   logic [31:0] mem_rdata_o;
+  logic apb_psel_i;
+  logic apb_penable_i;
+  logic apb_pwrite_i;
+  logic [7:0] apb_paddr_i;
+  logic [31:0] apb_pwdata_i;
+  logic [3:0] apb_pstrb_i;
+  logic [31:0] apb_prdata_o;
+  logic apb_pready_o;
+  logic apb_pslverr_o;
 
   int unsigned iterations;
   string kernel;
@@ -83,6 +92,17 @@ module authoring_core_sv_tb;
   longint unsigned dynamic_spawn_count;
   longint unsigned analysis_write_count;
   longint unsigned analysis_delivery_count;
+  longint unsigned random_stimulus_count;
+  longint unsigned constrained_packet_count;
+  longint unsigned constraint_extensions_count;
+  longint unsigned coverage_sampling_count;
+  longint unsigned apb_component_count;
+  longint unsigned coverage_opcode_hits [0:3];
+  longint unsigned coverage_length_hits [0:4];
+  longint unsigned coverage_cross_hits [0:2][0:2];
+  longint unsigned coverage_transition_hits;
+  bit coverage_have_previous_opcode;
+  logic [1:0] coverage_previous_opcode;
   longint unsigned dynamic_monitor_edges;
   bit dynamic_process_ready;
   bit dynamic_process_release;
@@ -96,10 +116,28 @@ module authoring_core_sv_tb;
   mailbox #(logic [31:0]) analysis_buffer;
   logic [31:0] analysis_expected[$];
   logic [31:0] analysis_actual[$];
+  typedef struct packed {
+    bit write;
+    logic [7:0] address;
+    logic [31:0] data;
+    logic [3:0] strobe;
+    bit error;
+    int unsigned wait_cycles;
+  } apb_transaction_t;
+  apb_transaction_t apb_expected[$];
+  apb_transaction_t apb_actual[$];
+  longint unsigned apb_compared;
+  longint unsigned apb_checker_violations;
+  bit apb_done;
   int unsigned analysis_buffer_drops;
   bit analysis_monitor_complete;
   semaphore queue_credits;
   semaphore authored_lock;
+  logic [63:0] random_seed_state;
+  logic [63:0] random_s0;
+  logic [63:0] random_s1;
+  logic [63:0] random_s2;
+  logic [63:0] random_s3;
 
   always begin
     #1ns clk = ~clk;
@@ -122,6 +160,150 @@ module authoring_core_sv_tb;
 
   function automatic logic [31:0] expected_response(input int unsigned iteration);
     return (stimulus(iteration) ^ 32'ha5a5_5a5a) + iteration;
+  endfunction
+
+  function automatic logic [31:0] expected_payload_response(
+      input int unsigned iteration,
+      input logic [31:0] payload);
+    return (payload ^ 32'ha5a5_5a5a) + iteration;
+  endfunction
+
+  function automatic logic [63:0] rotate_left64(
+      input logic [63:0] value,
+      input int unsigned shift);
+    return (value << shift) | (value >> (64 - shift));
+  endfunction
+
+  function automatic logic [63:0] splitmix_next();
+    logic [63:0] value;
+    random_seed_state = random_seed_state + 64'h9e37_79b9_7f4a_7c15;
+    value = random_seed_state;
+    value = (value ^ (value >> 30)) * 64'hbf58_476d_1ce4_e5b9;
+    value = (value ^ (value >> 27)) * 64'h94d0_49bb_1331_11eb;
+    return value ^ (value >> 31);
+  endfunction
+
+  task automatic initialize_random();
+    random_seed_state = 64'd1;
+    random_s0 = splitmix_next();
+    random_s1 = splitmix_next();
+    random_s2 = splitmix_next();
+    random_s3 = splitmix_next();
+  endtask
+
+  function automatic logic [63:0] random_next_u64();
+    logic [63:0] result;
+    logic [63:0] shifted;
+    result = rotate_left64(random_s1 * 64'd5, 7) * 64'd9;
+    shifted = random_s1 << 17;
+    random_s2 = random_s2 ^ random_s0;
+    random_s3 = random_s3 ^ random_s1;
+    random_s1 = random_s1 ^ random_s2;
+    random_s0 = random_s0 ^ random_s3;
+    random_s2 = random_s2 ^ shifted;
+    random_s3 = rotate_left64(random_s3, 45);
+    return result;
+  endfunction
+
+  function automatic longint unsigned random_below(
+      input longint unsigned bound);
+    longint unsigned threshold;
+    longint unsigned value;
+    threshold = (-bound) % bound;
+    forever begin
+      value = random_next_u64();
+      if (value >= threshold) return value % bound;
+    end
+  endfunction
+
+  function automatic logic [31:0] random_payload();
+    logic [31:0] payload;
+    logic [63:0] random_wide;
+    logic [63:0] random_top;
+    int unsigned order [0:3];
+    int unsigned remaining;
+    int unsigned selected;
+    int unsigned temporary;
+
+    payload = random_next_u64()[31:0];
+    case (random_below(10))
+      0: payload = payload ^ 32'h0000_0000;
+      1, 2: payload = payload ^ 32'h0101_0101;
+      3, 4, 5: payload = payload ^ 32'h1357_9bdf;
+      default: payload = payload ^ 32'ha5a5_5a5a;
+    endcase
+    random_wide = random_next_u64();
+    random_top = random_next_u64();
+    payload = payload ^ random_wide[31:0] ^ random_wide[63:32];
+    if (random_top[0]) payload = payload ^ 32'h8000_0000;
+
+    order = '{0, 1, 2, 3};
+    for (remaining = 4; remaining > 1; remaining--) begin
+      selected = random_below(remaining);
+      temporary = order[remaining - 1];
+      order[remaining - 1] = order[selected];
+      order[selected] = temporary;
+    end
+    payload = payload ^ order[0] ^ (order[1] << 4) ^
+              (order[2] << 8) ^ (order[3] << 12);
+    return payload;
+  endfunction
+
+  function automatic logic [31:0] constrained_packet_payload();
+    logic [7:0] opcode;
+    logic [15:0] length;
+    logic [15:0] address;
+    logic [7:0] tag;
+    forever begin
+      opcode = random_below(7);
+      length = 16'd64 + random_below(1437);
+      address = 16'h1000 + random_below(4096);
+      tag = random_below(256);
+      if ((length % 4) != 0) continue;
+      if ((address % 4) != 0) continue;
+      if ((opcode == 6) && (length > 256)) continue;
+      return ({24'b0, opcode} << 29) ^ ({16'b0, length} << 16) ^
+             ({16'b0, address} << 1) ^ {24'b0, tag};
+    end
+  endfunction
+
+  function automatic logic [31:0] constraint_extensions_payload();
+    logic [7:0] opcode;
+    logic [15:0] length;
+    logic [7:0] route;
+    logic [7:0] byte0;
+    logic [7:0] byte1;
+    logic [31:0] token0;
+    logic [31:0] token1;
+    logic token2;
+    longint unsigned selected;
+    forever begin
+      selected = random_below(3);
+      case (selected)
+        0: opcode = 1;
+        1: opcode = 3;
+        default: opcode = 5;
+      endcase
+
+      selected = random_below(4);
+      if (selected == 0) begin
+        length = 64 + random_below(1);
+      end else begin
+        length = 128 + random_below(4);
+      end
+      route = 2 + random_below(1);
+      byte0 = random_below(256);
+      byte1 = random_below(256);
+      token0 = random_below(64'h0000_0001_0000_0000);
+      token1 = random_below(64'h0000_0001_0000_0000);
+      token2 = 1 + random_below(1);
+      if (byte0 == byte1) continue;
+
+      return ({24'b0, opcode} << 29) ^ ({16'b0, length} << 16) ^
+             ({24'b0, route} << 24) ^ ({24'b0, byte0} << 8) ^
+             {24'b0, byte1} ^ token0 ^ token1 ^
+             ({31'b0, token2} << 31);
+    end
   endfunction
 
   function automatic logic [63:0] wide64_stimulus(input int unsigned iteration);
@@ -243,7 +425,7 @@ module authoring_core_sv_tb;
       #1ps;
       if (rsp_valid) break;
     end
-    check32(rsp_data, expected_response(iteration), "response");
+    check32(rsp_data, expected_payload_response(iteration, payload), "response");
     checksum = (checksum ^ rsp_data) * 32'h0100_0193;
     transactions++;
   endtask
@@ -701,6 +883,297 @@ module authoring_core_sv_tb;
       transact(i, stimulus(i), 1'b0);
   endtask
 
+  task automatic run_random_stimulus();
+    logic [31:0] payload;
+    initialize_random();
+    for (int unsigned i = 0; i < iterations; i++) begin
+      payload = random_payload();
+      random_stimulus_count++;
+      transact(i, payload, 1'b0);
+    end
+  endtask
+
+  task automatic run_constrained_packet();
+    logic [31:0] payload;
+    initialize_random();
+    for (int unsigned i = 0; i < iterations; i++) begin
+      payload = constrained_packet_payload();
+      constrained_packet_count++;
+      transact(i, payload, 1'b0);
+    end
+  endtask
+
+  task automatic run_constraint_extensions();
+    logic [31:0] payload;
+    initialize_random();
+    for (int unsigned i = 0; i < iterations; i++) begin
+      payload = constraint_extensions_payload();
+      constraint_extensions_count++;
+      transact(i, payload, 1'b0);
+    end
+  endtask
+
+  task automatic coverage_sample(input int unsigned iteration);
+    logic [1:0] opcode;
+    int unsigned length;
+    int unsigned length_bin;
+    opcode = iteration[1:0];
+    length = (iteration * 37) % 1600;
+
+    coverage_opcode_hits[opcode]++;
+    if (coverage_have_previous_opcode &&
+        coverage_previous_opcode == 0 && opcode == 1)
+      coverage_transition_hits++;
+    coverage_previous_opcode = opcode;
+    coverage_have_previous_opcode = 1'b1;
+
+    if (length == 0) begin
+      coverage_length_hits[0]++;
+      length_bin = 3;
+    end else if (length <= 63) begin
+      coverage_length_hits[1]++;
+      length_bin = 0;
+    end else if (length <= 511) begin
+      coverage_length_hits[2]++;
+      length_bin = 1;
+    end else if (length <= 1500) begin
+      coverage_length_hits[3]++;
+      length_bin = 2;
+    end else begin
+      coverage_length_hits[4]++;
+      length_bin = 3;
+    end
+    if (opcode != 3 && length_bin < 3)
+      coverage_cross_hits[opcode][length_bin]++;
+    coverage_sampling_count++;
+  endtask
+
+  task automatic run_coverage_sampling();
+    longint unsigned opcode_accounted;
+    longint unsigned length_accounted;
+    longint unsigned cross_accounted;
+    longint unsigned expected_cross;
+    int unsigned length;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      coverage_sample(i);
+      transact(i, stimulus(i), 1'b0);
+    end
+
+    opcode_accounted = 0;
+    for (int unsigned i = 0; i < 4; i++)
+      opcode_accounted += coverage_opcode_hits[i];
+    length_accounted = 0;
+    for (int unsigned i = 0; i < 5; i++)
+      length_accounted += coverage_length_hits[i];
+    cross_accounted = 0;
+    for (int unsigned opcode = 0; opcode < 3; opcode++)
+      for (int unsigned length_bin = 0; length_bin < 3; length_bin++)
+        cross_accounted += coverage_cross_hits[opcode][length_bin];
+    expected_cross = 0;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      length = (i * 37) % 1600;
+      if (i[1:0] != 3 && length != 0 && length <= 1500)
+        expected_cross++;
+    end
+    check32(coverage_sampling_count, iterations, "coverage samples");
+    check32(opcode_accounted, iterations, "coverage opcode accounting");
+    check32(length_accounted, iterations, "coverage length accounting");
+    check32(coverage_transition_hits, (iterations + 2) / 4,
+            "coverage transition hits");
+    check32(cross_accounted, expected_cross, "coverage cross hits");
+  endtask
+
+  task automatic apb_compare_available();
+    apb_transaction_t expected;
+    apb_transaction_t actual;
+    while (apb_expected.size() != 0 && apb_actual.size() != 0) begin
+      expected = apb_expected.pop_front();
+      actual = apb_actual.pop_front();
+      checks++;
+      if (actual !== expected) failures++;
+      apb_compared++;
+    end
+  endtask
+
+  task automatic apb_publish_expected(input apb_transaction_t transaction);
+    apb_expected.push_back(transaction);
+    apb_compare_available();
+  endtask
+
+  task automatic apb_publish_actual(input apb_transaction_t transaction);
+    apb_actual.push_back(transaction);
+    apb_compare_available();
+  endtask
+
+  task automatic apb_write(input logic [7:0] address,
+                           input logic [31:0] data,
+                           input logic [3:0] strobe);
+    int unsigned wait_cycles;
+    @(negedge clk);
+    apb_paddr_i = address;
+    apb_pwdata_i = data;
+    apb_pstrb_i = strobe;
+    apb_pwrite_i = 1'b1;
+    apb_psel_i = 1'b1;
+    apb_penable_i = 1'b0;
+    @(posedge clk);
+    @(negedge clk);
+    apb_penable_i = 1'b1;
+    wait_cycles = 0;
+    do begin
+      @(posedge clk);
+      if (!apb_pready_o) wait_cycles++;
+    end while (!apb_pready_o);
+    check32(apb_pslverr_o, 0, "APB write status");
+    apb_publish_expected('{1'b1, address, data, strobe, 1'b0,
+                           wait_cycles});
+    transactions++;
+    apb_component_count++;
+    @(negedge clk);
+    apb_psel_i = 1'b0;
+    apb_penable_i = 1'b0;
+    apb_pwrite_i = 1'b0;
+  endtask
+
+  task automatic apb_read(input logic [7:0] address,
+                          output logic [31:0] data);
+    int unsigned wait_cycles;
+    @(negedge clk);
+    apb_paddr_i = address;
+    apb_pstrb_i = '0;
+    apb_pwrite_i = 1'b0;
+    apb_psel_i = 1'b1;
+    apb_penable_i = 1'b0;
+    @(posedge clk);
+    @(negedge clk);
+    apb_penable_i = 1'b1;
+    wait_cycles = 0;
+    do begin
+      @(posedge clk);
+      if (!apb_pready_o) wait_cycles++;
+    end while (!apb_pready_o);
+    data = apb_prdata_o;
+    check32(apb_pslverr_o, 0, "APB read status");
+    apb_publish_expected('{1'b0, address, data, 4'hf, 1'b0,
+                           wait_cycles});
+    transactions++;
+    apb_component_count++;
+    @(negedge clk);
+    apb_psel_i = 1'b0;
+    apb_penable_i = 1'b0;
+    apb_pwrite_i = 1'b0;
+  endtask
+
+  task automatic run_apb_monitor();
+    int unsigned completed;
+    int unsigned wait_cycles;
+    bit active;
+    completed = 0;
+    wait_cycles = 0;
+    active = 1'b0;
+    while (completed < iterations * 2) begin
+      @(posedge clk);
+      if (!apb_psel_i) begin
+        active = 1'b0;
+        wait_cycles = 0;
+      end else if (!apb_penable_i) begin
+        active = 1'b1;
+        wait_cycles = 0;
+      end else if (!apb_pready_o) begin
+        if (active) wait_cycles++;
+      end else begin
+        apb_publish_actual('{apb_pwrite_i, apb_paddr_i,
+                            apb_pwrite_i ? apb_pwdata_i : apb_prdata_o,
+                            apb_pwrite_i ? apb_pstrb_i : 4'hf,
+                            apb_pslverr_o, wait_cycles});
+        active = 1'b0;
+        wait_cycles = 0;
+        completed++;
+      end
+    end
+  endtask
+
+  task automatic apb_checker_report(input bit condition);
+    if (!condition) begin
+      apb_checker_violations++;
+      checks++;
+      failures++;
+    end
+  endtask
+
+  task automatic run_apb_checker();
+    bit setup_seen;
+    bit waiting;
+    logic [7:0] saved_address;
+    logic saved_write;
+    logic [31:0] saved_write_data;
+    logic [3:0] saved_strobe;
+    setup_seen = 1'b0;
+    waiting = 1'b0;
+    while (!apb_done) begin
+      @(posedge clk);
+      apb_checker_report(!apb_penable_i || apb_psel_i);
+      apb_checker_report(!(apb_psel_i && apb_penable_i) ||
+                         setup_seen || waiting);
+      if (waiting) begin
+        apb_checker_report(apb_psel_i);
+        apb_checker_report(apb_penable_i);
+        apb_checker_report(apb_paddr_i == saved_address);
+        apb_checker_report(apb_pwrite_i == saved_write);
+        apb_checker_report(!saved_write ||
+                           apb_pwdata_i == saved_write_data);
+        apb_checker_report(apb_pstrb_i == saved_strobe);
+      end
+      if (apb_psel_i && !apb_penable_i) begin
+        apb_checker_report(apb_pwrite_i || apb_pstrb_i == '0);
+        saved_address = apb_paddr_i;
+        saved_write = apb_pwrite_i;
+        saved_write_data = apb_pwdata_i;
+        saved_strobe = apb_pstrb_i;
+        setup_seen = 1'b1;
+        waiting = 1'b0;
+      end else if (apb_psel_i && apb_penable_i) begin
+        if (setup_seen) begin
+          apb_checker_report(apb_paddr_i == saved_address);
+          apb_checker_report(apb_pwrite_i == saved_write);
+          apb_checker_report(!saved_write ||
+                             apb_pwdata_i == saved_write_data);
+          apb_checker_report(apb_pstrb_i == saved_strobe);
+        end
+        waiting = !apb_pready_o;
+        setup_seen = 1'b0;
+      end else begin
+        waiting = 1'b0;
+        setup_seen = 1'b0;
+      end
+    end
+  endtask
+
+  task automatic run_apb_sequence();
+    logic [31:0] value;
+    logic [31:0] read_data;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      value = stimulus(i);
+      apb_write((i & 15) * 4, value, 4'hf);
+      apb_read((i & 15) * 4, read_data);
+      check32(read_data, value, "APB read data");
+      checksum = (checksum ^ read_data) * 32'h0100_0193;
+    end
+    apb_done = 1'b1;
+  endtask
+
+  task automatic run_apb_component();
+    fork
+      run_apb_sequence();
+      run_apb_monitor();
+      run_apb_checker();
+    join
+    check32(apb_expected.size(), 0, "APB expected pending");
+    check32(apb_actual.size(), 0, "APB actual pending");
+    check32(apb_compared, iterations * 2, "APB scoreboard comparisons");
+    check32(apb_checker_violations, 0, "APB protocol violations");
+  endtask
+
   task automatic lifecycle_process();
     for (int unsigned i = 0; i < iterations; i++)
       check32(stimulus(i), stimulus(i), "owned process value");
@@ -721,7 +1194,7 @@ module authoring_core_sv_tb;
       end
     join
     #1ps;
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=test_lifecycle iterations=%0d transactions=0 checks=%0d sim_cycles=0 spawned_processes=%0d checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=%0d dynamic_spawn=0",
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=test_lifecycle iterations=%0d transactions=0 checks=%0d sim_cycles=0 spawned_processes=%0d checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=%0d dynamic_spawn=0 analysis_write=0 analysis_delivery=0 random_stimulus=0 constrained_packet=0 constraint_extensions=0 coverage_sampling=0 apb_component=0",
              iterations, checks, spawned_processes, failures,
              test_lifecycle_count);
     $finish;
@@ -734,7 +1207,7 @@ module authoring_core_sv_tb;
 
   task automatic report_dynamic_process();
     #1ps;
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=0 checks=%0d sim_cycles=0 spawned_processes=%0d checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=0 dynamic_spawn=%0d",
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=0 checks=%0d sim_cycles=0 spawned_processes=%0d checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=0 dynamic_spawn=%0d analysis_write=0 analysis_delivery=0 random_stimulus=0 constrained_packet=0 constraint_extensions=0 coverage_sampling=0 apb_component=0",
              kernel, iterations, checks, spawned_processes, failures,
              dynamic_spawn_count);
     $finish;
@@ -1192,10 +1665,26 @@ module authoring_core_sv_tb;
     dynamic_spawn_count = 0;
     analysis_write_count = 0;
     analysis_delivery_count = 0;
+    random_stimulus_count = 0;
+    constrained_packet_count = 0;
+    constraint_extensions_count = 0;
+    coverage_sampling_count = 0;
+    apb_component_count = 0;
+    coverage_opcode_hits = '{default: 0};
+    coverage_length_hits = '{default: 0};
+    coverage_cross_hits = '{default: 0};
+    coverage_transition_hits = 0;
+    coverage_have_previous_opcode = 1'b0;
+    coverage_previous_opcode = '0;
     dynamic_monitor_edges = 0;
     analysis_buffer_drops = 0;
     analysis_monitor_complete = 1'b0;
     analysis_expected = {};
+    apb_expected = {};
+    apb_actual = {};
+    apb_compared = 0;
+    apb_checker_violations = 0;
+    apb_done = 1'b0;
     dynamic_process_ready = 1'b0;
     dynamic_process_release = 1'b0;
     wide64_i = '0;
@@ -1210,6 +1699,12 @@ module authoring_core_sv_tb;
     mem_addr_i = '0;
     mem_wdata_i = '0;
     mem_we_i = 1'b0;
+    apb_psel_i = 1'b0;
+    apb_penable_i = 1'b0;
+    apb_pwrite_i = 1'b0;
+    apb_paddr_i = '0;
+    apb_pwdata_i = '0;
+    apb_pstrb_i = '0;
     void'($value$plusargs("AUTHORING_CORE_ITERS=%d", iterations));
     void'($value$plusargs("AUTHORING_CORE_KERNEL=%s", kernel));
     if (kernel != "test_lifecycle" && kernel != "dynamic_spawn" &&
@@ -1256,10 +1751,16 @@ module authoring_core_sv_tb;
       "dynamic_spawn_suspending": run_dynamic_spawn_suspending();
       "dynamic_monitor": run_dynamic_monitor();
       "analysis_fanout": run_analysis_fanout();
+      "random_stimulus": run_random_stimulus();
+      "constrained_packet": run_constrained_packet();
+      "constraint_extensions": run_constraint_extensions();
+      "coverage_sampling": run_coverage_sampling();
+      "apb_component": run_apb_component();
       default: $fatal(1, "unknown AUTHORING_CORE_KERNEL=%s", kernel);
     endcase
 
-    if (kernel != "timing_phases" && kernel != "test_lifecycle" &&
+    if (kernel != "timing_phases" && kernel != "apb_component" &&
+        kernel != "test_lifecycle" &&
         kernel != "dynamic_spawn" && kernel != "dynamic_task" &&
         kernel != "dynamic_spawn_scheduler" &&
         kernel != "dynamic_spawn_suspending") begin
@@ -1274,7 +1775,7 @@ module authoring_core_sv_tb;
         kernel != "dynamic_task" &&
         kernel != "dynamic_spawn_scheduler" &&
         kernel != "dynamic_spawn_suspending") begin
-      $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d spawned_processes=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d queue_send=%0d queue_receive=%0d queue_put=%0d queue_get=%0d lock_acquire=%0d semaphore_acquire=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d test_lifecycle=%0d dynamic_spawn=%0d analysis_write=%0d analysis_delivery=%0d",
+      $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d spawned_processes=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d queue_send=%0d queue_receive=%0d queue_put=%0d queue_get=%0d lock_acquire=%0d semaphore_acquire=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d test_lifecycle=%0d dynamic_spawn=%0d analysis_write=%0d analysis_delivery=%0d random_stimulus=%0d constrained_packet=%0d constraint_extensions=%0d coverage_sampling=%0d apb_component=%0d",
              kernel, iterations, transactions, checks, sim_cycles,
              spawned_processes, checksum,
              failures, task_value_count, clock_cycles_count, timeout_count,
@@ -1291,7 +1792,10 @@ module authoring_core_sv_tb;
              signal_edges, force_release_count, packed_view_count,
              hier_data_reads, hier_data_deposits, timing_phases_count,
              test_lifecycle_count, dynamic_spawn_count,
-             analysis_write_count, analysis_delivery_count);
+             analysis_write_count, analysis_delivery_count,
+             random_stimulus_count, constrained_packet_count,
+             constraint_extensions_count, coverage_sampling_count,
+             apb_component_count);
       $finish;
     end
   end

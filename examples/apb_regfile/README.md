@@ -1,16 +1,26 @@
 # APB register-file example
 
-This example wraps APB setup and access phases in a reusable `ApbMaster`.
-`write()` is a `Task<void>`, `read()` returns a value with `Task<uint32_t>`,
-and `read_expect()` composes a transaction with a check. The main sequence is
-therefore register-oriented instead of pin-oriented:
+This example composes the optional `cpptb_vc` APB components around a small
+register file. The testbench imports a generic master, passive monitor,
+protocol checker, in-order scoreboard, and functional coverage instead of
+defining protocol machinery locally.
 
 ```cpp
-co_await apb.write(address, value);
-co_await apb.read_expect("APB register readback", address, value);
+#include "cpptb_vc/cpptb_vc.hpp"
+
+const auto write = co_await master.write(address, value);
+test.expect_eq("APB write status", write.status, MemoryStatus::Okay);
+
+const auto read = co_await master.read(address);
+test.expect_eq("APB register readback", read.data, value);
 ```
 
-Run the C++ DPI testbench and its exact SystemVerilog twin:
+The sequence accepts any `MemoryMappedMaster`, so its register programming is
+not coupled to APB. The concrete `ApbBus` is assembled directly from generated
+DUT signals. Components do not start a clock, reset the DUT, or spawn
+themselves.
+
+Run the C++ DPI testbench and its pure-SystemVerilog peer:
 
 ```sh
 make cpp-dpi-apb-regfile-run
@@ -18,20 +28,11 @@ make cpp-dpi-apb-regfile-sv-run
 make feature-test FEATURE=dpi_apb_regfile
 ```
 
-Both implementations hold bus controls through the active clock edge and
-sample `PREADY`/`PRDATA` after the same explicit `1ps` settle delay. An
-unmapped read also verifies the APB error path.
-
-Both peers use the fixed semantic workload `kRegisterTransactions = 12`.
-Build the typed `Dut`, wrapper, transport, and simulator with:
+Run the exact 100,000-iteration component performance pair separately:
 
 ```sh
-uv run --frozen cpptb build
+make feature-test FEATURE=apb_component
+make feature-benchmark FEATURE=apb_component
 ```
 
-| cpptb | SystemVerilog |
-|---|---|
-| `Task<void> write(...)` | `task automatic apb_write_word(...)` |
-| `Task<uint32_t> read(...)` | task with an `output` value |
-| `co_await read(...)` | blocking task call |
-| `dut.apb.address.set(...)` | `apb_address = ...` |
+See `docs/verification-components.md` for the package and API contracts.

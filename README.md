@@ -54,11 +54,16 @@ types.
 - Batched and on-demand DPI transport selected by generated bindings.
 - Multiple registered tests with one fresh simulator process per selection,
   fatal and nonfatal checks, test-owned process cleanup, and JSON results.
+- Deterministic random streams, constrained transactions with adaptive optional
+  solver fallback, and explicit functional coverage with bins and crosses.
+- An optional `cpptb_vc` layer with transaction ports, in-order and keyed
+  scoreboards, ready/valid helpers, and APB verification components.
 - An apples-to-apples C++ DPI versus SystemVerilog benchmark suite with a hard
   1.10 performance-ratio guard and one documented direct-force transport
   waiver.
 
 See [testbench authoring](docs/testbench-authoring.md),
+[randomization and coverage](docs/random-stimulus.md),
 [running tests](docs/running-tests.md),
 [hierarchical DUT access](docs/hierarchy.md),
 [scheduling](docs/scheduling.md), and [code generation](docs/code-generation.md)
@@ -95,6 +100,12 @@ Installed CMake consumers use:
 ```cmake
 find_package(cpptb CONFIG REQUIRED)
 target_link_libraries(my_testbench PRIVATE cpptb::cpptb)
+```
+
+Reusable verification components are a separate optional target:
+
+```cmake
+target_link_libraries(my_testbench PRIVATE cpptb::vc)
 ```
 
 ## Build a testbench
@@ -176,6 +187,7 @@ only the selected core.
 ## Repository map
 
 - `include/cpptb/`: installable C++ framework headers.
+- `include/cpptb_vc/`: optional reusable verification-component headers.
 - `tools/codegen/`: public `cpptb` CLI and lower-level Slang code generator.
 - `examples/`: end-to-end C++ DPI examples and SystemVerilog equivalents.
 - `tests/`: unit, generator, and simulator conformance tests.

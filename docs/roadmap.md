@@ -41,9 +41,9 @@ milestone blockers. The current development priority is the framework.
 | - | [Foundation](#foundation) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Typed DUT access, timing, concurrency, hierarchy, data types, and simulator backends |
 | 1 | [Framework test lifecycle and structured results](#1-framework-test-lifecycle-and-structured-results) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Owned test processes, terminal states, checks, and harness-neutral diagnostics |
 | 2 | [Bounded queues and synchronization](#2-bounded-queues-and-synchronization) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Bounded FIFO communication, locks, semaphores, and cancellation-safe handoff |
-| 3 | [Reusable verification components](#3-reusable-verification-components) | <span class="roadmap-status roadmap-status--next">In progress</span> | Typed endpoints, drivers, monitors, scoreboards, and analysis fan-out |
-| 4 | [Random stimulus and functional coverage](#4-reproducible-random-stimulus-and-functional-coverage) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Reproducible random streams and mergeable functional coverage |
-| 5 | [Register abstraction](#5-register-abstraction) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Typed register models with explicit frontdoor and backdoor adapters |
+| 3 | [Reusable verification components](#3-reusable-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Package-ready bus and stream interfaces, APB components, monitors, checkers, and scoreboards |
+| 4 | [Random stimulus and functional coverage](#4-reproducible-random-stimulus-and-functional-coverage) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Reproducible random streams, adaptive solving, and mergeable functional coverage |
+| 5 | [Memory and register abstraction](#5-memory-and-register-abstraction) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Protocol-independent memory and typed register models with frontdoor and backdoor adapters |
 | 6 | [Interfaces and simulator portability](#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Interfaces, resolved signals, four-state values, and another simulator |
 | 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Logging, waveforms, wait diagnostics, and distributable packages |
 | 8 | [Coherent clock and reset control](#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Runtime clock ownership and explicit reusable reset components |
@@ -126,7 +126,7 @@ multi-process example demonstrates semantics that are not already covered by
 
 ## 3. Reusable verification components
 
-**Status:** <span class="roadmap-status roadmap-status--next">In progress</span>
+**Status:** <strong class="roadmap-status roadmap-status--done">Done</strong>
 
 The first lightweight transaction-component slice is implemented:
 
@@ -145,10 +145,32 @@ these pieces without replacing the lower-level `fifo_scoreboard` example. An
 exact `analysis_fanout` C++/pure-SV benchmark covers every publication and
 delivery and remains below the repository's `1.10x` performance guard.
 
-Remaining scope includes transaction producers and consumers, reference-model
-adapters, and reusable active or passive protocol components. Start with APB,
-then add AXI-Lite, streaming, UART, or SPI only when backed by complete
-runnable examples.
+The protocol-neutral transaction slice is also implemented:
+
+- a `MemoryMappedMaster` concept for typed reads and writes with addresses,
+  data, byte enables, and explicit responses;
+- `StreamSource` and `StreamSink` concepts for packet or word streams;
+- direct coroutine transaction methods that serialize concurrent callers when
+  required without exposing scheduler or arbitration machinery;
+- reference-model adapters and keyed or out-of-order scoreboards; and
+- explicit active master/source/sink roles and passive monitor/checker roles
+  without a mandatory agent or environment hierarchy.
+
+APB is the first complete protocol component. Its master, passive monitor,
+protocol checker, structured transactions, runnable example, scoreboard, and
+coverage composition are implemented. The same sequence is reusable through
+the generic memory-mapped interface. The exact `apb_component` C++/pure-SV
+pair exercises the active and passive components under the standard `1.10x`
+performance guard.
+
+The implementation lives under the separate `cpptb_vc` include tree,
+namespace, and CMake target. It depends only on public core APIs and generated
+signal values supplied by the caller, preserving a clean path to a separately
+versioned component package. See
+[Verification components](verification-components.md).
+
+Add AXI-Lite, streaming, UART, or SPI only when each component is backed by
+complete runnable examples and an exact SystemVerilog performance peer.
 
 These remain ordinary C++ objects and coroutines, not a second scheduler or a
 mandatory component hierarchy.
@@ -161,43 +183,98 @@ with another transport. Analysis publication must remain nonblocking; a
 subscriber that needs asynchronous consumption connects through a buffered
 adapter rather than silently delaying every other subscriber.
 
-Transaction methods may encapsulate a protocol operation, but the component
-implementation must show every signal write, edge wait, sampling phase, and
-delay. The framework must not insert implicit resets, waits, or signal writes.
+Transaction methods may encapsulate the signal writes and waits that define a
+protocol operation, but the component implementation must show every signal
+write, edge wait, sampling phase, and delay. The framework must not insert
+implicit resets, unrelated waits, clock startup, or signal writes.
 
 ## 4. Reproducible random stimulus and functional coverage
 
-**Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>
+**Status:** <strong class="roadmap-status roadmap-status--done">Done</strong>
 
-Add a test-owned random service with a recorded master seed and independently
-reproducible process streams. Begin with uniform ranges, weighted choices,
-shuffling, and user-defined generators before considering a constraint solver.
+The random-generation and constrained-random slices are implemented:
 
-Functional coverage should support coverpoints, bins, illegal bins, crosses,
-and transition coverage. Results should be mergeable across seeds. A stable
-JSON representation is sufficient initially; UCIS interoperability can follow
-after the data model has been exercised by real tests.
+- `test.random()` returns the current process's deterministic stream;
+- `randint()`, `choice()`, `weighted_choice()`, arbitrary-width `randbits()`,
+  and `shuffle()` cover the common value-generation path;
+- the master seed and versioned algorithm name are retained in schema-version 4
+  structured results and accepted by the reference runner;
+- independently derived process streams make concurrent generation insensitive
+  to coroutine interleaving; and
+- the exact `random_stimulus` C++/pure-SV pair checks every response and final
+  checksum under the standard `1.10x` guard.
+- user-defined transactions use `Randomized`, `Rand<T>`, `RandC<T>`, named
+  constraints, `randomize()`, `randomize_with(...)`, `pre_randomize()`, and
+  `post_randomize()`;
+- membership sets and ranges, weighted distributions, soft defaults, and
+  runtime constraint handles cover common SystemVerilog-style policy control;
+- nested randomized objects, fixed `RandArray<T, N>` fields, and arbitrary-width
+  `RandBits<Width>` values compose into one flattened solve problem;
+- a backend-neutral typed constraint representation separates authored
+  transaction classes from solving policy;
+- the default adaptive backend keeps the sampling path dependency-free and
+  invokes an application-configured fallback only after search exhaustion;
+- the optional direct Z3 backend caches persistent translated models, handles
+  coupled constraints, selects replayable randomized assignments, and reports
+  named unsatisfiable cores;
+- structured results record the configured backend, backend version, and the
+  number of sampling and solver executions;
+- the exact `constrained_packet` C++/pure-SV pair uses the same random stream,
+  candidate rejection, DUT transactions, checks, and checksum under the
+  standard performance policy; and
+- the exact `constraint_extensions` pair exercises the new constraint and
+  composite-field semantics against an equivalent pure-SystemVerilog workload;
+- `Covergroup<T>` and typed coverpoints support ordinary, ignore, illegal,
+  transition, and crossed bins with explicit allocation-free sampling; and
+- coverage snapshots report percentages and stable model data, merge matching
+  seeds, reject mismatched models, and serialize to schema-version 1 JSON.
+
+CRAVE remains a possible future adapter, not a required or API-defining
+dependency. Its viability spike required compatibility repairs for modern
+CMake, macOS, Clang, and Z3 that the direct Z3 adapter does not require.
+
+See [Randomization](random-stimulus.md) for the feature guide and
+[side-by-side examples](randomization/examples.md) comparing cpptb, Cocotb,
+UVM, and pure SystemVerilog authoring styles.
+
+The exact `coverage_sampling` C++/pure-SV pair performs equivalent point,
+ignore, illegal, transition, and cross accounting for each DUT transaction and
+passes the standard `1.10x` hard guard. See
+[Functional coverage](randomization/functional-coverage.md) for API and report
+examples. UCIS interoperability remains a follow-on after the schema-1 model
+has been exercised by larger regressions.
 
 Random stimulus and coverage must remain separate facilities: users should be
 able to use deterministic directed stimulus with coverage, or random stimulus
-without adopting a coverage model.
+without adopting a coverage model. Coverage-hole selection may later generate
+values from uncovered bins, but it is an optional policy layered on the same
+random and coverage APIs rather than a prerequisite for either facility.
 
-## 5. Register abstraction
+## 5. Memory and register abstraction
 
 **Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>
 
-Build a typed register model for register-heavy peripherals and SoCs:
+Begin with a protocol-independent sparse memory model that protocol components
+can share:
+
+- allocated regions, byte enables, configurable endianness, and read/write
+  permissions;
+- expected-data regions with contextual mismatch diagnostics;
+- read, write, and error-injection callbacks; and
+- explicit image load, fill, inspect, and dump helpers.
+
+Then build a typed register model for register-heavy peripherals and SoCs:
 
 - registers, fields, memories, access policies, and reset values;
-- frontdoor operations through a user-supplied bus adapter;
+- frontdoor operations through the generic `MemoryMappedMaster` interface;
 - backdoor access through generated hierarchy paths;
 - mirrored values, prediction, volatile fields, and read/write checking; and
 - generation from SystemRDL, IP-XACT, or RgGen metadata.
 
-The register layer should not own simulation time. A frontdoor adapter exposes
-ordinary coroutine transactions, and a backdoor adapter performs explicit
-hierarchical operations. This keeps the register model reusable across APB,
-AXI-Lite, and custom buses.
+The memory and register layers should not own simulation time. A frontdoor
+adapter exposes ordinary coroutine transactions, and a backdoor adapter
+performs explicit hierarchical operations. This keeps both models reusable
+across APB, AXI-Lite, Wishbone, and custom buses.
 
 ## 6. Interfaces, bidirectional signals, and portability
 
@@ -220,10 +297,14 @@ reported at startup rather than hidden in testbench code.
 
 Add the facilities needed to diagnose and distribute real regressions:
 
-- structured logging with simulation timestamps and component scopes;
+- scoped structured logging with simulation timestamps and `trace`, `debug`,
+  `info`, `warning`, and `error` levels;
+- lazy message formatting so disabled logs do not burden hot paths;
+- transaction recording with component and process provenance;
 - runtime waveform start/stop and scope selection;
 - waveform-on-failure support in the test runner;
-- a scheduler wait graph for deadlock and timeout reports;
+- a scheduler wait graph with process names, spawn sites, and outstanding
+  triggers for deadlock and timeout reports;
 - clean attribution of HDL assertion failures;
 - simulator and generated-binding compatibility reports; and
 - versioned runtime and code-generator packages.
@@ -238,7 +319,9 @@ installable.
 Extend clock ownership beyond initial registration. A returned clock handle
 should support stop, restart, pause, period or duty-cycle changes, and explicit
 release of ownership while remaining coherent with pending edge waits. The
-model must scale to unrelated input clocks and DUT-generated clocks.
+model must scale to unrelated input clocks and DUT-generated clocks, and report
+actionable ownership errors when a second component attempts to drive a
+scheduler-owned clock.
 
 Reusable reset components may be built on these primitives, but their APIs
 must expose each asserted value and each wait. They must not silently drive a
@@ -252,6 +335,15 @@ would add substantial machinery without improving the current testbench model.
 The useful ideas to retain are typed transactions and clear separation between
 sequences, drivers, monitors, and scoreboards.
 
+The first component library also does not require a heavyweight sequencer,
+mandatory agent hierarchy, or implicit component startup. Direct coroutine
+transactions and typed endpoints remain the default; arbitration is introduced
+only where a protocol or concurrent-caller use case requires it. The optional
+direct Z3 backend solves coupled constraints without making a solver a runtime
+dependency. A complete SystemVerilog constraint-language clone, dynamic random
+arrays, and coverage-guided solving remain deferred until real tests establish
+their value.
+
 The optimized DPI path should also retain generated typed hierarchy access
 rather than adding runtime string-based signal lookup as the default. Dynamic
 lookup can remain a future portability or debugging facility if a concrete use
@@ -263,7 +355,11 @@ The naming and capability comparisons are informed by cocotb's official
 [timing model](https://docs.cocotb.org/en/stable/timing_model.html). The
 transaction-component terminology follows the reusable portions of the
 [Accellera UVM User's Guide](https://www.accellera.org/images/downloads/standards/uvm/uvm_users_guide_1.2.pdf)
-without adopting its full infrastructure.
+without adopting its full infrastructure. Generic protocol interfaces and
+shared memory models follow the useful separation demonstrated by the
+[VUnit verification-component interfaces](https://vunit.github.io/verification_components/user_guide.html),
+while the randomization and coverage direction also considers
+[OSVVM's independently usable verification facilities](https://osvvm.org/about-os-vvm).
 
 ## Delivery process
 

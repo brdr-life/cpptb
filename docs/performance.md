@@ -279,6 +279,103 @@ make feature-test FEATURE=analysis_fanout
 make feature-benchmark FEATURE=analysis_fanout
 ```
 
+## Deterministic random stimulus
+
+The `random_stimulus` pair performs the same mixed random workload for every
+DUT request: one full-width `randint`, one four-way `weighted_choice`, one
+65-bit `randbits`, and one four-element `shuffle`. Both implementations use
+seed `1` and the versioned `xoshiro256ss-v1` transition, consume words in the
+same order, drive the resulting payload through the DUT, and compare all
+100,000 responses plus the final checksum.
+
+The valid July 17, 2026 run passed at `0.687x` C++ DPI over pure SV, with
+`0.684x` DPI-first, `0.693x` SV-first, `0.694x` independent, and `1.08%`
+paired/independent disagreement. These values are machine-specific; the
+registry retains the ordinary `1.10x` hard guard.
+
+```sh
+make feature-test FEATURE=random_stimulus
+make feature-benchmark FEATURE=random_stimulus
+```
+
+## Constrained-random packets
+
+The `constrained_packet` pair declares opcode, length, address, and tag fields.
+Both implementations apply identical range, modulo-alignment, and cross-field
+constraints, consume the same `xoshiro256ss-v1` words, reject the same
+candidates, and drive 100,000 accepted packets through the DUT. Every response
+and the final checksum must match before timing is considered.
+
+The C++ default adaptive backend caches the immutable constraint problem,
+folds direct bounds into candidate domains, omits checks already guaranteed by
+those domains, and keeps assignments of up to eight fields inline. The
+sampling fast path completes every packet without invoking a solver. These are
+generic runtime optimizations; the packet transaction has no benchmark-only
+fast path.
+
+The valid July 17, 2026 formal run measured `0.995x` C++ DPI over pure SV, with
+`0.998x` DPI-first, `0.975x` SV-first, `0.998x` independent, and `0.36%`
+paired/independent disagreement. It passes the `1.10x` hard guard.
+
+```sh
+make feature-test FEATURE=constrained_packet
+make feature-benchmark FEATURE=constrained_packet
+```
+
+## Constraint extensions
+
+The `constraint_extensions` pair exercises membership sets, a weighted value
+and range distribution, a soft default, a disabled constraint, a nested
+randomized object, a fixed randomized array, and a 65-bit randomized value.
+The C++ and pure-SystemVerilog forms consume the same random words, apply the
+same whole-candidate rejection rule, drive 100,000 transactions through the
+same DUT, and require exact response and checksum agreement.
+
+The July 17, 2026 run measured `0.816x` C++ DPI over pure SV, with `0.813x`
+DPI-first, `0.824x` SV-first, `0.824x` independent, and `0.88%`
+paired/independent disagreement. It passed the ratio guard, but is published as
+load-inconclusive because normalized one-minute host load reached `1.211`.
+
+```sh
+make feature-test FEATURE=constraint_extensions
+make feature-benchmark FEATURE=constraint_extensions
+```
+
+## Functional coverage sampling
+
+The `coverage_sampling` pair samples one transaction for every DUT transfer.
+Both implementations perform equivalent ordinary, ignore, illegal,
+transition, and 3-by-3 cross-bin accounting. Five final checks retain the
+sample total, point accounting, transition count, and cross count so the work
+cannot be optimized away before timing.
+
+The valid July 17, 2026 run measured `0.705x` C++ DPI over pure SV, with
+`0.702x` DPI-first, `0.716x` SV-first, `0.706x` independent, and `0.08%`
+paired/independent disagreement. It passes the standard `1.10x` hard guard.
+
+```sh
+make feature-test FEATURE=coverage_sampling
+make feature-benchmark FEATURE=coverage_sampling
+```
+
+## APB verification components
+
+The `apb_component` pair performs 100,000 APB writes and matching reads through
+a byte-enabled register array. Both implementations execute the same setup and
+access phases, passive transaction monitoring, protocol checks, in-order
+scoreboard comparisons, response checks, and checksum updates. The C++ side
+uses the public `cpptb_vc` master, monitor, checker, analysis port, and
+scoreboard rather than benchmark-local helpers.
+
+The valid July 17, 2026 run measured `0.916x` C++ DPI over pure SV, with
+`0.925x` DPI-first, `0.899x` SV-first, `0.920x` independent, and `0.45%`
+paired/independent disagreement. It passes the standard `1.10x` hard guard.
+
+```sh
+make feature-test FEATURE=apb_component
+make feature-benchmark FEATURE=apb_component
+```
+
 ## Timing-phase dispatch
 
 The exact `timing_phases` pair performs one falling-edge wait, one

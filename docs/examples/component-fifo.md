@@ -9,6 +9,14 @@ separate example so the primitive and component styles remain easy to compare.
 The framework does not start a clock, reset the DUT, spawn a process, or insert
 a sampling delay on behalf of the test.
 
+The optional components are imported explicitly:
+
+```cpp
+#include "cpptb/cpptb.hpp"
+#include "cpptb_vc/cpptb_vc.hpp"
+using namespace cpptb::vc;
+```
+
 ## Connect the components
 
 The root test owns every component and connection. The connection objects keep

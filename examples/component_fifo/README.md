@@ -4,7 +4,7 @@ This example verifies a ready/valid FIFO through the reusable transaction
 component layer. It deliberately sits beside `fifo_scoreboard`: that example
 shows direct `Queue` and coroutine composition, while this one shows typed
 ports, analysis fan-out, a buffered subscriber, an in-order scoreboard, and
-ready/valid helpers.
+ready/valid helpers imported explicitly from `cpptb_vc`.
 
 Run the C++ DPI testbench and its exact SystemVerilog twin:
 
