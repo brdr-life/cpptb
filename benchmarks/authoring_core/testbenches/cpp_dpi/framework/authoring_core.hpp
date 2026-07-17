@@ -43,6 +43,7 @@
 #define AUTHORING_CORE_KERNEL_DYNAMIC_TASK 31
 #define AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SCHEDULER 32
 #define AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SUSPENDING 33
+#define AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR 34
 
 #ifndef AUTHORING_CORE_KERNEL
 #define AUTHORING_CORE_KERNEL AUTHORING_CORE_KERNEL_CONTROL
@@ -93,6 +94,7 @@ struct FeatureCounts {
 struct BenchResult : cpptb::TestResult {
     FeatureCounts features;
     uint64_t transactions = 0;
+    uint64_t spawned_processes = 0;
     uint32_t checksum = 0x811c9dc5u;
     std::chrono::steady_clock::time_point start;
 };
@@ -166,6 +168,8 @@ constexpr const char* kernel_name() {
     return "dynamic_spawn_scheduler";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SUSPENDING
     return "dynamic_spawn_suspending";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR
+    return "dynamic_monitor";
 #else
 #error "Unknown AUTHORING_CORE_KERNEL"
 #endif

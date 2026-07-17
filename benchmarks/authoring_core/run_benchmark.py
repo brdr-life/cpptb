@@ -196,6 +196,7 @@ EQUIVALENCE_FIELDS = (
     "transactions",
     "checks",
     "sim_cycles",
+    "spawned_processes",
     "checksum",
     "failures",
     *FEATURE_FIELDS,
@@ -505,6 +506,14 @@ def _binary(mode: str, kernel: str) -> Path:
             )
         return REPO / "build" / "benchmarks" / "authoring_core" / "pure_sv_obj" / "Vauthoring_core_sv_tb"
     raise ValueError(f"unknown mode: {mode}")
+
+
+def _sv_build_target(kernel: str) -> str:
+    return (
+        "authoring-core-force-direct-sv-build"
+        if kernel == "force_direct"
+        else "authoring-core-sv-build"
+    )
 
 
 def run_sample(mode: str, kernel: str, pair: int, iterations: int) -> dict:
@@ -862,17 +871,25 @@ def collect_binary_metadata(kernels: list[str]) -> dict[str, object]:
 def _render_markdown(result: dict[str, object]) -> str:
     if result.get("measurement_mode") == "equivalence_only":
         semantic = result.get("semantic", {})
-        return "\n".join(
-            [
-                "# Authoring-core C++ DPI vs pure SystemVerilog semantic check",
-                "",
-                f"- Example: `{result['example']}`",
-                f"- Result status: `{result['status']}`",
-                f"- Iterations: `{result['iterations']}`",
-                f"- Exact workload match: `{str(semantic.get('exact_match', False)).lower()}`",
-                "",
-            ]
-        )
+        lines = [
+            "# Authoring-core C++ DPI vs pure SystemVerilog semantic check",
+            "",
+            f"- Example: `{result['example']}`",
+            f"- Result status: `{result['status']}`",
+            f"- Iterations: `{result['iterations']}`",
+            f"- Exact workload match: `{str(semantic.get('exact_match', False)).lower()}`",
+            "",
+        ]
+        if "error" in result:
+            lines.extend(
+                [
+                    "## Error",
+                    "",
+                    f"`{result['error']['type']}: {result['error']['message']}`",
+                    "",
+                ]
+            )
+        return "\n".join(lines)
     lines = [
         "# Authoring-core C++ DPI vs pure SystemVerilog benchmark",
         "",
@@ -881,10 +898,13 @@ def _render_markdown(result: dict[str, object]) -> str:
         f"- Initial adjacent warmed pairs: `{result['pairs']}`",
         f"- Conditional extra pairs: `{EXTRA_PAIRS}`",
         f"- Absolute hard guard: `C++ DPI / pure SV <= {MAX_DPI_OVER_SV_RATIO:.2f}x`",
+        f"- Gate policy: `{result.get('gate_policy', 'hard_1_10')}`",
         f"- Peripheral preflight: `{result['preflight']['status']}`",
         f"- Measurement environment: `{result.get('environment', {}).get('validity', {}).get('status', 'not_assessed')}`",
         "",
     ]
+    if "diagnostic_status" in result:
+        lines.insert(9, f"- Diagnostic status: `{result['diagnostic_status']}`")
     if "error" in result:
         lines.extend(
             [
@@ -925,10 +945,12 @@ def _render_markdown(result: dict[str, object]) -> str:
                 "",
             ]
         )
+    config = result.get("metadata", {}).get("config", {})
+    artifact_stem = "semantic" if config.get("semantic_only") else "latest"
     lines.extend(
         [
             "Raw execution order and every completed sample are preserved in",
-            "`latest.jsonl` and `latest.json`.",
+            f"`{artifact_stem}.jsonl` and `{artifact_stem}.json`.",
             "",
         ]
     )
@@ -974,6 +996,12 @@ def _example_field(example: object, *names: str) -> object | None:
     return None
 
 
+def _benchmark_gate_policy(example: object) -> str:
+    policy = _example_field(example, "gate_policy")
+    value = getattr(policy, "value", policy) or "hard_1_10"
+    return str(value)
+
+
 def resolve_authoring_example(name: str) -> tuple[str, str]:
     """Resolve one registry name to its canonical result name and kernel."""
     try:
@@ -1012,14 +1040,17 @@ def resolve_result_dir(example: str, root: Path | None = None) -> Path:
     return result_dir
 
 
-def resolve_result_paths(example: str, root: Path | None = None) -> dict[str, Path]:
+def resolve_result_paths(
+    example: str, root: Path | None = None, *, semantic_only: bool = False
+) -> dict[str, Path]:
     """Resolve every per-example output before any one of them is opened."""
     result_dir = resolve_result_dir(example, root)
+    stem = "semantic" if semantic_only else "latest"
     paths = {
         "directory": result_dir,
-        "json": result_dir / "latest.json",
-        "markdown": result_dir / "latest.md",
-        "journal": result_dir / "latest.jsonl",
+        "json": result_dir / f"{stem}.json",
+        "markdown": result_dir / f"{stem}.md",
+        "journal": result_dir / f"{stem}.jsonl",
     }
     for path in paths.values():
         if path != result_dir and path.resolve() != path:
@@ -1058,7 +1089,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    output_paths = resolve_result_paths(args.example)
+    gate_policy = _benchmark_gate_policy(_registry_lookup(args.example))
+    output_paths = resolve_result_paths(
+        args.example, semantic_only=args.semantic_only
+    )
     kernels = [args.kernel]
     config = {
         "example": args.example,
@@ -1069,6 +1103,7 @@ def main(argv: list[str] | None = None) -> int:
         "skip_build": args.skip_build,
         "with_preflight": args.with_preflight,
         "semantic_only": args.semantic_only,
+        "gate_policy": gate_policy,
         "preflight_iterations": args.preflight_iters,
         "max_absolute_ratio": MAX_DPI_OVER_SV_RATIO,
         "min_order_stratum_failure_ratio": MIN_ORDER_STRATUM_FAILURE_RATIO,
@@ -1082,6 +1117,10 @@ def main(argv: list[str] | None = None) -> int:
         "benchmark": "authoring_core_cpp_dpi_vs_pure_sv",
         "example": args.example,
         "status": "error",
+        "measurement_mode": (
+            "equivalence_only" if args.semantic_only else "performance"
+        ),
+        "gate_policy": gate_policy,
         "iterations": args.iters,
         "pairs": args.pairs,
         "extra_pairs": EXTRA_PAIRS,
@@ -1105,12 +1144,13 @@ def main(argv: list[str] | None = None) -> int:
         result["binaries"] = collect_binary_metadata(kernels)
         if not args.skip_build:
             dpi_target = str(_binary("cpp_dpi", args.kernel).relative_to(REPO))
+            sv_target = _sv_build_target(args.kernel)
             run_command(
                 [
                     "make",
                     "authoring-core-dpi-codegen-check",
                     dpi_target,
-                    "authoring-core-sv-build",
+                    sv_target,
                 ]
             )
             if args.with_preflight:
@@ -1139,7 +1179,6 @@ def main(argv: list[str] | None = None) -> int:
             journal.append(sv_sample)
             assert_equivalent(cpp_sample, sv_sample)
             raw_samples.extend((cpp_sample, sv_sample))
-            result["measurement_mode"] = "equivalence_only"
             result["semantic"] = {
                 "exact_match": True,
                 "cpp_dpi": cpp_sample,
@@ -1172,13 +1211,20 @@ def main(argv: list[str] | None = None) -> int:
             summary["guard"]["status"] for summary in summaries.values()
         }
         if "hard_failure" in guard_statuses:
-            result["status"] = "failed"
+            measured_status = "failed"
         elif "invalid_environment" in guard_statuses:
-            result["status"] = "invalid_environment"
+            measured_status = "invalid_environment"
         elif "passed_inconclusive" in guard_statuses:
-            result["status"] = "passed_inconclusive"
+            measured_status = "passed_inconclusive"
         else:
-            result["status"] = "success"
+            measured_status = "success"
+        if gate_policy == "diagnostic":
+            result["diagnostic_status"] = measured_status
+            result["status"] = (
+                "success" if measured_status == "failed" else measured_status
+            )
+        else:
+            result["status"] = measured_status
     except Exception as error:  # Persist all completed evidence before failing.
         result["status"] = "error"
         result["error"] = {"type": type(error).__name__, "message": str(error)}

@@ -116,6 +116,7 @@ _AUTHORING_TEMPLATE_IDS = {
     "dynamic_task": 31,
     "dynamic_spawn_scheduler": 32,
     "dynamic_spawn_suspending": 33,
+    "dynamic_monitor": 34,
 }
 
 
@@ -226,8 +227,9 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     ),
     _authoring(
         "dynamic_task",
-        "Repeated direct task composition",
+        "Repeated direct task composition (diagnostic control)",
         default_iterations=5_000_000,
+        gate_policy=GatePolicy.DIAGNOSTIC,
     ),
     _authoring(
         "dynamic_spawn_scheduler",
@@ -238,6 +240,10 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         "dynamic_spawn_suspending",
         "Repeated suspending process creation",
         default_iterations=5_000_000,
+    ),
+    _authoring(
+        "dynamic_monitor",
+        "Long-lived monitor processes",
     ),
     Benchmark(
         name="dpi_counter",

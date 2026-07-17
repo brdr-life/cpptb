@@ -50,7 +50,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
 AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
@@ -751,6 +751,7 @@ $(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn,30))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_task,31))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn_scheduler,32))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn_suspending,33))
+$(eval $(call AUTHORING_CORE_DPI_template,dynamic_monitor,34))
 
 define AUTHORING_CORE_SV_DPI_TIMING_template
 $(2)/Vdpi_authoring_core: $(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \

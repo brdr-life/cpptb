@@ -687,12 +687,16 @@ The earlier `dynamic_spawn` profile mixed scheduler mechanics with test
 lifecycle ownership. Four exact C++/pure-SV pairs now isolate the layers at
 5,000,000 iterations:
 
-| Pair | C++ DPI | Pure SV | Ratio |
+| Pair | C++ DPI median | Pure SV median | Paired ratio |
 | --- | ---: | ---: | ---: |
 | `dynamic_task` | 23.03 ns | 3.26 ns | `7.052x` |
 | `dynamic_spawn_scheduler` | 43.88 ns | 40.88 ns | `1.080x` |
 | `dynamic_spawn` | 49.88 ns | 41.39 ns | `1.199x` |
 | `dynamic_spawn_suspending` | 181.35 ns | 272.55 ns | `0.661x` |
+
+The time columns are independent per-mode medians. The ratio column is the
+median of adjacent paired ratios and is therefore not computed by dividing the
+two displayed medians.
 
 The low-level scheduler pair and lifecycle-tracked pair use the same passing
 `TestContext::expect_eq()` child body. The only C++ difference is independent
@@ -731,3 +735,25 @@ and attribution semantics or introducing a specialized sequential operation.
 Neither belongs in the general `TestContext::spawn()` contract. Real
 suspending concurrency already amortizes the fixed bookkeeping and is faster
 than the exact pure-SV twin in this benchmark.
+
+## Long-lived monitor benchmark (2026-07-16)
+
+The `dynamic_monitor` pair adds the realistic case missing from the repeated
+process-creation decomposition. It creates two lifecycle-owned observers once,
+runs them for 100,000 DUT responses, passes sampled data through a bounded
+queue/mailbox, and cancels both processes after foreground traffic completes.
+The result schema now records `spawned_processes`, making direct task
+composition (`0`), repeated spawn (`N` or `2N`), and persistent monitors (`2`)
+distinguishable in every semantic comparison.
+
+The pair matched two spawned processes, 100,000 transactions, 100,000 queue
+puts and gets, 100,003 checks, 500,003 cycles, and checksum `2854112901`.
+Its final valid 16-pair run passed at `0.744x` C++ DPI over pure SV (`0.742x`
+DPI-first, `0.748x` SV-first, `0.742x` independent, and `0.29%` disagreement).
+This confirms that the fixed lifecycle cost amortizes cleanly for persistent
+verification processes; the remaining hard performance concern is repeated
+creation of zero-time lifecycle-owned children, not ordinary monitor usage.
+
+Semantic-only runs now write `semantic.json`, `semantic.md`, and
+`semantic.jsonl`. They no longer replace the `latest.*` artifacts used as the
+performance baseline.
