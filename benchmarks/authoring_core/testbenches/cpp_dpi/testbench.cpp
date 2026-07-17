@@ -483,6 +483,18 @@ Task<void> transact(Context& context, uint32_t iteration, uint32_t payload,
     ++context.result.transactions;
 }
 
+Task<void> drive_request(Context& context, uint32_t payload) {
+    co_await wait_ready_raw(context);
+
+    co_await FallingEdge{context.dut.clk};
+    context.dut.req_data.set(payload);
+    context.dut.req_valid.set(1);
+
+    co_await RisingEdge{context.dut.clk};
+    co_await FallingEdge{context.dut.clk};
+    context.dut.req_valid.set(0);
+}
+
 Task<void> transact_signal_edge(Context& context, uint32_t iteration,
                                 uint32_t payload) {
     co_await wait_ready_raw(context);
@@ -562,7 +574,8 @@ void report(Context& context) {
     const auto& feature = context.result.features;
     std::printf(
         "AUTHORING_CORE_RESULT mode=cpp_dpi kernel=%s iterations=%u "
-        "transactions=%llu checks=%llu sim_cycles=%llu checksum=%u failures=%u "
+        "transactions=%llu checks=%llu sim_cycles=%llu spawned_processes=%llu "
+        "checksum=%u failures=%u "
         "task_value=%llu clock_cycles=%llu timeouts=%llu timeout_hits=%llu "
         "task_timeouts=%llu task_timeout_hits=%llu "
         "wait_until=%llu event_set=%llu event_wait=%llu queue_send=%llu "
@@ -582,6 +595,7 @@ void report(Context& context) {
         static_cast<unsigned long long>(context.result.transactions),
         static_cast<unsigned long long>(context.result.checks),
         static_cast<unsigned long long>(reported_sim_cycles(context)),
+        static_cast<unsigned long long>(context.result.spawned_processes),
         context.result.checksum, context.result.failures,
         static_cast<unsigned long long>(feature.task_value),
         static_cast<unsigned long long>(feature.clock_cycles),
@@ -633,6 +647,7 @@ Task<void> lifecycle_process(TestContext test, uint32_t iterations) {
 
 Task<void> run_test_lifecycle(Context context) {
     TestContext test{context.scheduler, context.result};
+    ++context.result.spawned_processes;
     auto process =
         test.spawn(lifecycle_process(test, context.iterations));
     for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
@@ -680,6 +695,7 @@ Task<void> run_dynamic_spawn_scheduler(Context context) {
     for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
         const uint32_t value = stimulus(iteration);
         ++context.result.features.dynamic_spawn;
+        ++context.result.spawned_processes;
         auto child = context.scheduler.spawn(
             dynamic_scheduler_child(test, value, iteration));
         co_await child;
@@ -693,6 +709,7 @@ Task<void> run_dynamic_spawn(Context context) {
     for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
         const uint32_t value = stimulus(iteration);
         ++context.result.features.dynamic_spawn;
+        ++context.result.spawned_processes;
         auto child =
             test.spawn(dynamic_spawn_child(test, value, iteration));
         co_await child;
@@ -721,6 +738,7 @@ Task<void> run_dynamic_spawn_suspending(Context context) {
     for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
         const uint32_t value = stimulus(iteration);
         ++context.result.features.dynamic_spawn;
+        context.result.spawned_processes += 2;
         auto child = test.spawn(dynamic_suspending_child(
             test, ready, release, value, iteration));
         auto releaser = test.spawn(dynamic_suspending_release(ready, release));
@@ -730,6 +748,64 @@ Task<void> run_dynamic_spawn_suspending(Context context) {
         release.clear();
     }
     co_await Delay{1_ps};
+    report(context);
+}
+
+Task<void> response_monitor(Context context, Queue<uint32_t>& observed) {
+    while (true) {
+        co_await RisingEdge{context.dut.rsp_valid};
+        co_await Delay{1_ps};
+        co_await observed.put(context.dut.rsp_data.get());
+        ++context.result.features.queue_put;
+    }
+}
+
+Task<void> response_edge_watcher(Context context, uint64_t& response_edges) {
+    while (true) {
+        co_await RisingEdge{context.dut.rsp_valid};
+        ++response_edges;
+    }
+}
+
+Task<void> run_dynamic_monitor(Context context) {
+    context.dut.rst_n.set(0);
+    context.dut.req_valid.set(0);
+    context.dut.req_data.set(0);
+    context.dut.rsp_ready.set(1);
+    for (uint32_t cycle = 0; cycle < 4; ++cycle) {
+        co_await RisingEdge{context.dut.clk};
+    }
+    context.dut.rst_n.set(1);
+
+    TestContext test{context.scheduler, context.result};
+    Queue<uint32_t> observed{8};
+    uint64_t response_edges = 0;
+    context.result.spawned_processes += 2;
+    auto monitor = test.spawn(response_monitor(context, observed));
+    auto watcher = test.spawn(response_edge_watcher(context, response_edges));
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        co_await drive_request(context, stimulus(iteration));
+        const uint32_t response = co_await observed.get();
+        ++context.result.features.queue_get;
+        check(context, "monitored response", response,
+              expected_response(iteration));
+        context.result.checksum =
+            (context.result.checksum ^ response) * 0x0100'0193u;
+        ++context.result.transactions;
+    }
+
+    monitor.cancel();
+    watcher.cancel();
+    co_await monitor;
+    co_await watcher;
+    co_await wait_for_response_count(context);
+    check64(context, "observed response edges", response_edges,
+            context.iterations);
+    check(context, "request count", context.dut.request_count.get(),
+          context.iterations);
+    check(context, "response count", context.dut.response_count.get(),
+          context.iterations);
     report(context);
 }
 
@@ -1042,6 +1118,9 @@ void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_SPAWN_SUSPENDING
     scheduler.spawn_detached(run_dynamic_spawn_suspending(
         Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR
+    scheduler.spawn_detached(
+        run_dynamic_monitor(Context{scheduler, dut, iterations, result}));
 #else
     scheduler.spawn_detached(run(Context{scheduler, dut, iterations, result}));
 #endif

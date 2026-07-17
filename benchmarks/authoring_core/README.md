@@ -68,11 +68,14 @@ feature.
 | `force_release` | `force_release=N` | `3N + 2` |
 | `packed_view` | `packed_view=N` | `5N + 2` |
 | `force_direct` | `force_release=N`, zero transactions and cycles | `N` |
-| `test_lifecycle` | `test_lifecycle=N`, zero transactions and cycles | `3N` |
-| `dynamic_task` | `dynamic_spawn=N`, zero transactions and cycles | `N` |
-| `dynamic_spawn_scheduler` | `dynamic_spawn=N`, zero transactions and cycles | `N` |
-| `dynamic_spawn` | `dynamic_spawn=N`, zero transactions and cycles | `N` |
-| `dynamic_spawn_suspending` | `dynamic_spawn=N`, zero transactions and cycles | `N` |
+| `hier_data` | `hier_data_reads=2N`, `hier_data_deposits=2N` | `3N + 2` |
+| `timing_phases` | `timing_phases=N`, zero transactions | `2N` |
+| `test_lifecycle` | `test_lifecycle=N`, `spawned_processes=1`, zero transactions and cycles | `3N` |
+| `dynamic_task` | `dynamic_spawn=N`, `spawned_processes=0`, zero transactions and cycles | `N` |
+| `dynamic_spawn_scheduler` | `dynamic_spawn=N`, `spawned_processes=N`, zero transactions and cycles | `N` |
+| `dynamic_spawn` | `dynamic_spawn=N`, `spawned_processes=N`, zero transactions and cycles | `N` |
+| `dynamic_spawn_suspending` | `dynamic_spawn=N`, `spawned_processes=2N`, zero transactions and cycles | `N` |
+| `dynamic_monitor` | `queue_put=N`, `queue_get=N`, `spawned_processes=2`, `transactions=N` | `N + 3` |
 | `all` | all aggregate usage counts enabled, both timeout-hit counts `floor(N/2)` | `28N + 2` |
 
 ## Semantic mapping
@@ -101,6 +104,7 @@ feature.
 | low-level scheduler process | one-child `fork ... join` |
 | lifecycle-tracked `TestContext::spawn()` | the same one-child `fork ... join` plus framework ownership on the C++ side |
 | two event-suspending processes | two forked SV tasks with the same event handshake |
+| two long-lived response observers, bounded `Queue`, and cancellation | named `fork...join_none`, bounded mailbox handoff, and `disable` after the same DUT traffic |
 
 The `signal_edge`, `array_multidim`, `force_release`, `packed_view`, and
 `force_direct` kernels are intentionally isolated and are not included in
@@ -119,12 +123,21 @@ The Event kernel exercises sticky set-before-wait behavior, and the Queue
 kernel exercises queued-before-get behavior, so neither kernel includes an
 unrequested process-spawn or producer-scheduling cost.
 
-The four dynamic-process kernels deliberately decompose direct task creation,
+Four dynamic-process kernels deliberately decompose direct task creation,
 core scheduler process creation, lifecycle-tracked `spawn()`, and processes
 that genuinely suspend. They default to 5,000,000 iterations so startup noise
 cannot hide a per-process regression. Each has an exact pure-SV twin and the
 runner rejects mismatched checks, feature counts, or checksums before applying
-the performance guard.
+the performance guard. `dynamic_task` is a diagnostic compiler-inlining
+control; it is not a framework performance gate. `dynamic_monitor` is the
+realistic companion workload: two persistent observers exchange every DUT
+response through a bounded queue and are cancelled after 100,000 foreground
+transactions.
+
+`spawned_processes` counts explicit independently scheduled process operations
+authored by these lifecycle and dynamic-process kernels. It does not count the
+root benchmark task or implementation processes internal to `Join`, timeout,
+and queue primitives.
 
 The C++ kernel is selected at compile time with `AUTHORING_CORE_KERNEL`, so
 feature dispatch is absent from its hot loop. The pure-SV testbench selects one
@@ -152,8 +165,9 @@ example names are rejected before any result file is opened. `--pairs` accepts
 any even value of at least 16 and rejects odd counts. The peripheral-suite
 DPI/SV equivalence preflight is disabled by default and can be requested with
 `--with-preflight`; its report field remains present as `skipped` when omitted.
-The runner build step compiles only the selected C++ DPI kernel plus the shared
-pure-SystemVerilog binary. Both binaries use the same
+The runner build step compiles only the selected C++ DPI kernel plus its
+pure-SystemVerilog twin. Most kernels share one SV binary; `force_direct` builds
+its isolated zero-time SV binary. Both binaries use the same
 `AUTHORING_CORE_OPT_FAST=-O3` fast-code setting by default; callers may
 override that Make variable for controlled compiler experiments.
 
@@ -201,8 +215,8 @@ control results from a smaller port surface.
 
 Every sample records its binary path and SHA256, one-based slot within the pair,
 zero-based global sequence index, pair order, and warmup/initial/extra batch.
-Each completed sample, including warmups, is appended immediately to
-`results/<example>/latest.jsonl`, then flushed and `fsync`ed. The JSON report also
+Each completed performance sample, including warmups, is appended immediately
+to `results/<example>/latest.jsonl`, then flushed and `fsync`ed. The JSON report also
 stores those raw samples, child CPU metrics, binary metadata, order-stratified
 and independent-median diagnostics, exact confidence bounds, pair-boundary
 load/power/thermal evidence, environment/tool metadata, preflight data, and
@@ -215,7 +229,9 @@ installed atomically with `os.replace`. The selected example's result directory
 is resolved before truncation or error handling, and one run never reads,
 truncates, or replaces another example's artifacts. Completed samples and
 metadata therefore remain available after a nonzero exit, including failures
-partway through a pair.
+partway through a pair. `--semantic-only` writes `semantic.json`,
+`semantic.md`, and `semantic.jsonl` in the same directory, leaving the latest
+performance measurement byte-for-byte unchanged.
 
 ## Direct tests
 

@@ -40,6 +40,7 @@ KERNELS = (
     "dynamic_task",
     "dynamic_spawn_scheduler",
     "dynamic_spawn_suspending",
+    "dynamic_monitor",
 )
 
 FEATURE_FIELDS = (
@@ -89,6 +90,7 @@ RESULT_FIELDS = (
     "transactions",
     "checks",
     "sim_cycles",
+    "spawned_processes",
     "checksum",
     "failures",
     *FEATURE_FIELDS,
@@ -100,6 +102,7 @@ class ExpectedCounts:
     iterations: int
     transactions: int
     checks: int
+    spawned_processes: int = 0
     task_value: int = 0
     clock_cycles: int = 0
     timeouts: int = 0
@@ -291,6 +294,7 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             iterations=iterations,
             transactions=0,
             checks=3 * iterations,
+            spawned_processes=1,
             test_lifecycle=iterations,
         )
 
@@ -300,11 +304,27 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
         "dynamic_spawn_scheduler",
         "dynamic_spawn_suspending",
     ):
+        spawned_processes = iterations
+        if kernel == "dynamic_task":
+            spawned_processes = 0
+        elif kernel == "dynamic_spawn_suspending":
+            spawned_processes = 2 * iterations
         return ExpectedCounts(
             iterations=iterations,
             transactions=0,
             checks=iterations,
+            spawned_processes=spawned_processes,
             dynamic_spawn=iterations,
+        )
+
+    if kernel == "dynamic_monitor":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 3,
+            spawned_processes=2,
+            queue_put=iterations,
+            queue_get=iterations,
         )
 
     return ExpectedCounts(

@@ -18,8 +18,15 @@ import run_benchmark as runner  # noqa: E402
 import workload  # noqa: E402
 
 
-def registry_example(name="control", kernel=None, kind="authoring"):
-    return {"name": name, "kind": kind, "kernel": kernel or name}
+def registry_example(
+    name="control", kernel=None, kind="authoring", gate_policy="hard_1_10"
+):
+    return {
+        "name": name,
+        "kind": kind,
+        "kernel": kernel or name,
+        "gate_policy": gate_policy,
+    }
 
 
 def sample(
@@ -169,6 +176,13 @@ class StatisticsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "sim_cycles"):
             runner.validate_pair_order(cpp, sv)
 
+    def test_spawned_process_equivalence_mismatch_is_rejected(self):
+        cpp = sample("cpp_dpi", 1, 1.0)
+        sv = sample("pure_sv", 1, 1.0)
+        sv["spawned_processes"] += 1
+        with self.assertRaisesRegex(ValueError, "spawned_processes"):
+            runner.assert_equivalent(cpp, sv)
+
 
 class GuardDecisionTests(unittest.TestCase):
     def guard(self, ratios, sv_times=None, final=True):
@@ -248,6 +262,14 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(
             runner._binary("pure_sv", "control").name,
             "Vauthoring_core_sv_tb",
+        )
+        self.assertEqual(
+            runner._sv_build_target("force_direct"),
+            "authoring-core-force-direct-sv-build",
+        )
+        self.assertEqual(
+            runner._sv_build_target("control"),
+            "authoring-core-sv-build",
         )
 
     @staticmethod
@@ -699,7 +721,8 @@ class DurabilityTests(unittest.TestCase):
                 "journal": Path(directory) / "control" / "latest.jsonl",
             }
 
-            def resolve(_example):
+            def resolve(_example, *, semantic_only=False):
+                self.assertFalse(semantic_only)
                 order.append("paths")
                 return output_paths
 
@@ -783,6 +806,13 @@ class DurabilityTests(unittest.TestCase):
             return sample(mode, pair, 1.0, kernel=kernel, iterations=iterations)
 
         with tempfile.TemporaryDirectory() as directory:
+            result_dir = Path(directory) / "control"
+            result_dir.mkdir()
+            performance_sentinels = {}
+            for filename in ("latest.json", "latest.md", "latest.jsonl"):
+                path = result_dir / filename
+                path.write_text(f"preserved {filename}\n", encoding="utf-8")
+                performance_sentinels[path] = path.read_bytes()
             with (
                 mock.patch.object(runner, "RESULT_DIR", Path(directory)),
                 mock.patch.object(
@@ -798,8 +828,12 @@ class DurabilityTests(unittest.TestCase):
                     ["--skip-build", "--example", "control", "--semantic-only"]
                 )
             result = json.loads(
-                (Path(directory) / "control" / "latest.json").read_text()
+                (result_dir / "semantic.json").read_text()
             )
+            self.assertTrue((result_dir / "semantic.md").is_file())
+            self.assertTrue((result_dir / "semantic.jsonl").is_file())
+            for path, contents in performance_sentinels.items():
+                self.assertEqual(path.read_bytes(), contents)
 
         self.assertEqual(returncode, 0)
         self.assertEqual(
@@ -813,6 +847,98 @@ class DurabilityTests(unittest.TestCase):
         self.assertEqual(result["measurement_mode"], "equivalence_only")
         self.assertTrue(result["semantic"]["exact_match"])
         self.assertEqual(len(result["raw_samples"]), 2)
+
+    def test_semantic_failure_preserves_performance_artifacts(self):
+        def mismatched_sample(mode, kernel, pair, iterations):
+            result = sample(
+                mode, pair, 1.0, kernel=kernel, iterations=iterations
+            )
+            if mode == "pure_sv":
+                result["spawned_processes"] += 1
+            return result
+
+        with tempfile.TemporaryDirectory() as directory:
+            result_dir = Path(directory) / "control"
+            result_dir.mkdir()
+            sentinels = {}
+            for filename in ("latest.json", "latest.md", "latest.jsonl"):
+                path = result_dir / filename
+                path.write_text(f"preserved {filename}\n", encoding="utf-8")
+                sentinels[path] = path.read_bytes()
+            with (
+                mock.patch.object(runner, "RESULT_DIR", Path(directory)),
+                mock.patch.object(
+                    runner, "_registry_lookup", return_value=registry_example()
+                ),
+                mock.patch.object(runner, "collect_metadata", return_value={}),
+                mock.patch.object(
+                    runner, "collect_binary_metadata", return_value={}
+                ),
+                mock.patch.object(
+                    runner, "run_sample", side_effect=mismatched_sample
+                ),
+                redirect_stdout(io.StringIO()),
+            ):
+                returncode = runner.main(
+                    ["--skip-build", "--example", "control", "--semantic-only"]
+                )
+
+            result = json.loads((result_dir / "semantic.json").read_text())
+            markdown = (result_dir / "semantic.md").read_text()
+            for path, contents in sentinels.items():
+                self.assertEqual(path.read_bytes(), contents)
+
+        self.assertEqual(returncode, 1)
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["measurement_mode"], "equivalence_only")
+        self.assertIn("spawned_processes", result["error"]["message"])
+        self.assertIn("semantic check", markdown)
+        self.assertNotIn("Initial adjacent warmed pairs", markdown)
+
+    def test_direct_diagnostic_benchmark_preserves_failure_as_diagnostic(self):
+        cpp, sv = paired_samples([1.2] * 16)
+        guard = runner.evaluate_guard(cpp, sv, final=True)
+        guard["extra_batch_collected"] = False
+        summary = {
+            "dynamic_task": {
+                "cpp_dpi": cpp,
+                "pure_sv": sv,
+                "guard": guard,
+            }
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                mock.patch.object(runner, "RESULT_DIR", Path(directory)),
+                mock.patch.object(
+                    runner,
+                    "_registry_lookup",
+                    return_value=registry_example(
+                        "dynamic_task", gate_policy="diagnostic"
+                    ),
+                ),
+                mock.patch.object(runner, "collect_metadata", return_value={}),
+                mock.patch.object(
+                    runner, "collect_binary_metadata", return_value={}
+                ),
+                mock.patch.object(
+                    runner, "run_comparison", return_value=(summary, [])
+                ),
+                redirect_stdout(io.StringIO()),
+            ):
+                returncode = runner.main(
+                    ["--skip-build", "--example", "dynamic_task"]
+                )
+            result = json.loads(
+                (Path(directory) / "dynamic_task" / "latest.json").read_text()
+            )
+
+        self.assertEqual(returncode, 0)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["diagnostic_status"], "failed")
+        self.assertEqual(
+            result["kernels"]["dynamic_task"]["guard"]["status"],
+            "hard_failure",
+        )
 
     def test_invalid_selection_does_not_create_or_truncate_results(self):
         with tempfile.TemporaryDirectory() as directory:

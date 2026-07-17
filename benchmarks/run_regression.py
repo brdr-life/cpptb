@@ -630,7 +630,7 @@ def _status_from_runner(result: Mapping[str, object]) -> str:
     return normalize_status(None, int(result["returncode"]))
 
 
-def _runner_result_path(entry: object) -> Path | None:
+def _runner_result_path(entry: object, *, semantic: bool = False) -> Path | None:
     adapter_kind = _entry_value(entry, "adapter_kind")
     adapter_kind = getattr(adapter_kind, "value", adapter_kind)
     if adapter_kind == "authoring_core":
@@ -640,7 +640,7 @@ def _runner_result_path(entry: object) -> Path | None:
             / "authoring_core"
             / "results"
             / feature_id(entry)
-            / "latest.json"
+            / ("semantic.json" if semantic else "latest.json")
         )
     if adapter_kind == "peripheral_suite":
         return REPO / "benchmarks" / "peripheral_suite" / "results" / "latest.json"
@@ -661,8 +661,9 @@ def _load_runner_result(
     entry: object,
     *,
     previous_signature: tuple[int, int, int] | None = None,
+    semantic: bool = False,
 ) -> dict[str, object] | None:
-    path = _runner_result_path(entry)
+    path = _runner_result_path(entry, semantic=semantic)
     if path is None or not path.is_file():
         return None
     if previous_signature is not None and _result_signature(path) == previous_signature:
@@ -695,11 +696,14 @@ def _render_entry_markdown(result: Mapping[str, object]) -> str:
         f"- Gate policy: `{result.get('gate_policy', 'hard_1_10')}`",
         f"- Load settle: `{settle_status}`",
     ]
+    if result.get("diagnostic_status") is not None:
+        lines.append(
+            f"- Diagnostic status: `{result.get('diagnostic_status')}`"
+        )
     waiver = result.get("waiver")
     if isinstance(waiver, Mapping):
         lines.extend(
             [
-                f"- Waiver diagnostic: `{result.get('diagnostic_status', '-')}`",
                 f"- Measured ratio: `{waiver.get('measured_ratio', '-')}`",
                 f"- Waiver ceiling: `{waiver.get('max_ratio', '-')}`",
             ]
@@ -739,7 +743,7 @@ def run_semantic_check(
             "commands": {},
             "comparison": None,
         }
-    result_path = _runner_result_path(entry)
+    result_path = _runner_result_path(entry, semantic=True)
     previous_signature = _result_signature(result_path)
     command_results = {
         label: _invoke(command, command_runner) for label, command in commands
@@ -759,7 +763,7 @@ def run_semantic_check(
     diagnostic_status = None
     if _gate_policy(entry) == "diagnostic":
         runner_result = _load_runner_result(
-            entry, previous_signature=previous_signature
+            entry, previous_signature=previous_signature, semantic=True
         )
         if runner_result is not None:
             diagnostic_status = _payload_status(
@@ -835,16 +839,19 @@ def _measure_entry(
         diagnostic_status = status
         runner_result = outputs.get("runner_result")
         missing_expected_result = result_path is not None and runner_result is None
-        status = (
-            "failed"
-            if missing_expected_result
-            or (
-                isinstance(runner_result, Mapping)
-                and runner_result.get("status")
-                in {"command_error", "workload_error", "error"}
-            )
-            else "passed"
-        )
+        if missing_expected_result or (
+            isinstance(runner_result, Mapping)
+            and runner_result.get("status")
+            in {"command_error", "workload_error", "error"}
+        ):
+            status = "failed"
+        elif diagnostic_status in {
+            "invalid_environment",
+            "passed_inconclusive",
+        }:
+            status = diagnostic_status
+        else:
+            status = "passed"
     elif policy == "waived_hard_1_10":
         diagnostic_status = status
         waiver = _waiver_metadata(entry)

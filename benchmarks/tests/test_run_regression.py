@@ -546,6 +546,26 @@ class RegressionTests(unittest.TestCase):
         self.assertEqual(measured["diagnostic_status"], "failed")
         self.assertEqual(result["status"], "failed")
 
+    def test_diagnostic_preserves_invalid_environment_status(self) -> None:
+        entry = feature("diagnostic", benchmark=["bench", "diagnostic"])
+        entry["gate_policy"] = "diagnostic"
+        with mock.patch.object(
+            regression,
+            "_load_runner_result",
+            return_value={"status": "invalid_environment"},
+        ):
+            result = self.run_in_temp(
+                [entry],
+                command_runner=SerialRunner(),
+                probe_runner=SequenceProbe([0.1]),
+            )
+
+        measured = result["entries"][0]
+        self.assertEqual(measured["status"], "invalid_environment")
+        self.assertEqual(
+            measured["diagnostic_status"], "invalid_environment"
+        )
+
     @staticmethod
     def waived_force_entry() -> dict[str, object]:
         entry = feature("force_direct", benchmark=["bench", "force_direct"])
@@ -684,6 +704,18 @@ class RegressionTests(unittest.TestCase):
         )
         self.assertIn("| Diagnostic |", markdown)
         self.assertIn("`failed`", markdown)
+
+    def test_entry_markdown_surfaces_diagnostic_status(self) -> None:
+        markdown = regression._render_entry_markdown(
+            {
+                "feature": "dynamic_task",
+                "status": "passed",
+                "adapter": "authoring_core",
+                "gate_policy": "diagnostic",
+                "diagnostic_status": "failed",
+            }
+        )
+        self.assertIn("Diagnostic status: `failed`", markdown)
 
     def test_per_entry_and_aggregate_outputs_are_isolated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
