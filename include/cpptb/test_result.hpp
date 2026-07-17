@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -112,6 +113,12 @@ struct TestResult {
     std::vector<std::string> tags;
     std::vector<FailureRecord> failure_records;
     std::vector<WarningRecord> warning_records;
+    std::optional<uint64_t> random_seed;
+    std::string random_algorithm;
+    std::string constraint_backend;
+    std::string constraint_backend_version;
+    uint64_t random_sampling_solves = 0;
+    uint64_t random_solver_solves = 0;
     uint64_t simulation_time_fs = 0;
     uint64_t wall_time_ns = 0;
     bool finished = false;

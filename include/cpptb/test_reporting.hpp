@@ -72,7 +72,7 @@ inline bool write_test_result_json(const char* path,
     FILE* stream = std::fopen(path, "w");
     if (!stream) return false;
 
-    std::fputs("{\n  \"schema_version\":2,\n  ", stream);
+    std::fputs("{\n  \"schema_version\":4,\n  ", stream);
     detail::write_json_field(stream, "test_name", result.test_name);
     std::fputs(",\n  ", stream);
     detail::write_json_field(stream, "case_name", result.case_name);
@@ -83,10 +83,31 @@ inline bool write_test_result_json(const char* path,
     detail::write_json_field(stream, "status_reason", result.status_reason);
     std::fputs(",\n  \"tags\":", stream);
     detail::write_json_string_array(stream, result.tags);
+    std::fputs(",\n  \"random_seed\":", stream);
+    if (result.random_seed) {
+        std::fprintf(stream, "%llu",
+                     static_cast<unsigned long long>(*result.random_seed));
+    } else {
+        std::fputs("null", stream);
+    }
+    std::fputs(",\n  ", stream);
+    detail::write_json_field(stream, "random_algorithm",
+                             result.random_algorithm);
+    std::fputs(",\n  ", stream);
+    detail::write_json_field(stream, "constraint_backend",
+                             result.constraint_backend);
+    std::fputs(",\n  ", stream);
+    detail::write_json_field(stream, "constraint_backend_version",
+                             result.constraint_backend_version);
     std::fprintf(stream,
-                 ",\n  \"checks\":%llu,\n  \"failures\":%u,\n"
+                 ",\n  \"random_sampling_solves\":%llu,\n"
+                 "  \"random_solver_solves\":%llu,\n"
+                 "  \"checks\":%llu,\n  \"failures\":%u,\n"
                  "  \"warnings\":%u,\n  \"simulation_time_fs\":%llu,\n"
                  "  \"wall_time_ns\":%llu,\n  \"failure_records\":[",
+                 static_cast<unsigned long long>(
+                     result.random_sampling_solves),
+                 static_cast<unsigned long long>(result.random_solver_solves),
                  static_cast<unsigned long long>(result.checks),
                  result.failures, result.warnings,
                  static_cast<unsigned long long>(result.simulation_time_fs),
