@@ -426,6 +426,16 @@ required to validate X/Z propagation end to end; Verilator remains the
 two-state performance reference. Simulator capability differences should be
 reported at startup rather than hidden in testbench code.
 
+The framework now has a fail-closed Verilator capability gate and cached
+semantic probe covering X/Z storage, high-impedance and conflicting-driver net
+resolution, and both DPI directions. Verilator 5.050 and current upstream
+development fail that probe;
+their experimental `--fourstate` option is not a usable simulator capability
+yet. A regression intentionally records this blocked state and will fail with
+an enablement reminder when all semantics become available. The
+[four-state guide](four-state.md) documents the existing `LogicBits` API and
+the conformance criteria required before transport is enabled.
+
 ## 7. Debugging and release tooling
 
 **Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>

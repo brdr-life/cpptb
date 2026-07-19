@@ -86,6 +86,7 @@ test-lifecycle
 running-tests
 hierarchy
 interfaces
+four-state
 examples
 clocking
 scheduling

@@ -46,6 +46,15 @@ def _add_project_options(parser: argparse.ArgumentParser) -> None:
         help="simulator backend (default: verilator)",
     )
     parser.add_argument(
+        "--experimental-four-state",
+        action="store_true",
+        default=None,
+        help=(
+            "request experimental four-state mode after a Verilator "
+            "semantic capability probe (currently upstream-blocked)"
+        ),
+    )
+    parser.add_argument(
         "--framework-root",
         type=Path,
         help="cpptb checkout, installation prefix, or include directory",
@@ -108,6 +117,7 @@ def _resolve(args: argparse.Namespace) -> ProjectSpec:
         build_name=args.build_name,
         build_dir=args.build_dir,
         simulator=args.simulator,
+        experimental_four_state=args.experimental_four_state,
         refresh_top=args.rebuild,
     )
 
