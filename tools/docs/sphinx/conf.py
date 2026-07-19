@@ -120,6 +120,7 @@ examples/fifo-scoreboard
 examples/component-fifo
 examples/multiclock
 examples/apb-regfile
+examples/ipxact-regfile
 examples/watchdog-timeout
 examples/fault-injection
 examples/rich-data

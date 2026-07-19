@@ -12,6 +12,7 @@ from cpptb_codegen.generate_dpi_bindings import generate_sources
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURE = REPO / "tests/codegen/fixtures/register_model.rdl"
+IPXACT_EXAMPLE = REPO / "examples/ipxact_regfile/component.xml"
 
 
 class PeakRdlExporterTests(unittest.TestCase):
@@ -914,6 +915,29 @@ class PeakRdlExporterTests(unittest.TestCase):
             self.assertIn(
                 'std::array<cpptb::vc::RegisterMemoryDescriptor, 0>', generated
             )
+
+    def test_checked_in_ipxact_example_imports_registers_and_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "ipxact_regs.hpp"
+            result = self.run_peakrdl(
+                "cpptb",
+                str(IPXACT_EXAMPLE),
+                "-o",
+                str(output),
+                "--namespace",
+                "ipxact_regs",
+                "--rename",
+                "peripheral",
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+            generated = output.read_text(encoding="utf-8")
+            self.assertIn("enum class mode_enum_t", generated)
+            self.assertIn("RegisterScopeView_registers", generated)
+            self.assertIn("RegisterViewArray<", generated)
+            self.assertIn('.path = "peripheral.registers.control"', generated)
+            self.assertIn('.path = "peripheral.scratchpad"', generated)
+            self.assertIn('.address = UINT64_C(0x100)', generated)
+            self.assertIn("RegisterMemoryHandle<Master> scratchpad", generated)
 
     def test_legitimate_single_child_addrmap_keeps_outer_hierarchy(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

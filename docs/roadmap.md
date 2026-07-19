@@ -300,7 +300,8 @@ across APB, AXI-Lite, Wishbone, and custom buses.
 Named generated field and memory handles, relocatable block bases, desired and
 mirrored values, every standard SystemRDL write effect, write-once policy,
 passive memory prediction, generated-model execution against a fake master,
-and the APB-backed example are covered by regression. The
+the APB-backed example, and a first-class IP-XACT register-and-memory example
+with a matching pure-SystemVerilog sequence are covered by regression. The
 exact `memory_model` C++/pure-SV semantic pair passes at 100,000 operations;
 the bus-free `memory_model_direct` pair also matches at 200,000 model
 operations, 300,002 checks, and zero simulated cycles. Formal timing remains

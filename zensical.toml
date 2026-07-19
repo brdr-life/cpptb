@@ -42,6 +42,7 @@ nav = [
       { "Component FIFO" = "examples/component-fifo.md" },
       { "Multiple clocks" = "examples/multiclock.md" },
       { "APB register file" = "examples/apb-regfile.md" },
+      { "IP-XACT register model" = "examples/ipxact-regfile.md" },
       { "Watchdogs and timeouts" = "examples/watchdog-timeout.md" },
       { "Fault injection" = "examples/fault-injection.md" },
       { "Rich data" = "examples/rich-data.md" },
