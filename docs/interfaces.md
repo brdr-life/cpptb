@@ -52,6 +52,47 @@ fails with an error naming the interface port and asking for an explicit
 modport. Integral interface parameter values and constructor connections are
 inferred from the elaborated design.
 
+## Multidimensional interface and member arrays
+
+Each unpacked SystemVerilog dimension becomes one C++ `[]`, in source order.
+This applies independently to dimensions on the interface port and dimensions
+on a member inside the interface:
+
+```systemverilog
+interface grid_if(input logic clk);
+  logic [3:0] payload  [1:0];
+  logic [3:0] observed [1:0];
+  modport target(input clk, payload, output observed);
+endinterface
+
+module design(grid_if.target grids [1:0][2:4]);
+  // ...
+endmodule
+```
+
+The first two indices select an interface instance. The final index selects a
+member-array element:
+
+```cpp
+dut.grids[1][3].clk.set(0);
+dut.grids[1][3].payload[0].set(0xa);
+dut.grids[1][3].payload[1].set(0x5);
+
+const auto first = dut.grids[1][3].observed[0].get();
+const auto second = dut.grids[0][4].observed[1].get();
+```
+
+Declared bounds are preserved. In this example, the first interface index is
+`0..1`, the second is `2..4`, and the member index is `0..1`, even though the
+source declarations mix descending and ascending ranges. An out-of-range
+selection fails with the declared bounds. Direction still comes exclusively
+from the modport: `payload[word]` has `set()` and `get()`, while
+`observed[word]` has only `get()`.
+
+The same rule scales to more dimensions without introducing index-number APIs
+or generated `inputs` and `outputs` containers. The expression remains the
+elaborated HDL path written with ordinary C++ indexing.
+
 ## Clocks inside interfaces
 
 Interface clocks are ordinary named members. The C++ testbench owns input
