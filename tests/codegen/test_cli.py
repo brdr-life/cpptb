@@ -22,6 +22,8 @@ class PublicCliTests(unittest.TestCase):
         test_help = output.getvalue()
         self.assertIn("wall-time limit in seconds for each test process", test_help)
         self.assertIn("result directory", test_help)
+        self.assertIn("experimental four-state mode", test_help)
+        self.assertIn("currently upstream-blocked", test_help)
 
     def test_test_without_names_runs_the_complete_catalog(self):
         with tempfile.TemporaryDirectory() as temp_dir:

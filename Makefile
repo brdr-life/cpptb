@@ -148,6 +148,7 @@ CPPTB_CODEGEN_SOURCES := \
 	tools/codegen/cpptb_codegen/register_codegen.py \
 	tools/codegen/cpptb_codegen/rggen_codegen.py \
 	tools/codegen/cpptb_codegen/runner.py \
+	tools/codegen/cpptb_codegen/verilator_capabilities.py \
 	tools/codegen/cpptb_codegen/frontends/__init__.py \
 	tools/codegen/cpptb_codegen/frontends/slang.py \
 	tools/codegen/cpptb_codegen/frontends/verilator_json.py \

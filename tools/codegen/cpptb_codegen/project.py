@@ -34,6 +34,7 @@ class ProjectSpec:
     testbench_include_dirs: tuple[Path, ...] = ()
     cxx_flags: tuple[str, ...] = ()
     verilator_args: tuple[str, ...] = ()
+    experimental_four_state: bool = False
     simulator: str = "verilator"
 
     @property
@@ -104,6 +105,14 @@ def _string_list(value: Any, label: str) -> list[str]:
     ):
         raise ProjectError(f"{label} must be an array of non-empty strings")
     return list(value)
+
+
+def _boolean(value: Any, label: str, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ProjectError(f"{label} must be a boolean")
+    return value
 
 
 def _resolve_patterns(
@@ -317,6 +326,7 @@ def resolve_project(
     build_name: str | None = None,
     build_dir: Path | None = None,
     simulator: str | None = None,
+    experimental_four_state: bool | None = None,
     refresh_top: bool = False,
 ) -> ProjectSpec:
     """Resolve CLI overrides, optional TOML, then filesystem conventions."""
@@ -418,6 +428,28 @@ def resolve_project(
             f"unsupported simulator {selected_simulator!r}; the current build "
             "backend supports 'verilator'"
         )
+    verilator_args = tuple(
+        _string_list(build.get("verilator_args"), "build.verilator_args")
+    )
+    if any(
+        argument
+        in {"--fourstate", "-fourstate", "--no-fourstate", "-no-fourstate"}
+        for argument in verilator_args
+    ):
+        raise ProjectError(
+            "build.verilator_args must not control '--fourstate'; use "
+            "build.experimental_four_state so cpptb can run its semantic "
+            "capability probe and reject silent X/Z coercion"
+        )
+    configured_four_state = _boolean(
+        build.get("experimental_four_state"),
+        "cpptb.toml build.experimental_four_state",
+    )
+    selected_four_state = (
+        configured_four_state
+        if experimental_four_state is None
+        else experimental_four_state
+    )
 
     return ProjectSpec(
         root=root,
@@ -432,8 +464,7 @@ def resolve_project(
         parameters=parameter_values,
         testbench_include_dirs=testbench_include_dirs,
         cxx_flags=tuple(_string_list(build.get("cxx_flags"), "build.cxx_flags")),
-        verilator_args=tuple(
-            _string_list(build.get("verilator_args"), "build.verilator_args")
-        ),
+        verilator_args=verilator_args,
+        experimental_four_state=selected_four_state,
         simulator=selected_simulator,
     )

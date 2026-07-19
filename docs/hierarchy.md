@@ -158,7 +158,10 @@ const auto sampled = dut.core.bus.get_logic();
 
 The ordinary `get()`, `deposit()`, and `force()` operations remain available
 as two-state operations. Four-state behavior depends on simulator support;
-Verilator, the current end-to-end reference backend, is a two-state simulator.
+Verilator, the current end-to-end reference backend, does not yet preserve X/Z
+semantics. Known `LogicBits` values work, while unknown writes fail before
+transport. See [four-state values](four-state.md) for the complete value API,
+capability gate, diagnostics, and current upstream limitation.
 
 ## Hierarchical triggers
 

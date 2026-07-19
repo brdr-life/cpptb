@@ -146,9 +146,14 @@ X or Z therefore aborts with the operation, hierarchy path, simulator name,
 and a recommendation to use a four-state backend rather than silently
 coercing the value.
 
-End-to-end four-state propagation, resolved contention, and the complete
-conformance suite on another standards-compliant simulator remain portability
-work. Known 0/1 `LogicBits` values continue to work on Verilator.
+Verilator's experimental `--fourstate` option does not currently preserve the
+required semantics. CPPTB therefore rejects raw use of that option and offers
+an explicit, fail-closed capability probe instead. End-to-end four-state
+propagation, resolved contention, and the complete conformance suite on another
+standards-compliant simulator remain portability work. Known 0/1 `LogicBits`
+values continue to work on Verilator.
 
 See the runnable [interfaces example](examples/interfaces.md) and the
-[hierarchy guide](hierarchy.md) for adjacent internal and array access.
+[hierarchy guide](hierarchy.md) for adjacent internal and array access. The
+[four-state guide](four-state.md) documents `LogicBits`, logic signal APIs, the
+experimental gate, and its enablement criteria.

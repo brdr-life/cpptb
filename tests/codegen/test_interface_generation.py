@@ -506,6 +506,7 @@ int main(int argc, char**) {
             self.assertIn("force_logic on 'dut.block.signal'", rejected.stdout)
             self.assertIn("Verilator is a two-state simulator", rejected.stdout)
             self.assertIn("would silently coerce the value", rejected.stdout)
+            self.assertIn("upstream-under-development", rejected.stdout)
 
 
 if __name__ == "__main__":

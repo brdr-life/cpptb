@@ -35,6 +35,7 @@ nav = [
     { "Running tests" = "running-tests.md" },
     { "Hierarchical DUT access" = "hierarchy.md" },
     { "Interfaces and inouts" = "interfaces.md" },
+    { "Four-state values" = "four-state.md" },
     { "Examples" = [
       { "Overview" = "examples.md" },
       { "Counter" = "examples/counter.md" },

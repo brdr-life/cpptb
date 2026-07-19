@@ -29,6 +29,13 @@ constructor connections, fixed interface arrays, and `inout` drive intent are
 also derived from the elaborated source. See
 [SystemVerilog interfaces and bidirectional signals](interfaces.md).
 
+The generated hierarchy records whether each HDL object is two-state or
+four-state, but transport capability is a separate simulator property. The
+experimental Verilator request runs a semantic probe before generation can
+enable four-state transport; normal builds do not run the probe. See
+[four-state values](four-state.md) for the API and fail-closed activation
+contract.
+
 Pass multiple RTL files together and use `--top` only when source elaboration
 cannot choose one root unambiguously. Code generation discovers port shape,
 but does not assign clock roles or timing. The C++ testbench does that:

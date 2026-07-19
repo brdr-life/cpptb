@@ -15,6 +15,7 @@ from typing import Sequence
 
 from cpptb_codegen.generate_dpi_bindings import generate_sources
 from cpptb_codegen.project import ProjectSpec
+from cpptb_codegen.verilator_capabilities import probe_verilator_four_state
 
 
 class BuildError(RuntimeError):
@@ -160,6 +161,7 @@ def _fingerprint(
         ],
         "cxx_flags": list(spec.cxx_flags),
         "verilator_args": list(spec.verilator_args),
+        "experimental_four_state": spec.experimental_four_state,
         "verilator_version": verilator_version,
         "cxx_version": cxx_version,
     }
@@ -209,6 +211,7 @@ def _write_state(path: Path, spec: ProjectSpec, fingerprint: str) -> None:
         "binary": str(spec.binary),
         "rtl_sources": [str(item) for item in spec.rtl_sources],
         "testbench_sources": [str(item) for item in spec.testbench_sources],
+        "experimental_four_state": spec.experimental_four_state,
     }
     path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -246,6 +249,29 @@ class VerilatorBackend:
     ) -> BuildResult:
         spec = self.spec
         verilator_version = _capture([*self.verilator, "--version"], "Verilator")
+        if spec.experimental_four_state:
+            probe = probe_verilator_four_state(
+                self.verilator,
+                verilator_version,
+                spec.metadata_dir / "verilator-four-state-probe",
+                refresh=rebuild,
+            )
+            if not probe.supported:
+                raise BuildError(
+                    "experimental four-state mode requested, but Verilator "
+                    "does not preserve the required semantics\n"
+                    f"  {probe.summary()}\n"
+                    "Verilator's --fourstate flag is upstream-under-development. "
+                    "Remove --experimental-four-state and use known 0/1 values, "
+                    "or run four-state tests on a standards-compliant backend."
+                )
+            raise BuildError(
+                "Verilator now passes the experimental four-state semantic "
+                "probe, but CPPTB transport remains disabled until the full "
+                "four-state conformance suite and performance peers pass. "
+                "Update the capability regression and enablement review before "
+                "using this mode."
+            )
         cxx_version = _capture([*self.cxx, "--version"], "C++ compiler").splitlines()[0]
         fingerprint = _fingerprint(
             spec,
