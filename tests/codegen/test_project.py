@@ -56,6 +56,7 @@ include_dirs = ["tests/support"]
 directory = "out"
 cxx_flags = ["-O2"]
 verilator_args = ["--trace"]
+experimental_four_state = true
 """.strip()
                 + "\n"
             )
@@ -70,6 +71,58 @@ verilator_args = ["--trace"]
             self.assertEqual(spec.build_root, (root / "out").resolve())
             self.assertEqual(spec.cxx_flags, ("-O2",))
             self.assertEqual(spec.verilator_args, ("--trace",))
+            self.assertTrue(spec.experimental_four_state)
+
+    def test_four_state_configuration_must_use_the_guarded_option(self):
+        for argument in (
+            "--fourstate",
+            "-fourstate",
+            "--no-fourstate",
+            "-no-fourstate",
+        ):
+            with self.subTest(argument=argument):
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    root = Path(temp_dir)
+                    (root / "design.sv").write_text(
+                        "module design; endmodule\n"
+                    )
+                    (root / "testbench.cpp").write_text("// testbench\n")
+                    (root / "cpptb.toml").write_text(
+                        f'[build]\nverilator_args = ["{argument}"]\n'
+                    )
+
+                    with self.assertRaisesRegex(
+                        ProjectError, "build.experimental_four_state"
+                    ):
+                        resolve_project(project=root, top="design")
+
+    def test_four_state_configuration_must_be_boolean(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "design.sv").write_text("module design; endmodule\n")
+            (root / "testbench.cpp").write_text("// testbench\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\nexperimental_four_state = "yes"\n'
+            )
+
+            with self.assertRaisesRegex(
+                ProjectError, "experimental_four_state must be a boolean"
+            ):
+                resolve_project(project=root, top="design")
+
+    def test_cli_four_state_override_enables_the_guard(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "design.sv").write_text("module design; endmodule\n")
+            (root / "testbench.cpp").write_text("// testbench\n")
+
+            spec = resolve_project(
+                project=root,
+                top="design",
+                experimental_four_state=True,
+            )
+
+            self.assertTrue(spec.experimental_four_state)
 
     def test_cli_overrides_configured_sources_and_build_location(self):
         with tempfile.TemporaryDirectory() as temp_dir:

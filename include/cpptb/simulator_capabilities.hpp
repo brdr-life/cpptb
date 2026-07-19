@@ -32,8 +32,10 @@ inline void require_logic_write_supported(const LogicBits<Width>& value,
     std::fprintf(
         stderr,
         "cpptb: %s on '%s' contains X or Z, but %.*s is a two-state "
-        "simulator and would silently coerce the value; run this test on a "
-        "four-state simulator or drive a known 0/1 value\n",
+        "simulator and would silently coerce the value; Verilator's "
+        "--fourstate flag is currently upstream-under-development, so run "
+        "this test on a standards-compliant four-state backend or drive a "
+        "known 0/1 value\n",
         operation, path, static_cast<int>(capabilities.name.size()),
         capabilities.name.data());
     std::abort();

@@ -205,6 +205,19 @@ simulator = "verilator"
 cxx_flags = ["-O2"]
 ```
 
+Four-state Verilator work is guarded separately from raw simulator arguments:
+
+```toml
+[build]
+experimental_four_state = true
+```
+
+The option currently runs a semantic capability probe and reports that
+Verilator does not preserve the required X/Z behavior. Do not add
+`--fourstate` to `verilator_args`; that bypass is rejected because accepting
+the upstream flag does not imply correct four-state execution. See
+[four-state values](four-state.md) for details.
+
 Source patterns are expanded in listed order, with each pattern sorted
 deterministically. `cpptb build` reports ambiguous top modules with the exact
 `--top` remedy. Missing tools, sources, tests, include directories, and invalid
