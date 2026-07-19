@@ -14,6 +14,7 @@ of the way.
 | [Component FIFO](examples/component-fifo.md) | Reusable transaction endpoints and analysis fan-out | Complete component composition |
 | [Multiple clocks](examples/multiclock.md) | Independent clock domains | Producer, consumer, and trigger probe |
 | [APB register file](examples/apb-regfile.md) | Optional protocol component package | Generic sequence, master, monitor, checker, scoreboard, and coverage |
+| [IP-XACT register model](examples/ipxact-regfile.md) | A standard IP-XACT contract with registers and native memory | Generated hierarchy, fake-master check, APB sequence, and pure-SV peer |
 | [Watchdogs and timeouts](examples/watchdog-timeout.md) | Operations that may stall or need cancellation | Transaction, timeout, and process lifecycle |
 | [Fault injection](examples/fault-injection.md) | Internal access and controlled fault injection | Deposit, force, release, and explicit settling |
 | [Rich data](examples/rich-data.md) | Wide, fixed-point, array, struct, and enum ports | Typed construction and checking |
