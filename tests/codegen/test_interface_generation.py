@@ -132,7 +132,10 @@ module sample(grid_if.target grids [1:0][2:4]); endmodule
         )
         self.assertEqual(payload.interface_rank, 2)
 
-    @unittest.skipUnless(shutil.which("verilator"), "Verilator is required")
+    @unittest.skipUnless(
+        shutil.which("c++") and shutil.which("verilator"),
+        "C++ and Verilator are required",
+    )
     def test_generates_multidimensional_interface_and_member_arrays(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -170,6 +173,62 @@ endmodule
             self.assertIn("grid_if grids [1:0] [2:4]", wrapper)
             self.assertIn("grids[1][2].payload[cpptb_", wrapper)
             self.assertIn("operator[](std::int32_t index)", header)
+
+            verilator_root = subprocess.run(
+                ["verilator", "--getenv", "VERILATOR_ROOT"],
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout.strip()
+            api_check = root / "interface_array_api.cpp"
+            api_check.write_text(
+                r'''
+#include <utility>
+#include "sample_dut.hpp"
+
+template <typename T>
+concept HasGet = requires(T value) { value.get(); };
+
+template <typename T>
+concept HasSet = requires(T value) {
+    value.set(typename T::value_type{});
+};
+
+using Dut = cpptb::generated::sample::Dut;
+using Cell = decltype(std::declval<Dut>().grids[1][3]);
+
+static_assert(HasSet<decltype(std::declval<Cell>().clk)>);
+static_assert(HasSet<decltype(std::declval<Cell>().payload[0])>);
+static_assert(HasGet<decltype(std::declval<Cell>().payload[1])>);
+static_assert(HasGet<decltype(std::declval<Cell>().observed[0])>);
+static_assert(!HasSet<decltype(std::declval<Cell>().observed[1])>);
+
+void documented_usage(Dut dut) {
+    dut.grids[1][3].clk.set(0);
+    dut.grids[1][3].payload[0].set(0xa);
+    dut.grids[1][3].payload[1].set(0x5);
+    (void)dut.grids[1][3].observed[0].get();
+    (void)dut.grids[0][4].observed[1].get();
+}
+''',
+                encoding="utf-8",
+            )
+            api_compile = subprocess.run(
+                [
+                    "c++",
+                    "-std=c++20",
+                    "-fsyntax-only",
+                    f"-I{REPO / 'include'}",
+                    f"-I{generated}",
+                    f"-I{Path(verilator_root) / 'include' / 'vltstd'}",
+                    str(api_check),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+            )
+            self.assertEqual(api_compile.returncode, 0, api_compile.stdout)
+
             lint = subprocess.run(
                 [
                     "verilator",
