@@ -206,7 +206,7 @@ CPPTB_EXAMPLE_FRONTEND_CHECK_TARGETS :=
 
 # $(1): target slug, $(2): variable prefix, $(3): directory name,
 # $(4): RTL/top basename, $(5): generated DPI top, $(6): pure-SV top,
-# $(7): fixed semantic benchmark test.
+# $(7): fixed semantic benchmark test, $(8): optional `slang-only` frontend mode.
 define CPPTB_EXAMPLE_template
 CPPTB_$(2)_DIR := examples/$(3)
 CPPTB_$(2)_BUILD_DIR := $$(CPPTB_BUILD_DIR)/$(3)
@@ -216,6 +216,7 @@ CPPTB_$(2)_SV_OBJ_DIR := $$(CPPTB_$(2)_BUILD_DIR)/systemverilog_obj
 CPPTB_$(2)_RESULT_DIR := $$(CPPTB_$(2)_BUILD_DIR)/results
 CPPTB_$(2)_SV_TB := $$(CPPTB_$(2)_DIR)/systemverilog/$(6).sv
 CPPTB_$(2)_DEFAULT_TEST := $(7)
+CPPTB_$(2)_FRONTEND_CHECK_ARGS := $$(if $$(filter slang-only,$(8)),--rebuild,--compare-frontend verilator_json)
 CPPTB_$(2)_GENERATED := \
 	$$(CPPTB_$(2)_GENERATED_DIR)/$(4)_dut.hpp \
 	$$(CPPTB_$(2)_GENERATED_DIR)/dut.hpp \
@@ -245,7 +246,7 @@ cpp-dpi-$(1)-codegen-check:
 
 cpp-dpi-$(1)-frontend-check:
 	$$(CPPTB) build $$(CPPTB_$(2)_PROJECT_ARGS) \
-		--compare-frontend verilator_json
+		$$(CPPTB_$(2)_FRONTEND_CHECK_ARGS)
 
 cpp-dpi-$(1)-build:
 	$$(CPPTB) build $$(CPPTB_$(2)_PROJECT_ARGS)
@@ -310,6 +311,7 @@ cpptb-ipxact-regfile-model-test: $(CPPTB_IPXACT_REGFILE_MODEL_TEST)
 $(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_timeout,stalling_responder,dpi_stalling_responder,stalling_responder_sv_tb,watchdog_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb,fault_injection_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb,rich_data_sequence))
+$(eval $(call CPPTB_EXAMPLE_template,interfaces,INTERFACES,interfaces,stream_interfaces,dpi_stream_interfaces,stream_interfaces_sv_tb,interface_test,slang-only))
 
 .PHONY: help all test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 

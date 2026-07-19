@@ -33,7 +33,7 @@ CPPTB_REGISTER_TEST(count_sequence);
 | [Reusable verification components](roadmap.md#3-reusable-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
 | [Random stimulus and functional coverage](roadmap.md#4-reproducible-random-stimulus-and-functional-coverage) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
 | [Memory and register verification components](roadmap.md#5-memory-and-register-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
-| [Interfaces and simulator portability](roadmap.md#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
+| [Interfaces and simulator portability](roadmap.md#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--next">In progress</span> |
 | [Debugging and release tooling](roadmap.md#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Coherent clock and reset control](roadmap.md#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Batched execution and run-ahead experiments](roadmap.md#9-batched-execution-and-run-ahead-experiments) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
@@ -63,6 +63,8 @@ delivery process behind each milestone.
   execution harness.
 - [Hierarchical DUT access](hierarchy.md) covers natural instance paths,
   memories, packed types, backdoor operations, and hierarchical triggers.
+- [SystemVerilog interfaces and bidirectional signals](interfaces.md) covers
+  modports, interface arrays, named directions, clocks, and inout drive intent.
 - [Examples](examples.md) maps common DUT styles to runnable C++ DPI and pure
   SystemVerilog pairs.
 - [Open-source core benchmarks](examples/open-source-cores.md) show the same

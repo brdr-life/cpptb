@@ -199,6 +199,7 @@ private:
     }
 };
 
+
 struct ConformanceClocks {
     cpptb::dpi::StaticPackedSignal<1, false, false, kSignalClkA, 0> a;
     cpptb::dpi::StaticPackedSignal<1, false, false, kSignalClkB, 1> b;

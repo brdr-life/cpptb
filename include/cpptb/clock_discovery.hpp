@@ -196,7 +196,8 @@ class ClockDiscoveryCollector {
             const auto& clock = clocks_[index];
             output << (index == 0 ? "\n" : ",\n")
                    << "    {\"port\": \"" << clock.name
-                   << "\", \"period_fs\": " << clock.period_fs
+                   << "\", \"signal_id\": " << clock.signal_id
+                   << ", \"period_fs\": " << clock.period_fs
                    << ", \"phase_fs\": " << clock.phase_fs
                    << ", \"initial_value\": "
                    << (binding_.signal_value(clock.signal_id) & 1u)

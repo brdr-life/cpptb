@@ -63,21 +63,21 @@ Task<void> fault_injection_sequence(Dut dut, TestContext& test) {
     test.expect_eq("RTL writes resume after release", dut.counter_o.get(),
                    0x56u);
 
-    dut.memory.at(2).deposit(0xbeef);
+    dut.memory[2].deposit(0xbeef);
     test.expect_eq("deposit is immediately readable",
-                   dut.memory.at(2).get(), 0xbeefu);
+                   dut.memory[2].get(), 0xbeefu);
     dut.memory_address.set(2);
     co_await Delay{1_ps};
     test.expect_eq("deposit reaches memory output", dut.memory_read_data.get(),
                    0xbeefu);
 
-    dut.memory.at(2).force(0xcafe);
+    dut.memory[2].force(0xcafe);
     test.expect_eq("memory force is immediately readable",
-                   dut.memory.at(2).get(), 0xcafeu);
+                   dut.memory[2].get(), 0xcafeu);
     co_await Delay{1_ps};
     test.expect_eq("memory force reaches output", dut.memory_read_data.get(),
                    0xcafeu);
-    dut.memory.at(2).release();
+    dut.memory[2].release();
 
     dut.memory_write_data.set(0x1234);
     dut.memory_write.set(1);

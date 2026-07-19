@@ -115,6 +115,8 @@ class HierarchyGenerationTests(unittest.TestCase):
             wrapper = (generated / "dpi_hierarchy_catalog.sv").read_text()
             self.assertIn("HierarchyBlock1Scope block1", header)
             self.assertIn("ScopeElement<1, HierarchyLanes1Scope>", header)
+            self.assertIn("struct HierarchyLanesArrayElement", header)
+            self.assertIn("HierarchyLanesArrayElement operator[](", header)
             self.assertIn("static constexpr std::int64_t WIDTH = 8", header)
             self.assertNotIn("i_dut.block1.storage", wrapper)
             self.assertNotIn("svdpi.h", header)
@@ -157,6 +159,16 @@ class HierarchyGenerationTests(unittest.TestCase):
             self.assertIn(("block1.memory", "force"), selected)
             self.assertIn(("block1.matrix", "deposit"), selected)
             self.assertIn(("lanes[1].block2.storage", "get"), selected)
+            self.assertIn(("lanes[1].block2.storage", "deposit"), selected)
+            self.assertIn(("lanes[1].block2.storage", "force"), selected)
+            self.assertIn(("lanes[1].block2.storage", "release"), selected)
+            self.assertIn(("lanes[1].block2.storage", "get_logic"), selected)
+            self.assertIn(
+                ("lanes[1].block2.storage", "deposit_logic"), selected
+            )
+            self.assertIn(
+                ("lanes[1].block2.storage", "force_logic"), selected
+            )
             self.assertIn(("internal_flag", "any_edge"), selected)
             self.assertIn(("four_state_value", "get_logic"), selected)
             self.assertIn(("four_state_value", "deposit_logic"), selected)
@@ -164,7 +176,7 @@ class HierarchyGenerationTests(unittest.TestCase):
             self.assertIn(("wide_value", "get"), selected)
             self.assertIn(("wide_value", "deposit"), selected)
             self.assertIn(("wide_value", "force"), selected)
-            self.assertNotIn(("lanes[0].block2.storage", "get"), selected)
+            self.assertIn(("lanes[0].block2.storage", "get"), selected)
 
             generate_sources(
                 [source],
@@ -201,7 +213,7 @@ class HierarchyGenerationTests(unittest.TestCase):
             self.assertIn("observe_hierarchy_signal_0", wrapper)
             self.assertIn("@(event_out);", wrapper)
             self.assertNotIn("@(clk);", wrapper)
-            self.assertNotIn("i_dut.lanes[0].block2.storage", wrapper)
+            self.assertIn("i_dut.lanes[0].block2.storage", wrapper)
 
             common_verilator_args = [
                 "verilator",

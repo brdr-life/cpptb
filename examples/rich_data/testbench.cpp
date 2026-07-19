@@ -37,7 +37,7 @@ Task<void> rich_data_sequence(Dut dut, TestContext& test) {
     dut.fixed_b_i.set(fixed_b.raw().to_uint());
 
     for (int32_t index = 1; index <= 3; ++index) {
-        dut.scalar_array_i.at(index).set(
+        dut.scalar_array_i[index].set(
             0x1020'3040u + static_cast<uint32_t>(index));
     }
 
@@ -45,7 +45,7 @@ Task<void> rich_data_sequence(Dut dut, TestContext& test) {
         for (int32_t column = -1; column <= 1; ++column) {
             const uint32_t ordinal =
                 static_cast<uint32_t>((row - 1) * 3 + column + 1);
-            dut.matrix_i.at(row).at(column).set(Bits<65>::from_words(
+            dut.matrix_i[row][column].set(Bits<65>::from_words(
                 {0x1020'3040u + ordinal, 0x5060'7080u + ordinal,
                  ordinal & 1u}));
         }
@@ -77,7 +77,7 @@ Task<void> rich_data_sequence(Dut dut, TestContext& test) {
         const uint32_t input =
             0x1020'3040u + static_cast<uint32_t>(index);
         test.expect_eq("unpacked array element",
-                       dut.scalar_array_o.at(index).get(),
+                       dut.scalar_array_o[index].get(),
                        input ^ (0x0101'0101u * static_cast<uint32_t>(index)));
     }
 
@@ -91,7 +91,7 @@ Task<void> rich_data_sequence(Dut dut, TestContext& test) {
                 {0x1020'3040u + ordinal, 0x5060'7080u + ordinal,
                  ordinal & 1u});
             test.expect_eq("multidimensional wide array element",
-                           dut.matrix_o.at(row).at(column).get(),
+                           dut.matrix_o[row][column].get(),
                            xor_words<65>(input, matrix_mask));
         }
     }

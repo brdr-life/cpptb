@@ -593,6 +593,7 @@ private:
     }
 };
 
+
 struct AuthoringCoreDut {
     static constexpr bool cpptb_static_binding = true;
     cpptb::dpi::StaticPackedSignal<1, true, false, kSignalClk, 0> clk;

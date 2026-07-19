@@ -44,7 +44,7 @@ milestone blockers. The current development priority is the framework.
 | 3 | [Reusable verification components](#3-reusable-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Package-ready bus and stream interfaces, APB components, monitors, checkers, and scoreboards |
 | 4 | [Random stimulus and functional coverage](#4-reproducible-random-stimulus-and-functional-coverage) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Reproducible random streams, adaptive solving, and mergeable functional coverage |
 | 5 | [Memory and register verification components](#5-memory-and-register-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Optional protocol-independent memory and typed register models with frontdoor and backdoor adapters |
-| 6 | [Interfaces and simulator portability](#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Interfaces, resolved signals, four-state values, and another simulator |
+| 6 | [Interfaces and simulator portability](#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--next">In progress</span> | Typed interfaces and inout intent are shipped; four-state and second-simulator conformance remain |
 | 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Logging, waveforms, wait diagnostics, and distributable packages |
 | 8 | [Coherent clock and reset control](#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Runtime clock ownership and explicit reusable reset components |
 | 9 | [Batched execution and run-ahead experiments](#9-batched-execution-and-run-ahead-experiments) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Reduce DPI scheduler resumptions across fine-grained timing boundaries |
@@ -403,12 +403,22 @@ a host-load window admitted by the benchmark policy.
 
 ## 6. Interfaces, bidirectional signals, and portability
 
-**Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>
+**Status:** <span class="roadmap-status roadmap-status--next">In progress</span>
 
-Extend generated typed access to SystemVerilog interfaces, modports, unpacked
-interface arrays, `inout` ports, and resolved tri-state nets. Preserve natural
-hierarchical access and four-state values without requiring user-authored
-binding files.
+Shipped in the Verilator reference flow:
+
+- generated named access for parameterized SystemVerilog interfaces with an
+  explicit modport;
+- fixed interface arrays and independent clocks selected by exact generated
+  signal identity;
+- `drive()`, `high_z()`, and `get()` for top-level and interface-member
+  `inout` signals, with no implicit delay;
+- natural `dut.scope[index].member` access for homogeneous elaborated instance
+  and generate arrays; and
+- simulator capability diagnostics that reject X/Z writes when a two-state
+  backend would silently coerce them.
+
+Remaining portability work:
 
 Run the complete generated transport and scheduling conformance suite on at
 least one additional standards-compliant simulator. A four-state simulator is

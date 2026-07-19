@@ -25,6 +25,7 @@ EXPECTED_NAMES = (
     "dpi_watchdog_timeout",
     "dpi_fault_injection",
     "dpi_rich_data",
+    "dpi_interfaces",
     "peripheral_suite",
 )
 
@@ -38,6 +39,7 @@ EXAMPLE_NAMES = (
     "dpi_watchdog_timeout",
     "dpi_fault_injection",
     "dpi_rich_data",
+    "dpi_interfaces",
 )
 
 
@@ -167,6 +169,7 @@ class RegistryTests(unittest.TestCase):
                 "dpi_watchdog_timeout",
                 "dpi_fault_injection",
                 "dpi_rich_data",
+                "dpi_interfaces",
                 "peripheral_suite",
             ),
         )

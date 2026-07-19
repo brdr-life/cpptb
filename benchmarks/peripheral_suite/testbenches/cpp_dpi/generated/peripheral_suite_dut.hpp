@@ -228,6 +228,297 @@ private:
     }
 };
 
+struct HierarchyII2CScope;
+struct HierarchyII2CByteControllerScope;
+struct HierarchyII2CByteControllerBitControllerScope;
+struct HierarchyII2CIRegsScope;
+struct HierarchyISpiScope;
+struct HierarchyISpiIRegsScope;
+struct HierarchyITimerScope;
+struct HierarchyITimerTimerGen0Scope;
+struct HierarchyITimerTimerGen0TimerIScope;
+struct HierarchyITimerTimerGen0TimerIIRegsScope;
+struct HierarchyITimerTimerGen1Scope;
+struct HierarchyITimerTimerGen1TimerIScope;
+struct HierarchyITimerTimerGen1TimerIIRegsScope;
+
+struct HierarchyITimerTimerGenArrayElementTimerIIRegs {
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.arst_n", "i_timer.TIMER_GEN[1].timer_i.i_regs.arst_n">> arst_n;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.clk", "i_timer.TIMER_GEN[1].timer_i.i_regs.clk">> clk;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 4, true, cpptb::probe::Value<4>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_addr", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_addr">> cpuif_addr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_ack", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_ack">> cpuif_rd_ack;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_data", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_data">> cpuif_rd_data;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_err", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_err">> cpuif_rd_err;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req">> cpuif_req;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_is_wr", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_is_wr">> cpuif_req_is_wr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_masked", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_masked">> cpuif_req_masked;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_stall_rd", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_stall_rd">> cpuif_req_stall_rd;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_stall_wr", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_stall_wr">> cpuif_req_stall_wr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_ack", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_ack">> cpuif_wr_ack;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_biten", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_biten">> cpuif_wr_biten;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_data", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_data">> cpuif_wr_data;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_err", "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_err">> cpuif_wr_err;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 4, true, cpptb::probe::Value<4>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_addr", "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_addr">> decoded_addr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_err", "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_err">> decoded_err;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_req", "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_req">> decoded_req;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_req_is_wr", "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_req_is_wr">> decoded_req_is_wr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_wr_biten", "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_wr_biten">> decoded_wr_biten;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_wr_data", "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_wr_data">> decoded_wr_data;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.is_valid_addr", "i_timer.TIMER_GEN[1].timer_i.i_regs.is_valid_addr">> is_valid_addr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.is_valid_rw", "i_timer.TIMER_GEN[1].timer_i.i_regs.is_valid_rw">> is_valid_rw;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.load_next_c", "i_timer.TIMER_GEN[1].timer_i.i_regs.load_next_c">> load_next_c;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.next_c", "i_timer.TIMER_GEN[1].timer_i.i_regs.next_c">> next_c;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 4, true, cpptb::probe::Value<4>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.rd_mux_addr", "i_timer.TIMER_GEN[1].timer_i.i_regs.rd_mux_addr">> rd_mux_addr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.readback_data", "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_data">> readback_data;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.readback_data_var", "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_data_var">> readback_data_var;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.readback_done", "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_done">> readback_done;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.readback_err", "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_err">> readback_err;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 4, false, cpptb::probe::Value<4>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_addr", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_addr">> s_cpuif_addr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_ack", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_ack">> s_cpuif_rd_ack;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, false, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_data", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_data">> s_cpuif_rd_data;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_err", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_err">> s_cpuif_rd_err;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req">> s_cpuif_req;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_is_wr", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_is_wr">> s_cpuif_req_is_wr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_stall_rd", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_stall_rd">> s_cpuif_req_stall_rd;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_stall_wr", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_stall_wr">> s_cpuif_req_stall_wr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_ack", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_ack">> s_cpuif_wr_ack;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, false, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_biten", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_biten">> s_cpuif_wr_biten;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, false, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_data", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_data">> s_cpuif_wr_data;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, false, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_err", "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_err">> s_cpuif_wr_err;
+};
+
+struct HierarchyITimerTimerGenArrayElementTimerI {
+    [[no_unique_address]] HierarchyITimerTimerGenArrayElementTimerIIRegs i_regs;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.HCLK", "i_timer.TIMER_GEN[1].timer_i.HCLK">> HCLK;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.HRESETn", "i_timer.TIMER_GEN[1].timer_i.HRESETn">> HRESETn;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 12, true, cpptb::probe::Value<12>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.PADDR", "i_timer.TIMER_GEN[1].timer_i.PADDR">> PADDR;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.PENABLE", "i_timer.TIMER_GEN[1].timer_i.PENABLE">> PENABLE;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.PRDATA", "i_timer.TIMER_GEN[1].timer_i.PRDATA">> PRDATA;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.PREADY", "i_timer.TIMER_GEN[1].timer_i.PREADY">> PREADY;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.PSEL", "i_timer.TIMER_GEN[1].timer_i.PSEL">> PSEL;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.PSLVERR", "i_timer.TIMER_GEN[1].timer_i.PSLVERR">> PSLVERR;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.PWDATA", "i_timer.TIMER_GEN[1].timer_i.PWDATA">> PWDATA;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.PWRITE", "i_timer.TIMER_GEN[1].timer_i.PWRITE">> PWRITE;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.apb_write", "i_timer.TIMER_GEN[1].timer_i.apb_write">> apb_write;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.cmp_write", "i_timer.TIMER_GEN[1].timer_i.cmp_write">> cmp_write;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 4, true, cpptb::probe::Value<4>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.core_addr", "i_timer.TIMER_GEN[1].timer_i.core_addr">> core_addr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.cycle_counter_n", "i_timer.TIMER_GEN[1].timer_i.cycle_counter_n">> cycle_counter_n;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.cycle_counter_q", "i_timer.TIMER_GEN[1].timer_i.cycle_counter_q">> cycle_counter_q;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 2, true, cpptb::probe::Value<2>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.irq_o", "i_timer.TIMER_GEN[1].timer_i.irq_o">> irq_o;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 3, true, cpptb::probe::Value<3>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.prescaler_int", "i_timer.TIMER_GEN[1].timer_i.prescaler_int">> prescaler_int;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 2, true, cpptb::probe::Value<2>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.register_adr", "i_timer.TIMER_GEN[1].timer_i.register_adr">> register_adr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.timer_next", "i_timer.TIMER_GEN[1].timer_i.timer_next">> timer_next;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.timer_we", "i_timer.TIMER_GEN[1].timer_i.timer_we">> timer_we;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.unused_core_rd_ack", "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_ack">> unused_core_rd_ack;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 32, true, cpptb::probe::Value<32>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.unused_core_rd_data", "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_data">> unused_core_rd_data;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.unused_core_rd_err", "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_err">> unused_core_rd_err;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.unused_core_req_stall_rd", "i_timer.TIMER_GEN[1].timer_i.unused_core_req_stall_rd">> unused_core_req_stall_rd;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.unused_core_req_stall_wr", "i_timer.TIMER_GEN[1].timer_i.unused_core_req_stall_wr">> unused_core_req_stall_wr;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.unused_core_wr_ack", "i_timer.TIMER_GEN[1].timer_i.unused_core_wr_ack">> unused_core_wr_ack;
+    cpptb::hierarchy::SelectedSignal<HierarchyTransport, 1, true, cpptb::probe::Value<1>, true, cpptb::hierarchy::AccessPathSet<"i_timer.TIMER_GEN[0].timer_i.unused_core_wr_err", "i_timer.TIMER_GEN[1].timer_i.unused_core_wr_err">> unused_core_wr_err;
+    std::int64_t APB_ADDR_WIDTH;
+    std::int64_t EnableBit;
+    std::int64_t PrescalerStartBit;
+    std::int64_t PrescalerStopBit;
+    std::int64_t RegCmp;
+    std::int64_t RegTimer;
+    std::int64_t RegTimerCtrl;
+};
+
+struct HierarchyITimerTimerGenArrayElement {
+    [[no_unique_address]] HierarchyITimerTimerGenArrayElementTimerI timer_i;
+    std::int64_t k;
+};
+
+struct HierarchyITimerTimerGenArray {
+    using Compatibility = cpptb::hierarchy::ScopeArray<cpptb::hierarchy::ScopeElement<0, HierarchyITimerTimerGen0Scope>, cpptb::hierarchy::ScopeElement<1, HierarchyITimerTimerGen1Scope>>;
+
+    template <std::int32_t Index>
+    [[nodiscard]] constexpr auto at() const {
+        return Compatibility{}.template at<Index>();
+    }
+
+    [[nodiscard]] HierarchyITimerTimerGenArrayElement operator[](
+        std::int32_t index) const {
+        switch (index) {
+            case 0: return HierarchyITimerTimerGenArrayElement
+                {
+                    {
+                        {
+                            {286, "i_timer.TIMER_GEN[0].timer_i.i_regs.arst_n"},
+                            {287, "i_timer.TIMER_GEN[0].timer_i.i_regs.clk"},
+                            {288, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_addr"},
+                            {289, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_ack"},
+                            {290, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_data"},
+                            {291, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_err"},
+                            {292, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req"},
+                            {293, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_is_wr"},
+                            {294, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_masked"},
+                            {295, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_stall_rd"},
+                            {296, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_stall_wr"},
+                            {297, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_ack"},
+                            {298, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_biten"},
+                            {299, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_data"},
+                            {300, "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_err"},
+                            {301, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_addr"},
+                            {302, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_err"},
+                            {303, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_req"},
+                            {304, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_req_is_wr"},
+                            {305, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_wr_biten"},
+                            {306, "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_wr_data"},
+                            {307, "i_timer.TIMER_GEN[0].timer_i.i_regs.is_valid_addr"},
+                            {308, "i_timer.TIMER_GEN[0].timer_i.i_regs.is_valid_rw"},
+                            {309, "i_timer.TIMER_GEN[0].timer_i.i_regs.load_next_c"},
+                            {310, "i_timer.TIMER_GEN[0].timer_i.i_regs.next_c"},
+                            {311, "i_timer.TIMER_GEN[0].timer_i.i_regs.rd_mux_addr"},
+                            {312, "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_data"},
+                            {313, "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_data_var"},
+                            {314, "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_done"},
+                            {315, "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_err"},
+                            {316, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_addr"},
+                            {317, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_ack"},
+                            {318, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_data"},
+                            {319, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_err"},
+                            {320, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req"},
+                            {321, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_is_wr"},
+                            {322, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_stall_rd"},
+                            {323, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_stall_wr"},
+                            {324, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_ack"},
+                            {325, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_biten"},
+                            {326, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_data"},
+                            {327, "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_err"}
+                        },
+                        {271, "i_timer.TIMER_GEN[0].timer_i.HCLK"},
+                        {272, "i_timer.TIMER_GEN[0].timer_i.HRESETn"},
+                        {273, "i_timer.TIMER_GEN[0].timer_i.PADDR"},
+                        {274, "i_timer.TIMER_GEN[0].timer_i.PENABLE"},
+                        {275, "i_timer.TIMER_GEN[0].timer_i.PRDATA"},
+                        {276, "i_timer.TIMER_GEN[0].timer_i.PREADY"},
+                        {277, "i_timer.TIMER_GEN[0].timer_i.PSEL"},
+                        {278, "i_timer.TIMER_GEN[0].timer_i.PSLVERR"},
+                        {279, "i_timer.TIMER_GEN[0].timer_i.PWDATA"},
+                        {280, "i_timer.TIMER_GEN[0].timer_i.PWRITE"},
+                        {281, "i_timer.TIMER_GEN[0].timer_i.apb_write"},
+                        {282, "i_timer.TIMER_GEN[0].timer_i.cmp_write"},
+                        {283, "i_timer.TIMER_GEN[0].timer_i.core_addr"},
+                        {284, "i_timer.TIMER_GEN[0].timer_i.cycle_counter_n"},
+                        {285, "i_timer.TIMER_GEN[0].timer_i.cycle_counter_q"},
+                        {328, "i_timer.TIMER_GEN[0].timer_i.irq_o"},
+                        {329, "i_timer.TIMER_GEN[0].timer_i.prescaler_int"},
+                        {330, "i_timer.TIMER_GEN[0].timer_i.register_adr"},
+                        {331, "i_timer.TIMER_GEN[0].timer_i.timer_next"},
+                        {332, "i_timer.TIMER_GEN[0].timer_i.timer_we"},
+                        {333, "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_ack"},
+                        {334, "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_data"},
+                        {335, "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_err"},
+                        {336, "i_timer.TIMER_GEN[0].timer_i.unused_core_req_stall_rd"},
+                        {337, "i_timer.TIMER_GEN[0].timer_i.unused_core_req_stall_wr"},
+                        {338, "i_timer.TIMER_GEN[0].timer_i.unused_core_wr_ack"},
+                        {339, "i_timer.TIMER_GEN[0].timer_i.unused_core_wr_err"},
+                        12,
+                        0,
+                        3,
+                        5,
+                        2,
+                        0,
+                        1
+                    },
+                    0
+                };
+            case 1: return HierarchyITimerTimerGenArrayElement
+                {
+                    {
+                        {
+                            {355, "i_timer.TIMER_GEN[1].timer_i.i_regs.arst_n"},
+                            {356, "i_timer.TIMER_GEN[1].timer_i.i_regs.clk"},
+                            {357, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_addr"},
+                            {358, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_ack"},
+                            {359, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_data"},
+                            {360, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_err"},
+                            {361, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req"},
+                            {362, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_is_wr"},
+                            {363, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_masked"},
+                            {364, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_stall_rd"},
+                            {365, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_stall_wr"},
+                            {366, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_ack"},
+                            {367, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_biten"},
+                            {368, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_data"},
+                            {369, "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_err"},
+                            {370, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_addr"},
+                            {371, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_err"},
+                            {372, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_req"},
+                            {373, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_req_is_wr"},
+                            {374, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_wr_biten"},
+                            {375, "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_wr_data"},
+                            {376, "i_timer.TIMER_GEN[1].timer_i.i_regs.is_valid_addr"},
+                            {377, "i_timer.TIMER_GEN[1].timer_i.i_regs.is_valid_rw"},
+                            {378, "i_timer.TIMER_GEN[1].timer_i.i_regs.load_next_c"},
+                            {379, "i_timer.TIMER_GEN[1].timer_i.i_regs.next_c"},
+                            {380, "i_timer.TIMER_GEN[1].timer_i.i_regs.rd_mux_addr"},
+                            {381, "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_data"},
+                            {382, "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_data_var"},
+                            {383, "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_done"},
+                            {384, "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_err"},
+                            {385, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_addr"},
+                            {386, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_ack"},
+                            {387, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_data"},
+                            {388, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_err"},
+                            {389, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req"},
+                            {390, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_is_wr"},
+                            {391, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_stall_rd"},
+                            {392, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_stall_wr"},
+                            {393, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_ack"},
+                            {394, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_biten"},
+                            {395, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_data"},
+                            {396, "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_err"}
+                        },
+                        {340, "i_timer.TIMER_GEN[1].timer_i.HCLK"},
+                        {341, "i_timer.TIMER_GEN[1].timer_i.HRESETn"},
+                        {342, "i_timer.TIMER_GEN[1].timer_i.PADDR"},
+                        {343, "i_timer.TIMER_GEN[1].timer_i.PENABLE"},
+                        {344, "i_timer.TIMER_GEN[1].timer_i.PRDATA"},
+                        {345, "i_timer.TIMER_GEN[1].timer_i.PREADY"},
+                        {346, "i_timer.TIMER_GEN[1].timer_i.PSEL"},
+                        {347, "i_timer.TIMER_GEN[1].timer_i.PSLVERR"},
+                        {348, "i_timer.TIMER_GEN[1].timer_i.PWDATA"},
+                        {349, "i_timer.TIMER_GEN[1].timer_i.PWRITE"},
+                        {350, "i_timer.TIMER_GEN[1].timer_i.apb_write"},
+                        {351, "i_timer.TIMER_GEN[1].timer_i.cmp_write"},
+                        {352, "i_timer.TIMER_GEN[1].timer_i.core_addr"},
+                        {353, "i_timer.TIMER_GEN[1].timer_i.cycle_counter_n"},
+                        {354, "i_timer.TIMER_GEN[1].timer_i.cycle_counter_q"},
+                        {397, "i_timer.TIMER_GEN[1].timer_i.irq_o"},
+                        {398, "i_timer.TIMER_GEN[1].timer_i.prescaler_int"},
+                        {399, "i_timer.TIMER_GEN[1].timer_i.register_adr"},
+                        {400, "i_timer.TIMER_GEN[1].timer_i.timer_next"},
+                        {401, "i_timer.TIMER_GEN[1].timer_i.timer_we"},
+                        {402, "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_ack"},
+                        {403, "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_data"},
+                        {404, "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_err"},
+                        {405, "i_timer.TIMER_GEN[1].timer_i.unused_core_req_stall_rd"},
+                        {406, "i_timer.TIMER_GEN[1].timer_i.unused_core_req_stall_wr"},
+                        {407, "i_timer.TIMER_GEN[1].timer_i.unused_core_wr_ack"},
+                        {408, "i_timer.TIMER_GEN[1].timer_i.unused_core_wr_err"},
+                        12,
+                        0,
+                        3,
+                        5,
+                        2,
+                        0,
+                        1
+                    },
+                    1
+                };
+            default:
+                std::fprintf(stderr,
+                    "cpptb: hierarchy scope array 'i_timer.TIMER_GEN' "
+                    "index %d is out of range; valid indices "
+                    "are 0, 1\n", index);
+                std::abort();
+        }
+    }
+};
+
 struct HierarchyITimerTimerGen0TimerIIRegsScope {
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 286, "i_timer.TIMER_GEN[0].timer_i.i_regs.arst_n", 1, false, cpptb::probe::Value<1>, true> arst_n;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 287, "i_timer.TIMER_GEN[0].timer_i.i_regs.clk", 1, false, cpptb::probe::Value<1>, true> clk;
@@ -732,7 +1023,7 @@ struct HierarchyISpiScope {
 };
 
 struct HierarchyITimerScope {
-    [[no_unique_address]] cpptb::hierarchy::ScopeArray<cpptb::hierarchy::ScopeElement<0, HierarchyITimerTimerGen0Scope>, cpptb::hierarchy::ScopeElement<1, HierarchyITimerTimerGen1Scope>> TIMER_GEN;
+    [[no_unique_address]] HierarchyITimerTimerGenArray TIMER_GEN;
     static constexpr std::int64_t APB_ADDR_WIDTH = 12;
     static constexpr std::int64_t RegsMaxAdr = 2;
     static constexpr std::int64_t TIMER_CNT = 2;

@@ -85,6 +85,7 @@ random-stimulus
 test-lifecycle
 running-tests
 hierarchy
+interfaces
 examples
 clocking
 scheduling
@@ -124,6 +125,7 @@ examples/ipxact-regfile
 examples/watchdog-timeout
 examples/fault-injection
 examples/rich-data
+examples/interfaces
 examples/heavy-benchmarks
 examples/open-source-cores
 examples/secworks-aes-regmodel
