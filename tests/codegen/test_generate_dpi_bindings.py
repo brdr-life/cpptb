@@ -1169,12 +1169,12 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("bit [63:0] warr_o [3:0];", wrapper)
         self.assertIn("arr_i = '{default: '0};", wrapper)
         self.assertIn(
-            "for (int cpptb_arr_i_index = 1; cpptb_arr_i_index <= 8;",
+            "for (int cpptb_arr_i_index_0 = 1; cpptb_arr_i_index_0 <= 8;",
             wrapper,
         )
         self.assertNotIn("in_words[INPUT_SIGNAL_ARRI", wrapper)
         self.assertIn(
-            "for (int cpptb_warr_o_index = 0; cpptb_warr_o_index <= 3;",
+            "for (int cpptb_warr_o_index_0 = 0; cpptb_warr_o_index_0 <= 3;",
             wrapper,
         )
         self.assertIn("in_words[INPUT_SIGNAL_WARRO", wrapper)

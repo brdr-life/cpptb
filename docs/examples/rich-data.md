@@ -49,12 +49,12 @@ test.expect_eq("Q2.14 multiply", dut.fixed_y_o.get(),
 
 ## Arrays and generated views
 
-Each declared unpacked dimension contributes an `.at(index)` level, preserving
+Each declared unpacked dimension contributes an `[index]` level, preserving
 the source bounds including descending and negative ranges:
 
 ```cpp
-dut.scalar_array_i.at(2).set(0x1020'3042u);
-dut.matrix_i.at(2).at(-1).set(
+dut.scalar_array_i[2].set(0x1020'3042u);
+dut.matrix_i[2][-1].set(
     Bits<65>::from_words({0x1020'3043u, 0x5060'7083u, 1u}));
 ```
 

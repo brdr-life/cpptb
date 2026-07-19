@@ -75,9 +75,9 @@ Task<void> hierarchy_sequence(Dut dut, cpptb::TestContext& test) {
                    dut.block1.inverted.get(), 0x56u);
     dut.block1.inverted.release();
 
-    dut.block1.memory.at(2).deposit(0xbeef);
+    dut.block1.memory[2].deposit(0xbeef);
     test.expect_eq("non-zero memory index deposit",
-                   dut.block1.memory.at(2).get(), 0xbeefu);
+                   dut.block1.memory[2].get(), 0xbeefu);
     const std::array<std::uint32_t, 7> memory_values{
         0x1020u, 0x3040u, 0x5060u, 0x7080u,
         0x90a0u, 0xb0c0u, 0xd0e0u};
@@ -88,18 +88,43 @@ Task<void> hierarchy_sequence(Dut dut, cpptb::TestContext& test) {
         test.expect_eq("non-zero memory block transfer", memory_readback[index],
                        memory_values[index]);
     }
-    dut.block1.memory.at(2).force(0xcafe);
+    dut.block1.memory[2].force(0xcafe);
     test.expect_eq("memory force is immediately readable",
-                   dut.block1.memory.at(2).get(), 0xcafeu);
-    dut.block1.memory.at(2).release();
+                   dut.block1.memory[2].get(), 0xcafeu);
+    dut.block1.memory[2].release();
 
-    dut.block1.matrix.at(1).at(3).deposit(0x5a);
+    dut.block1.matrix[1][3].deposit(0x5a);
     test.expect_eq("multidimensional memory index",
-                   dut.block1.matrix.at(1).at(3).get(), 0x5au);
+                   dut.block1.matrix[1][3].get(), 0x5au);
 
-    dut.lanes.at<1>().block2.storage.deposit(0x9c);
+    dut.lanes[1].block2.storage.deposit(0x9c);
     test.expect_eq("generated instance hierarchy",
-                   dut.lanes.at<1>().block2.storage.get(), 0x9cu);
+                   dut.lanes[1].block2.storage.get(), 0x9cu);
+    test.expect_eq("selected hierarchy parameter",
+                   dut.lanes[1].block2.WIDTH, 8);
+    const auto selected_fixed =
+        UFixed4_4::from_raw(cpptb::Bits<8>::from_uint(0xb4));
+    dut.lanes[1].block2.storage.deposit_as(selected_fixed);
+    test.expect_eq(
+        "selected hierarchy typed view",
+        dut.lanes[1].block2.storage.get_as<UFixed4_4>().raw(),
+        selected_fixed.raw());
+    dut.lanes[1].block2.storage.deposit_logic(
+        cpptb::LogicBits<8>::from_uint(0xa5));
+    test.expect_eq("selected hierarchy four-state deposit",
+                   dut.lanes[1].block2.storage.get_logic(),
+                   cpptb::LogicBits<8>::from_uint(0xa5));
+    dut.lanes[1].block2.storage.force(0x3d);
+    test.expect_eq("selected hierarchy force",
+                   dut.lanes[1].block2.storage.get(), 0x3du);
+    dut.lanes[1].block2.storage.force_logic(
+        cpptb::LogicBits<8>::from_uint(0x5a));
+    test.expect_eq("selected hierarchy four-state force",
+                   dut.lanes[1].block2.storage.get_logic(),
+                   cpptb::LogicBits<8>::from_uint(0x5a));
+    dut.lanes[1].block2.storage.release();
+    test.expect_eq("selected hierarchy release",
+                   dut.lanes[1].block2.storage.get(), 0x5au);
 
     dut.block1.state.deposit(
         cpptb::generated::hierarchy_catalog::to_value(StateT::Done));

@@ -99,15 +99,15 @@ Memory elements use the same primitive interface. A deposit is a one-time
 blocking assignment; a force continues to override other writers:
 
 ```cpp
-dut.memory.at(2).deposit(0xbeef);
+dut.memory[2].deposit(0xbeef);
 test.expect_eq("deposit is immediately readable",
-               dut.memory.at(2).get(), 0xbeefu);
+               dut.memory[2].get(), 0xbeefu);
 
-dut.memory.at(2).force(0xcafe);
+dut.memory[2].force(0xcafe);
 co_await Delay{1_ps};
 test.expect_eq("memory force reaches output", dut.memory_read_data.get(),
                0xcafeu);
-dut.memory.at(2).release();
+dut.memory[2].release();
 ```
 
 The complete C++ and pure-SV benches perform the same 13 checks over the same

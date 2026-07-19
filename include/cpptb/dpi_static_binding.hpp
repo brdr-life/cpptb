@@ -21,6 +21,7 @@ struct StaticBindingContext {
     uint32_t* inputs = nullptr;
     uint32_t* outputs = nullptr;
     const uint32_t* current_inputs = nullptr;
+    const uint32_t* observed_transport_offsets = nullptr;
     bool* configured_clock = nullptr;
     bool* edge_observer = nullptr;
     bool* local_edge_capable = nullptr;
@@ -111,7 +112,7 @@ struct StaticPackedSignalSpec {
 
 template <size_t Width, bool Writable, bool Driven, uint32_t Id,
           OnDemandGetWordsFn GetWords, OnDemandSetWordsFn SetWords>
-    requires(Writable == Driven && GetWords != nullptr &&
+    requires((!Driven || Writable) && GetWords != nullptr &&
              Writable == (SetWords != nullptr))
 struct StaticOnDemandSignalSpec {
     static_assert(Width > 0, "signal width must be positive");
@@ -119,7 +120,7 @@ struct StaticOnDemandSignalSpec {
 
 template <size_t Width, bool Writable, bool Driven, uint32_t Id,
           uint32_t TransportOffset, typename... Dimensions>
-    requires(Writable == Driven)
+    requires(!Driven || Writable)
 struct StaticPackedArraySpec {
     static_assert(Width > 0, "array element width must be positive");
     static_assert(sizeof...(Dimensions) > 0);
@@ -128,7 +129,7 @@ struct StaticPackedArraySpec {
 template <size_t Width, bool Writable, bool Driven, uint32_t Id,
           OnDemandGetWordsFn GetWords, OnDemandSetWordsFn SetWords,
           typename... Dimensions>
-    requires(Writable == Driven && GetWords != nullptr &&
+    requires((!Driven || Writable) && GetWords != nullptr &&
              Writable == (SetWords != nullptr))
 struct StaticOnDemandArraySpec {
     static_assert(Width > 0, "array element width must be positive");
@@ -214,8 +215,16 @@ class StaticPackedRef {
     value_type get() const {
         typename cpptb::Bits<Width>::word_array words{};
         for (size_t word = 0; word < word_count; ++word) {
-            if constexpr (Writable) {
-                words[word] = context->outputs[id + word];
+            const bool scheduler_owned =
+                context->configured_clock && context->configured_clock[id];
+            if constexpr (Driven) {
+                if (scheduler_owned && context->current_inputs) {
+                    const auto offset =
+                        context->observed_transport_offsets[id + word];
+                    words[word] = context->current_inputs[offset];
+                } else {
+                    words[word] = context->outputs[id + word];
+                }
             } else if (context->current_inputs) {
                 words[word] = context->current_inputs[transport_offset + word];
             } else {
@@ -261,7 +270,7 @@ class StaticPackedRef {
 };
 
 template <size_t Width, bool Writable, bool Driven>
-    requires(Writable == Driven)
+    requires(!Driven || Writable)
 class StaticOnDemandRef {
    public:
     using value_type = coro::PackedSignalValue<Width>;
@@ -364,7 +373,7 @@ class StaticPackedSignal {
 };
 
 template <size_t Width, bool Writable, bool Driven, uint32_t Id>
-    requires(Writable == Driven)
+    requires(!Driven || Writable)
 class StaticOnDemandSignal {
    public:
     using value_type = coro::PackedSignalValue<Width>;
@@ -412,7 +421,7 @@ class StaticOnDemandSignal {
 template <size_t ElementWidth, bool Writable, bool Driven, uint32_t BaseId,
           uint32_t BaseTransportOffset, size_t DimensionIndex,
           typename Dimension, typename... RemainingDimensions>
-    requires(Writable == Driven)
+    requires(!Driven || Writable)
 class StaticPackedFixedArray {
    public:
     static constexpr size_t element_width = ElementWidth;
@@ -457,6 +466,10 @@ class StaticPackedFixedArray {
         }
     }
 
+    [[nodiscard]] auto operator[](int32_t index) const {
+        return at(index);
+    }
+
    private:
     void check_bounds(int32_t index) const {
         if (index >= low() && index <= high()) return;
@@ -472,7 +485,7 @@ class StaticPackedFixedArray {
 template <size_t ElementWidth, bool Writable, bool Driven, uint32_t BaseId,
           size_t DimensionIndex, typename Dimension,
           typename... RemainingDimensions>
-    requires(Writable == Driven)
+    requires(!Driven || Writable)
 class StaticOnDemandFixedArray {
    public:
     static constexpr size_t element_width = ElementWidth;
@@ -516,6 +529,10 @@ class StaticOnDemandFixedArray {
                 context, BaseId + id_offset + offset,
                 word_offset_delta + offset, name, get_words_fn, set_words_fn};
         }
+    }
+
+    [[nodiscard]] auto operator[](int32_t index) const {
+        return at(index);
     }
 
    private:

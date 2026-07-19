@@ -219,8 +219,8 @@ module dpi_authoring_core;
     in_words[INPUT_SIGNAL_WIDE64O + 0] = wide64_o[0 +: 32];
     in_words[INPUT_SIGNAL_WIDE64O + 1] = wide64_o[32 +: 32];
     in_words[INPUT_SIGNAL_FIXEDYO] = fixed_y_o;
-    for (int cpptb_array_o_index = 1; cpptb_array_o_index <= 8; cpptb_array_o_index++) begin
-      in_words[INPUT_SIGNAL_ARRAYO + (cpptb_array_o_index - 1) * 1] = array_o[cpptb_array_o_index];
+    for (int cpptb_array_o_index_0 = 1; cpptb_array_o_index_0 <= 8; cpptb_array_o_index_0++) begin
+      in_words[INPUT_SIGNAL_ARRAYO + (cpptb_array_o_index_0 - 1) * 1] = array_o[cpptb_array_o_index_0];
     end
     for (int cpptb_array_multidim_o_index_0 = 1; cpptb_array_multidim_o_index_0 <= 2; cpptb_array_multidim_o_index_0++) begin
       for (int cpptb_array_multidim_o_index_1 = -1; cpptb_array_multidim_o_index_1 <= 1; cpptb_array_multidim_o_index_1++) begin
@@ -245,8 +245,8 @@ module dpi_authoring_core;
     wide64_i = {out_words[OUTPUT_SIGNAL_WIDE64I + 1], out_words[OUTPUT_SIGNAL_WIDE64I + 0]};
     fixed_a_i = out_words[OUTPUT_SIGNAL_FIXEDAI][15:0];
     fixed_b_i = out_words[OUTPUT_SIGNAL_FIXEDBI][15:0];
-    for (int cpptb_array_i_index = 1; cpptb_array_i_index <= 8; cpptb_array_i_index++) begin
-      array_i[cpptb_array_i_index] = out_words[OUTPUT_SIGNAL_ARRAYI + (cpptb_array_i_index - 1) * 1];
+    for (int cpptb_array_i_index_0 = 1; cpptb_array_i_index_0 <= 8; cpptb_array_i_index_0++) begin
+      array_i[cpptb_array_i_index_0] = out_words[OUTPUT_SIGNAL_ARRAYI + (cpptb_array_i_index_0 - 1) * 1];
     end
     for (int cpptb_array_multidim_i_index_0 = 1; cpptb_array_multidim_i_index_0 <= 2; cpptb_array_multidim_i_index_0++) begin
       for (int cpptb_array_multidim_i_index_1 = -1; cpptb_array_multidim_i_index_1 <= 1; cpptb_array_multidim_i_index_1++) begin
@@ -449,8 +449,8 @@ module dpi_authoring_core;
     longint unsigned generation;
     requests = initial_requests;
     if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
-      edge_interest[SIGNAL_CLK] |= authoring_core_dpi_edge_interest(SIGNAL_CLK);
       edge_interest[SIGNAL_RSPVALID] = authoring_core_dpi_edge_interest(SIGNAL_RSPVALID);
+      edge_interest[0] |= authoring_core_dpi_edge_interest(0);
     end
     if ((requests & STEP_TIMER_IDLE) != 0) begin
       timer_deadline = NO_TIMER;
@@ -535,12 +535,12 @@ module dpi_authoring_core;
         sim_cycles++;
       end
       if (
-          ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLK] & 1) != 0)) ||
-          ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLK] & 2) != 0)) ||
+          ((event_edge == EDGE_RISING) && ((edge_interest[0] & 1) != 0)) ||
+          ((event_edge == EDGE_FALLING) && ((edge_interest[0] & 2) != 0)) ||
           ((event_edge == EDGE_RISING) &&
            1'b1 &&
            (timer_deadline == NO_TIMER))) begin
-        run_step(PHASE_EDGE, SIGNAL_CLK, event_edge, requests);
+        run_step(PHASE_EDGE, 0, event_edge, requests);
         service_requests(requests);
       end
     end
@@ -605,12 +605,12 @@ module dpi_authoring_core;
           sim_cycles++;
         end
         if (
-            ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLK] & 1) != 0)) ||
-            ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLK] & 2) != 0)) ||
+            ((event_edge == EDGE_RISING) && ((edge_interest[0] & 1) != 0)) ||
+            ((event_edge == EDGE_FALLING) && ((edge_interest[0] & 2) != 0)) ||
             ((event_edge == EDGE_RISING) &&
              1'b1 &&
              (timer_deadline == NO_TIMER))) begin
-          run_step(PHASE_EDGE, SIGNAL_CLK,
+          run_step(PHASE_EDGE, 0,
                    event_edge, requests);
           service_requests(requests);
         end

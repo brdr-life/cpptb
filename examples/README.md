@@ -15,6 +15,7 @@ twin with the same stimulus, checks, and primary-clock cycle count.
 | [`watchdog_timeout`](watchdog_timeout/) | Trigger/task timeouts, expected stalls, process handles, and cancellation | `make cpp-dpi-watchdog-timeout-run` |
 | [`fault_injection`](fault_injection/) | Internal `get()`/`deposit()`/`force()`/`release()` on nets, variables, and memory | `make cpp-dpi-fault-injection-run` |
 | [`rich_data`](rich_data/) | Wide values and slices, fixed point, arrays, packed structs, and enums | `make cpp-dpi-rich-data-run` |
+| [`interfaces`](interfaces/) | Parameterized interfaces, modports, interface arrays, independent clocks, and inouts | `make cpp-dpi-interfaces-run` |
 
 ## Which example should I copy?
 
@@ -35,6 +36,8 @@ twin with the same stimulus, checks, and primary-clock cycle count.
 - Start from `fault_injection` for explicit internal access and fault
   injection.
 - Start from `rich_data` for typed interfaces beyond scalar ports.
+- Start from `interfaces` for SystemVerilog interfaces, modports, or `inout`
+  pins.
 
 Run all C++/SV pairs through the normal test target:
 
