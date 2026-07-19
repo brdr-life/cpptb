@@ -51,11 +51,23 @@ class ContractTests(unittest.TestCase):
 
     def test_makefile_builds_every_authoring_kernel(self):
         makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+        self.assertIn(
+            "tools/codegen/cpptb_codegen/rggen_codegen.py", makefile
+        )
+        authoring_template = makefile.split(
+            "define AUTHORING_CORE_DPI_template", 1
+        )[1].split("endef", 1)[0]
+        self.assertIn("$(CPPTB_CODEGEN_SOURCES)", authoring_template)
         kernel_line = next(
             line for line in makefile.splitlines()
             if line.startswith("AUTHORING_CORE_KERNELS :=")
         )
         self.assertEqual(tuple(kernel_line.split(":=", 1)[1].split()), workload.KERNELS)
+        generated_rule = makefile.split(
+            "$(AUTHORING_CORE_DPI_GENERATED):", 1
+        )[1].split("authoring-core-dpi-codegen:", 1)[0]
+        self.assertIn("@test -f $@", generated_rule)
+        self.assertNotIn("$(CPPTB_CODEGEN)", generated_rule)
         self.assertIn(
             "$(eval $(call AUTHORING_CORE_DPI_template,task_timeout,8))",
             makefile,
@@ -133,6 +145,10 @@ class ContractTests(unittest.TestCase):
             makefile,
         )
         self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,process_pipeline,41))",
+            makefile,
+        )
+        self.assertIn(
             "$(eval $(call AUTHORING_CORE_DPI_template,random_stimulus,36))",
             makefile,
         )
@@ -150,6 +166,46 @@ class ContractTests(unittest.TestCase):
         )
         self.assertIn(
             "$(eval $(call AUTHORING_CORE_DPI_template,apb_component,40))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,memory_model,42))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,memory_model_direct,43))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,register_prediction_validity,44))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,register_backdoor,45))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,register_hierarchy,46))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,register_memory,50))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,register_sequences,51))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,register_coverage,52))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,register_maps,53))",
+            makefile,
+        )
+        self.assertIn(
+            "$(eval $(call AUTHORING_CORE_DPI_template,register_user_effects,54))",
             makefile,
         )
         self.assertIn("AUTHORING_CORE_OPT_FAST ?= -O3", makefile)
@@ -407,6 +463,334 @@ class ContractTests(unittest.TestCase):
         self.assertIn("task automatic run_apb_checker", sv)
         self.assertIn('"apb_component": run_apb_component();', sv)
 
+    def test_memory_model_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("memory_model", 5)
+        self.assertEqual(counts.transactions, 10)
+        self.assertEqual(counts.checks, 29)
+        self.assertEqual(counts.memory_model, 10)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["memory_model"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("SparseMemory memory", cpp)
+        self.assertIn("make_memory_predictor<Transaction>", cpp)
+        self.assertIn("memory_model_bytes", sv)
+        self.assertIn('"memory_model": run_memory_model();', sv)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="memory_model"),
+            workload.expected_checksum(5, kernel="apb_component"),
+        )
+
+    def test_direct_memory_model_has_bus_free_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("memory_model_direct", 5)
+        self.assertEqual(counts.transactions, 10)
+        self.assertEqual(counts.checks, 17)
+        self.assertEqual(counts.memory_model_direct, 10)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["memory_model_direct"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_memory_model_direct", cpp)
+        self.assertIn("memory.write_word", cpp)
+        self.assertIn("memory.read_word<uint32_t>", cpp)
+        self.assertIn("task automatic run_memory_model_direct", sv)
+        self.assertIn(
+            '"memory_model_direct": run_memory_model_direct();', sv
+        )
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="memory_model_direct"),
+            workload.expected_checksum(5, kernel="memory_model"),
+        )
+
+    def test_register_prediction_validity_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_prediction_validity", 5)
+        self.assertEqual(counts.transactions, 0)
+        self.assertEqual(counts.checks, 29)
+        self.assertEqual(counts.register_prediction_validity, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["register_prediction_validity"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_prediction_validity", cpp)
+        self.assertIn("model.mirrored_valid_mask()", cpp)
+        self.assertIn("observed.connect(predictor)", cpp)
+        self.assertIn("task automatic run_register_prediction_validity", sv)
+        self.assertIn(
+            '"register_prediction_validity": run_register_prediction_validity();',
+            sv,
+        )
+
+    def test_register_backdoor_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_backdoor", 5)
+        self.assertEqual(counts.transactions, 0)
+        self.assertEqual(counts.checks, 7)
+        self.assertEqual(counts.register_backdoor, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["register_backdoor"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_backdoor", cpp)
+        self.assertIn('cpptb_signal<"pending_data">', cpp)
+        self.assertIn("model.poke(value)", cpp)
+        self.assertIn("task automatic run_register_backdoor", sv)
+        self.assertIn('"register_backdoor": run_register_backdoor();', sv)
+
+    def test_register_hierarchy_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_hierarchy", 5)
+        self.assertEqual(counts.transactions, 0)
+        self.assertEqual(counts.checks, 27)
+        self.assertEqual(counts.register_hierarchy, 5)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["register_hierarchy"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_hierarchy", cpp)
+        self.assertIn("RegisterViewArray lanes", cpp)
+        self.assertIn("lanes.for_each", cpp)
+        self.assertIn("task automatic run_register_hierarchy", sv)
+        self.assertIn('"register_hierarchy": run_register_hierarchy();', sv)
+
+    def test_register_split_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_split", 5)
+        self.assertEqual(counts.transactions, 20)
+        self.assertEqual(counts.checks, 12)
+        self.assertEqual(counts.register_split, 5)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="register_split"),
+            0x811C9DC5,
+        )
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_split", cpp)
+        self.assertIn(".width = 32", cpp)
+        self.assertIn(".access_width = 16", cpp)
+        self.assertIn("task automatic run_register_split", sv)
+        self.assertIn('"register_split": run_register_split();', sv)
+
+    def test_register_wide_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_wide", 5)
+        self.assertEqual(counts.transactions, 100)
+        self.assertEqual(counts.checks, 32)
+        self.assertEqual(counts.register_wide, 5)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="register_wide"),
+            0x811C9DC5,
+        )
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_wide", cpp)
+        self.assertIn("WideRegisterHandle<128", cpp)
+        self.assertIn("WideRegisterMemoryHandle<128", cpp)
+        self.assertIn("WideRegisterPredictor predictor", cpp)
+        self.assertIn("model.poke(value)", cpp)
+        self.assertIn("task automatic run_register_wide", sv)
+        self.assertIn("logic [127:0] predicted", sv)
+        self.assertIn('"register_wide": run_register_wide();', sv)
+
+    def test_register_enum_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_enum", 5)
+        self.assertEqual(counts.transactions, 10)
+        self.assertEqual(counts.checks, 12)
+        self.assertEqual(counts.register_enum, 5)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="register_enum"),
+            0x811C9DC5,
+        )
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_enum", cpp)
+        self.assertIn("RegisterEnumFieldHandle<BenchmarkMode", cpp)
+        self.assertIn("task automatic run_register_enum", sv)
+        self.assertIn('"register_enum": run_register_enum();', sv)
+
+    def test_register_memory_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_memory", 5)
+        self.assertEqual(counts.transactions, 0)
+        self.assertEqual(counts.checks, 32)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="register_memory"),
+            0x7AF17C29,
+        )
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        generated_header = (
+            BENCH_DIR / "testbenches/cpp_dpi/generated/authoring_core_dut.hpp"
+        ).read_text(encoding="utf-8")
+        generated_wrapper = (
+            BENCH_DIR / "testbenches/cpp_dpi/generated/dpi_authoring_core.sv"
+        ).read_text(encoding="utf-8")
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_memory", cpp)
+        self.assertIn("RegisterMemoryHandle memory", cpp)
+        self.assertIn("AccessPath::Backdoor", cpp)
+        self.assertIn("memory.write_offset", cpp)
+        self.assertIn("memory.read_absolute", cpp)
+        self.assertIn("memory.base_address()", cpp)
+        self.assertIn("dut_.memory.get_into", cpp)
+        self.assertIn("dut_.memory.deposit", cpp)
+        self.assertIn("get_block4", generated_header)
+        self.assertIn("deposit_block4", generated_header)
+        self.assertIn("get_block4", generated_wrapper)
+        self.assertIn("deposit_block4", generated_wrapper)
+        self.assertIn("task automatic run_register_memory", sv)
+        self.assertIn("selected_index = byte_offset / 4", sv)
+        self.assertIn("absolute_address - 64'h0000_0000_0000_4100", sv)
+        self.assertIn('"register_memory": run_register_memory();', sv)
+
+    def test_register_sequences_have_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_sequences", 5)
+        self.assertEqual(counts.transactions, 105)
+        self.assertEqual(counts.checks, 232)
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_sequences", cpp)
+        self.assertIn("register_reset_check(test, model)", cpp)
+        self.assertIn("register_access_check(test, model)", cpp)
+        self.assertIn("register_bit_bash(test, model)", cpp)
+        self.assertIn("task automatic run_register_sequences", sv)
+        self.assertIn('"register_sequences": run_register_sequences();', sv)
+        self.assertIn("frontdoor bit-bash value", sv)
+        self.assertIn("backdoor bit-bash value", sv)
+
+    def test_register_coverage_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_coverage", 5)
+        self.assertEqual(counts.transactions, 50)
+        self.assertEqual(counts.checks, 12)
+        self.assertEqual(counts.coverage_sampling, 5)
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_coverage", cpp)
+        self.assertIn("RegisterAccessCoverage coverage", cpp)
+        self.assertIn("coverage.sample_memory", cpp)
+        self.assertIn("task automatic run_register_coverage", sv)
+        self.assertIn('"register_coverage": run_register_coverage();', sv)
+        self.assertIn("memory_backdoor_writes", sv)
+
+    def test_register_maps_have_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_maps", 5)
+        self.assertEqual(counts.transactions, 50)
+        self.assertEqual(counts.checks, 42)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="register_maps"),
+            0x79653529,
+        )
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_maps", cpp)
+        self.assertIn("RegisterAddressMap primary", cpp)
+        self.assertIn("RegisterAddressMap alias", cpp)
+        self.assertIn("BenchmarkRegisterFrontdoor custom", cpp)
+        self.assertIn("memory.read_into(index, readback, alias)", cpp)
+        self.assertIn("task automatic run_register_maps", sv)
+        self.assertIn('"register_maps": run_register_maps();', sv)
+        self.assertIn("custom frontdoor read", sv)
+
+    def test_register_user_effects_have_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("register_user_effects", 5)
+        self.assertEqual(counts.transactions, 10)
+        self.assertEqual(counts.checks, 22)
+        self.assertEqual(
+            workload.expected_checksum(5, kernel="register_user_effects"),
+            0xC4BA90E2,
+        )
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Task<void> run_register_user_effects", cpp)
+        self.assertIn("BenchmarkUserEffectPolicy", cpp)
+        self.assertIn("RegisterWriteEffect::User", cpp)
+        self.assertIn("RegisterReadEffect::User", cpp)
+        self.assertIn("task automatic run_register_user_effects", sv)
+        self.assertIn(
+            '"register_user_effects": run_register_user_effects();', sv
+        )
+        self.assertIn("written_value = mirrored ^ desired_value", sv)
+
     def test_queue_sync_has_exact_isolated_counts_and_twin(self):
         counts = workload.expected_counts("queue_sync", 5)
         self.assertEqual(counts.transactions, 5)
@@ -541,6 +925,37 @@ class ContractTests(unittest.TestCase):
         self.assertIn("fork : dynamic_monitor_processes", sv)
         self.assertIn("disable dynamic_monitor_processes;", sv)
         self.assertIn('"dynamic_monitor": run_dynamic_monitor();', sv)
+
+    def test_process_pipeline_has_exact_finite_process_twin(self):
+        counts = workload.expected_counts("process_pipeline", 5)
+        self.assertEqual(counts.transactions, 5)
+        self.assertEqual(counts.checks, 9)
+        self.assertEqual(counts.spawned_processes, 3)
+        self.assertEqual(counts.queue_put, 10)
+        self.assertEqual(counts.queue_get, 10)
+        self.assertEqual(counts.dynamic_spawn, 0)
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        for task in (
+            "process_pipeline_driver",
+            "process_pipeline_worker",
+            "process_pipeline_scoreboard",
+        ):
+            self.assertIn(f"test.spawn(\n        {task}", cpp)
+            self.assertIn(f"task automatic {task}();", sv)
+        self.assertIn("Queue<uint32_t> expected_values{8};", cpp)
+        self.assertIn("Queue<uint32_t> observed_values{8};", cpp)
+        self.assertIn("co_await driver;", cpp)
+        self.assertIn("co_await worker;", cpp)
+        self.assertIn("co_await scoreboard;", cpp)
+        self.assertIn("process_expected_queue = new(8);", sv)
+        self.assertIn("process_observed_queue = new(8);", sv)
+        self.assertIn('"process_pipeline": run_process_pipeline();', sv)
 
     def test_probe_kernels_have_exact_isolated_counts(self):
         for kernel, enabled_fields in (

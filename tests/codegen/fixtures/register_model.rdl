@@ -1,0 +1,89 @@
+enum mode_e {
+    IDLE = 3'b000;
+    ACTIVE = 3'b011;
+    DIAGNOSTIC = 3'b111;
+};
+
+addrmap demo_regs {
+    hdl_path = "u_regs";
+    default regwidth = 32;
+    default accesswidth = 32;
+
+    reg {
+        hdl_path = "control_q[31:0]";
+        field {
+            sw = rw;
+            hw = r;
+            reset = 1;
+        } enable[0:0];
+        field {
+            sw = rw;
+            hw = r;
+            reset = 3;
+            encode = mode_e;
+        } mode[3:1];
+    } control @ 0x0;
+
+    reg {
+        field {
+            hdl_path_slice = '{"pending_storage[15:8]"};
+            sw = rw;
+            hw = r;
+            onwrite = woclr;
+            reset = 8'hff;
+        } pending[7:0];
+        field {
+            hdl_path_slice = '{
+                "sampled_bits[7]", "sampled_bits[6]",
+                "sampled_bits[5]", "sampled_bits[4]",
+                "sampled_bits[3]", "sampled_bits[2]",
+                "sampled_bits[1]", "sampled_bits[0]"
+            };
+            sw = r;
+            hw = w;
+            onread = rclr;
+        } sampled[15:8];
+    } status @ 0x4;
+
+    reg {
+        accesswidth = 16;
+        field {
+            sw = rw;
+            hw = r;
+        } value[31:0];
+    } split_access @ 0x8;
+
+    regfile {
+        hdl_path = "security";
+        reg {
+            hdl_path = "key_q";
+            field {
+                sw = rw1;
+                hw = r;
+            } key[31:0];
+        } key @ 0x0;
+    } security @ 0x20;
+
+    reg {
+        field {
+            sw = rw;
+            hw = r;
+        } value[7:0];
+    } lane_control[2] @ 0x40 += 0x4;
+
+    regfile {
+        reg {
+            field {
+                sw = rw;
+                hw = r;
+            } value[15:0];
+        } control @ 0x0;
+    } bank[2] @ 0x60 += 0x10;
+
+    external mem {
+        mementries = 16;
+        memwidth = 32;
+        sw = rw;
+        hdl_path_slice = '{"buffer_storage"};
+    } buffer @ 0x100;
+};

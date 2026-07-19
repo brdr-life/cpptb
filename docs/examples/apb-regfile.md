@@ -5,6 +5,11 @@ bus helper. The registered test owns one active master and three passive
 consumers: a monitor, protocol checker, and functional coverage subscriber.
 The monitor also feeds an in-order transaction scoreboard.
 
+The example registers a second `memory_model_apb_test` that replaces the
+hand-authored expected queue with `SparseMemory` and `MemoryPredictor`. It
+covers writable regions, a read-only ID image, and error translation without
+putting APB timing into the model.
+
 ## Construct the bus
 
 Generated signals are assembled into a typed `ApbBus`. No configuration file
@@ -79,7 +84,7 @@ Task<void> component_apb_test(Dut dut, TestContext& test) {
     test.spawn_detached(checker.run_forever());
 
     co_await Join{register_sequence(master, test, expected),
-                  monitor.run(observed, kObservedTransactions)};
+                  monitor.run(observed, kRegisterTransactions * 2u)};
 
     scoreboard.finalize();
     test.expect_eq("APB protocol violations", checker.violations(),
@@ -100,7 +105,7 @@ test code.
 <div class="cpptb-code-tab-label">cpptb_vc (C++ DPI)</div>
 
 ```cpp
-const auto write = co_await master.write(address, value, 0xfu);
+const auto write = co_await master.write(address, value);
 test.expect_eq("APB write status", write.status, MemoryStatus::Okay);
 
 const auto read = co_await master.read(address);
@@ -140,6 +145,17 @@ Run the 100,000-iteration exact component benchmark with:
 make feature-test FEATURE=apb_component
 make feature-benchmark FEATURE=apb_component
 ```
+
+Run the equivalent sparse-memory predictor pair with:
+
+```sh
+make feature-test FEATURE=memory_model
+make feature-benchmark FEATURE=memory_model
+```
+
+The authored register contract is in `examples/apb_regfile/registers.rdl` and
+can be exported through PeakRDL as described in
+[the four-framework register workflow](../memory-register-models.md#one-register-workflow-in-four-frameworks).
 
 See [Verification components](../verification-components.md) for the package
 boundary and complete component contracts.

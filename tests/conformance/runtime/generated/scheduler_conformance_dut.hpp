@@ -2,9 +2,11 @@
 // Do not edit by hand.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include "cpptb/dpi_static_binding.hpp"
@@ -115,6 +117,32 @@ struct HierarchyTransport {
             }
         }
         fail("force", id);
+    }
+
+    template <std::size_t Width>
+    static void get_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("get_span", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<const cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("deposit_span", id);
     }
 
     template <std::size_t Width>
@@ -243,6 +271,53 @@ struct SchedulerConformanceDut {
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 10, "row", 32, true, cpptb::probe::Value<32>, false> row;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 11, "unused_predicate", 1, true, cpptb::probe::Value<1>, true> unused_predicate;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 12, "unused_stable", 1, true, cpptb::probe::Value<1>, true> unused_stable;
+    template <cpptb::hierarchy::FixedString Path>
+    [[nodiscard]] constexpr auto cpptb_signal() const {
+        if constexpr (Path.view() == "column") {
+            return (*this).column;
+        }
+        else if constexpr (Path.view() == "force_counter") {
+            return (*this).force_counter;
+        }
+        else if constexpr (Path.view() == "force_memory") {
+            return (*this).force_memory;
+        }
+        else if constexpr (Path.view() == "force_variable_u64") {
+            return (*this).force_variable_u64;
+        }
+        else if constexpr (Path.view() == "force_variable_wide") {
+            return (*this).force_variable_wide;
+        }
+        else if constexpr (Path.view() == "index") {
+            return (*this).index;
+        }
+        else if constexpr (Path.view() == "internal_memory") {
+            return (*this).internal_memory;
+        }
+        else if constexpr (Path.view() == "internal_net") {
+            return (*this).internal_net;
+        }
+        else if constexpr (Path.view() == "internal_u64") {
+            return (*this).internal_u64;
+        }
+        else if constexpr (Path.view() == "internal_wide") {
+            return (*this).internal_wide;
+        }
+        else if constexpr (Path.view() == "row") {
+            return (*this).row;
+        }
+        else if constexpr (Path.view() == "unused_predicate") {
+            return (*this).unused_predicate;
+        }
+        else if constexpr (Path.view() == "unused_stable") {
+            return (*this).unused_stable;
+        }
+        else {
+            static_assert(Path.view().empty(),
+                          "HDL path is not present in the generated DUT hierarchy");
+            return cpptb::hierarchy::UnsupportedSignal{};
+        }
+    }
 };
 
 }  // namespace cpptb::conformance

@@ -97,6 +97,16 @@ module authoring_core_sv_tb;
   longint unsigned constraint_extensions_count;
   longint unsigned coverage_sampling_count;
   longint unsigned apb_component_count;
+  longint unsigned memory_model_count;
+  longint unsigned memory_model_direct_count;
+  longint unsigned register_prediction_validity_count;
+  longint unsigned register_backdoor_count;
+  longint unsigned register_hierarchy_count;
+  longint unsigned register_split_count;
+  longint unsigned register_wide_count;
+  longint unsigned register_enum_count;
+  longint unsigned register_predictor_reads;
+  longint unsigned register_predictor_writes;
   longint unsigned coverage_opcode_hits [0:3];
   longint unsigned coverage_length_hits [0:4];
   longint unsigned coverage_cross_hits [0:2][0:2];
@@ -113,6 +123,8 @@ module authoring_core_sv_tb;
   logic [31:0] queue_items[$];
   mailbox #(logic [31:0]) bounded_queue;
   mailbox #(logic [31:0]) dynamic_monitor_queue;
+  mailbox #(logic [31:0]) process_expected_queue;
+  mailbox #(logic [31:0]) process_observed_queue;
   mailbox #(logic [31:0]) analysis_buffer;
   logic [31:0] analysis_expected[$];
   logic [31:0] analysis_actual[$];
@@ -129,6 +141,11 @@ module authoring_core_sv_tb;
   longint unsigned apb_compared;
   longint unsigned apb_checker_violations;
   bit apb_done;
+  bit memory_model_mode;
+  byte unsigned memory_model_bytes [longint unsigned];
+  longint unsigned memory_model_reads;
+  longint unsigned memory_model_writes;
+  longint unsigned memory_model_mismatches;
   int unsigned analysis_buffer_drops;
   bit analysis_monitor_complete;
   semaphore queue_credits;
@@ -379,6 +396,18 @@ module authoring_core_sv_tb;
     if (failures <= 8) begin
       $display("AUTHORING_CORE_MISMATCH mode=pure_sv kernel=%s label=%s actual=0x%016x expected=0x%016x",
                kernel, label, actual, expected);
+    end
+  endtask
+
+  task automatic check128(input logic [127:0] actual,
+                          input logic [127:0] expected,
+                          input string label);
+    checks++;
+    if (actual == expected) return;
+    failures++;
+    if (failures <= 8) begin
+      $display("AUTHORING_CORE_MISMATCH mode=pure_sv kernel=%s label=%s actual_word0=0x%08x expected_word0=0x%08x",
+               kernel, label, actual[31:0], expected[31:0]);
     end
   endtask
 
@@ -1001,8 +1030,35 @@ module authoring_core_sv_tb;
   endtask
 
   task automatic apb_publish_actual(input apb_transaction_t transaction);
-    apb_actual.push_back(transaction);
-    apb_compare_available();
+    if (memory_model_mode) begin
+      apb_transaction_t expected;
+      expected = transaction;
+      expected.error = 1'b0;
+      if (transaction.write) begin
+        for (int unsigned byte_index = 0; byte_index < 4; byte_index++) begin
+          if (transaction.strobe[byte_index])
+            memory_model_bytes[transaction.address + byte_index] =
+                transaction.data[byte_index * 8 +: 8];
+        end
+        memory_model_writes++;
+      end else begin
+        expected.data = '0;
+        for (int unsigned byte_index = 0; byte_index < 4; byte_index++) begin
+          if (memory_model_bytes.exists(transaction.address + byte_index))
+            expected.data[byte_index * 8 +: 8] =
+                memory_model_bytes[transaction.address + byte_index];
+        end
+        memory_model_reads++;
+      end
+      checks++;
+      if (transaction !== expected) begin
+        failures++;
+        memory_model_mismatches++;
+      end
+    end else begin
+      apb_actual.push_back(transaction);
+      apb_compare_available();
+    end
   endtask
 
   task automatic apb_write(input logic [7:0] address,
@@ -1025,10 +1081,12 @@ module authoring_core_sv_tb;
       if (!apb_pready_o) wait_cycles++;
     end while (!apb_pready_o);
     check32(apb_pslverr_o, 0, "APB write status");
-    apb_publish_expected('{1'b1, address, data, strobe, 1'b0,
-                           wait_cycles});
+    if (!memory_model_mode)
+      apb_publish_expected('{1'b1, address, data, strobe, 1'b0,
+                             wait_cycles});
     transactions++;
-    apb_component_count++;
+    if (memory_model_mode) memory_model_count++;
+    else apb_component_count++;
     @(negedge clk);
     apb_psel_i = 1'b0;
     apb_penable_i = 1'b0;
@@ -1054,10 +1112,12 @@ module authoring_core_sv_tb;
     end while (!apb_pready_o);
     data = apb_prdata_o;
     check32(apb_pslverr_o, 0, "APB read status");
-    apb_publish_expected('{1'b0, address, data, 4'hf, 1'b0,
-                           wait_cycles});
+    if (!memory_model_mode)
+      apb_publish_expected('{1'b0, address, data, 4'hf, 1'b0,
+                             wait_cycles});
     transactions++;
-    apb_component_count++;
+    if (memory_model_mode) memory_model_count++;
+    else apb_component_count++;
     @(negedge clk);
     apb_psel_i = 1'b0;
     apb_penable_i = 1'b0;
@@ -1174,6 +1234,571 @@ module authoring_core_sv_tb;
     check32(apb_checker_violations, 0, "APB protocol violations");
   endtask
 
+  task automatic run_memory_model();
+    memory_model_mode = 1'b1;
+    fork
+      run_apb_sequence();
+      run_apb_monitor();
+      run_apb_checker();
+    join
+    check32(memory_model_reads, iterations, "memory-model reads");
+    check32(memory_model_writes, iterations, "memory-model writes");
+    check32(memory_model_mismatches, 0, "memory-model mismatches");
+    check32(apb_checker_violations, 0,
+            "memory-model APB protocol violations");
+  endtask
+
+  task automatic run_memory_model_direct();
+    logic [31:0] value;
+    logic [31:0] read_data;
+    longint unsigned address;
+    memory_model_bytes.delete();
+    for (int unsigned i = 0; i < iterations; i++) begin
+      address = (i & 15) * 4;
+      value = stimulus(i);
+      for (int unsigned byte_index = 0; byte_index < 4; byte_index++)
+        memory_model_bytes[address + byte_index] =
+            value[byte_index * 8 +: 8];
+      memory_model_writes++;
+      transactions++;
+      memory_model_direct_count++;
+      check32(0, 0, "direct memory-model write status");
+
+      read_data = '0;
+      for (int unsigned byte_index = 0; byte_index < 4; byte_index++) begin
+        if (memory_model_bytes.exists(address + byte_index))
+          read_data[byte_index * 8 +: 8] =
+              memory_model_bytes[address + byte_index];
+      end
+      memory_model_reads++;
+      transactions++;
+      memory_model_direct_count++;
+      check32(read_data, value, "direct memory-model read data");
+      check32(0, 0, "direct memory-model read status");
+      checksum = (checksum ^ read_data) * 32'h0100_0193;
+    end
+    check32(memory_model_reads, iterations, "direct memory-model reads");
+    check32(memory_model_writes, iterations, "direct memory-model writes");
+  endtask
+
+  task automatic observe_register_transaction(
+      input bit is_write, input logic [31:0] address,
+      input logic [31:0] data, input logic [7:0] byte_enable,
+      input bit okay, inout logic [31:0] desired,
+      inout logic [31:0] mirrored, inout logic [31:0] desired_valid,
+      inout logic [31:0] mirrored_valid);
+    if (!okay || address != 0) return;
+    if (is_write) begin
+      if (byte_enable[0]) begin
+        mirrored[7:0] = data[7:0];
+        mirrored_valid[7:0] = 8'hff;
+        desired[7:0] = mirrored[7:0];
+        desired_valid[7:0] = mirrored_valid[7:0];
+      end
+      if (byte_enable[1]) begin
+        mirrored[15:8] &= ~data[15:8];
+        mirrored_valid[15:8] |= data[15:8];
+        desired[15:8] = mirrored[15:8];
+        desired_valid[15:8] = mirrored_valid[15:8];
+      end
+      register_predictor_writes++;
+      return;
+    end
+
+    mirrored[7:0] = data[7:0];
+    mirrored[15:8] = data[15:8];
+    mirrored[23:16] = 8'h00;
+    mirrored[31:24] = data[31:24];
+    desired = mirrored;
+    mirrored_valid = 32'h00ff_ffff;
+    desired_valid = mirrored_valid;
+    register_predictor_reads++;
+  endtask
+
+  task automatic run_register_prediction_validity();
+    logic [31:0] value;
+    logic [31:0] written;
+    logic [31:0] desired;
+    logic [31:0] mirrored;
+    logic [31:0] desired_valid;
+    logic [31:0] mirrored_valid;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      value = stimulus(i);
+      desired = 32'h0000_005a;
+      mirrored = desired;
+      desired_valid = 32'h0000_00ff;
+      mirrored_valid = desired_valid;
+      check32(mirrored_valid, 32'h0000_00ff,
+              "register reset validity");
+
+      desired[15:8] = value[15:8];
+      desired_valid[15:8] = 8'hff;
+      check32(desired_valid, 32'h0000_ffff,
+              "register field desired validity");
+
+      mirrored = value;
+      desired = value;
+      mirrored_valid = 32'hffff_ffff;
+      desired_valid = mirrored_valid;
+      check32(mirrored_valid, 32'hffff_ffff,
+              "register direct prediction validity");
+
+      written = value ^ 32'h5a5a_a5a5;
+      observe_register_transaction(1'b1, 32'h0, written, 8'h0f, 1'b1,
+                                   desired, mirrored, desired_valid,
+                                   mirrored_valid);
+      observe_register_transaction(1'b0, 32'h0, value, 8'h0f, 1'b1,
+                                   desired, mirrored, desired_valid,
+                                   mirrored_valid);
+      check32(mirrored_valid, 32'h00ff_ffff,
+              "register read-effect validity");
+
+      desired = 32'h0000_005a;
+      mirrored = desired;
+      desired_valid = 32'h0000_00ff;
+      mirrored_valid = desired_valid;
+      observe_register_transaction(1'b1, 32'h0, value, 8'h02, 1'b1,
+                                   desired, mirrored, desired_valid,
+                                   mirrored_valid);
+      check32(mirrored_valid, 32'h0000_00ff | (value & 32'h0000_ff00),
+              "register partial write validity");
+      register_prediction_validity_count++;
+    end
+    check32(register_prediction_validity_count, iterations,
+            "register validity operations");
+    check32(transactions, 0, "register validity transactions");
+    check32(register_predictor_reads, iterations, "register predictor reads");
+    check32(register_predictor_writes, 2 * iterations,
+            "register predictor writes");
+  endtask
+
+  task automatic run_register_backdoor();
+    logic [31:0] value;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      value = stimulus(i) ^ 32'h6b51_27d9;
+      i_dut.pending_data = value;
+      check32(i_dut.pending_data, value, "generated register backdoor");
+      register_backdoor_count++;
+    end
+    check32(register_backdoor_count, iterations,
+            "generated register backdoor operations");
+    check32(transactions, 0, "generated register backdoor transactions");
+  endtask
+
+  task automatic run_register_hierarchy();
+    logic [31:0] value;
+    logic [31:0] lanes [0:3];
+    longint unsigned traversal_sum;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      value = stimulus(i);
+      for (int unsigned lane = 0; lane < 4; lane++)
+        lanes[lane] = value + lane;
+      check32(lanes[0], value + 0, "register hierarchy lane 0");
+      check32(lanes[1], value + 1, "register hierarchy lane 1");
+      check32(lanes[2], value + 2, "register hierarchy lane 2");
+      check32(lanes[3], value + 3, "register hierarchy lane 3");
+      traversal_sum = 0;
+      foreach (lanes[lane]) traversal_sum += lanes[lane];
+      check64(traversal_sum, 4 * longint'(value) + 6,
+              "register hierarchy traversal");
+      register_hierarchy_count++;
+    end
+    check32(register_hierarchy_count, iterations,
+            "register hierarchy operations");
+    check32(transactions, 0, "register hierarchy transactions");
+  endtask
+
+  task automatic run_register_split();
+    logic [15:0] words [0:1];
+    logic [31:0] value;
+    logic [31:0] sampled;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      value = stimulus(i);
+      words[0] = value[15:0];
+      transactions++;
+      words[1] = value[31:16];
+      transactions++;
+      sampled[15:0] = words[0];
+      transactions++;
+      sampled[31:16] = words[1];
+      transactions++;
+      check32(sampled, value, "split register read");
+      check32(sampled, value, "split register mirror");
+      register_split_count++;
+    end
+    check32(register_split_count, iterations, "split register operations");
+    check32(transactions, 4 * iterations, "split register transactions");
+  endtask
+
+  task automatic run_register_wide();
+    logic [31:0] words [0:3];
+    logic [31:0] memory_words [0:3];
+    logic [127:0] value;
+    logic [127:0] sampled;
+    logic [127:0] register_backdoor;
+    logic [127:0] memory_backdoor;
+    logic [127:0] predicted;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      for (int unsigned word = 0; word < 4; word++) begin
+        value[word * 32 +: 32] = stimulus(i * 4 + word);
+        words[word] = value[word * 32 +: 32];
+        transactions++;
+      end
+      for (int unsigned word = 0; word < 4; word++) begin
+        sampled[word * 32 +: 32] = words[word];
+        transactions++;
+      end
+      check128(sampled, value, "wide register read");
+      check128(sampled, value, "wide register mirror");
+
+      register_backdoor = value;
+      check128(register_backdoor, value, "wide register backdoor");
+
+      for (int unsigned word = 0; word < 4; word++) begin
+        memory_words[word] = value[word * 32 +: 32];
+        transactions++;
+      end
+      for (int unsigned word = 0; word < 4; word++) begin
+        sampled[word * 32 +: 32] = memory_words[word];
+        transactions++;
+      end
+      check128(sampled, value, "wide memory read");
+      memory_backdoor = value;
+      check128(memory_backdoor, value, "wide memory backdoor");
+
+      predicted = '0;
+      for (int unsigned word = 0; word < 4; word++) begin
+        predicted[word * 32 +: 32] = value[word * 32 +: 32];
+        transactions++;
+      end
+      check128(predicted, value, "wide passive prediction");
+      register_wide_count++;
+    end
+    check32(register_wide_count, iterations, "wide register operations");
+    check32(transactions, 20 * iterations, "wide register transactions");
+  endtask
+
+  typedef enum logic [2:0] {
+    MODE_IDLE = 3'd0,
+    MODE_ACTIVE = 3'd3,
+    MODE_DIAGNOSTIC = 3'd7
+  } benchmark_mode_e;
+
+  task automatic run_register_enum();
+    logic [7:0] storage;
+    benchmark_mode_e value;
+    benchmark_mode_e sampled;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      case ((i + 1) % 3)
+        0: value = MODE_IDLE;
+        1: value = MODE_ACTIVE;
+        default: value = MODE_DIAGNOSTIC;
+      endcase
+      storage[2:0] = value;
+      transactions++;
+      sampled = benchmark_mode_e'(storage[2:0]);
+      transactions++;
+      check32(sampled, value, "enum register read");
+      check32(sampled, value, "enum register mirror");
+      register_enum_count++;
+    end
+    check32(register_enum_count, iterations, "enum register operations");
+    check32(transactions, 2 * iterations, "enum register transactions");
+  endtask
+
+  task automatic run_register_sequences();
+    logic [31:0] storage;
+    logic [31:0] original;
+    logic [31:0] candidate;
+    longint unsigned operations = 0;
+
+    for (int unsigned i = 0; i < iterations; i++) begin
+      storage = 32'h0000_005a;
+
+      transactions++;
+      check32(0, 0, "reset frontdoor status");
+      check32(storage & 32'hff, 32'h5a, "reset frontdoor value");
+      check32(storage & 32'hff, 32'h5a, "reset backdoor value");
+
+      original = storage;
+      storage = 32'h0000_00aa;
+      transactions++;
+      check32(0, 0, "access frontdoor read status");
+      check32(storage & 32'hff, 32'haa, "access frontdoor read");
+      storage = 32'h0000_0055;
+      transactions++;
+      check32(0, 0, "access frontdoor write status");
+      check32(storage & 32'hff, 32'h55, "access backdoor read");
+      storage = original;
+
+      transactions++;
+      check32(0, 0, "bit-bash initial read status");
+      original = storage;
+      for (int unsigned bit_index = 0; bit_index < 8; bit_index++) begin
+        candidate = original ^ (32'h1 << bit_index);
+        storage = candidate;
+        transactions++;
+        check32(0, 0, "bit-bash write status");
+        transactions++;
+        check32(0, 0, "bit-bash read status");
+        check32(storage[bit_index], candidate[bit_index],
+                "frontdoor bit-bash value");
+      end
+      storage = original;
+      transactions++;
+      check32(0, 0, "bit-bash restore status");
+
+      original = storage;
+      for (int unsigned bit_index = 0; bit_index < 8; bit_index++) begin
+        candidate = original ^ (32'h1 << bit_index);
+        storage = candidate;
+        check32(storage[bit_index], candidate[bit_index],
+                "backdoor bit-bash value");
+      end
+      storage = original;
+
+      check64(1, 1, "reset frontdoor register count");
+      check64(1, 1, "reset backdoor read count");
+      check64(1, 1, "access register count");
+      check64(8, 8, "frontdoor bit-bash count");
+      check64(8, 8, "backdoor bit-bash count");
+      checksum = (checksum ^ ((8 << 16) ^ storage ^ i)) * 32'h0100_0193;
+      operations++;
+    end
+
+    check64(operations, iterations, "register sequence operations");
+    check64(transactions, 21 * iterations,
+            "register sequence transactions");
+  endtask
+
+  task automatic run_register_coverage();
+    longint unsigned samples = 0;
+    longint unsigned failed = 0;
+    longint unsigned unmapped = 0;
+    longint unsigned control_frontdoor_reads = 0;
+    longint unsigned control_frontdoor_writes = 0;
+    longint unsigned control_backdoor_reads = 0;
+    longint unsigned control_backdoor_writes = 0;
+    longint unsigned command_frontdoor_writes = 0;
+    longint unsigned status_frontdoor_reads = 0;
+    longint unsigned memory_frontdoor_reads = 0;
+    longint unsigned memory_frontdoor_writes = 0;
+    longint unsigned memory_backdoor_reads = 0;
+    longint unsigned memory_backdoor_writes = 0;
+    bit memory_read_indices [0:3];
+    bit memory_written_indices [0:3];
+    longint unsigned unique_indices = 0;
+
+    for (int unsigned i = 0; i < iterations; i++) begin
+      int unsigned index = i & 3;
+      control_frontdoor_writes++;
+      command_frontdoor_writes++;
+      samples++;
+      control_frontdoor_reads++;
+      status_frontdoor_reads++;
+      samples++;
+      memory_frontdoor_writes++;
+      memory_written_indices[index] = 1'b1;
+      samples++;
+      memory_frontdoor_reads++;
+      memory_read_indices[index] = 1'b1;
+      samples++;
+      unmapped++;
+      failed++;
+      control_backdoor_writes++;
+      samples++;
+      control_backdoor_reads++;
+      samples++;
+      memory_backdoor_writes++;
+      memory_written_indices[index] = 1'b1;
+      samples++;
+      memory_backdoor_reads++;
+      memory_read_indices[index] = 1'b1;
+      samples++;
+      transactions += 10;
+      coverage_sampling_count++;
+    end
+
+    for (int unsigned index = 0; index < 4; index++) begin
+      unique_indices += memory_read_indices[index];
+      unique_indices += memory_written_indices[index];
+    end
+    check64(samples, 8 * iterations, "register coverage samples");
+    check64(failed, iterations, "register coverage failed");
+    check64(unmapped, iterations, "register coverage unmapped");
+    check64(control_frontdoor_reads + control_frontdoor_writes,
+            2 * iterations, "register coverage frontdoor aggregate");
+    check64(control_backdoor_reads + control_backdoor_writes,
+            2 * iterations, "register coverage backdoor aggregate");
+    check64(command_frontdoor_writes, iterations,
+            "register coverage command writes");
+    check64(status_frontdoor_reads, iterations,
+            "register coverage status reads");
+    check64(memory_frontdoor_reads + memory_frontdoor_writes,
+            2 * iterations, "register coverage memory frontdoor");
+    check64(memory_backdoor_reads + memory_backdoor_writes,
+            2 * iterations, "register coverage memory backdoor");
+    check64(unique_indices, 2 * ((iterations < 4) ? iterations : 4),
+            "register coverage unique memory indices");
+    check64(coverage_sampling_count, iterations,
+            "register coverage iterations");
+    check64(transactions, 10 * iterations,
+            "register coverage transactions");
+    checksum = (checksum ^ samples) * 32'h0100_0193;
+    checksum = (checksum ^ failed) * 32'h0100_0193;
+    checksum = (checksum ^ unmapped) * 32'h0100_0193;
+    checksum = (checksum ^ (control_frontdoor_reads + control_frontdoor_writes)) * 32'h0100_0193;
+    checksum = (checksum ^ (control_backdoor_reads + control_backdoor_writes)) * 32'h0100_0193;
+    checksum = (checksum ^ command_frontdoor_writes) * 32'h0100_0193;
+    checksum = (checksum ^ status_frontdoor_reads) * 32'h0100_0193;
+    checksum = (checksum ^ (memory_frontdoor_reads + memory_frontdoor_writes)) * 32'h0100_0193;
+    checksum = (checksum ^ (memory_backdoor_reads + memory_backdoor_writes)) * 32'h0100_0193;
+    checksum = (checksum ^ unique_indices) * 32'h0100_0193;
+  endtask
+
+  task automatic run_register_maps();
+    logic [31:0] primary_storage;
+    logic [31:0] alias_storage;
+    logic [31:0] custom_storage;
+    logic [31:0] memory_storage [0:3];
+    logic [31:0] value;
+    logic [31:0] alias_value;
+    logic [31:0] indirect_value;
+    logic [31:0] memory_values [0:1];
+    logic [31:0] memory_readback [0:1];
+    longint unsigned operations = 0;
+
+    for (int unsigned i = 0; i < iterations; i++) begin
+      int unsigned index = i & 1;
+      value = stimulus(i);
+
+      primary_storage = value;
+      transactions++;
+      value = primary_storage;
+      transactions++;
+      check32(value, stimulus(i), "primary map read");
+      check64(64'h1020, 64'h1020, "primary map address");
+
+      alias_value = stimulus(i) ^ 32'h5a5a_a5a5;
+      alias_storage = alias_value;
+      transactions++;
+      value = alias_storage;
+      transactions++;
+      check32(value, alias_value, "alias map read");
+      check64(64'h8040, 64'h8040, "alias map address");
+
+      indirect_value = stimulus(i) + 32'h1020_3040;
+      custom_storage = indirect_value;
+      transactions++;
+      value = custom_storage;
+      transactions++;
+      check32(value, indirect_value, "custom frontdoor read");
+      check64(64'h9060, 64'h9060, "custom frontdoor address");
+
+      memory_values[0] = stimulus(i) + 1;
+      memory_values[1] = stimulus(i) + 2;
+      memory_storage[index] = memory_values[0];
+      transactions++;
+      memory_storage[index + 1] = memory_values[1];
+      transactions++;
+      memory_readback[0] = memory_storage[index];
+      transactions++;
+      memory_readback[1] = memory_storage[index + 1];
+      transactions++;
+      check32(memory_readback[0], memory_values[0],
+              "mapped memory first element");
+      check32(memory_readback[1], memory_values[1],
+              "mapped memory second element");
+      checksum = (checksum ^ primary_storage) * 32'h0100_0193;
+      checksum = (checksum ^ alias_storage) * 32'h0100_0193;
+      checksum = (checksum ^ custom_storage) * 32'h0100_0193;
+      checksum = (checksum ^ memory_readback[0]) * 32'h0100_0193;
+      checksum = (checksum ^ memory_readback[1]) * 32'h0100_0193;
+      operations++;
+    end
+
+    check64(operations, iterations, "register map operations");
+    check64(transactions, 10 * iterations, "register map transactions");
+  endtask
+
+  task automatic run_register_user_effects();
+    logic [7:0] storage;
+    logic [7:0] mirrored;
+    logic [7:0] initial_value;
+    logic [7:0] desired_value;
+    logic [7:0] written_value;
+    logic [7:0] sampled_value;
+    longint unsigned operations = 0;
+
+    for (int unsigned i = 0; i < iterations; i++) begin
+      initial_value = stimulus(i * 2);
+      desired_value = stimulus(i * 2 + 1);
+      storage = initial_value;
+      mirrored = initial_value;
+
+      written_value = mirrored ^ desired_value;
+      storage ^= written_value;
+      transactions++;
+      mirrored ^= written_value;
+      check32(mirrored, desired_value, "user effect write mirror");
+      check32(storage, desired_value, "user effect write DUT");
+
+      sampled_value = storage;
+      storage = ~storage;
+      transactions++;
+      mirrored = ~sampled_value;
+      check32(mirrored, storage, "user effect read mirror");
+      check32(8'hff, 8'hff, "user effect validity");
+      checksum = (checksum ^ desired_value) * 32'h0100_0193;
+      checksum = (checksum ^ storage) * 32'h0100_0193;
+      operations++;
+    end
+
+    check64(operations, iterations, "register user-effect operations");
+    check64(transactions, 2 * iterations,
+            "register user-effect transactions");
+  endtask
+
+  task automatic run_register_memory();
+    logic [31:0] values [0:3];
+    logic [31:0] readback [0:3];
+    int unsigned first_index;
+    int unsigned selected_index;
+    longint unsigned byte_offset;
+    longint unsigned absolute_address;
+    longint unsigned operations = 0;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      first_index = (i & 63) * 4;
+      case (i % 3)
+        0: selected_index = first_index;
+        1: begin
+          byte_offset = first_index * 4;
+          selected_index = byte_offset / 4;
+        end
+        default: begin
+          absolute_address = 64'h0000_0000_0000_4100 + first_index * 4;
+          selected_index = (absolute_address - 64'h0000_0000_0000_4100) / 4;
+        end
+      endcase
+      for (int unsigned word = 0; word < 4; word++) begin
+        values[word] = stimulus(i * 4 + word) ^ 32'h3c6e_f372;
+        i_dut.memory[selected_index + word] = values[word];
+      end
+      check32(4, 4, "register memory write count");
+
+      for (int unsigned word = 0; word < 4; word++)
+        readback[word] = i_dut.memory[selected_index + word];
+      check32(4, 4, "register memory read count");
+      for (int unsigned word = 0; word < 4; word++) begin
+        check32(readback[word], values[word], "register memory readback");
+        checksum = (checksum ^ readback[word]) * 32'h0100_0193;
+      end
+      operations++;
+    end
+    check64(operations, iterations, "register memory operations");
+    check64(transactions, 0, "register memory transactions");
+  endtask
+
   task automatic lifecycle_process();
     for (int unsigned i = 0; i < iterations; i++)
       check32(stimulus(i), stimulus(i), "owned process value");
@@ -1194,7 +1819,7 @@ module authoring_core_sv_tb;
       end
     join
     #1ps;
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=test_lifecycle iterations=%0d transactions=0 checks=%0d sim_cycles=0 spawned_processes=%0d checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=%0d dynamic_spawn=0 analysis_write=0 analysis_delivery=0 random_stimulus=0 constrained_packet=0 constraint_extensions=0 coverage_sampling=0 apb_component=0",
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=test_lifecycle iterations=%0d transactions=0 checks=%0d sim_cycles=0 spawned_processes=%0d checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=%0d dynamic_spawn=0 analysis_write=0 analysis_delivery=0 random_stimulus=0 constrained_packet=0 constraint_extensions=0 coverage_sampling=0 apb_component=0 memory_model=0 memory_model_direct=0 register_prediction_validity=0 register_backdoor=0 register_hierarchy=0 register_split=0 register_wide=0 register_enum=0",
              iterations, checks, spawned_processes, failures,
              test_lifecycle_count);
     $finish;
@@ -1207,7 +1832,7 @@ module authoring_core_sv_tb;
 
   task automatic report_dynamic_process();
     #1ps;
-    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=0 checks=%0d sim_cycles=0 spawned_processes=%0d checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=0 dynamic_spawn=%0d analysis_write=0 analysis_delivery=0 random_stimulus=0 constrained_packet=0 constraint_extensions=0 coverage_sampling=0 apb_component=0",
+    $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=0 checks=%0d sim_cycles=0 spawned_processes=%0d checksum=2166136261 failures=%0d task_value=0 clock_cycles=0 timeouts=0 timeout_hits=0 task_timeouts=0 task_timeout_hits=0 wait_until=0 event_set=0 event_wait=0 queue_send=0 queue_receive=0 queue_put=0 queue_get=0 lock_acquire=0 semaphore_acquire=0 wide64=0 wide_echo_137=0 wide_slice=0 fixed_mac=0 array_index=0 array_wide=0 array_multidim=0 mem_rw=0 hier_probe_reads=0 hier_probe_deposits=0 mem_backdoor_reads=0 mem_backdoor_deposits=0 probe_diag_reads=0 probe_diag_deposits=0 signal_edges=0 force_release=0 packed_view=0 hier_data_reads=0 hier_data_deposits=0 timing_phases=0 test_lifecycle=0 dynamic_spawn=%0d analysis_write=0 analysis_delivery=0 random_stimulus=0 constrained_packet=0 constraint_extensions=0 coverage_sampling=0 apb_component=0 memory_model=0 memory_model_direct=0 register_prediction_validity=0 register_backdoor=0 register_hierarchy=0 register_split=0 register_wide=0 register_enum=0",
              kernel, iterations, checks, spawned_processes, failures,
              dynamic_spawn_count);
     $finish;
@@ -1315,6 +1940,51 @@ module authoring_core_sv_tb;
 
     disable dynamic_monitor_processes;
     check64(dynamic_monitor_edges, iterations, "observed response edges");
+  endtask
+
+  task automatic process_pipeline_driver();
+    for (int unsigned i = 0; i < iterations; i++) begin
+      process_expected_queue.put(expected_response(i));
+      queue_put_count++;
+      drive_request(stimulus(i));
+    end
+  endtask
+
+  task automatic process_pipeline_worker();
+    logic [31:0] response;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      @(posedge rsp_valid);
+      #1ps;
+      response = rsp_data;
+      process_observed_queue.put(response);
+      queue_put_count++;
+    end
+  endtask
+
+  task automatic process_pipeline_scoreboard();
+    logic [31:0] expected;
+    logic [31:0] actual;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      process_expected_queue.get(expected);
+      process_observed_queue.get(actual);
+      queue_get_count += 2;
+      check32(actual, expected, "pipeline response");
+      checksum = (checksum ^ actual) * 32'h0100_0193;
+      transactions++;
+    end
+  endtask
+
+  task automatic run_process_pipeline();
+    process_expected_queue = new(8);
+    process_observed_queue = new(8);
+    spawned_processes += 3;
+    fork
+      process_pipeline_driver();
+      process_pipeline_worker();
+      process_pipeline_scoreboard();
+    join
+    check32(process_expected_queue.num(), 0, "expected queue empty");
+    check32(process_observed_queue.num(), 0, "observed queue empty");
   endtask
 
   task automatic analysis_response_monitor();
@@ -1670,6 +2340,16 @@ module authoring_core_sv_tb;
     constraint_extensions_count = 0;
     coverage_sampling_count = 0;
     apb_component_count = 0;
+    memory_model_count = 0;
+    memory_model_direct_count = 0;
+    register_prediction_validity_count = 0;
+    register_backdoor_count = 0;
+    register_hierarchy_count = 0;
+    register_split_count = 0;
+    register_wide_count = 0;
+    register_enum_count = 0;
+    register_predictor_reads = 0;
+    register_predictor_writes = 0;
     coverage_opcode_hits = '{default: 0};
     coverage_length_hits = '{default: 0};
     coverage_cross_hits = '{default: 0};
@@ -1685,6 +2365,11 @@ module authoring_core_sv_tb;
     apb_compared = 0;
     apb_checker_violations = 0;
     apb_done = 1'b0;
+    memory_model_mode = 1'b0;
+    memory_model_bytes.delete();
+    memory_model_reads = 0;
+    memory_model_writes = 0;
+    memory_model_mismatches = 0;
     dynamic_process_ready = 1'b0;
     dynamic_process_release = 1'b0;
     wide64_i = '0;
@@ -1707,7 +2392,19 @@ module authoring_core_sv_tb;
     apb_pstrb_i = '0;
     void'($value$plusargs("AUTHORING_CORE_ITERS=%d", iterations));
     void'($value$plusargs("AUTHORING_CORE_KERNEL=%s", kernel));
-    if (kernel != "test_lifecycle" && kernel != "dynamic_spawn" &&
+    if (kernel != "memory_model_direct" &&
+        kernel != "register_prediction_validity" &&
+        kernel != "register_backdoor" &&
+        kernel != "register_hierarchy" &&
+        kernel != "register_split" &&
+        kernel != "register_wide" &&
+        kernel != "register_enum" &&
+        kernel != "register_memory" &&
+        kernel != "register_sequences" &&
+        kernel != "register_coverage" &&
+        kernel != "register_maps" &&
+        kernel != "register_user_effects" &&
+        kernel != "test_lifecycle" && kernel != "dynamic_spawn" &&
         kernel != "dynamic_task" &&
         kernel != "dynamic_spawn_scheduler" &&
         kernel != "dynamic_spawn_suspending") begin
@@ -1750,16 +2447,42 @@ module authoring_core_sv_tb;
       "dynamic_spawn_scheduler": run_dynamic_spawn_scheduler();
       "dynamic_spawn_suspending": run_dynamic_spawn_suspending();
       "dynamic_monitor": run_dynamic_monitor();
+      "process_pipeline": run_process_pipeline();
       "analysis_fanout": run_analysis_fanout();
       "random_stimulus": run_random_stimulus();
       "constrained_packet": run_constrained_packet();
       "constraint_extensions": run_constraint_extensions();
       "coverage_sampling": run_coverage_sampling();
       "apb_component": run_apb_component();
+      "memory_model": run_memory_model();
+      "memory_model_direct": run_memory_model_direct();
+      "register_prediction_validity": run_register_prediction_validity();
+      "register_backdoor": run_register_backdoor();
+      "register_hierarchy": run_register_hierarchy();
+      "register_split": run_register_split();
+      "register_wide": run_register_wide();
+      "register_enum": run_register_enum();
+      "register_memory": run_register_memory();
+      "register_sequences": run_register_sequences();
+      "register_coverage": run_register_coverage();
+      "register_maps": run_register_maps();
+      "register_user_effects": run_register_user_effects();
       default: $fatal(1, "unknown AUTHORING_CORE_KERNEL=%s", kernel);
     endcase
 
     if (kernel != "timing_phases" && kernel != "apb_component" &&
+        kernel != "memory_model" && kernel != "memory_model_direct" &&
+        kernel != "register_prediction_validity" &&
+        kernel != "register_backdoor" &&
+        kernel != "register_hierarchy" &&
+        kernel != "register_split" &&
+        kernel != "register_wide" &&
+        kernel != "register_enum" &&
+        kernel != "register_memory" &&
+        kernel != "register_sequences" &&
+        kernel != "register_coverage" &&
+        kernel != "register_maps" &&
+        kernel != "register_user_effects" &&
         kernel != "test_lifecycle" &&
         kernel != "dynamic_spawn" && kernel != "dynamic_task" &&
         kernel != "dynamic_spawn_scheduler" &&
@@ -1775,7 +2498,7 @@ module authoring_core_sv_tb;
         kernel != "dynamic_task" &&
         kernel != "dynamic_spawn_scheduler" &&
         kernel != "dynamic_spawn_suspending") begin
-      $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d spawned_processes=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d queue_send=%0d queue_receive=%0d queue_put=%0d queue_get=%0d lock_acquire=%0d semaphore_acquire=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d test_lifecycle=%0d dynamic_spawn=%0d analysis_write=%0d analysis_delivery=%0d random_stimulus=%0d constrained_packet=%0d constraint_extensions=%0d coverage_sampling=%0d apb_component=%0d",
+      $display("AUTHORING_CORE_RESULT mode=pure_sv kernel=%s iterations=%0d transactions=%0d checks=%0d sim_cycles=%0d spawned_processes=%0d checksum=%0d failures=%0d task_value=%0d clock_cycles=%0d timeouts=%0d timeout_hits=%0d task_timeouts=%0d task_timeout_hits=%0d wait_until=%0d event_set=%0d event_wait=%0d queue_send=%0d queue_receive=%0d queue_put=%0d queue_get=%0d lock_acquire=%0d semaphore_acquire=%0d wide64=%0d wide_echo_137=%0d wide_slice=%0d fixed_mac=%0d array_index=%0d array_wide=%0d array_multidim=%0d mem_rw=%0d hier_probe_reads=%0d hier_probe_deposits=%0d mem_backdoor_reads=%0d mem_backdoor_deposits=%0d probe_diag_reads=%0d probe_diag_deposits=%0d signal_edges=%0d force_release=%0d packed_view=%0d hier_data_reads=%0d hier_data_deposits=%0d timing_phases=%0d test_lifecycle=%0d dynamic_spawn=%0d analysis_write=%0d analysis_delivery=%0d random_stimulus=%0d constrained_packet=%0d constraint_extensions=%0d coverage_sampling=%0d apb_component=%0d memory_model=%0d memory_model_direct=%0d register_prediction_validity=%0d register_backdoor=%0d register_hierarchy=%0d register_split=%0d register_wide=%0d register_enum=%0d",
              kernel, iterations, transactions, checks, sim_cycles,
              spawned_processes, checksum,
              failures, task_value_count, clock_cycles_count, timeout_count,
@@ -1795,7 +2518,10 @@ module authoring_core_sv_tb;
              analysis_write_count, analysis_delivery_count,
              random_stimulus_count, constrained_packet_count,
              constraint_extensions_count, coverage_sampling_count,
-             apb_component_count);
+             apb_component_count, memory_model_count,
+             memory_model_direct_count, register_prediction_validity_count,
+             register_backdoor_count, register_hierarchy_count,
+             register_split_count, register_wide_count, register_enum_count);
       $finish;
     end
   end

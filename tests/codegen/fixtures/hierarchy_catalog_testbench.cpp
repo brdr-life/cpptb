@@ -1,6 +1,8 @@
 #include "cpptb/cpptb.hpp"
 #include "hierarchy_catalog_dut.hpp"
 
+#include <array>
+#include <span>
 #include <type_traits>
 #include <utility>
 
@@ -28,6 +30,10 @@ static_assert(sizeof(Dut) == sizeof(PortOnlyDut));
 static_assert(std::is_same_v<
               decltype(std::declval<Dut>().block1.state.get()), StateTValue>);
 static_assert(std::is_same_v<
+              decltype(std::declval<Dut>()
+                           .template cpptb_signal<"block1.storage">()),
+              decltype(Dut::block1.storage)>);
+static_assert(std::is_same_v<
               decltype(std::declval<Dut>().block1.packet.get()), PacketTValue>);
 static_assert(decltype(Dut::block1)::WIDTH == 8);
 static_assert(decltype(Dut::block1)::DOUBLE_WIDTH == 16);
@@ -40,8 +46,10 @@ Task<void> hierarchy_sequence(Dut dut, cpptb::TestContext& test) {
     co_await RisingEdge{dut.clk};
 
     dut.block1.storage.deposit(0x12);
+    const auto storage_by_path =
+        dut.template cpptb_signal<"block1.storage">();
     test.expect_eq("scalar deposit is immediately readable",
-                   dut.block1.storage.get(), 0x12u);
+                   storage_by_path.get(), 0x12u);
     co_await Delay{1_ps};
     test.expect_eq("scalar deposit reaches output", dut.value.get(), 0x12u);
 
@@ -70,6 +78,16 @@ Task<void> hierarchy_sequence(Dut dut, cpptb::TestContext& test) {
     dut.block1.memory.at(2).deposit(0xbeef);
     test.expect_eq("non-zero memory index deposit",
                    dut.block1.memory.at(2).get(), 0xbeefu);
+    const std::array<std::uint32_t, 7> memory_values{
+        0x1020u, 0x3040u, 0x5060u, 0x7080u,
+        0x90a0u, 0xb0c0u, 0xd0e0u};
+    std::array<std::uint32_t, 7> memory_readback{};
+    dut.block1.memory.deposit(2, std::span<const std::uint32_t>{memory_values});
+    dut.block1.memory.get_into(2, std::span<std::uint32_t>{memory_readback});
+    for (std::size_t index = 0; index < memory_values.size(); ++index) {
+        test.expect_eq("non-zero memory block transfer", memory_readback[index],
+                       memory_values[index]);
+    }
     dut.block1.memory.at(2).force(0xcafe);
     test.expect_eq("memory force is immediately readable",
                    dut.block1.memory.at(2).get(), 0xcafeu);

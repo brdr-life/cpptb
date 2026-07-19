@@ -32,6 +32,10 @@ namespace or include paths.
 | `cpptb_vc/scoreboards.hpp` | In-order and keyed scoreboards plus reference-model publication |
 | `cpptb_vc/stream.hpp` | Stream concepts and ready/valid source, sink, and monitor components |
 | `cpptb_vc/memory_mapped.hpp` | Protocol-neutral requests, responses, transactions, statuses, and master concept |
+| `cpptb_vc/memory_model.hpp` | Sparse expected memory, regions, callbacks, images, and passive prediction |
+| `cpptb_vc/register_model.hpp` | Typed registers, fields, memories, mirrors, and frontdoor/backdoor adapters |
+| `cpptb_vc/register_coverage.hpp` | Optional register, field, and register-memory access coverage |
+| `cpptb_vc/register_sequences.hpp` | Reusable reset-check, access-check, and policy-aware bit-bash sequences |
 | `cpptb_vc/apb.hpp` | APB master, passive monitor, and protocol checker |
 | `cpptb_vc/cpptb_vc.hpp` | Convenience umbrella for the complete optional package |
 
@@ -40,6 +44,25 @@ the first endpoint APIs. New code should import `cpptb_vc` directly. The shim
 is deprecated for new integrations: before `cpptb_vc` becomes a separately
 versioned distribution, it will move with that distribution or be removed so
 the core package never acquires a reverse dependency on optional components.
+
+## Component guides
+
+Keep core testbenches on `cpptb::cpptb` and add only the optional component
+layers the environment needs:
+
+| Guide | Use it for |
+|---|---|
+| [Sparse expected memory](verification-components/memory-model.md) | Images, expected byte storage, byte enables, permissions, and passive prediction |
+| [Register abstraction layer](memory-register-models.md) | Typed registers and fields, desired/mirrored state, frontdoor/backdoor access, and side effects |
+| [Generate register models](verification-components/register-generation.md) | SystemRDL, IP-XACT, or native RgGen input, build dependencies, naming, and limitations |
+| [Standard register sequences](verification-components/register-sequences.md) | Reset checks, frontdoor/backdoor agreement, bit-bash policy, summaries, and performance peer |
+
+These components depend on scheduler tasks and generic transaction interfaces;
+the scheduler and generated DUT API do not depend on them.
+This packaging follows the same useful boundary described by Cocotb's
+[extension guidance](https://docs.cocotb.org/en/stable/extensions.html): the
+simulation framework remains small while reusable verification IP can be
+installed, documented, and versioned separately.
 
 ## One component in four frameworks
 
@@ -317,6 +340,11 @@ The complete [APB register-file example](examples/apb-regfile.md) connects a
 master, monitor, checker, scoreboard, and coverage model. The
 [component FIFO](examples/component-fifo.md) demonstrates the stream and
 analysis components.
+
+The same APB monitor can feed a protocol-independent
+[sparse memory predictor](verification-components/memory-model.md). Use the
+[register abstraction layer](memory-register-models.md) when the environment
+also needs typed fields, desired/mirrored state, or generated SystemRDL access.
 
 ## Performance qualification
 

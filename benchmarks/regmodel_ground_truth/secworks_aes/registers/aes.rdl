@@ -1,0 +1,50 @@
+addrmap secworks_aes {
+    default regwidth = 32;
+    default accesswidth = 32;
+
+    reg {
+        field { sw = r; hw = w; } value[31:0];
+    } name0 @ 0x00;
+
+    reg {
+        field { sw = r; hw = w; } value[31:0];
+    } name1 @ 0x04;
+
+    reg {
+        field { sw = r; hw = w; } value[31:0];
+    } version @ 0x08;
+
+    reg {
+        field { sw = w; hw = r; } init[0:0];
+        field { sw = w; hw = r; } next[1:1];
+    } control @ 0x20;
+
+    reg {
+        field { sw = r; hw = w; } ready[0:0];
+        field { sw = r; hw = w; } valid[1:1];
+    } status @ 0x24;
+
+    reg {
+        field { sw = rw; hw = r; } encdec[0:0];
+        field { sw = rw; hw = r; } key_length[1:1];
+    } config @ 0x28;
+
+    reg { field { sw = rw; hw = r; } value[31:0]; } key0 @ 0x40;
+    reg { field { sw = rw; hw = r; } value[31:0]; } key1 @ 0x44;
+    reg { field { sw = rw; hw = r; } value[31:0]; } key2 @ 0x48;
+    reg { field { sw = rw; hw = r; } value[31:0]; } key3 @ 0x4c;
+    reg { field { sw = rw; hw = r; } value[31:0]; } key4 @ 0x50;
+    reg { field { sw = rw; hw = r; } value[31:0]; } key5 @ 0x54;
+    reg { field { sw = rw; hw = r; } value[31:0]; } key6 @ 0x58;
+    reg { field { sw = rw; hw = r; } value[31:0]; } key7 @ 0x5c;
+
+    reg { field { sw = rw; hw = r; } value[31:0]; } block0 @ 0x80;
+    reg { field { sw = rw; hw = r; } value[31:0]; } block1 @ 0x84;
+    reg { field { sw = rw; hw = r; } value[31:0]; } block2 @ 0x88;
+    reg { field { sw = rw; hw = r; } value[31:0]; } block3 @ 0x8c;
+
+    reg { field { sw = r; hw = w; } value[31:0]; } result0 @ 0xc0;
+    reg { field { sw = r; hw = w; } value[31:0]; } result1 @ 0xc4;
+    reg { field { sw = r; hw = w; } value[31:0]; } result2 @ 0xc8;
+    reg { field { sw = r; hw = w; } value[31:0]; } result3 @ 0xcc;
+};

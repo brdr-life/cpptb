@@ -55,6 +55,47 @@ second and subsequent commands reuse the compiled binary until RTL, C++,
 framework headers, options, or tool versions change. Use `--rebuild` to bypass
 the cache and `--verbose` to display the normally hidden compiler commands.
 
+## CLI reference
+
+The installed command is self-documenting:
+
+```sh
+cpptb --help
+cpptb build --help
+cpptb list --help
+cpptb test --help
+```
+
+| Command | Purpose |
+|---|---|
+| `cpptb build` | Resolve the project, generate DUT bindings, and build the simulator executable |
+| `cpptb list` | Build if needed, then list the compiled test catalog |
+| `cpptb test [TEST ...]` | Build if needed, then run all tests or the named tests serially |
+
+All three commands accept the same project and build selectors:
+
+| Option | Purpose |
+|---|---|
+| `--project PATH` | Project directory; defaults to the current directory |
+| `--source PATH_OR_GLOB` | RTL source, directory, or glob; repeat for multiple inputs |
+| `--testbench PATH_OR_GLOB` | C++ testbench source, directory, or glob; repeat as needed |
+| `--top MODULE` | Select the SystemVerilog DUT top module |
+| `--target NAME` | Override the generated simulator target name |
+| `--build-dir PATH` | Select the build root, relative to the project unless absolute |
+| `--simulator verilator` | Select the simulator backend; currently Verilator |
+| `--framework-root PATH` | Locate a cpptb checkout, install prefix, or include directory |
+| `--rebuild` | Ignore the content cache and rebuild |
+| `--verbose` | Show normally hidden generation and compiler commands |
+
+`cpptb list --timeout SECONDS` limits catalog discovery wall time.
+`cpptb test --timeout SECONDS` applies the wall-time limit independently to
+each test process, and `--result-dir PATH` overrides the default
+`build/cpptb/TARGET/results` directory.
+
+This `--top` selects the HDL DUT and is separate from PeakRDL's register-map
+`--top`. Register generation and all of its naming options are documented in
+[Generate a register model](verification-components/register-generation.md).
+
 ## Project layout and build ownership
 
 An ordinary user project needs only RTL and a testbench. It may use a flat

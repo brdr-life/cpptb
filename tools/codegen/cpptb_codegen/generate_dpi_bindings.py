@@ -1655,6 +1655,18 @@ def render_cpp_hierarchy_transport(
                 lines.append(
                     f"void {name}(int index, {const_prefix}{value_type} value);"
                 )
+    for operation in ("get", "deposit"):
+        for signal in selected[operation]:
+            if len(signal.unpacked) != 1 or signal.width > 64:
+                continue
+            name = hierarchy_export_name(
+                manifest, indices[signal.hdl_path], f"{operation}_block4"
+            )
+            const_prefix = "const " if operation == "deposit" else ""
+            lines.append(
+                f"void {name}(int first_index, int count, "
+                f"{const_prefix}unsigned int* values);"
+            )
     for operation in ("get_logic", "deposit_logic", "force_logic"):
         for signal in selected[operation]:
             name = hierarchy_export_name(
@@ -1827,6 +1839,121 @@ def render_cpp_hierarchy_transport(
         lines.extend(
             [
                 f'        fail("{operation}", id);',
+                "    }",
+                "",
+            ]
+        )
+
+    for operation in ("get", "deposit"):
+        span_type = (
+            "std::span<cpptb::probe::Value<Width>>"
+            if operation == "get"
+            else "std::span<const cpptb::probe::Value<Width>>"
+        )
+        lines.extend(
+            [
+                "    template <std::size_t Width>",
+                f"    static void {operation}_span(std::uint32_t id,",
+                "                            std::int32_t first_index,",
+                f"                            {span_type} values) {{",
+                "        constexpr std::size_t kBlockEntries = 4;",
+                "        if constexpr (Width <= 64) {",
+                "            switch (id) {",
+            ]
+        )
+        for signal in selected[operation]:
+            if len(signal.unpacked) != 1 or signal.width > 64:
+                continue
+            index = indices[signal.hdl_path]
+            name = hierarchy_export_name(
+                manifest, index, f"{operation}_block4"
+            )
+            word_count = 4 if signal.width <= 32 else 8
+            lines.extend(
+                [
+                    f"                case {index}: {{",
+                    f"                    static_assert(Width == {signal.width});",
+                    "                    for (std::size_t offset = 0;",
+                    "                         offset < values.size();",
+                    "                         offset += kBlockEntries) {",
+                    "                        const std::size_t count = std::min(",
+                    "                            kBlockEntries, values.size() - offset);",
+                    f"                        std::array<std::uint32_t, {word_count}> words{{}};",
+                ]
+            )
+            if operation == "deposit":
+                lines.extend(
+                    [
+                        "                        for (std::size_t word = 0;",
+                        "                             word < count; ++word) {",
+                    ]
+                )
+                if signal.width <= 32:
+                    lines.append(
+                        "                            words[word] = "
+                        "static_cast<std::uint32_t>(values[offset + word]);"
+                    )
+                else:
+                    lines.extend(
+                        [
+                            "                            const std::uint64_t value =",
+                            "                                static_cast<std::uint64_t>(",
+                            "                                    values[offset + word]);",
+                            "                            words[word * 2] =",
+                            "                                static_cast<std::uint32_t>(value);",
+                            "                            words[word * 2 + 1] =",
+                            "                                static_cast<std::uint32_t>(value >> 32);",
+                        ]
+                    )
+                lines.extend(
+                    [
+                        "                        }",
+                        f"                        {name}(",
+                        "                            static_cast<int>(first_index + offset),",
+                        "                            static_cast<int>(count), words.data());",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        f"                        {name}(",
+                        "                            static_cast<int>(first_index + offset),",
+                        "                            static_cast<int>(count), words.data());",
+                        "                        for (std::size_t word = 0;",
+                        "                             word < count; ++word) {",
+                    ]
+                )
+                if signal.width <= 32:
+                    lines.append(
+                        "                            values[offset + word] = "
+                        "static_cast<cpptb::probe::Value<Width>>(words[word]);"
+                    )
+                else:
+                    lines.extend(
+                        [
+                            "                            values[offset + word] =",
+                            "                                static_cast<cpptb::probe::Value<Width>>(",
+                            "                                    static_cast<std::uint64_t>(",
+                            "                                        words[word * 2]) |",
+                            "                                    (static_cast<std::uint64_t>(",
+                            "                                         words[word * 2 + 1])",
+                            "                                     << 32));",
+                        ]
+                    )
+                lines.append("                        }")
+            lines.extend(
+                [
+                    "                    }",
+                    "                    return;",
+                    "                }",
+                ]
+            )
+        lines.extend(
+            [
+                "                default: break;",
+                "            }",
+                "        }",
+                f'        fail("{operation}_span", id);',
                 "    }",
                 "",
             ]
@@ -2116,6 +2243,53 @@ def render_cpp_hierarchy(
     return definitions, member_lines(())
 
 
+def hierarchy_signal_member_expression(signal: HierarchySignal) -> str:
+    """Render a typed member expression from the elaborated hierarchy path."""
+
+    expression = "(*this)"
+    for component in signal.cpp_path[:-1]:
+        match = re.fullmatch(r"(.+)\[(-?\d+)\]", component)
+        if match:
+            expression += (
+                f".{cpp_identifier(match.group(1))}.template "
+                f"at<{int(match.group(2))}>()"
+            )
+        else:
+            expression += f".{cpp_identifier(component)}"
+    expression += f".{cpp_identifier(signal.cpp_path[-1])}"
+    return expression
+
+
+def render_cpp_hierarchy_lookup(hierarchy: HierarchyCatalog) -> list[str]:
+    if not hierarchy.signals:
+        return []
+    lines = [
+        "    template <cpptb::hierarchy::FixedString Path>",
+        "    [[nodiscard]] constexpr auto cpptb_signal() const {",
+    ]
+    for index, signal in enumerate(hierarchy.signals):
+        keyword = "if" if index == 0 else "else if"
+        lines.extend(
+            [
+                f"        {keyword} constexpr (Path.view() == "
+                f"{json.dumps(signal.hdl_path)}) {{",
+                f"            return {hierarchy_signal_member_expression(signal)};",
+                "        }",
+            ]
+        )
+    lines.extend(
+        [
+            "        else {",
+            "            static_assert(Path.view().empty(),",
+            '                          "HDL path is not present in the generated DUT hierarchy");',
+            "            return cpptb::hierarchy::UnsupportedSignal{};",
+            "        }",
+            "    }",
+        ]
+    )
+    return lines
+
+
 def render_cpp_dut(
     ports: list[Port],
     internals: list[Internal],
@@ -2131,9 +2305,11 @@ def render_cpp_dut(
         generated_banner(source).rstrip(),
         "#pragma once",
         "",
+        "#include <algorithm>",
         "#include <array>",
         "#include <cstddef>",
         "#include <cstdint>",
+        "#include <span>",
         "#include <string_view>",
         "",
         (
@@ -2224,6 +2400,7 @@ def render_cpp_dut(
             lines.append(f"    {field_type} {name};")
         if not node.path:
             lines.extend(hierarchy_root_members)
+            lines.extend(render_cpp_hierarchy_lookup(hierarchy))
         lines.extend(["};", ""])
 
     compatibility_root = manifest.get("compatibility_root_type")
@@ -3508,6 +3685,46 @@ def sv_hierarchy_export_functions(
             else:
                 lines.append(f"    {destination} = $unsigned({target});")
             lines.extend(["  endfunction", ""])
+            if len(signal.unpacked) == 1 and signal.width <= 64:
+                block_name = hierarchy_export_name(
+                    manifest, index, "get_block4"
+                )
+                slot_width = 32 if signal.width <= 32 else 64
+                payload_width = slot_width * 4
+                lines.extend(
+                    [
+                        f'  export "DPI-C" function {block_name};',
+                        f"  function void {block_name}(",
+                        "      input int first_index, input int count,",
+                        f"      output bit [{payload_width - 1}:0] values);",
+                        "    values = '0;",
+                        "    for (int offset = 0; offset < count; offset++) begin",
+                    ]
+                )
+                destination_slice = (
+                    f"values[offset * {slot_width} +: {signal.width}]"
+                )
+                if dynamic_one_dimensional_memory:
+                    lines.append(
+                        f"      {destination_slice} = "
+                        f"$unsigned({target}[first_index + offset]);"
+                    )
+                else:
+                    lines.append("      case (first_index + offset)")
+                    dimension = signal.unpacked[0]
+                    for linear, element_target, _ in memory_targets:
+                        actual_index = dimension.low + linear
+                        lines.append(
+                            f"        {actual_index}: {destination_slice} = "
+                            f"$unsigned({element_target});"
+                        )
+                    lines.extend(
+                        [
+                            '        default: $fatal(1, "block read index %0d is out of bounds", first_index + offset);',
+                            "      endcase",
+                        ]
+                    )
+                lines.extend(["    end", "  endfunction", ""])
 
         if (path, "get_logic") in operations:
             name = hierarchy_export_name(manifest, index, "get_logic")
@@ -3593,6 +3810,48 @@ def sv_hierarchy_export_functions(
             else:
                 lines.append(f"    {target} = {assigned_value};")
             lines.extend(["  endfunction", ""])
+            if len(signal.unpacked) == 1 and signal.width <= 64:
+                block_name = hierarchy_export_name(
+                    manifest, index, "deposit_block4"
+                )
+                slot_width = 32 if signal.width <= 32 else 64
+                payload_width = slot_width * 4
+                block_value = (
+                    f"values[offset * {slot_width} +: {signal.width}]"
+                )
+                assigned_block_value = hierarchy_assignment_value(
+                    signal, block_value
+                )
+                lines.extend(
+                    [
+                        f'  export "DPI-C" function {block_name};',
+                        f"  function void {block_name}(",
+                        "      input int first_index, input int count,",
+                        f"      input bit [{payload_width - 1}:0] values);",
+                        "    for (int offset = 0; offset < count; offset++) begin",
+                    ]
+                )
+                if dynamic_one_dimensional_memory:
+                    lines.append(
+                        f"      {target}[first_index + offset] = "
+                        f"{assigned_block_value};"
+                    )
+                else:
+                    lines.append("      case (first_index + offset)")
+                    dimension = signal.unpacked[0]
+                    for linear, element_target, _ in memory_targets:
+                        actual_index = dimension.low + linear
+                        lines.append(
+                            f"        {actual_index}: {element_target} = "
+                            f"{assigned_block_value};"
+                        )
+                    lines.extend(
+                        [
+                            '        default: $fatal(1, "block deposit index %0d is out of bounds", first_index + offset);',
+                            "      endcase",
+                        ]
+                    )
+                lines.extend(["    end", "  endfunction", ""])
 
         if (path, "deposit_logic") in operations:
             name = hierarchy_export_name(manifest, index, "deposit_logic")
@@ -3940,6 +4199,13 @@ def render_sv(
         if clock_source(clock) in {"generated", "registered"}
     ]
     calendar_clock_names = {clock["port"] for clock in calendar_clocks}
+    clock_port_names = {clock["port"] for clock in clocks}
+    clock_interest_ports = [
+        port for port in ports if port.name in clock_port_names
+    ]
+    edge_interest_ports = list(
+        {port.name: port for port in [*clock_interest_ports, *edge_observers]}.values()
+    )
     calendar_dynamic_ports = [
         port
         for port in dynamic_clock_ports
@@ -4323,16 +4589,18 @@ def render_sv(
             "    requests = initial_requests;",
         ]
     )
-    if edge_observers or hierarchy_edge_paths_selected:
+    if edge_interest_ports or hierarchy_edge_paths_selected:
         lines.extend(
             [
                 "    if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin",
             ]
         )
-        for port in edge_observers:
+        for port in edge_interest_ports:
             constant = sv_signal_constant(port)
+            assignment = "|=" if port.name in clock_port_names else "="
             lines.append(
-                f"      edge_interest[{constant}] = {edge_interest_function}({constant});"
+                f"      edge_interest[{constant}] {assignment} "
+                f"{edge_interest_function}({constant});"
             )
         for path in hierarchy_edge_paths_selected:
             constant = sv_hierarchy_edge_constant(path)
@@ -4461,6 +4729,12 @@ def render_sv(
         clock_name = clock["port"]
         port = next(port for port in ports if port.name == clock_name)
         constant = sv_signal_constant(port)
+        primary_literal = (
+            "1'b1"
+            if primary_clock is not None
+            and clock_name == primary_clock["port"]
+            else "1'b0"
+        )
         lines.extend(
             [
                 f"    if (calendar_clock_active[{index}] &&",
@@ -4481,8 +4755,12 @@ def render_sv(
             )
         lines.extend(
             [
-                "      if ((event_edge == EDGE_RISING) ||",
-                "          track_falling_edges) begin",
+                "      if (",
+                f"          ((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
+                f"          ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0)) ||",
+                "          ((event_edge == EDGE_RISING) &&",
+                f"           {primary_literal} &&",
+                "           (timer_deadline == NO_TIMER))) begin",
                 f"        run_step(PHASE_EDGE, {constant}, event_edge, requests);",
                 "        service_requests(requests);",
                 "      end",
@@ -4504,8 +4782,12 @@ def render_sv(
                 "          (event_edge == EDGE_RISING)) begin",
                 "        sim_cycles++;",
                 "      end",
-                "      if ((event_edge == EDGE_RISING) ||",
-                "          track_falling_edges) begin",
+                "      if (",
+                f"          ((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
+                f"          ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0)) ||",
+                f"          (primary_clock[{constant}] &&",
+                "           (event_edge == EDGE_RISING) &&",
+                "           (timer_deadline == NO_TIMER))) begin",
                 f"        run_step(PHASE_EDGE, {constant}, event_edge, requests);",
                 "        service_requests(requests);",
                 "      end",
@@ -4565,6 +4847,14 @@ def render_sv(
 
     for index, clock in enumerate(clocks):
         clock_name = clock["port"]
+        port = next(port for port in ports if port.name == clock_name)
+        constant = sv_signal_constant(port)
+        primary_literal = (
+            "1'b1"
+            if primary_clock is not None
+            and clock_name == primary_clock["port"]
+            else "1'b0"
+        )
         if clock_source(clock) in {"generated", "registered"}:
             lines.extend(
                 [
@@ -4610,9 +4900,13 @@ def render_sv(
                 )
             lines.extend(
                 [
-                    "        if ((event_edge == EDGE_RISING) ||",
-                    "            track_falling_edges) begin",
-                    f"          run_step(PHASE_EDGE, {sv_signal_constant(next(port for port in ports if port.name == clock_name))},",
+                    "        if (",
+                    f"            ((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
+                    f"            ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0)) ||",
+                    "            ((event_edge == EDGE_RISING) &&",
+                    f"             {primary_literal} &&",
+                    "             (timer_deadline == NO_TIMER))) begin",
+                    f"          run_step(PHASE_EDGE, {constant},",
                     "                   event_edge, requests);",
                     "          service_requests(requests);",
                     "        end",
@@ -4647,9 +4941,14 @@ def render_sv(
             )
         lines.extend(
             [
-                "      if ((event_edge == EDGE_RISING) || track_falling_edges) begin",
+                "      if (",
+                f"          ((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
+                f"          ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0)) ||",
+                "          ((event_edge == EDGE_RISING) &&",
+                f"           {primary_literal} &&",
+                "           (timer_deadline == NO_TIMER))) begin",
                 "        if (status == 0) begin",
-                f"          run_step(PHASE_EDGE, {sv_signal_constant(next(port for port in ports if port.name == clock_name))},",
+                f"          run_step(PHASE_EDGE, {constant},",
                 "                   event_edge, requests);",
                 "          service_requests(requests);",
                 "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
@@ -4691,8 +4990,12 @@ def render_sv(
                     "              (event_edge == EDGE_RISING)) begin",
                     "            sim_cycles++;",
                     "          end",
-                    "          if ((event_edge == EDGE_RISING) ||",
-                    "              track_falling_edges) begin",
+                    "          if (",
+                    f"              ((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
+                    f"              ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0)) ||",
+                    f"              (primary_clock[{constant}] &&",
+                    "               (event_edge == EDGE_RISING) &&",
+                    "               (timer_deadline == NO_TIMER))) begin",
                     f"            run_step(PHASE_EDGE, {constant}, event_edge, requests);",
                     "            service_requests(requests);",
                     "          end",

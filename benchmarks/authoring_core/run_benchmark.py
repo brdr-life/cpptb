@@ -35,6 +35,7 @@ from workload import (  # noqa: E402
     expected_checksum,
     expected_counts,
 )
+import build_provenance  # noqa: E402
 
 
 DEFAULT_ITERATIONS = 100_000
@@ -45,7 +46,9 @@ EXTRA_PAIRS = 16
 MAX_DPI_OVER_SV_RATIO = 1.10
 MIN_ORDER_STRATUM_FAILURE_RATIO = 1.05
 MAX_INDEPENDENT_PAIRED_DISAGREEMENT = 0.05
-MAX_NORMALIZED_LOAD_1M = 1.0
+MAX_WALL_CPU_RATIO_DISAGREEMENT = 0.05
+MAX_CPU_SAMPLE_DEVIATION = 0.25
+MAX_NORMALIZED_LOAD_1M = 0.30
 CONFIDENCE = 0.95
 RESULT_RE = re.compile(r"^AUTHORING_CORE_RESULT\s+(?P<fields>.+)$")
 PERIPHERAL_RESULT_RE = re.compile(
@@ -104,13 +107,24 @@ def atomic_write_json(
     atomic_write_text(path, json.dumps(value, indent=2) + "\n", replace=replace)
 
 
+_BINARY_HASH_CACHE: dict[tuple[str, int, int], str] = {}
+
+
 def binary_sha256(path: Path) -> str | None:
     try:
+        path = Path(path)
+        stat = path.stat()
+        cache_key = (str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+        cached = _BINARY_HASH_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
         digest = hashlib.sha256()
-        with Path(path).open("rb") as stream:
+        with path.open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 digest.update(chunk)
-        return digest.hexdigest()
+        result = digest.hexdigest()
+        _BINARY_HASH_CACHE[cache_key] = result
+        return result
     except OSError:
         return None
 
@@ -313,7 +327,8 @@ def validate_pair_order(cpp_samples: list[dict], sv_samples: list[dict]) -> None
 
 
 def paired_ratio_statistics(
-    cpp_samples: list[dict], sv_samples: list[dict]
+    cpp_samples: list[dict], sv_samples: list[dict],
+    metric: str = "process_wall_ms",
 ) -> dict[str, object]:
     validate_pair_order(cpp_samples, sv_samples)
     if len(cpp_samples) % 2:
@@ -323,12 +338,12 @@ def paired_ratio_statistics(
     ratios: list[float] = []
     strata = {"cpp_dpi_first": [], "pure_sv_first": []}
     for pair in sorted(cpp_by_pair):
-        cpp_ms = float(cpp_by_pair[pair]["process_wall_ms"])
-        sv_ms = float(sv_by_pair[pair]["process_wall_ms"])
+        cpp_ms = float(cpp_by_pair[pair][metric])
+        sv_ms = float(sv_by_pair[pair][metric])
         if not math.isfinite(cpp_ms) or cpp_ms <= 0:
-            raise ValueError("C++ DPI process samples must be finite and positive")
+            raise ValueError(f"C++ DPI {metric} samples must be finite and positive")
         if not math.isfinite(sv_ms) or sv_ms <= 0:
-            raise ValueError("pure-SV process samples must be finite and positive")
+            raise ValueError(f"pure-SV {metric} samples must be finite and positive")
         paired_ratio = cpp_ms / sv_ms
         ratios.append(paired_ratio)
         first_mode = str(cpp_by_pair[pair]["pair_order"][0])
@@ -340,9 +355,9 @@ def paired_ratio_statistics(
         label: statistics.median(values) for label, values in strata.items()
     }
     independent_ratio = statistics.median(
-        float(sample["process_wall_ms"]) for sample in cpp_samples
+        float(sample[metric]) for sample in cpp_samples
     ) / statistics.median(
-        float(sample["process_wall_ms"]) for sample in sv_samples
+        float(sample[metric]) for sample in sv_samples
     )
     relative_disagreement = abs(independent_ratio - ratio) / ratio
     absolute_stratum_gap = abs(
@@ -350,7 +365,7 @@ def paired_ratio_statistics(
     )
     stratum_gap = absolute_stratum_gap / ratio
     return {
-        "metric": "median(cpp_dpi_process_wall_ms / pure_sv_process_wall_ms by adjacent pair)",
+        "metric": f"median(cpp_dpi_{metric} / pure_sv_{metric} by adjacent pair)",
         "ratio": ratio,
         "overhead_percent": (ratio - 1.0) * 100.0,
         "paired_ratios": ratios,
@@ -371,6 +386,75 @@ def paired_ratio_statistics(
     }
 
 
+def cpu_corroboration(
+    cpp_samples: list[dict], sv_samples: list[dict], wall_ratio: float
+) -> dict[str, object]:
+    try:
+        cpu_stats = paired_ratio_statistics(
+            cpp_samples, sv_samples, metric="child_cpu_ms"
+        )
+    except ValueError as error:
+        return {
+            "valid": False,
+            "status": "invalid",
+            "ratio": None,
+            "wall_cpu_ratio_disagreement": None,
+            "max_wall_cpu_ratio_disagreement": (
+                MAX_WALL_CPU_RATIO_DISAGREEMENT
+            ),
+            "max_sample_deviation": MAX_CPU_SAMPLE_DEVIATION,
+            "mode_median_child_cpu_ms": {},
+            "outliers": [],
+            "reasons": [f"invalid child-CPU samples: {error}"],
+            "statistics": None,
+        }
+    cpu_ratio = float(cpu_stats["ratio"])
+    ratio_disagreement = abs(cpu_ratio - wall_ratio) / wall_ratio
+    outliers: list[dict[str, object]] = []
+    medians: dict[str, float] = {}
+    for mode, samples in (("cpp_dpi", cpp_samples), ("pure_sv", sv_samples)):
+        median_cpu = statistics.median(
+            float(sample["child_cpu_ms"]) for sample in samples
+        )
+        medians[mode] = median_cpu
+        for sample in samples:
+            cpu_ms = float(sample["child_cpu_ms"])
+            deviation = abs(cpu_ms - median_cpu) / median_cpu
+            if deviation > MAX_CPU_SAMPLE_DEVIATION:
+                outliers.append(
+                    {
+                        "mode": mode,
+                        "pair": int(sample["pair"]),
+                        "child_cpu_ms": cpu_ms,
+                        "mode_median_child_cpu_ms": median_cpu,
+                        "relative_deviation": deviation,
+                    }
+                )
+    reasons: list[str] = []
+    if ratio_disagreement > MAX_WALL_CPU_RATIO_DISAGREEMENT:
+        reasons.append(
+            f"wall and child-CPU paired medians differ by {ratio_disagreement:.1%} "
+            f"(limit {MAX_WALL_CPU_RATIO_DISAGREEMENT:.1%})"
+        )
+    if outliers:
+        reasons.append(
+            f"{len(outliers)} samples deviate by more than "
+            f"{MAX_CPU_SAMPLE_DEVIATION:.0%} from their mode CPU median"
+        )
+    return {
+        "valid": not reasons,
+        "status": "valid" if not reasons else "invalid",
+        "ratio": cpu_ratio,
+        "wall_cpu_ratio_disagreement": ratio_disagreement,
+        "max_wall_cpu_ratio_disagreement": MAX_WALL_CPU_RATIO_DISAGREEMENT,
+        "max_sample_deviation": MAX_CPU_SAMPLE_DEVIATION,
+        "mode_median_child_cpu_ms": medians,
+        "outliers": outliers,
+        "reasons": reasons,
+        "statistics": cpu_stats,
+    }
+
+
 def evaluate_guard(
     cpp_samples: list[dict],
     sv_samples: list[dict],
@@ -380,6 +464,10 @@ def evaluate_guard(
     if len(cpp_samples) < MIN_PAIRS:
         raise ValueError(f"guard requires at least {MIN_PAIRS} paired samples")
     stats = paired_ratio_statistics(cpp_samples, sv_samples)
+    corroboration = cpu_corroboration(
+        cpp_samples, sv_samples, float(stats["ratio"])
+    )
+    stats["cpu_corroboration"] = corroboration
     stats.update(
         {
             "max_ratio": max_ratio,
@@ -389,6 +477,13 @@ def evaluate_guard(
             ),
         }
     )
+    if not corroboration["valid"]:
+        stats["status"] = "invalid_environment"
+        stats["verdict"] = "invalid_environment"
+        stats["validity"] = "invalid"
+        stats["invalid_environment_reasons"] = list(corroboration["reasons"])
+        stats["error"] = "; ".join(corroboration["reasons"])
+        return stats
     if float(stats["ratio"]) > max_ratio:
         order_medians = stats["order_stratified_paired_medians"]
         strata_confirm = all(
@@ -432,11 +527,21 @@ def evaluate_guard(
                     "independent and paired medians differ by more than "
                     f"{MAX_INDEPENDENT_PAIRED_DISAGREEMENT:.0%}"
                 )
-            stats["status"] = "invalid_environment"
-            stats["verdict"] = "invalid_environment"
-            stats["validity"] = "invalid"
             stats["invalid_environment_reasons"] = reasons
-            stats["error"] = "; ".join(reasons)
+            if final:
+                stats["status"] = "invalid_environment"
+                stats["verdict"] = "invalid_environment"
+                stats["validity"] = "invalid"
+                stats["error"] = "; ".join(reasons)
+            else:
+                stats["status"] = "needs_extra_batch"
+                stats["verdict"] = "inconclusive"
+                stats["provisional_status"] = "invalid_environment"
+                stats["validity"] = "provisional"
+                stats["confirmation_reason"] = (
+                    "initial threshold crossing has order-sensitive diagnostics; "
+                    "collecting the fixed confirmation batch"
+                )
         return stats
     upper = float(stats["one_sided_95_upper_median_bound"]["bound"])
     if upper > max_ratio and not final:
@@ -457,7 +562,10 @@ def evaluate_guard(
 
 
 def run_command(
-    command: list[str], *, include_resource_metrics: bool = False
+    command: list[str],
+    *,
+    include_resource_metrics: bool = False,
+    environment: dict[str, str] | None = None,
 ) -> tuple[str, float | dict[str, float]]:
     usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
     started = time.perf_counter()
@@ -468,6 +576,7 @@ def run_command(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         check=False,
+        env=environment,
     )
     wall_ms = (time.perf_counter() - started) * 1000.0
     usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -489,6 +598,14 @@ def run_command(
         "child_cpu_utilization": child_cpu_ms / wall_ms if wall_ms else 0.0,
         "child_max_rss": float(usage_after.ru_maxrss),
     }
+
+
+def run_serial_make(targets: list[str]) -> None:
+    """Build formal benchmark inputs without inheriting parallel make state."""
+    environment = os.environ.copy()
+    environment["MAKEFLAGS"] = "-j1"
+    environment["MFLAGS"] = "-j1"
+    run_command(["make", "-j1", *targets], environment=environment)
 
 
 def _binary(mode: str, kernel: str) -> Path:
@@ -809,27 +926,17 @@ def assess_environment_validity(probes: list[dict]) -> dict[str, object]:
 def apply_environment_validity(
     summaries: dict[str, dict], validity: dict[str, object]
 ) -> None:
-    """Downgrade conclusions that were measured in an invalid environment."""
+    """Invalidate every conclusion measured outside the admitted environment."""
     if bool(validity["valid"]):
         return
     for summary in summaries.values():
         guard = summary["guard"]
-        if guard["status"] != "hard_failure":
-            if guard["status"] == "passed":
-                guard["status"] = "passed_inconclusive"
-                guard["verdict"] = "passed_inconclusive"
-            if guard["status"] == "passed_inconclusive":
-                guard["validity"] = "invalid"
-                guard["environment_limits_pass"] = True
-                guard["invalid_environment_reasons"] = list(validity["reasons"])
-                warning = "; ".join(validity["reasons"])
-                existing = guard.get("warning")
-                guard["warning"] = f"{existing}; {warning}" if existing else warning
-            continue
+        previous_status = guard["status"]
         guard["status"] = "invalid_environment"
         guard["verdict"] = "invalid_environment"
         guard["validity"] = "invalid"
-        guard["environment_blocks_hard_failure"] = True
+        guard["environment_blocks_hard_failure"] = previous_status == "hard_failure"
+        guard["environment_blocks_pass"] = previous_status != "hard_failure"
         guard["invalid_environment_reasons"] = list(validity["reasons"])
         guard["error"] = "; ".join(validity["reasons"])
 
@@ -864,8 +971,34 @@ def collect_binary_metadata(kernels: list[str]) -> dict[str, object]:
             mode_binaries[kernel] = {
                 "path": str(path),
                 "sha256": binary_sha256(path),
+                "provenance": build_provenance.verify_stamp(mode, kernel, path),
             }
     return binaries
+
+
+def require_current_binaries(binaries: dict[str, object]) -> None:
+    """Reject --skip-build when a binary is not tied to the current sources."""
+    stale: list[str] = []
+    if not isinstance(binaries, dict) or not binaries:
+        stale.append("binary metadata is empty")
+    for mode in ("cpp_dpi", "pure_sv"):
+        mode_binaries = binaries.get(mode) if isinstance(binaries, dict) else None
+        if not isinstance(mode_binaries, dict) or not mode_binaries:
+            stale.append(f"{mode}: binary metadata is missing")
+            continue
+        for kernel, metadata in mode_binaries.items():
+            if not isinstance(metadata, dict):
+                stale.append(f"{mode}/{kernel}: binary metadata is invalid")
+                continue
+            provenance = metadata.get("provenance", {})
+            if not isinstance(provenance, dict) or not provenance.get("valid"):
+                reasons = provenance.get("reasons", ["missing provenance"])
+                stale.append(f"{mode}/{kernel}: {'; '.join(map(str, reasons))}")
+    if stale:
+        raise RuntimeError(
+            "--skip-build requires binaries stamped from the current sources; "
+            "rerun without --skip-build. " + " | ".join(stale)
+        )
 
 
 def _render_markdown(result: dict[str, object]) -> str:
@@ -918,8 +1051,8 @@ def _render_markdown(result: dict[str, object]) -> str:
     if kernels:
         lines.extend(
             [
-                "| Kernel | Paired median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |",
-                "|---|---:|---:|---:|---:|---:|---|---:|",
+                "| Kernel | Wall median | CPU median | DPI-first | SV-first | Independent | Disagreement | Status | Extra batch |",
+                "|---|---:|---:|---:|---:|---:|---:|---|---:|",
             ]
         )
         for kernel in result["selected_kernels"]:
@@ -927,8 +1060,11 @@ def _render_markdown(result: dict[str, object]) -> str:
                 continue
             guard = kernels[kernel]["guard"]
             strata = guard["order_stratified_paired_medians"]
+            cpu_ratio = guard.get("cpu_corroboration", {}).get("ratio")
+            cpu_text = f"{cpu_ratio:.3f}x" if cpu_ratio is not None else "n/a"
             lines.append(
                 f"| `{kernel}` | {guard['ratio']:.3f}x | "
+                f"{cpu_text} | "
                 f"{strata['cpp_dpi_first']:.3f}x | "
                 f"{strata['pure_sv_first']:.3f}x | "
                 f"{guard['independent_median_ratio']:.3f}x | "
@@ -1110,6 +1246,8 @@ def main(argv: list[str] | None = None) -> int:
         "max_independent_paired_relative_disagreement": (
             MAX_INDEPENDENT_PAIRED_DISAGREEMENT
         ),
+        "max_wall_cpu_ratio_disagreement": MAX_WALL_CPU_RATIO_DISAGREEMENT,
+        "max_cpu_sample_deviation": MAX_CPU_SAMPLE_DEVIATION,
         "max_normalized_load_1m": MAX_NORMALIZED_LOAD_1M,
     }
     raw_samples: list[dict] = []
@@ -1142,26 +1280,22 @@ def main(argv: list[str] | None = None) -> int:
         result["metadata"]["captured_before_result_writes"] = True
         journal = SampleJournal(output_paths["journal"], truncate=True)
         result["binaries"] = collect_binary_metadata(kernels)
-        if not args.skip_build:
+        if args.skip_build:
+            require_current_binaries(result["binaries"])
+        else:
             dpi_target = str(_binary("cpp_dpi", args.kernel).relative_to(REPO))
             sv_target = _sv_build_target(args.kernel)
-            run_command(
-                [
-                    "make",
-                    "authoring-core-dpi-codegen-check",
-                    dpi_target,
-                    sv_target,
-                ]
-            )
+            run_serial_make(["authoring-core-dpi-codegen-check"])
+            run_serial_make([dpi_target, sv_target])
             if args.with_preflight:
-                run_command(
+                run_serial_make(
                     [
-                        "make",
                         "peripheral-suite-dpi-build",
                         "peripheral-suite-sv-build",
                     ]
                 )
             result["binaries"] = collect_binary_metadata(kernels)
+            require_current_binaries(result["binaries"])
         if args.with_preflight:
             result["preflight"] = run_peripheral_preflight(args.preflight_iters)
         if args.semantic_only:
@@ -1188,6 +1322,16 @@ def main(argv: list[str] | None = None) -> int:
             _write_results(result, output_paths)
             print(_render_markdown(result))
             return 0
+        admission_probe = collect_environment_probe()
+        admission = assess_environment_validity([admission_probe])
+        result["environment"]["admission_probe"] = admission_probe
+        result["environment"]["admission"] = admission
+        if not admission["valid"]:
+            result["environment"]["validity"] = admission
+            result["status"] = "invalid_environment"
+            _write_results(result, output_paths)
+            print(_render_markdown(result))
+            return 1
         summaries, _ = run_comparison(
             kernels,
             args.iters,

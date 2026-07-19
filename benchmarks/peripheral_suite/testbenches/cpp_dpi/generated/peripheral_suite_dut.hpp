@@ -2,9 +2,11 @@
 // Do not edit by hand.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include "cpptb/coro_runtime.hpp"
@@ -144,6 +146,32 @@ struct HierarchyTransport {
             }
         }
         fail("force", id);
+    }
+
+    template <std::size_t Width>
+    static void get_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("get_span", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<const cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("deposit_span", id);
     }
 
     template <std::size_t Width>
@@ -799,6 +827,1259 @@ struct PeripheralSuiteDut {
     static constexpr std::int64_t SPI_BUFFER_DEPTH = 10;
     static constexpr std::int64_t SPI_LOG_BUFFER_DEPTH = 4;
     static constexpr std::int64_t TIMER_CNT = 2;
+    template <cpptb::hierarchy::FixedString Path>
+    [[nodiscard]] constexpr auto cpptb_signal() const {
+        if constexpr (Path.view() == "i_i2c.HCLK") {
+            return (*this).i_i2c.HCLK;
+        }
+        else if constexpr (Path.view() == "i_i2c.HRESETn") {
+            return (*this).i_i2c.HRESETn;
+        }
+        else if constexpr (Path.view() == "i_i2c.PADDR") {
+            return (*this).i_i2c.PADDR;
+        }
+        else if constexpr (Path.view() == "i_i2c.PENABLE") {
+            return (*this).i_i2c.PENABLE;
+        }
+        else if constexpr (Path.view() == "i_i2c.PRDATA") {
+            return (*this).i_i2c.PRDATA;
+        }
+        else if constexpr (Path.view() == "i_i2c.PREADY") {
+            return (*this).i_i2c.PREADY;
+        }
+        else if constexpr (Path.view() == "i_i2c.PSEL") {
+            return (*this).i_i2c.PSEL;
+        }
+        else if constexpr (Path.view() == "i_i2c.PSLVERR") {
+            return (*this).i_i2c.PSLVERR;
+        }
+        else if constexpr (Path.view() == "i_i2c.PWDATA") {
+            return (*this).i_i2c.PWDATA;
+        }
+        else if constexpr (Path.view() == "i_i2c.PWRITE") {
+            return (*this).i_i2c.PWRITE;
+        }
+        else if constexpr (Path.view() == "i_i2c.ack") {
+            return (*this).i_i2c.ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.al") {
+            return (*this).i_i2c.al;
+        }
+        else if constexpr (Path.view() == "i_i2c.apb_addr") {
+            return (*this).i_i2c.apb_addr;
+        }
+        else if constexpr (Path.view() == "i_i2c.apb_write") {
+            return (*this).i_i2c.apb_write;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.ack_in") {
+            return (*this).i_i2c.byte_controller.ack_in;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.ack_out") {
+            return (*this).i_i2c.byte_controller.ack_out;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.al") {
+            return (*this).i_i2c.byte_controller.bit_controller.al;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.busy") {
+            return (*this).i_i2c.byte_controller.bit_controller.busy;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.cSCL") {
+            return (*this).i_i2c.byte_controller.bit_controller.cSCL;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.cSDA") {
+            return (*this).i_i2c.byte_controller.bit_controller.cSDA;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.c_state") {
+            return (*this).i_i2c.byte_controller.bit_controller.c_state;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.clk") {
+            return (*this).i_i2c.byte_controller.bit_controller.clk;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.clk_cnt") {
+            return (*this).i_i2c.byte_controller.bit_controller.clk_cnt;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.clk_en") {
+            return (*this).i_i2c.byte_controller.bit_controller.clk_en;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.cmd") {
+            return (*this).i_i2c.byte_controller.bit_controller.cmd;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.cmd_ack") {
+            return (*this).i_i2c.byte_controller.bit_controller.cmd_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.cmd_stop") {
+            return (*this).i_i2c.byte_controller.bit_controller.cmd_stop;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.cnt") {
+            return (*this).i_i2c.byte_controller.bit_controller.cnt;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.dSCL") {
+            return (*this).i_i2c.byte_controller.bit_controller.dSCL;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.dSDA") {
+            return (*this).i_i2c.byte_controller.bit_controller.dSDA;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.din") {
+            return (*this).i_i2c.byte_controller.bit_controller.din;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.dout") {
+            return (*this).i_i2c.byte_controller.bit_controller.dout;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.dscl_oen") {
+            return (*this).i_i2c.byte_controller.bit_controller.dscl_oen;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.ena") {
+            return (*this).i_i2c.byte_controller.bit_controller.ena;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.fSCL") {
+            return (*this).i_i2c.byte_controller.bit_controller.fSCL;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.fSDA") {
+            return (*this).i_i2c.byte_controller.bit_controller.fSDA;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.filter_cnt") {
+            return (*this).i_i2c.byte_controller.bit_controller.filter_cnt;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.nReset") {
+            return (*this).i_i2c.byte_controller.bit_controller.nReset;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.sSCL") {
+            return (*this).i_i2c.byte_controller.bit_controller.sSCL;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.sSDA") {
+            return (*this).i_i2c.byte_controller.bit_controller.sSDA;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.scl_i") {
+            return (*this).i_i2c.byte_controller.bit_controller.scl_i;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.scl_o") {
+            return (*this).i_i2c.byte_controller.bit_controller.scl_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.scl_oen") {
+            return (*this).i_i2c.byte_controller.bit_controller.scl_oen;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.scl_sync") {
+            return (*this).i_i2c.byte_controller.bit_controller.scl_sync;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.sda_chk") {
+            return (*this).i_i2c.byte_controller.bit_controller.sda_chk;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.sda_i") {
+            return (*this).i_i2c.byte_controller.bit_controller.sda_i;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.sda_o") {
+            return (*this).i_i2c.byte_controller.bit_controller.sda_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.sda_oen") {
+            return (*this).i_i2c.byte_controller.bit_controller.sda_oen;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.slave_wait") {
+            return (*this).i_i2c.byte_controller.bit_controller.slave_wait;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.sta_condition") {
+            return (*this).i_i2c.byte_controller.bit_controller.sta_condition;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.bit_controller.sto_condition") {
+            return (*this).i_i2c.byte_controller.bit_controller.sto_condition;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.c_state") {
+            return (*this).i_i2c.byte_controller.c_state;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.clk") {
+            return (*this).i_i2c.byte_controller.clk;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.clk_cnt") {
+            return (*this).i_i2c.byte_controller.clk_cnt;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.cmd_ack") {
+            return (*this).i_i2c.byte_controller.cmd_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.cnt_done") {
+            return (*this).i_i2c.byte_controller.cnt_done;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.core_ack") {
+            return (*this).i_i2c.byte_controller.core_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.core_cmd") {
+            return (*this).i_i2c.byte_controller.core_cmd;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.core_rxd") {
+            return (*this).i_i2c.byte_controller.core_rxd;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.core_txd") {
+            return (*this).i_i2c.byte_controller.core_txd;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.dcnt") {
+            return (*this).i_i2c.byte_controller.dcnt;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.din") {
+            return (*this).i_i2c.byte_controller.din;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.dout") {
+            return (*this).i_i2c.byte_controller.dout;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.ena") {
+            return (*this).i_i2c.byte_controller.ena;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.go") {
+            return (*this).i_i2c.byte_controller.go;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.i2c_al") {
+            return (*this).i_i2c.byte_controller.i2c_al;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.i2c_busy") {
+            return (*this).i_i2c.byte_controller.i2c_busy;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.ld") {
+            return (*this).i_i2c.byte_controller.ld;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.nReset") {
+            return (*this).i_i2c.byte_controller.nReset;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.read") {
+            return (*this).i_i2c.byte_controller.read;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.scl_i") {
+            return (*this).i_i2c.byte_controller.scl_i;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.scl_o") {
+            return (*this).i_i2c.byte_controller.scl_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.scl_oen") {
+            return (*this).i_i2c.byte_controller.scl_oen;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.sda_i") {
+            return (*this).i_i2c.byte_controller.sda_i;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.sda_o") {
+            return (*this).i_i2c.byte_controller.sda_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.sda_oen") {
+            return (*this).i_i2c.byte_controller.sda_oen;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.shift") {
+            return (*this).i_i2c.byte_controller.shift;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.sr") {
+            return (*this).i_i2c.byte_controller.sr;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.start") {
+            return (*this).i_i2c.byte_controller.start;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.stop") {
+            return (*this).i_i2c.byte_controller.stop;
+        }
+        else if constexpr (Path.view() == "i_i2c.byte_controller.write") {
+            return (*this).i_i2c.byte_controller.write;
+        }
+        else if constexpr (Path.view() == "i_i2c.cmd_next") {
+            return (*this).i_i2c.cmd_next;
+        }
+        else if constexpr (Path.view() == "i_i2c.cmd_q") {
+            return (*this).i_i2c.cmd_q;
+        }
+        else if constexpr (Path.view() == "i_i2c.core_en") {
+            return (*this).i_i2c.core_en;
+        }
+        else if constexpr (Path.view() == "i_i2c.ctrl_next") {
+            return (*this).i_i2c.ctrl_next;
+        }
+        else if constexpr (Path.view() == "i_i2c.ctrl_q") {
+            return (*this).i_i2c.ctrl_q;
+        }
+        else if constexpr (Path.view() == "i_i2c.done") {
+            return (*this).i_i2c.done;
+        }
+        else if constexpr (Path.view() == "i_i2c.i2c_al") {
+            return (*this).i_i2c.i2c_al;
+        }
+        else if constexpr (Path.view() == "i_i2c.i2c_busy") {
+            return (*this).i_i2c.i2c_busy;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.arst_n") {
+            return (*this).i_i2c.i_regs.arst_n;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.clk") {
+            return (*this).i_i2c.i_regs.clk;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_addr") {
+            return (*this).i_i2c.i_regs.cpuif_addr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_rd_ack") {
+            return (*this).i_i2c.i_regs.cpuif_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_rd_data") {
+            return (*this).i_i2c.i_regs.cpuif_rd_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_rd_err") {
+            return (*this).i_i2c.i_regs.cpuif_rd_err;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_req") {
+            return (*this).i_i2c.i_regs.cpuif_req;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_req_is_wr") {
+            return (*this).i_i2c.i_regs.cpuif_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_req_masked") {
+            return (*this).i_i2c.i_regs.cpuif_req_masked;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_req_stall_rd") {
+            return (*this).i_i2c.i_regs.cpuif_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_req_stall_wr") {
+            return (*this).i_i2c.i_regs.cpuif_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_wr_ack") {
+            return (*this).i_i2c.i_regs.cpuif_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_wr_biten") {
+            return (*this).i_i2c.i_regs.cpuif_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_wr_data") {
+            return (*this).i_i2c.i_regs.cpuif_wr_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.cpuif_wr_err") {
+            return (*this).i_i2c.i_regs.cpuif_wr_err;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.decoded_addr") {
+            return (*this).i_i2c.i_regs.decoded_addr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.decoded_err") {
+            return (*this).i_i2c.i_regs.decoded_err;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.decoded_req") {
+            return (*this).i_i2c.i_regs.decoded_req;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.decoded_req_is_wr") {
+            return (*this).i_i2c.i_regs.decoded_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.decoded_wr_biten") {
+            return (*this).i_i2c.i_regs.decoded_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.decoded_wr_data") {
+            return (*this).i_i2c.i_regs.decoded_wr_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.is_valid_addr") {
+            return (*this).i_i2c.i_regs.is_valid_addr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.is_valid_rw") {
+            return (*this).i_i2c.i_regs.is_valid_rw;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.load_next_c") {
+            return (*this).i_i2c.i_regs.load_next_c;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.next_c") {
+            return (*this).i_i2c.i_regs.next_c;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.rd_mux_addr") {
+            return (*this).i_i2c.i_regs.rd_mux_addr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.readback_data") {
+            return (*this).i_i2c.i_regs.readback_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.readback_data_var") {
+            return (*this).i_i2c.i_regs.readback_data_var;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.readback_done") {
+            return (*this).i_i2c.i_regs.readback_done;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.readback_err") {
+            return (*this).i_i2c.i_regs.readback_err;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_addr") {
+            return (*this).i_i2c.i_regs.s_cpuif_addr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_rd_ack") {
+            return (*this).i_i2c.i_regs.s_cpuif_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_rd_data") {
+            return (*this).i_i2c.i_regs.s_cpuif_rd_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_rd_err") {
+            return (*this).i_i2c.i_regs.s_cpuif_rd_err;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_req") {
+            return (*this).i_i2c.i_regs.s_cpuif_req;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_req_is_wr") {
+            return (*this).i_i2c.i_regs.s_cpuif_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_req_stall_rd") {
+            return (*this).i_i2c.i_regs.s_cpuif_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_req_stall_wr") {
+            return (*this).i_i2c.i_regs.s_cpuif_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_wr_ack") {
+            return (*this).i_i2c.i_regs.s_cpuif_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_wr_biten") {
+            return (*this).i_i2c.i_regs.s_cpuif_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_wr_data") {
+            return (*this).i_i2c.i_regs.s_cpuif_wr_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.i_regs.s_cpuif_wr_err") {
+            return (*this).i_i2c.i_regs.s_cpuif_wr_err;
+        }
+        else if constexpr (Path.view() == "i_i2c.iack") {
+            return (*this).i_i2c.iack;
+        }
+        else if constexpr (Path.view() == "i_i2c.ien") {
+            return (*this).i_i2c.ien;
+        }
+        else if constexpr (Path.view() == "i_i2c.interrupt_o") {
+            return (*this).i_i2c.interrupt_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.irq_flag") {
+            return (*this).i_i2c.irq_flag;
+        }
+        else if constexpr (Path.view() == "i_i2c.irxack") {
+            return (*this).i_i2c.irxack;
+        }
+        else if constexpr (Path.view() == "i_i2c.pre_next") {
+            return (*this).i_i2c.pre_next;
+        }
+        else if constexpr (Path.view() == "i_i2c.pre_q") {
+            return (*this).i_i2c.pre_q;
+        }
+        else if constexpr (Path.view() == "i_i2c.rd") {
+            return (*this).i_i2c.rd;
+        }
+        else if constexpr (Path.view() == "i_i2c.rx_data") {
+            return (*this).i_i2c.rx_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.rxack") {
+            return (*this).i_i2c.rxack;
+        }
+        else if constexpr (Path.view() == "i_i2c.scl_pad_i") {
+            return (*this).i_i2c.scl_pad_i;
+        }
+        else if constexpr (Path.view() == "i_i2c.scl_pad_o") {
+            return (*this).i_i2c.scl_pad_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.scl_padoen_o") {
+            return (*this).i_i2c.scl_padoen_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.sda_pad_i") {
+            return (*this).i_i2c.sda_pad_i;
+        }
+        else if constexpr (Path.view() == "i_i2c.sda_pad_o") {
+            return (*this).i_i2c.sda_pad_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.sda_padoen_o") {
+            return (*this).i_i2c.sda_padoen_o;
+        }
+        else if constexpr (Path.view() == "i_i2c.sta") {
+            return (*this).i_i2c.sta;
+        }
+        else if constexpr (Path.view() == "i_i2c.status_data") {
+            return (*this).i_i2c.status_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.sto") {
+            return (*this).i_i2c.sto;
+        }
+        else if constexpr (Path.view() == "i_i2c.tip") {
+            return (*this).i_i2c.tip;
+        }
+        else if constexpr (Path.view() == "i_i2c.tx_next") {
+            return (*this).i_i2c.tx_next;
+        }
+        else if constexpr (Path.view() == "i_i2c.tx_q") {
+            return (*this).i_i2c.tx_q;
+        }
+        else if constexpr (Path.view() == "i_i2c.unused_core_rd_ack") {
+            return (*this).i_i2c.unused_core_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.unused_core_rd_data") {
+            return (*this).i_i2c.unused_core_rd_data;
+        }
+        else if constexpr (Path.view() == "i_i2c.unused_core_rd_err") {
+            return (*this).i_i2c.unused_core_rd_err;
+        }
+        else if constexpr (Path.view() == "i_i2c.unused_core_req_stall_rd") {
+            return (*this).i_i2c.unused_core_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_i2c.unused_core_req_stall_wr") {
+            return (*this).i_i2c.unused_core_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_i2c.unused_core_wr_ack") {
+            return (*this).i_i2c.unused_core_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_i2c.unused_core_wr_err") {
+            return (*this).i_i2c.unused_core_wr_err;
+        }
+        else if constexpr (Path.view() == "i_i2c.unused_signals") {
+            return (*this).i_i2c.unused_signals;
+        }
+        else if constexpr (Path.view() == "i_i2c.wr") {
+            return (*this).i_i2c.wr;
+        }
+        else if constexpr (Path.view() == "i_spi.HCLK") {
+            return (*this).i_spi.HCLK;
+        }
+        else if constexpr (Path.view() == "i_spi.HRESETn") {
+            return (*this).i_spi.HRESETn;
+        }
+        else if constexpr (Path.view() == "i_spi.PADDR") {
+            return (*this).i_spi.PADDR;
+        }
+        else if constexpr (Path.view() == "i_spi.PENABLE") {
+            return (*this).i_spi.PENABLE;
+        }
+        else if constexpr (Path.view() == "i_spi.PRDATA") {
+            return (*this).i_spi.PRDATA;
+        }
+        else if constexpr (Path.view() == "i_spi.PREADY") {
+            return (*this).i_spi.PREADY;
+        }
+        else if constexpr (Path.view() == "i_spi.PSEL") {
+            return (*this).i_spi.PSEL;
+        }
+        else if constexpr (Path.view() == "i_spi.PSLVERR") {
+            return (*this).i_spi.PSLVERR;
+        }
+        else if constexpr (Path.view() == "i_spi.PWDATA") {
+            return (*this).i_spi.PWDATA;
+        }
+        else if constexpr (Path.view() == "i_spi.PWRITE") {
+            return (*this).i_spi.PWRITE;
+        }
+        else if constexpr (Path.view() == "i_spi.apb_addr") {
+            return (*this).i_spi.apb_addr;
+        }
+        else if constexpr (Path.view() == "i_spi.apb_read") {
+            return (*this).i_spi.apb_read;
+        }
+        else if constexpr (Path.view() == "i_spi.apb_write") {
+            return (*this).i_spi.apb_write;
+        }
+        else if constexpr (Path.view() == "i_spi.clkdiv_next") {
+            return (*this).i_spi.clkdiv_next;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.arst_n") {
+            return (*this).i_spi.i_regs.arst_n;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.clk") {
+            return (*this).i_spi.i_regs.clk;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_addr") {
+            return (*this).i_spi.i_regs.cpuif_addr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_rd_ack") {
+            return (*this).i_spi.i_regs.cpuif_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_rd_data") {
+            return (*this).i_spi.i_regs.cpuif_rd_data;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_rd_err") {
+            return (*this).i_spi.i_regs.cpuif_rd_err;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_req") {
+            return (*this).i_spi.i_regs.cpuif_req;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_req_is_wr") {
+            return (*this).i_spi.i_regs.cpuif_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_req_masked") {
+            return (*this).i_spi.i_regs.cpuif_req_masked;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_req_stall_rd") {
+            return (*this).i_spi.i_regs.cpuif_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_req_stall_wr") {
+            return (*this).i_spi.i_regs.cpuif_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_wr_ack") {
+            return (*this).i_spi.i_regs.cpuif_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_wr_biten") {
+            return (*this).i_spi.i_regs.cpuif_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_wr_data") {
+            return (*this).i_spi.i_regs.cpuif_wr_data;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.cpuif_wr_err") {
+            return (*this).i_spi.i_regs.cpuif_wr_err;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.decoded_addr") {
+            return (*this).i_spi.i_regs.decoded_addr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.decoded_err") {
+            return (*this).i_spi.i_regs.decoded_err;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.decoded_req") {
+            return (*this).i_spi.i_regs.decoded_req;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.decoded_req_is_wr") {
+            return (*this).i_spi.i_regs.decoded_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.decoded_wr_biten") {
+            return (*this).i_spi.i_regs.decoded_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.decoded_wr_data") {
+            return (*this).i_spi.i_regs.decoded_wr_data;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.is_valid_addr") {
+            return (*this).i_spi.i_regs.is_valid_addr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.is_valid_rw") {
+            return (*this).i_spi.i_regs.is_valid_rw;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.load_next_c") {
+            return (*this).i_spi.i_regs.load_next_c;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.next_c") {
+            return (*this).i_spi.i_regs.next_c;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.rd_mux_addr") {
+            return (*this).i_spi.i_regs.rd_mux_addr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.readback_data") {
+            return (*this).i_spi.i_regs.readback_data;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.readback_data_var") {
+            return (*this).i_spi.i_regs.readback_data_var;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.readback_done") {
+            return (*this).i_spi.i_regs.readback_done;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.readback_err") {
+            return (*this).i_spi.i_regs.readback_err;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_addr") {
+            return (*this).i_spi.i_regs.s_cpuif_addr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_rd_ack") {
+            return (*this).i_spi.i_regs.s_cpuif_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_rd_data") {
+            return (*this).i_spi.i_regs.s_cpuif_rd_data;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_rd_err") {
+            return (*this).i_spi.i_regs.s_cpuif_rd_err;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_req") {
+            return (*this).i_spi.i_regs.s_cpuif_req;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_req_is_wr") {
+            return (*this).i_spi.i_regs.s_cpuif_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_req_stall_rd") {
+            return (*this).i_spi.i_regs.s_cpuif_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_req_stall_wr") {
+            return (*this).i_spi.i_regs.s_cpuif_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_wr_ack") {
+            return (*this).i_spi.i_regs.s_cpuif_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_wr_biten") {
+            return (*this).i_spi.i_regs.s_cpuif_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_wr_data") {
+            return (*this).i_spi.i_regs.s_cpuif_wr_data;
+        }
+        else if constexpr (Path.view() == "i_spi.i_regs.s_cpuif_wr_err") {
+            return (*this).i_spi.i_regs.s_cpuif_wr_err;
+        }
+        else if constexpr (Path.view() == "i_spi.intcfg_next") {
+            return (*this).i_spi.intcfg_next;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_addr") {
+            return (*this).i_spi.spi_addr;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_addr_len") {
+            return (*this).i_spi.spi_addr_len;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_clk_div") {
+            return (*this).i_spi.spi_clk_div;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_clk_div_valid") {
+            return (*this).i_spi.spi_clk_div_valid;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_cmd") {
+            return (*this).i_spi.spi_cmd;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_cmd_len") {
+            return (*this).i_spi.spi_cmd_len;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_csreg") {
+            return (*this).i_spi.spi_csreg;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_data_len") {
+            return (*this).i_spi.spi_data_len;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_data_rx") {
+            return (*this).i_spi.spi_data_rx;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_data_rx_ready") {
+            return (*this).i_spi.spi_data_rx_ready;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_data_rx_valid") {
+            return (*this).i_spi.spi_data_rx_valid;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_data_tx") {
+            return (*this).i_spi.spi_data_tx;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_data_tx_ready") {
+            return (*this).i_spi.spi_data_tx_ready;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_data_tx_valid") {
+            return (*this).i_spi.spi_data_tx_valid;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_dummy_rd") {
+            return (*this).i_spi.spi_dummy_rd;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_dummy_wr") {
+            return (*this).i_spi.spi_dummy_wr;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_int_cnt_en") {
+            return (*this).i_spi.spi_int_cnt_en;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_int_cnt_rx") {
+            return (*this).i_spi.spi_int_cnt_rx;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_int_cnt_tx") {
+            return (*this).i_spi.spi_int_cnt_tx;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_int_en") {
+            return (*this).i_spi.spi_int_en;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_int_rd_sta") {
+            return (*this).i_spi.spi_int_rd_sta;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_int_th_rx") {
+            return (*this).i_spi.spi_int_th_rx;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_int_th_tx") {
+            return (*this).i_spi.spi_int_th_tx;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_qrd") {
+            return (*this).i_spi.spi_qrd;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_qwr") {
+            return (*this).i_spi.spi_qwr;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_rd") {
+            return (*this).i_spi.spi_rd;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_status") {
+            return (*this).i_spi.spi_status;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_swrst") {
+            return (*this).i_spi.spi_swrst;
+        }
+        else if constexpr (Path.view() == "i_spi.spi_wr") {
+            return (*this).i_spi.spi_wr;
+        }
+        else if constexpr (Path.view() == "i_spi.spiadr_next") {
+            return (*this).i_spi.spiadr_next;
+        }
+        else if constexpr (Path.view() == "i_spi.spicmd_next") {
+            return (*this).i_spi.spicmd_next;
+        }
+        else if constexpr (Path.view() == "i_spi.spidum_next") {
+            return (*this).i_spi.spidum_next;
+        }
+        else if constexpr (Path.view() == "i_spi.spilen_next") {
+            return (*this).i_spi.spilen_next;
+        }
+        else if constexpr (Path.view() == "i_spi.status_next") {
+            return (*this).i_spi.status_next;
+        }
+        else if constexpr (Path.view() == "i_spi.unused_core_rd_ack") {
+            return (*this).i_spi.unused_core_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_spi.unused_core_rd_data") {
+            return (*this).i_spi.unused_core_rd_data;
+        }
+        else if constexpr (Path.view() == "i_spi.unused_core_rd_err") {
+            return (*this).i_spi.unused_core_rd_err;
+        }
+        else if constexpr (Path.view() == "i_spi.unused_core_req_stall_rd") {
+            return (*this).i_spi.unused_core_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_spi.unused_core_req_stall_wr") {
+            return (*this).i_spi.unused_core_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_spi.unused_core_wr_ack") {
+            return (*this).i_spi.unused_core_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_spi.unused_core_wr_err") {
+            return (*this).i_spi.unused_core_wr_err;
+        }
+        else if constexpr (Path.view() == "i_spi.unused_signals") {
+            return (*this).i_spi.unused_signals;
+        }
+        else if constexpr (Path.view() == "i_timer.HCLK") {
+            return (*this).i_timer.HCLK;
+        }
+        else if constexpr (Path.view() == "i_timer.HRESETn") {
+            return (*this).i_timer.HRESETn;
+        }
+        else if constexpr (Path.view() == "i_timer.PADDR") {
+            return (*this).i_timer.PADDR;
+        }
+        else if constexpr (Path.view() == "i_timer.PENABLE") {
+            return (*this).i_timer.PENABLE;
+        }
+        else if constexpr (Path.view() == "i_timer.PRDATA") {
+            return (*this).i_timer.PRDATA;
+        }
+        else if constexpr (Path.view() == "i_timer.PREADY") {
+            return (*this).i_timer.PREADY;
+        }
+        else if constexpr (Path.view() == "i_timer.PSEL") {
+            return (*this).i_timer.PSEL;
+        }
+        else if constexpr (Path.view() == "i_timer.PSLVERR") {
+            return (*this).i_timer.PSLVERR;
+        }
+        else if constexpr (Path.view() == "i_timer.PWDATA") {
+            return (*this).i_timer.PWDATA;
+        }
+        else if constexpr (Path.view() == "i_timer.PWRITE") {
+            return (*this).i_timer.PWRITE;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.HCLK") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.HCLK;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.HRESETn") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.HRESETn;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.PADDR") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.PADDR;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.PENABLE") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.PENABLE;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.PRDATA") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.PRDATA;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.PREADY") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.PREADY;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.PSEL") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.PSEL;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.PSLVERR") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.PSLVERR;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.PWDATA") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.PWDATA;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.PWRITE") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.PWRITE;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.apb_write") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.apb_write;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.cmp_write") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.cmp_write;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.core_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.core_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.cycle_counter_n") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.cycle_counter_n;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.cycle_counter_q") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.cycle_counter_q;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.arst_n") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.arst_n;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.clk") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.clk;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_data") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_rd_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_rd_err") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_rd_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_req;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_is_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_masked") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_req_masked;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_stall_rd") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_req_stall_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_biten") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_data") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_wr_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.cpuif_wr_err") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.cpuif_wr_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.decoded_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_err") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.decoded_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_req") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.decoded_req;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_req_is_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.decoded_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_wr_biten") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.decoded_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.decoded_wr_data") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.decoded_wr_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.is_valid_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.is_valid_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.is_valid_rw") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.is_valid_rw;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.load_next_c") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.load_next_c;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.next_c") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.next_c;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.rd_mux_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.rd_mux_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_data") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.readback_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_data_var") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.readback_data_var;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_done") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.readback_done;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.readback_err") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.readback_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_data") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_rd_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_rd_err") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_rd_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_req;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_is_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_stall_rd") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_req_stall_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_biten") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_data") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_wr_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.i_regs.s_cpuif_wr_err") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.i_regs.s_cpuif_wr_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.irq_o") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.irq_o;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.prescaler_int") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.prescaler_int;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.register_adr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.register_adr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.timer_next") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.timer_next;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.timer_we") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.timer_we;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.unused_core_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_data") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.unused_core_rd_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.unused_core_rd_err") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.unused_core_rd_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.unused_core_req_stall_rd") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.unused_core_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.unused_core_req_stall_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.unused_core_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.unused_core_wr_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.unused_core_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[0].timer_i.unused_core_wr_err") {
+            return (*this).i_timer.TIMER_GEN.template at<0>().timer_i.unused_core_wr_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.HCLK") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.HCLK;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.HRESETn") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.HRESETn;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.PADDR") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.PADDR;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.PENABLE") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.PENABLE;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.PRDATA") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.PRDATA;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.PREADY") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.PREADY;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.PSEL") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.PSEL;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.PSLVERR") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.PSLVERR;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.PWDATA") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.PWDATA;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.PWRITE") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.PWRITE;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.apb_write") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.apb_write;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.cmp_write") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.cmp_write;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.core_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.core_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.cycle_counter_n") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.cycle_counter_n;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.cycle_counter_q") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.cycle_counter_q;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.arst_n") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.arst_n;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.clk") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.clk;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_data") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_rd_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_rd_err") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_rd_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_req;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_is_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_masked") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_req_masked;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_stall_rd") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_req_stall_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_biten") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_data") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_wr_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.cpuif_wr_err") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.cpuif_wr_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.decoded_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_err") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.decoded_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_req") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.decoded_req;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_req_is_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.decoded_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_wr_biten") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.decoded_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.decoded_wr_data") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.decoded_wr_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.is_valid_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.is_valid_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.is_valid_rw") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.is_valid_rw;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.load_next_c") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.load_next_c;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.next_c") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.next_c;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.rd_mux_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.rd_mux_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_data") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.readback_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_data_var") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.readback_data_var;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_done") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.readback_done;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.readback_err") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.readback_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_addr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_addr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_data") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_rd_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_rd_err") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_rd_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_req;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_is_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_req_is_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_stall_rd") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_req_stall_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_biten") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_wr_biten;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_data") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_wr_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.i_regs.s_cpuif_wr_err") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.i_regs.s_cpuif_wr_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.irq_o") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.irq_o;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.prescaler_int") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.prescaler_int;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.register_adr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.register_adr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.timer_next") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.timer_next;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.timer_we") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.timer_we;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.unused_core_rd_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_data") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.unused_core_rd_data;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.unused_core_rd_err") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.unused_core_rd_err;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.unused_core_req_stall_rd") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.unused_core_req_stall_rd;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.unused_core_req_stall_wr") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.unused_core_req_stall_wr;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.unused_core_wr_ack") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.unused_core_wr_ack;
+        }
+        else if constexpr (Path.view() == "i_timer.TIMER_GEN[1].timer_i.unused_core_wr_err") {
+            return (*this).i_timer.TIMER_GEN.template at<1>().timer_i.unused_core_wr_err;
+        }
+        else if constexpr (Path.view() == "i_timer.irq_o") {
+            return (*this).i_timer.irq_o;
+        }
+        else if constexpr (Path.view() == "i_timer.prdata") {
+            return (*this).i_timer.prdata;
+        }
+        else if constexpr (Path.view() == "i_timer.pready") {
+            return (*this).i_timer.pready;
+        }
+        else if constexpr (Path.view() == "i_timer.psel_int") {
+            return (*this).i_timer.psel_int;
+        }
+        else if constexpr (Path.view() == "i_timer.pslverr") {
+            return (*this).i_timer.pslverr;
+        }
+        else if constexpr (Path.view() == "i_timer.slave_address_int") {
+            return (*this).i_timer.slave_address_int;
+        }
+        else {
+            static_assert(Path.view().empty(),
+                          "HDL path is not present in the generated DUT hierarchy");
+            return cpptb::hierarchy::UnsupportedSignal{};
+        }
+    }
 };
 
 }  // namespace cpptb::benchmarks::peripheral_suite

@@ -162,7 +162,7 @@ class MulticlockTests(unittest.TestCase):
     def test_expanded_examples_use_the_same_exact_equivalence_contract(self) -> None:
         examples = {
             "FIFO_SCOREBOARD": (1, 27, 44),
-            "APB_REGFILE": (1, 41, 80),
+            "APB_REGFILE": (1, 72, 80),
             "WATCHDOG_TIMEOUT": (1, 20, 44),
             "FAULT_INJECTION": (1, 13, 7),
             "RICH_DATA": (1, 17, 0),

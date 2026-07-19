@@ -908,6 +908,21 @@ int main() {
                              .process_source_line != 0,
                      true);
 
+    cpptb::coro::Testbench dropped_context_scheduler;
+    cpptb::TestResult dropped_context_result;
+    bool dropped_context_child_completed = false;
+    {
+        cpptb::TestContext context{dropped_context_scheduler,
+                                   dropped_context_result};
+        context.spawn_detached(
+            slow_sibling(dropped_context_child_completed));
+    }
+    dropped_context_scheduler.set_time(100'000'000);
+    passed &= expect("dropped context cancels unowned child",
+                     dropped_context_child_completed, false);
+    passed &= expect("dropped context leaves scheduler idle",
+                     dropped_context_scheduler.done(), true);
+
     const auto duplicate_one = cpptb::register_test(
         "duplicate", duplicate_first);
     const auto duplicate_two = cpptb::register_test(

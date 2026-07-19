@@ -76,9 +76,63 @@ feature.
 | `dynamic_spawn` | `dynamic_spawn=N`, `spawned_processes=N`, zero transactions and cycles | `N` |
 | `dynamic_spawn_suspending` | `dynamic_spawn=N`, `spawned_processes=2N`, zero transactions and cycles | `N` |
 | `dynamic_monitor` | `queue_put=N`, `queue_get=N`, `spawned_processes=2`, `transactions=N` | `N + 3` |
+| `process_pipeline` | `queue_put=2N`, `queue_get=2N`, `spawned_processes=3`, `transactions=N` | `N + 4` |
 | `analysis_fanout` | `analysis_write=2N`, `analysis_delivery=3N`, `spawned_processes=1`, `transactions=N` | `N + 6` |
 | `apb_component` | `apb_component=2N`, `transactions=2N` | `5N + 4` |
+| `memory_model` | `memory_model=2N`, `transactions=2N` | `5N + 4` |
+| `memory_model_direct` | `memory_model_direct=2N`, `transactions=2N` | `3N + 2` |
+| `register_prediction_validity` | `register_prediction_validity=N`, zero DUT transactions and cycles | `5N + 4` |
+| `register_backdoor` | `register_backdoor=N`, zero bus transactions, one deposit and one read per iteration | `N + 2` |
+| `register_hierarchy` | `register_hierarchy=N`, four typed array elements and deterministic traversal, zero DUT transactions | `5N + 2` |
+| `register_split` | `register_split=N`, two 16-bit writes and two 16-bit reads per 32-bit logical register operation | `2N + 2` |
+| `register_wide` | `register_wide=N`, exact 128-bit register/memory frontdoors, raw backdoors, and passive prediction over 32-bit transfers | `6N + 2` |
+| `register_enum` | `register_enum=N`, one typed enum field write and read per operation | `2N + 2` |
+| `register_memory` | four-entry semantic backdoor write/read spans, zero bus transactions | `6N + 2` |
+| `register_sequences` | reset/access/bit-bash sequence policy, 21 frontdoor transactions per iteration | `46N + 2` |
+| `register_coverage` | `coverage_sampling=N`, ten observed register/memory transactions per iteration | `12` |
+| `register_maps` | primary, alias, and custom-frontdoor register/memory views, ten transactions per iteration | `8N + 2` |
+| `register_user_effects` | two policy-controlled transfers and narrow/wide prediction checks per iteration | `4N + 2` |
 | `all` | all aggregate usage counts enabled, both timeout-hit counts `floor(N/2)` | `28N + 2` |
+
+`memory_model` is the clocked APB integration workload.
+`memory_model_direct` performs the same sparse-memory write/read semantics
+without DUT traffic or simulation-time advancement, isolating model overhead.
+`register_prediction_validity` executes matched reset-mask, field-update,
+direct/read/write prediction, side-effect-validity bookkeeping, and passive
+`AnalysisPort` predictor dispatch without DUT traffic so the RAL cost is
+measured directly.
+`register_backdoor` compares a generated-style typed RAL adapter against the
+same direct hierarchical deposit/read/check sequence in pure SystemVerilog.
+Neither side inserts a delay.
+`register_hierarchy` compares compile-time indexed register-array views and
+ordered traversal against the same four-element operations and traversal in
+pure SystemVerilog.
+`register_split` compares a 32-bit RAL frontdoor over a 16-bit transport with
+the same two-write/two-read sequence authored directly in SystemVerilog.
+`register_wide` compares 128-bit `Bits` RAL register and memory frontdoors,
+raw backdoors, and passive prediction over a 32-bit transport
+with the same four-write/four-read sequence in SystemVerilog.
+`register_enum` compares generated-style typed field access, including the same
+enum casts in its pure-SystemVerilog peer.
+`register_memory` compares the generated-memory `AccessPath::Backdoor` span API
+against the same four HDL memory deposits, four reads, checks, and checksum
+updates in pure SystemVerilog. The generated standard-DPI adapter carries up to
+four adjacent entries in one packed export, while the public register-memory
+API and semantic operation count remain unchanged. Neither side advances
+simulation time.
+`register_sequences` compares reusable reset-check, mixed access-check, and
+policy-aware bit-bash sequences with the same literal procedures in pure SV.
+`register_coverage` compares passive address, byte-enable, field-policy, and
+memory-index classification with an exact SV coverage-counter twin.
+`register_maps` compares primary and aliased address views plus exceptional
+register and memory frontdoors while preserving one logical mirror.
+`register_user_effects` compares an authored user-effect policy with the same
+XOR-on-write and invert-on-read equations in pure SV. These RAL kernels do not
+insert simulation delays; every transaction and check count is validated by
+the independent workload contract. Because this kernel compares a generated
+runtime abstraction with directly inlined SV equations, it uses a 10,000,000
+iteration diagnostic policy. The timed secworks AES integration is the
+release-facing register-model performance guard.
 
 ## Semantic mapping
 
@@ -107,6 +161,7 @@ feature.
 | lifecycle-tracked `TestContext::spawn()` | the same one-child `fork ... join` plus framework ownership on the C++ side |
 | two event-suspending processes | two forked SV tasks with the same event handshake |
 | two long-lived response observers, bounded `Queue`, and cancellation | named `fork...join_none`, bounded mailbox handoff, and `disable` after the same DUT traffic |
+| finite driver, response worker, and scoreboard processes | three automatic tasks in `fork...join` connected by two bounded mailboxes |
 | synchronous `AnalysisPort` fan-out to a scoreboard and bounded audit buffer | direct expected/actual queues plus a bounded mailbox audit subscriber |
 | `cpptb_vc` APB master, passive monitor, checker, and scoreboard | matching APB tasks, passive forked processes, and expected/actual transaction queues |
 
@@ -138,11 +193,14 @@ core scheduler process creation, lifecycle-tracked `spawn()`, and processes
 that genuinely suspend. They default to 5,000,000 iterations so startup noise
 cannot hide a per-process regression. Each has an exact pure-SV twin and the
 runner rejects mismatched checks, feature counts, or checksums before applying
-the performance guard. `dynamic_task` is a diagnostic compiler-inlining
-control; it is not a framework performance gate. `dynamic_monitor` is the
-realistic companion workload: two persistent observers exchange every DUT
-response through a bounded queue and are cancelled after 100,000 foreground
-transactions.
+the performance guard. `dynamic_task` and `dynamic_spawn` are diagnostic
+controls for compiler inlining and minimum lifecycle cost; they are not
+framework performance gates. `dynamic_monitor` is a hard-gated persistent
+companion workload: two observers exchange every DUT response through a bounded
+queue and are cancelled after 100,000 foreground transactions.
+`process_pipeline` is the hard-gated finite companion: a driver, response
+worker, and scoreboard repeatedly suspend, communicate through two bounded
+queues, complete naturally, and are joined.
 
 `analysis_fanout` publishes one expected and one observed transaction per DUT
 response. The observed stream reaches both an in-order scoreboard and a

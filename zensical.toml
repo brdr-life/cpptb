@@ -14,7 +14,13 @@ nav = [
   { "Getting started" = "getting-started.md" },
   { "Guides" = [
     { "Testbench authoring" = "testbench-authoring.md" },
-    { "Verification components" = "verification-components.md" },
+    { "Verification components" = [
+      { "Overview" = "verification-components.md" },
+      { "Sparse expected memory" = "verification-components/memory-model.md" },
+      { "Register abstraction layer" = "memory-register-models.md" },
+      { "Generate register models" = "verification-components/register-generation.md" },
+      { "Standard register sequences" = "verification-components/register-sequences.md" },
+    ] },
     { "Randomization" = [
       { "Overview" = "random-stimulus.md" },
       { "Side-by-side examples" = "randomization/examples.md" },
@@ -41,6 +47,7 @@ nav = [
       { "Rich data" = "examples/rich-data.md" },
       { "Heavy benchmarks" = "examples/heavy-benchmarks.md" },
       { "Open-source cores" = "examples/open-source-cores.md" },
+      { "AES register-model oracle" = "examples/secworks-aes-regmodel.md" },
     ] },
     { "Clocking" = "clocking.md" },
     { "Scheduling" = "scheduling.md" },

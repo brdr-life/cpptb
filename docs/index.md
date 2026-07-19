@@ -32,10 +32,11 @@ CPPTB_REGISTER_TEST(count_sequence);
 | [Bounded queues and synchronization](roadmap.md#2-bounded-queues-and-synchronization) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
 | [Reusable verification components](roadmap.md#3-reusable-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
 | [Random stimulus and functional coverage](roadmap.md#4-reproducible-random-stimulus-and-functional-coverage) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
-| [Memory and register abstraction](roadmap.md#5-memory-and-register-abstraction) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
+| [Memory and register verification components](roadmap.md#5-memory-and-register-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> |
 | [Interfaces and simulator portability](roadmap.md#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Debugging and release tooling](roadmap.md#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 | [Coherent clock and reset control](roadmap.md#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
+| [Batched execution and run-ahead experiments](roadmap.md#9-batched-execution-and-run-ahead-experiments) | <span class="roadmap-status roadmap-status--planned">Planned</span> |
 
 See the [complete roadmap](roadmap.md) for scope, design constraints, and the
 delivery process behind each milestone.
@@ -49,7 +50,11 @@ delivery process behind each milestone.
 - [Framework test lifecycle](test-lifecycle.md) covers registration, checks,
   process ownership, terminal states, and structured results.
 - [Verification components](verification-components.md) covers the optional
-  `cpptb_vc` package, transaction interfaces, scoreboards, streams, and APB.
+  `cpptb_vc` package, transaction interfaces, scoreboards, streams, APB,
+  [sparse expected memory](verification-components/memory-model.md), and the
+  [register abstraction layer](memory-register-models.md). The
+  [generation guide](verification-components/register-generation.md) covers
+  PeakRDL generation from SystemRDL or IP-XACT.
 - [Randomization](random-stimulus.md) provides a multi-page guide to direct
   generators, constrained transactions, composite fields, solver backends,
   replay, [functional coverage](randomization/functional-coverage.md), and
@@ -63,6 +68,9 @@ delivery process behind each milestone.
 - [Open-source core benchmarks](examples/open-source-cores.md) show the same
   testbench work against PicoRV32, AES-128, and 64-bit Ethernet FCS RTL in
   pure SV, C++ DPI, C++ VPI, and Cocotb.
+- [secworks AES register-model oracle](examples/secworks-aes-regmodel.md)
+  proves a generated SystemRDL model against the unchanged upstream top-level
+  bench and provides a scalable matched pure-SV performance peer.
 
 ## Understand the framework
 
@@ -82,13 +90,16 @@ delivery process behind each milestone.
 The current implementation supports concurrent processes, edge and delay
 triggers, typed tasks, timeouts, events, bounded queues, locks, semaphores,
 typed transaction endpoints, analysis fan-out, in-order and keyed scoreboards,
-ready/valid and APB components, wide packed and fixed-point values, multidimensional
-arrays, deterministic and constrained-random stimulus with membership,
+ready/valid and APB components, wide packed and fixed-point values,
+multidimensional arrays, and deterministic and constrained-random stimulus
+with membership,
 distributions, soft constraints, adaptive optional solver fallback, composite
 fields, functional coverpoints, crosses, transitions, and source-inferred
 hierarchical access. Compiled test catalogs,
 one-test-per-run selection, test-owned process cleanup, fatal and nonfatal
 checks, and JSON results are also supported.
+Optional `cpptb_vc` components add sparse expected memory, typed register
+models, and PeakRDL generation without extending the core scheduler API.
 Verilator is the end-to-end reference simulator. Direct Verilator timing
 dispatch and the standard VPI fallback implement the complete scheduling
 contract; the faster generated SV-DPI calendar remains experimental. Broader

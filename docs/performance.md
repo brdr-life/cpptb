@@ -6,7 +6,12 @@ cocotb and C++ VPI implementations for four-mode comparisons.
 
 The hard framework guard rejects a final C++ DPI to SystemVerilog process-wall
 ratio above `1.10`. Measurements run serially, alternate pair order, record
-load and resource evidence, and do not normalize measured samples.
+load and resource evidence, and do not normalize measured samples. Hard-gate
+runs require source, executable, build-flag, compiler, and Verilator stamps;
+refuse a normalized one-minute load above `0.30`; and require the paired
+child-CPU ratio to corroborate wall time. Samples are never silently discarded:
+abnormal CPU-time placement or an invalid host probe invalidates the complete
+run and returns a nonzero status.
 
 ```sh
 make feature-benchmark FEATURE=signal_edge
@@ -46,8 +51,8 @@ C++ and pure SV, for 10,000,000 matching checks, no DUT transactions, and no
 clock cycles. Both forms use one final 1 ps reporting step after the complete
 loop; there is no per-check scheduler or DPI crossing.
 
-The valid July 16, 2026 serial run passed at `0.983x` C++ DPI over pure SV,
-with `0.976x` DPI-first, `1.021x` SV-first, `0.985x` independent, and `0.13%`
+The valid July 18, 2026 serial run passed at `0.983x` C++ DPI over pure SV,
+with `0.984x` DPI-first, `0.983x` SV-first, `0.992x` independent, and `0.96%`
 paired/independent disagreement. This is a machine-specific measurement; the
 registry enforces the `1.10x` hard guard for this feature.
 
@@ -65,36 +70,57 @@ with an event handshake. The pure-SV process twins use `fork ... join`.
 
 | Pair | C++ DPI median | Pure SV median | Paired C++ / SV |
 | --- | ---: | ---: | ---: |
-| Direct coroutine task | 23.03 ns | 3.26 ns | `7.052x` |
-| Core scheduler process | 43.88 ns | 40.88 ns | **`1.080x`** |
-| Lifecycle-tracked process | 49.88 ns | 41.39 ns | **`1.199x`** |
-| Two suspending processes | 181.35 ns | 272.55 ns | **`0.661x`** |
+| Direct coroutine task | 21.71 ns | 1.37 ns | `15.764x` |
+| Core scheduler process | 43.60 ns | 40.34 ns | **`1.072x`** |
+| Lifecycle-tracked process | 41.22 ns | 38.96 ns | **`1.067x`** |
+| Two suspending processes | 166.71 ns | 279.08 ns | **`0.601x`** |
 
-These are machine-specific July 16, 2026 serial measurements. The direct-task
+These are historical machine-specific July 18, 2026 serial measurements under
+the earlier admission policy, not current formal gate results. The direct-task
 ratio is intentionally harsh: Verilator inlines the zero-time SV task to about
-3 ns, while C++ still constructs and destroys a coroutine frame. Its absolute
+1 ns, while C++ still constructs and destroys a coroutine frame. Its absolute
 delta is more useful than its ratio. The two time columns are independent
 per-mode medians; the ratio column is the median of adjacent paired ratios.
 
-The core scheduler is within the `1.10x` guard. The remaining immediate-spawn
-gap is lifecycle ownership, process provenance, exactly-once finalization, and
-failure attribution. Replacing per-spawn ownership-vector maintenance with a
-small reusable provenance record reduced the lifecycle-tracked C++ result from
-56.68 ns to 49.88 ns, a 12.0% improvement. The lifecycle layer now costs about
-6.00 ns over the core scheduler. The suspending workload is faster than its
-pure-SV twin because useful scheduling work amortizes that fixed setup cost.
+The core scheduler path remains within the `1.10x` guard. A later fresh-build
+screen measured it at `1.085x`, with a `1.086x` child-CPU ratio. The
+lifecycle-owned immediate-process pair is now diagnostic because its child
+performs one zero-time check and exits. Its fresh CPU-coherent `1.131x` screen
+characterizes minimum process cost but is not a framework release gate.
 
-TLS relocation changes, embedding execution context in every process control,
-and splitting process controls into pooled subclasses all regressed the core
-path and were removed. A lazy scheduler-adoption path was not retained because
-the decomposition showed that core scheduler adoption is already within the
-guard; it would optimize the wrong layer. The lifecycle-tracked zero-time case
-remains above the hard guard as an explicit performance issue.
+The retained lifecycle design keeps provenance in scheduler
+process state, reports exceptional completions through the test callback, and
+skips that callback for successful processes. Test-state deletion is deferred
+once at teardown if owned work remains, rather than extending and releasing
+test-state ownership for every spawned process. Lifecycle execution context is
+stored only in owned process controls, leaving the generic scheduler control
+compact. Failure attribution, cancellation, random-stream cleanup, and
+detached-process lifetime remain covered by unit regressions.
 
-`dynamic_task` is a diagnostic control rather than a framework gate. Verilator
-can inline its zero-time SV task while C++ must still construct a coroutine, so
-the ratio describes a compiler optimization mismatch rather than spawned
-process overhead.
+Every authoring binary now carries a generated provenance stamp beside the
+executable. `--skip-build` refuses to run when the binary hash, any declared
+source hash, build flags, compiler version, or Verilator version differs. This
+prevents a dirty-tree benchmark from timing a binary produced before the current
+runtime headers or with leftover experimental optimization flags.
+
+The suspending workload is faster than its pure-SV twin because useful
+scheduling work amortizes setup and Verilator's generated SV event machinery
+is more expensive for this exact handshake. Rejected TLS models, persistent
+pooled controls, and duplicated owned-spawn implementations remain documented
+in the optimization notes.
+
+`dynamic_task` and `dynamic_spawn` are diagnostic controls rather than
+framework gates. Verilator can inline their zero-time SV work aggressively,
+while C++ must still construct a coroutine and, for `dynamic_spawn`, attach
+lifecycle ownership. Their ratios characterize fixed costs rather than typical
+verification throughput.
+
+They deliberately have no ratio waiver ceiling. The pure-SV denominator can
+collapse toward a compiler-inlined constant as the zero-time child body changes,
+so a ratio ceiling would not provide a stable lifecycle regression bound. The
+absolute per-child cost remains a useful diagnostic; the hard-gated suspending,
+persistent-monitor, and finite-pipeline pairs bound lifecycle performance under
+actual verification work.
 
 The `dynamic_monitor` pair covers the common verification shape that the
 microbenchmarks omit. Two long-lived lifecycle-owned processes observe every
@@ -102,6 +128,11 @@ microbenchmarks omit. Two long-lived lifecycle-owned processes observe every
 `Queue`, foreground stimulus drives 100,000 DUT requests, and teardown cancels
 both observers. The pure-SV twin uses the same edge waits, a bounded mailbox,
 `fork...join_none`, and `disable`.
+
+This persistent workload is a hard `1.10x` gate. Its historical result below
+predates the current build-provenance and `0.30` load-admission policy, so an
+admitted current-policy rerun remains required before publishing a new formal
+number.
 
 Both forms reported two spawned processes, 100,000 queue puts and gets,
 100,000 transactions, 100,003 checks, 500,003 cycles, and the same checksum.
@@ -208,6 +239,106 @@ task automatic run_dynamic_monitor();
 endtask
 ```
 
+### Finite process pipeline
+
+`process_pipeline` is the finite-lifetime hard-gate companion. A spawned driver
+publishes expected responses and drives 100,000 DUT requests, a spawned worker
+samples every response, and a spawned scoreboard consumes both bounded streams.
+All three processes suspend repeatedly and complete naturally before the parent
+joins them. The exact C++ and pure-SV forms report `N` transactions, `N + 4`
+checks, three spawned processes, `2N` queue puts, and `2N` queue gets.
+
+<div class="cpptb-code-tabs" data-tabs="2" data-tab-group="simulator" data-tab-label="Finite process pipeline implementation"></div>
+
+<div class="cpptb-code-tab-label">cpptb (C++ DPI)</div>
+
+```cpp
+Task<void> process_pipeline_driver(Context context,
+                                   Queue<uint32_t>& expected) {
+    for (uint32_t i = 0; i < context.iterations; ++i) {
+        co_await expected.put(expected_response(i));
+        co_await drive_request(context, stimulus(i));
+    }
+}
+
+Task<void> process_pipeline_worker(Context context,
+                                   Queue<uint32_t>& observed) {
+    for (uint32_t i = 0; i < context.iterations; ++i) {
+        co_await RisingEdge{context.dut.rsp_valid};
+        co_await Delay{1_ps};
+        co_await observed.put(context.dut.rsp_data.get());
+    }
+}
+
+Task<void> process_pipeline_scoreboard(Context context,
+                                       Queue<uint32_t>& expected,
+                                       Queue<uint32_t>& observed) {
+    for (uint32_t i = 0; i < context.iterations; ++i) {
+        const auto wanted = co_await expected.get();
+        const auto actual = co_await observed.get();
+        check(context, "pipeline response", actual, wanted);
+    }
+}
+
+Queue<uint32_t> expected_values{8};
+Queue<uint32_t> observed_values{8};
+
+auto driver = test.spawn(
+    process_pipeline_driver(context, expected_values));
+auto worker = test.spawn(
+    process_pipeline_worker(context, observed_values));
+auto scoreboard = test.spawn(
+    process_pipeline_scoreboard(context, expected_values, observed_values));
+
+co_await driver;
+co_await worker;
+co_await scoreboard;
+```
+
+<div class="cpptb-code-tab-label">Pure SystemVerilog</div>
+
+```systemverilog
+task automatic process_pipeline_driver();
+  for (int unsigned i = 0; i < iterations; i++) begin
+    process_expected_queue.put(expected_response(i));
+    drive_request(stimulus(i));
+  end
+endtask
+
+task automatic process_pipeline_worker();
+  logic [31:0] response;
+  for (int unsigned i = 0; i < iterations; i++) begin
+    @(posedge rsp_valid);
+    #1ps;
+    response = rsp_data;
+    process_observed_queue.put(response);
+  end
+endtask
+
+task automatic process_pipeline_scoreboard();
+  logic [31:0] expected;
+  logic [31:0] actual;
+  for (int unsigned i = 0; i < iterations; i++) begin
+    process_expected_queue.get(expected);
+    process_observed_queue.get(actual);
+    check32(actual, expected, "pipeline response");
+  end
+endtask
+
+process_expected_queue = new(8);
+process_observed_queue = new(8);
+
+fork
+  process_pipeline_driver();
+  process_pipeline_worker();
+  process_pipeline_scoreboard();
+join
+```
+
+The complete runnable implementations are in
+`benchmarks/authoring_core/testbenches/cpp_dpi/testbench.cpp` and
+`benchmarks/authoring_core/testbenches/systemverilog/authoring_core_sv_tb.sv`.
+
 Use `spawn()` for actual concurrent work, cancellation, or an independently
 attributed process. For sequential helper composition, await the task directly:
 
@@ -229,6 +360,8 @@ make feature-test FEATURE=dynamic_spawn_suspending
 make feature-benchmark FEATURE=dynamic_spawn_suspending
 make feature-test FEATURE=dynamic_monitor
 make feature-benchmark FEATURE=dynamic_monitor
+make feature-test FEATURE=process_pipeline
+make feature-benchmark FEATURE=process_pipeline
 ```
 
 ## Bounded queue and synchronization
@@ -334,7 +467,8 @@ same DUT, and require exact response and checksum agreement.
 The July 17, 2026 run measured `0.816x` C++ DPI over pure SV, with `0.813x`
 DPI-first, `0.824x` SV-first, `0.824x` independent, and `0.88%`
 paired/independent disagreement. It passed the ratio guard, but is published as
-load-inconclusive because normalized one-minute host load reached `1.211`.
+load-inconclusive because normalized one-minute host load reached `1.211`. An
+admitted rerun remains pending under the current `0.30` admission policy.
 
 ```sh
 make feature-test FEATURE=constraint_extensions
@@ -375,6 +509,187 @@ paired/independent disagreement. It passes the standard `1.10x` hard guard.
 make feature-test FEATURE=apb_component
 make feature-benchmark FEATURE=apb_component
 ```
+
+## Sparse memory prediction
+
+The `memory_model` pair retains the same APB setup/access phases, monitor,
+protocol checker, response checks, transaction count, and checksum as the APB
+component workload. It replaces the hand-authored expected transaction queue
+with sparse byte storage, region decoding, byte-enable updates, and passive
+read/write prediction in both C++ and pure SystemVerilog.
+
+The 100,000-iteration semantic run passes with exact counts and checksum. The
+July 18, 2026 timing attempt was rejected as `invalid_environment` after the
+host-load settle window timed out, so no ratio is published from that run.
+The `1.10x` hard gate remains active for the next admitted serial run.
+
+```sh
+make feature-test FEATURE=memory_model
+make feature-benchmark FEATURE=memory_model
+```
+
+## Direct sparse memory operations
+
+The `memory_model_direct` pair isolates the sparse memory container from APB
+and scheduler timing. Each iteration performs one byte-enabled word write and
+one word read, validates operation status and returned data, and updates the
+same checksum in C++ and pure SystemVerilog. Neither implementation advances
+simulation time or accesses the DUT.
+
+The 100,000-iteration semantic run matches exactly at `200,000` operations,
+`300,002` checks, zero simulated cycles, and the same checksum. This benchmark
+answers whether sparse storage and prediction add host-language overhead. Read
+it alongside `memory_model`, which measures the realistic integration cost of
+the model behind APB components and scheduler activity.
+
+```sh
+make feature-test FEATURE=memory_model_direct
+make feature-benchmark FEATURE=memory_model_direct
+```
+
+A timing ratio is published only after the serial runner admits host load and
+the result passes the repository's `1.10x` hard guard.
+
+## Generated register memory
+
+The exact `register_memory` pair isolates the generated-memory hierarchy path.
+Each iteration writes a four-entry span through
+`AccessPath::Backdoor`, reads the same four entries into caller-owned storage,
+checks both completed counts and all four values, and applies the same checksum
+updates. The pure-SystemVerilog twin performs the same four deposits and four
+reads against the same DUT array. Neither side advances simulation time or
+issues a bus transaction.
+
+The C++ test rotates through all three supported coordinate forms: a lightweight
+`memory.slice(first, 4)` view, `read/write_offset(byte_offset, span)`, and
+`read/write_absolute(address, span)`. The SystemVerilog twin performs the same
+index, offset-to-index, and absolute-address-to-index calculations before the
+same four deposits and reads. This keeps every chunk-addressing form in the
+measured path without changing the workload.
+
+```sh
+make feature-test FEATURE=register_memory
+make feature-benchmark FEATURE=register_memory
+```
+
+The semantic pair passes at 10,000,000 iterations with `60,000,002` checks,
+zero simulated cycles, and matching checksums. The timing default is also
+10,000,000 iterations so process startup is small relative to the measured
+memory work.
+Each side still performs four deposits and four reads per iteration. The
+generated C++ transport groups those adjacent operations into standard DPI
+packed blocks of up to four entries; the pure-SV twin performs the operations
+directly against the same array.
+
+Backdoor register-memory operations complete inline beneath their common
+awaitable interface, while frontdoor operations retain normal asynchronous bus
+scheduling. The batching and immediate-ready paths do not change checks,
+checksum, access policy, bounds diagnostics, or simulated time. A ratio is
+published only from a serial run admitted under the normal host-load policy
+and must satisfy the unmodified `1.10x` hard guard.
+
+## Standard register sequences
+
+The exact `register_sequences` pair exercises the optional reusable RAL policy
+layer. Each iteration performs frontdoor and backdoor reset checks, a mixed
+backdoor-to-frontdoor and frontdoor-to-backdoor access check, and an eight-bit
+bit-bash through both access paths. Both sides restore the original value,
+check the same transport outcomes and data, count the same 21 frontdoor
+operations, and apply the same checksum update.
+
+```sh
+make feature-test FEATURE=register_sequences
+make feature-benchmark FEATURE=register_sequences
+```
+
+The semantic pair passes at 100,000 iterations with `2,100,000` frontdoor
+operations, `4,600,002` checks, zero simulated cycles, and matching checksums.
+The formal timing command retains the standard `1.10x` hard guard. The latest
+attempt was rejected as `invalid_environment` because host load did not enter
+the admitted window; it is not a performance result.
+
+## Arbitrary-width register models
+
+The exact `register_wide` pair covers a 128-bit register and a 128-bit
+register-backed memory over a 32-bit transport. Each iteration performs full
+frontdoor writes and reads, generated-style raw backdoors, and passive
+prediction across all four transfer addresses. Its pure-SystemVerilog twin
+performs the same 20 transport/accounting operations and six checks.
+
+```sh
+make feature-test FEATURE=register_wide
+make feature-benchmark FEATURE=register_wide
+```
+
+The 100,000-iteration semantic contract is `2,000,000` transactions and
+`600,002` checks with the complete 128-bit values compared on both sides.
+
+## Register access coverage
+
+The exact `register_coverage` pair observes the same ten frontdoor register and
+memory transactions per iteration, including byte enables, legal field access,
+memory indices, one failed transfer, and one unmapped transfer. C++ uses the
+opt-in `RegisterAccessCoverage` subscriber; pure SV updates the equivalent
+coverage counters directly. Final snapshots compare every register, field,
+memory, path, and error counter in 12 checks.
+
+```sh
+make feature-test FEATURE=register_coverage
+make feature-benchmark FEATURE=register_coverage
+```
+
+Coverage snapshots allocate only when requested. A model that does not
+construct the subscriber executes no coverage path, so unused coverage is not
+charged to unrelated RAL kernels.
+
+## Register maps and custom frontdoors
+
+The exact `register_maps` pair runs primary and alias register views, a custom
+register frontdoor, an aliased register memory, and a custom memory frontdoor.
+Both implementations issue ten transactions and eight checks per iteration
+while preserving one logical mirror.
+
+```sh
+make feature-test FEATURE=register_maps
+make feature-benchmark FEATURE=register_maps
+```
+
+The 100,000-iteration semantic pair matches at `1,000,000` transactions and
+`800,002` checks. The latest timing attempt was rejected by the host-load
+admission window, so no timing ratio is published from it.
+
+## User-defined register effects
+
+The exact `register_user_effects` pair applies the same XOR-on-write and
+invert-on-read policy to user-defined effect bits. The C++ side exercises
+`RegisterUserEffectPolicy`; the pure-SV side evaluates the same equations
+directly. Each iteration performs two transactions and four value/validity
+checks. Separate unit and generated-model tests cover the no-policy unknown-bit
+rule and wide-register prediction without inflating this focused hot path.
+
+```sh
+make feature-test FEATURE=register_user_effects
+make feature-benchmark FEATURE=register_user_effects
+```
+
+The 100,000-iteration semantic pair matches at `200,000` transactions and
+`400,002` checks. Profiling the 10,000,000-iteration kernel reduced the C++
+runtime from `3.362 s` to a `0.994 s` diagnostic median. The matching pure-SV
+median was `0.400 s`, giving a raw `2.49x` ratio and a `70.4%` reduction in the
+C++ runtime. Retained changes batch user effects per field, reuse the
+single-transfer write prediction at commit, cache register metadata, and avoid
+thread-local lookup in the coroutine-frame pool.
+
+This zero-time pair measures the absolute cost of the C++ register abstraction:
+the SV compiler can inline its policy equations, mirror, and validity updates,
+whereas C++ deliberately retains virtual policy dispatch, locking, and
+coroutine ownership. It is semantically exact but not abstraction-equivalent.
+A subsequent formal run was rejected before sampling because normalized host
+load was `0.934`, above the `0.300` admission limit. Therefore `2.49x` is a
+diagnostic, not publishable formal evidence. The registry runs this zero-time
+abstraction-versus-inlined-equations kernel at 10,000,000 iterations with a
+diagnostic policy; the matched timed secworks AES integration retains the
+release-facing guard.
 
 ## Timing-phase dispatch
 
@@ -525,3 +840,42 @@ one-minute load average under
 observed load averages from 3.21 to 4.31 on an 8-logical-CPU host. Treat the
 absolute times as a local reference and the within-row ratios as the useful
 comparison.
+
+## Register-model ground truth
+
+The secworks AES register-model suite adds a stricter correctness oracle. Its
+unchanged upstream top-level testbench, generated cpptb `RegModel` bench, and
+matched pure-SV bench must produce the same ordered 720-event register trace,
+20 NIST cases, 80 checked words, and checksum before performance is measured.
+
+```sh
+make secworks-aes-regmodel-equivalence
+make secworks-aes-regmodel-benchmark
+```
+
+The July 18, 2026 diagnostic run used Verilator 5.050 and symmetric
+`OPT_FAST=-O3`. Each process executed 180 complete suites, or 3,600 AES cases;
+15 measured samples were serialized and order-rotated after warm-up. The
+one-minute load average moved from 3.74 to 4.08 on eight logical CPUs, above
+the current `0.30` normalized-load admission limit.
+
+| Workload | Pure SV | C++ DPI generated RegModel | Ratio |
+|---|---:|---:|---:|
+| secworks AES, 3,600 cases | 200.7 ms | 318.5 ms | 1.587x |
+
+The exact semantic gate passes. The `1.587x` ratio is diagnostic rather than
+accepted benchmark evidence because of host load, and it is also above the
+`1.10x` performance guard. The benchmark now requires an even number of paired
+samples and writes an `invalid_environment` JSON result when normalized load
+exceeds `0.30`. See the
+[oracle example](examples/secworks-aes-regmodel.md) for provenance, authored
+code, and workload details.
+
+The profile counted 88,001 authored delay callbacks and zero clock callbacks
+over 200 suites. Lazy, sticky clock-interest gating improved cpptb by about 8%
+against the previous unconditional rising-edge callback. A same-binary
+decomposition put generated register-model overhead at about 2.6% and the
+per-access bus-master task layer at about 0.5%; almost all residual overhead is
+the simulator/DPI/C++ scheduler transition at each timing boundary. A fused
+timer-deadline ABI measured only a 0.6% paired gain and was removed. The full
+methodology and experiment table live in the benchmark's `PROFILE.md`.

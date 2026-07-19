@@ -4,12 +4,23 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
   "pyslang==11.0.0",
+  "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+peakrdl = [
+  "peakrdl>=1.5,<2",
+  "peakrdl-ipxact>=3.5,<4",
 ]
 
 [project.scripts]
 cpptb = "cpptb_codegen.cli:main"
 cpptb-codegen = "cpptb_codegen.generate_dpi_bindings:main"
 cpptb-run = "cpptb_codegen.runner:main"
+cpptb-rggen = "cpptb_codegen.rggen_codegen:main"
+
+[project.entry-points."peakrdl.exporters"]
+cpptb = "cpptb_codegen.peakrdl_plugin:CppTbExporter"
 
 [build-system]
 requires = ["setuptools>=69"]

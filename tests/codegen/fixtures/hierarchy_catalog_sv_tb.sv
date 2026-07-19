@@ -42,6 +42,8 @@ module hierarchy_catalog_sv_tb;
 
   initial begin
     packet_t packet;
+    logic [15:0] memory_values [2:8];
+    logic [15:0] memory_readback [2:8];
 
     write_enable = 1'b0;
     write_data = '0;
@@ -78,6 +80,20 @@ module hierarchy_catalog_sv_tb;
     i_dut.block1.memory[2] = 16'hbeef;
     expect_eq("non-zero memory index deposit",
               i_dut.block1.memory[2], 16'hbeef);
+    memory_values[2] = 16'h1020;
+    memory_values[3] = 16'h3040;
+    memory_values[4] = 16'h5060;
+    memory_values[5] = 16'h7080;
+    memory_values[6] = 16'h90a0;
+    memory_values[7] = 16'hb0c0;
+    memory_values[8] = 16'hd0e0;
+    for (int index = 2; index <= 8; index++)
+      i_dut.block1.memory[index] = memory_values[index];
+    for (int index = 2; index <= 8; index++) begin
+      memory_readback[index] = i_dut.block1.memory[index];
+      expect_eq("non-zero memory block transfer", memory_readback[index],
+                memory_values[index]);
+    end
     force i_dut.block1.memory[2] = 16'hcafe;
     expect_eq("memory force is immediately readable",
               i_dut.block1.memory[2], 16'hcafe);

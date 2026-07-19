@@ -1,0 +1,53 @@
+register_blocks:
+  - name: rggen_demo
+    byte_size: 256
+    bus_width: 32
+    registers:
+      - name: control
+        offset_address: 0x00
+        cpptb_hdl_path: u_regs.control_q
+        bit_fields:
+          - name: enable
+            bit_assignment: {lsb: 0, width: 1}
+            type: rw
+            initial_value: 1
+          - name: mode
+            bit_assignment: {lsb: 1, width: 3}
+            type: rw
+            initial_value: 3
+      - name: status
+        offset_address: 0x04
+        bit_fields:
+          - name: pending
+            bit_assignment: {lsb: 0, width: 8}
+            type: w1c
+            initial_value: 0xff
+          - name: sampled
+            bit_assignment: {lsb: 8, width: 8}
+            type: wrc
+      - name: lane
+        offset_address: 0x10
+        size: 2
+        step: 4
+        bit_fields:
+          - name: value
+            bit_assignment: {lsb: 0, width: 16}
+            type: rw
+            initial_value: 0
+      - name: buffer
+        offset_address: 0x80
+        type: external
+        size: 4
+        step: 4
+        cpptb_hdl_path: u_regs.buffer
+    register_files:
+      - name: bank
+        offset_address: 0x40
+        registers:
+          - name: config
+            offset_address: 0x04
+            bit_fields:
+              - name: value
+                bit_assignment: {lsb: 0, width: 8}
+                type: rw
+                initial_value: 0x5a
