@@ -124,7 +124,7 @@ endmodule
         self.assertFalse(signals["block1.inverted"].depositable)
         self.assertEqual(
             signals["block1.memory"].unpacked,
-            (UnpackedRange(2, 5),),
+            (UnpackedRange(2, 8),),
         )
         self.assertEqual(
             signals["block1.matrix"].unpacked,

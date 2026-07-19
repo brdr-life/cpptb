@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -22,6 +23,17 @@
 #include "cpptb/diagnostic.hpp"
 #include "cpptb/randomized.hpp"
 #include "cpptb/test_result.hpp"
+
+#if defined(_MSC_VER)
+#define CPPTB_DETAIL_ALWAYS_INLINE __forceinline
+#define CPPTB_DETAIL_NOINLINE __declspec(noinline)
+#elif defined(__GNUC__) || defined(__clang__)
+#define CPPTB_DETAIL_ALWAYS_INLINE inline __attribute__((always_inline))
+#define CPPTB_DETAIL_NOINLINE __attribute__((noinline))
+#else
+#define CPPTB_DETAIL_ALWAYS_INLINE inline
+#define CPPTB_DETAIL_NOINLINE
+#endif
 
 namespace cpptb {
 
@@ -130,26 +142,27 @@ class SkipTest final {
 
 class TestRunState;
 
-struct ProcessProvenance {
-    TestRunState* owner = nullptr;
-    ProcessProvenance* next_free = nullptr;
-    uint64_t id = 0;
-    std::string_view description;
-    const char* source_file = "";
-    uint32_t source_line = 0;
-    Random random;
-};
+using ProcessProvenance = coro::ProcessExecutionContext;
 
 class TestRunState {
    public:
     TestRunState(coro::Testbench& scheduler, TestResult& result,
                  coro::ClockRegistrar clocks, ResultSink* sink = nullptr)
-        : scheduler_(&scheduler), result_(&result), clocks_(clocks), sink_(sink) {}
+        : scheduler_(&scheduler),
+          result_(&result),
+          clocks_(clocks),
+          sink_(sink) {}
 
-    void retain() noexcept { ++references_; }
+    CPPTB_DETAIL_ALWAYS_INLINE void retain() noexcept { ++references_; }
 
-    void release() noexcept {
-        if (--references_ == 0) delete this;
+    CPPTB_DETAIL_ALWAYS_INLINE void release() noexcept {
+        if (--references_ != 0) [[likely]] return;
+        if (scheduler_->defer_owner_cleanup(
+                this, owns_process, destroy_deferred)) {
+            cancel_owned_processes();
+            return;
+        }
+        destroy();
     }
 
     void begin(std::string_view name, const TestMetadata& metadata = {},
@@ -180,40 +193,24 @@ class TestRunState {
         if (sink_) sink_->test_started(*result_);
     }
 
-    ProcessProvenance* create_process(
-        std::string_view description,
+    CPPTB_DETAIL_ALWAYS_INLINE ProcessProvenance create_process(
+        const char* description,
         std::source_location location = std::source_location::current()) {
-        retain();
-        ProcessProvenance* provenance = nullptr;
-        if (!free_process_provenance_) {
-            process_provenance_.push_back(ProcessProvenance{});
-            provenance = &process_provenance_.back();
-        } else {
-            provenance = free_process_provenance_;
-            free_process_provenance_ = provenance->next_free;
-        }
-        const uint64_t process_id = next_process_id_++;
-        *provenance = ProcessProvenance{
+        return ProcessProvenance{
             .owner = this,
-            .id = process_id,
+            .id = next_process_id_++,
             .description = description,
-            .source_file = location.file_name(),
-            .source_line = location.line(),
-            .random = Random{random_detail::derive_seed(master_random_seed_,
-                                                        process_id)},
+            .declaration = location,
         };
-        return provenance;
     }
 
-    void release_process(ProcessProvenance* provenance) noexcept {
+    CPPTB_DETAIL_ALWAYS_INLINE void release_process(
+        ProcessProvenance* provenance) noexcept {
         if (!provenance || provenance->owner != this) return;
-        provenance->owner = nullptr;
-        provenance->next_free = free_process_provenance_;
-        free_process_provenance_ = provenance;
-        release();
+        if (!process_randoms_.empty()) process_randoms_.erase(provenance->id);
     }
 
-    void record_check() {
+    CPPTB_DETAIL_ALWAYS_INLINE void record_check() {
         if (!result_->finished) ++result_->checks;
     }
 
@@ -344,23 +341,33 @@ class TestRunState {
     }
 
     void cancel_owned_processes() {
-        scheduler_->cancel_processes_owned_by(
-            this, [](void* process_owner, void* test_owner) noexcept {
-                auto* provenance =
-                    static_cast<ProcessProvenance*>(process_owner);
-                return provenance && provenance->owner == test_owner;
-            });
+        scheduler_->cancel_processes_owned_by(this, owns_process);
     }
 
-    bool finished() const { return result_->finished; }
-    coro::Testbench& scheduler() const { return *scheduler_; }
+    CPPTB_DETAIL_ALWAYS_INLINE bool finished() const {
+        return result_->finished;
+    }
+    CPPTB_DETAIL_ALWAYS_INLINE coro::Testbench& scheduler() const {
+        return *scheduler_;
+    }
     TestResult& result() const { return *result_; }
     coro::ClockRegistrar clocks() const { return clocks_; }
 
     Random& current_random() {
         auto* process = static_cast<ProcessProvenance*>(
             scheduler_->current_execution_context());
-        if (process && process->owner == this) return process->random;
+        if (process && process->owner == this) {
+            process->cleanup = cleanup_process_resources;
+            auto found = process_randoms_.find(process->id);
+            if (found == process_randoms_.end()) {
+                found = process_randoms_
+                            .emplace(process->id,
+                                     Random{random_detail::derive_seed(
+                                         master_random_seed_, process->id)})
+                            .first;
+            }
+            return found->second;
+        }
         return fallback_random_;
     }
 
@@ -390,23 +397,41 @@ class TestRunState {
     }
 
    private:
+    static bool owns_process(void* process_owner,
+                             void* test_owner) noexcept {
+        auto* provenance = static_cast<ProcessProvenance*>(process_owner);
+        return provenance && provenance->owner == test_owner;
+    }
+
+    static void cleanup_process_resources(
+        coro::ProcessExecutionContext* provenance) noexcept {
+        if (!provenance || !provenance->owner) return;
+        auto& state = *static_cast<TestRunState*>(provenance->owner);
+        state.release_process(provenance);
+    }
+
+    static void destroy_deferred(void* owner) noexcept {
+        delete static_cast<TestRunState*>(owner);
+    }
+
+    CPPTB_DETAIL_NOINLINE void destroy() noexcept { delete this; }
+
     template <typename Record>
     void attach_current_process(Record& record) const {
         auto* process = static_cast<ProcessProvenance*>(
             scheduler_->current_execution_context());
         if (!process || process->owner != this) return;
         record.process.assign(process->description);
-        record.process_source_file.assign(process->source_file);
+        record.process_source_file.assign(process->declaration.file_name());
         record.process_id = process->id;
-        record.process_source_line = process->source_line;
+        record.process_source_line = process->declaration.line();
     }
 
     coro::Testbench* scheduler_;
     TestResult* result_;
     coro::ClockRegistrar clocks_;
     ResultSink* sink_;
-    std::deque<ProcessProvenance> process_provenance_;
-    ProcessProvenance* free_process_provenance_ = nullptr;
+    std::unordered_map<uint64_t, Random> process_randoms_;
     uint64_t next_process_id_ = 1;
     uint64_t master_random_seed_ = kDefaultRandomSeed;
     Random fallback_random_;
@@ -447,9 +472,15 @@ class TestRunStatePtr {
 
     ~TestRunStatePtr() { reset(); }
 
-    TestRunState* get() const noexcept { return state_; }
-    TestRunState& operator*() const noexcept { return *state_; }
-    TestRunState* operator->() const noexcept { return state_; }
+    CPPTB_DETAIL_ALWAYS_INLINE TestRunState* get() const noexcept {
+        return state_;
+    }
+    CPPTB_DETAIL_ALWAYS_INLINE TestRunState& operator*() const noexcept {
+        return *state_;
+    }
+    CPPTB_DETAIL_ALWAYS_INLINE TestRunState* operator->() const noexcept {
+        return state_;
+    }
 
    private:
     void reset() noexcept {
@@ -478,45 +509,43 @@ class TestContext {
         requires requires(const Actual& actual, const Expected& expected) {
             { actual == expected } -> std::convertible_to<bool>;
         }
-    void expect_eq(
+    CPPTB_DETAIL_ALWAYS_INLINE void expect_eq(
         std::string_view label, const Actual& actual, const Expected& expected,
         std::source_location location = std::source_location::current()) const {
         state_->record_check();
-        if (actual == expected) return;
-        state_->record_failure(comparison_failure(
-            FailureKind::Expectation, label, actual, expected, location));
+        if (actual == expected) [[likely]] return;
+        record_comparison_failure(FailureKind::Expectation, label, actual,
+                                  expected, location);
     }
 
-    void expect(
+    CPPTB_DETAIL_ALWAYS_INLINE void expect(
         std::string_view label, bool condition,
         std::source_location location = std::source_location::current()) const {
         state_->record_check();
-        if (condition) return;
-        state_->record_failure(boolean_failure(FailureKind::Expectation, label,
-                                               location));
+        if (condition) [[likely]] return;
+        record_boolean_failure(FailureKind::Expectation, label, location);
     }
 
     template <typename Actual, typename Expected>
         requires requires(const Actual& actual, const Expected& expected) {
             { actual == expected } -> std::convertible_to<bool>;
         }
-    void require_eq(
+    CPPTB_DETAIL_ALWAYS_INLINE void require_eq(
         std::string_view label, const Actual& actual, const Expected& expected,
         std::source_location location = std::source_location::current()) const {
         state_->record_check();
-        if (actual == expected) return;
-        state_->record_failure(comparison_failure(
-            FailureKind::Requirement, label, actual, expected, location));
+        if (actual == expected) [[likely]] return;
+        record_comparison_failure(FailureKind::Requirement, label, actual,
+                                  expected, location);
         throw detail::AbortTest{};
     }
 
-    void require(
+    CPPTB_DETAIL_ALWAYS_INLINE void require(
         std::string_view label, bool condition,
         std::source_location location = std::source_location::current()) const {
         state_->record_check();
-        if (condition) return;
-        state_->record_failure(boolean_failure(FailureKind::Requirement, label,
-                                               location));
+        if (condition) [[likely]] return;
+        record_boolean_failure(FailureKind::Requirement, label, location);
         throw detail::AbortTest{};
     }
 
@@ -532,18 +561,15 @@ class TestContext {
         throw detail::SkipTest{std::string{reason}, location};
     }
 
-    coro::Process spawn(
+    CPPTB_DETAIL_ALWAYS_INLINE coro::Process spawn(
         coro::Task<void> task,
         std::source_location location = std::source_location::current()) const {
-        auto* provenance = state_->create_process("spawned process", location);
-        auto process = state_->scheduler().spawn(
-            std::move(task), static_cast<void*>(provenance),
-            coro::ProcessCompletionHandler{
-                provenance, detail::finish_owned_process});
-        if (state_->finished() && process.valid() && !process.done()) {
-            process.cancel();
-        }
-        if (state_->finished()) throw detail::AbortTest{};
+        auto* state = state_.get();
+        const auto provenance =
+            state->create_process("spawned process", location);
+        auto process = state->scheduler().spawn_owned(
+            std::move(task), provenance, detail::finish_owned_process);
+        if (state->finished()) [[unlikely]] handle_finished_spawn(process);
         return process;
     }
 
@@ -593,6 +619,12 @@ class TestContext {
         : state_(std::move(state)) {}
 
    private:
+    CPPTB_DETAIL_NOINLINE static void handle_finished_spawn(
+        coro::Process& process) {
+        if (process.valid() && !process.done()) process.cancel();
+        throw detail::AbortTest{};
+    }
+
     void require_randomized(const RandomizeResult& result,
                             const ConstraintBackend& backend,
                             std::source_location location) const {
@@ -633,31 +665,47 @@ class TestContext {
         };
     }
 
+    CPPTB_DETAIL_NOINLINE void record_boolean_failure(
+        FailureKind kind, std::string_view label,
+        std::source_location location) const {
+        state_->record_failure(boolean_failure(kind, label, location));
+    }
+
+    template <typename Actual, typename Expected>
+    CPPTB_DETAIL_NOINLINE void record_comparison_failure(
+        FailureKind kind, std::string_view label, const Actual& actual,
+        const Expected& expected, std::source_location location) const {
+        state_->record_failure(
+            comparison_failure(kind, label, actual, expected, location));
+    }
+
     detail::TestRunStatePtr state_;
 };
 
 namespace detail {
 
+inline void finish_owned_process_slow(ProcessProvenance* provenance,
+                                      coro::ExceptionState& exception) noexcept {
+    auto& state = *static_cast<TestRunState*>(provenance->owner);
+    try {
+        exception.rethrow();
+    } catch (const AbortTest&) {
+        state.finish(TestStatus::Failed);
+    } catch (const SkipTest& skip) {
+        state.record_skip(skip.reason, skip.location);
+    } catch (const std::exception& error) {
+        state.record_exception(error.what(), std::source_location::current());
+    } catch (...) {
+        state.record_exception("unknown exception",
+                               std::source_location::current());
+    }
+}
+
 inline void finish_owned_process(void* owner, coro::ExceptionState& exception,
                                  bool cancelled) noexcept {
     auto* provenance = static_cast<ProcessProvenance*>(owner);
-    auto& state = *provenance->owner;
-    if (!cancelled && exception) {
-        try {
-            exception.rethrow();
-        } catch (const AbortTest&) {
-            state.finish(TestStatus::Failed);
-        } catch (const SkipTest& skip) {
-            state.record_skip(skip.reason, skip.location);
-        } catch (const std::exception& error) {
-            state.record_exception(error.what(),
-                                   std::source_location::current());
-        } catch (...) {
-            state.record_exception("unknown exception",
-                                   std::source_location::current());
-        }
-    }
-    state.release_process(provenance);
+    if (!cancelled && exception) [[unlikely]]
+        finish_owned_process_slow(provenance, exception);
 }
 
 template <typename Dut>
@@ -907,13 +955,13 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
                            selected->declaration);
         return true;
     }
-    auto* root_provenance =
+    const auto root_provenance =
         state->create_process("root process", selected->declaration);
-    auto root = scheduler.spawn(detail::invoke_registered_test(
-        selected->function, dut, state, selected->declaration,
-        simulation_timeout), static_cast<void*>(root_provenance),
-        coro::ProcessCompletionHandler{
-            root_provenance, detail::finish_owned_process});
+    auto root = scheduler.spawn_owned(
+        detail::invoke_registered_test(selected->function, dut, state,
+                                       selected->declaration,
+                                       simulation_timeout),
+        root_provenance, detail::finish_owned_process);
     return true;
 }
 
@@ -926,6 +974,9 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
 }
 
 }  // namespace cpptb
+
+#undef CPPTB_DETAIL_ALWAYS_INLINE
+#undef CPPTB_DETAIL_NOINLINE
 
 #define CPPTB_DETAIL_JOIN_IMPL(Left, Right) Left##Right
 #define CPPTB_DETAIL_JOIN(Left, Right) CPPTB_DETAIL_JOIN_IMPL(Left, Right)

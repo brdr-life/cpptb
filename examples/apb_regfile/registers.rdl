@@ -1,0 +1,23 @@
+addrmap apb_registers {
+    default regwidth = 32;
+
+    reg {
+        field { sw = rw; hw = r; reset = 0; } value[31:0];
+    } register_0 @ 0x00;
+
+    reg {
+        field { sw = rw; hw = r; reset = 0; } value[31:0];
+    } register_1 @ 0x04;
+
+    reg {
+        field { sw = rw; hw = r; reset = 0; } value[31:0];
+    } register_2 @ 0x08;
+
+    reg {
+        field { sw = rw; hw = r; reset = 0; } value[31:0];
+    } register_3 @ 0x0c;
+
+    reg {
+        field { sw = r; hw = r; reset = 32'h4350_5054; } value[31:0];
+    } identification @ 0x10;
+};

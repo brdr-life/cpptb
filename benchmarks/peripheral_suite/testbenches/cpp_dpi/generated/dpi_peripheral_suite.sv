@@ -534,6 +534,9 @@ module dpi_peripheral_suite;
     int requests;
     longint unsigned generation;
     requests = initial_requests;
+    if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
+      edge_interest[SIGNAL_HCLK] |= cpptb_dpi_edge_interest(SIGNAL_HCLK);
+    end
     if ((requests & STEP_TIMER_IDLE) != 0) begin
       timer_deadline = NO_TIMER;
       timer_generation++;
@@ -616,8 +619,12 @@ module dpi_peripheral_suite;
       if (event_edge == EDGE_RISING) begin
         sim_cycles++;
       end
-      if ((event_edge == EDGE_RISING) ||
-          track_falling_edges) begin
+      if (
+          ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_HCLK] & 1) != 0)) ||
+          ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_HCLK] & 2) != 0)) ||
+          ((event_edge == EDGE_RISING) &&
+           1'b1 &&
+           (timer_deadline == NO_TIMER))) begin
         run_step(PHASE_EDGE, SIGNAL_HCLK, event_edge, requests);
         service_requests(requests);
       end
@@ -682,8 +689,12 @@ module dpi_peripheral_suite;
         if (event_edge == EDGE_RISING) begin
           sim_cycles++;
         end
-        if ((event_edge == EDGE_RISING) ||
-            track_falling_edges) begin
+        if (
+            ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_HCLK] & 1) != 0)) ||
+            ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_HCLK] & 2) != 0)) ||
+            ((event_edge == EDGE_RISING) &&
+             1'b1 &&
+             (timer_deadline == NO_TIMER))) begin
           run_step(PHASE_EDGE, SIGNAL_HCLK,
                    event_edge, requests);
           service_requests(requests);

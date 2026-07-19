@@ -21,7 +21,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 RESULT_DIR = REPO / "benchmarks" / "results" / "regression"
 sys.path.insert(0, str(REPO))
-DEFAULT_LOAD_THRESHOLD = 1.00
+DEFAULT_LOAD_THRESHOLD = 0.30
 DEFAULT_SETTLE_POLL_SECONDS = 5.0
 DEFAULT_SETTLE_TIMEOUT_SECONDS = 60.0
 STATUS_PRECEDENCE = {

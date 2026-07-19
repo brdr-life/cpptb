@@ -6,8 +6,8 @@ MOJOTB_BUILD_DIR := $(BUILD_DIR)/mojotb
 MOJOTB_OBJ_DIR := $(MOJOTB_BUILD_DIR)/obj
 CPPTB_BUILD_DIR := $(BUILD_DIR)/cpptb
 CPPTB_OBJ_DIR := $(CPPTB_BUILD_DIR)/obj
-CPPTB_PUBLIC_HEADERS := $(wildcard include/cpptb/*.hpp) \
-	$(wildcard include/cpptb_vc/*.hpp)
+CPPTB_PUBLIC_HEADERS := $(sort $(shell find include/cpptb include/cpptb_vc \
+	-type f -name '*.hpp'))
 CPPTB_CORO_RUNTIME_TEST := $(CPPTB_BUILD_DIR)/coro_runtime_test
 CPPTB_PACKED_VALUE_TEST := $(CPPTB_BUILD_DIR)/packed_value_test
 CPPTB_RANDOM_TEST := $(CPPTB_BUILD_DIR)/random_test
@@ -16,6 +16,10 @@ CPPTB_Z3_RANDOM_TEST := $(CPPTB_BUILD_DIR)/z3_random_backend_test
 CPPTB_COVERAGE_TEST := $(CPPTB_BUILD_DIR)/coverage_test
 CPPTB_TEST_API_TEST := $(CPPTB_BUILD_DIR)/test_api_test
 CPPTB_COMPONENTS_TEST := $(CPPTB_BUILD_DIR)/components_test
+CPPTB_MEMORY_MODEL_TEST := $(CPPTB_BUILD_DIR)/memory_model_test
+CPPTB_REGISTER_MODEL_TEST := $(CPPTB_BUILD_DIR)/register_model_test
+CPPTB_REGISTER_SEQUENCES_TEST := $(CPPTB_BUILD_DIR)/register_sequences_test
+CPPTB_REGISTER_COVERAGE_TEST := $(CPPTB_BUILD_DIR)/register_coverage_test
 CPPTB_HIERARCHY_TEST := $(CPPTB_BUILD_DIR)/hierarchy_test
 CPPTB_APB_EVENT_OBJ_DIR := $(CPPTB_BUILD_DIR)/apb_event_obj
 CPPTB_CONFORMANCE_DIR := tests/conformance/runtime
@@ -43,6 +47,7 @@ AUTHORING_CORE_TIMING_CALENDAR_DIR := $(AUTHORING_CORE_TIMING_EXPERIMENT_DIR)/sv
 AUTHORING_CORE_TIMING_VPI_DIR := $(AUTHORING_CORE_TIMING_EXPERIMENT_DIR)/portable_vpi
 AUTHORING_CORE_DPI_MANIFEST := $(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/authoring_core.dpi.json
 AUTHORING_CORE_DPI_GENERATOR := $(CPPTB_CODEGEN_ENTRY)
+AUTHORING_CORE_BUILD_PROVENANCE := $(AUTHORING_CORE_DIR)/build_provenance.py
 AUTHORING_CORE_DPI_CODEGEN_STAMP := $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi.codegen.stamp
 AUTHORING_CORE_CLOCK_CONFIG := $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi.clocks.json
 AUTHORING_CORE_ACCESS_CONFIG := $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi.access.json
@@ -57,7 +62,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor process_pipeline analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component memory_model memory_model_direct register_prediction_validity register_backdoor register_hierarchy register_split register_wide register_enum register_memory register_sequences register_coverage register_maps register_user_effects
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
 AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
@@ -126,16 +131,21 @@ FEATURE ?=
 FEATURE_REGRESSION_RUNNER := python3 benchmarks/run_regression.py
 UV_CACHE_DIR ?= $(BUILD_DIR)/uv-cache
 CODEGEN_PYTHON := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen python
+PEAKRDL_PYTHON := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen --extra peakrdl python
 DOCS_RUN := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen --group docs
 CPPTB_CODEGEN := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb-codegen
 CPPTB := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb
 CPPTB_CODEGEN_SOURCES := \
 	$(CPPTB_CODEGEN_ENTRY) \
 	tools/codegen/cpptb_codegen/__init__.py \
+	tools/codegen/cpptb_codegen/__main__.py \
 	tools/codegen/cpptb_codegen/build.py \
 	tools/codegen/cpptb_codegen/cli.py \
 	tools/codegen/cpptb_codegen/design_ir.py \
+	tools/codegen/cpptb_codegen/peakrdl_plugin.py \
 	tools/codegen/cpptb_codegen/project.py \
+	tools/codegen/cpptb_codegen/register_codegen.py \
+	tools/codegen/cpptb_codegen/rggen_codegen.py \
 	tools/codegen/cpptb_codegen/runner.py \
 	tools/codegen/cpptb_codegen/frontends/__init__.py \
 	tools/codegen/cpptb_codegen/frontends/slang.py \
@@ -184,7 +194,10 @@ VERILATOR_PLATFORM_CXXFLAGS := -I$(SDKROOT)/usr/include/c++/v1
 else
 VERILATOR_PLATFORM_CXXFLAGS :=
 endif
-CXX ?= clang++
+ifeq ($(origin CXX),default)
+CXX := c++
+endif
+export CXX
 
 CPPTB_EXAMPLE_PHONY_TARGETS :=
 CPPTB_EXAMPLE_TEST_TARGETS :=
@@ -264,11 +277,13 @@ $(eval $(call CPPTB_EXAMPLE_template,timer-only,TIMER_ONLY,timer_only,timer_only
 $(eval $(call CPPTB_EXAMPLE_template,fifo-scoreboard,FIFO_SCOREBOARD,fifo_scoreboard,stream_fifo,dpi_stream_fifo,stream_fifo_sv_tb,fifo_test))
 $(eval $(call CPPTB_EXAMPLE_template,component-fifo,COMPONENT_FIFO,component_fifo,component_fifo,dpi_component_fifo,component_fifo_sv_tb,component_fifo_test))
 $(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb,component_apb_test))
+CPPTB_EXAMPLE_PHONY_TARGETS += cpp-dpi-apb-regfile-suite-test
+CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-apb-regfile-suite-test
 $(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_timeout,stalling_responder,dpi_stalling_responder,stalling_responder_sv_tb,watchdog_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb,fault_injection_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb,rich_data_sequence))
 
-.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -278,6 +293,8 @@ help:
 		'  make feature-test FEATURE=…  Run one semantic comparison' \
 		'  make feature-benchmark FEATURE=…  Benchmark one C++/SV pair' \
 		'  make feature-regression      Run the complete serial regression' \
+		'  make secworks-aes-regmodel-equivalence  Check generated RegModel against upstream AES' \
+		'  make secworks-aes-regmodel-benchmark    Benchmark the matched AES workload' \
 		'  make authoring-core-timing-experiments-build  Build timing backends' \
 		'  make docs-build              Build both documentation variants' \
 		'  make docs-sphinx-serve       Preview Sphinx at localhost:8001' \
@@ -286,10 +303,11 @@ help:
 
 all: test
 
-test: unit-test python-test codegen-test conformance-test examples-test registry-check
+test: unit-test python-test codegen-test conformance-test examples-test ground-truth-test registry-check
 
 unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test \
-	cpptb-components-test cpptb-hierarchy-test
+	cpptb-components-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test \
+	cpptb-hierarchy-test
 
 python-test:
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/tests
@@ -297,16 +315,29 @@ python-test:
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/framework_comparison/tests
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/framework_comparison/heavy_suite/tests
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/framework_comparison/open_cores/tests
+	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/regmodel_ground_truth/secworks_aes/tests
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/peripheral_suite/tests
 
-codegen-test: cpptb-codegen-test cpptb-codegen-frontend-check
+codegen-test: cpptb-codegen-test cpptb-peakrdl-test cpptb-codegen-frontend-check
 
 conformance-test: cpptb-conformance-run
 
 examples-test: $(CPPTB_EXAMPLE_TEST_TARGETS)
 
+ground-truth-test: secworks-aes-regmodel-equivalence
+
+secworks-aes-regmodel-equivalence:
+	$(MAKE) -C benchmarks/regmodel_ground_truth/secworks_aes equivalence
+
+secworks-aes-regmodel-benchmark:
+	$(MAKE) -C benchmarks/regmodel_ground_truth/secworks_aes benchmark \
+		REPEATS=$${REPEATS:-180} RUNS=$${RUNS:-6}
+
 cpp-dpi-counter-suite-test:
 	$(CPPTB) test $(CPPTB_COUNTER_PROJECT_ARGS)
+
+cpp-dpi-apb-regfile-suite-test:
+	$(CPPTB) test $(CPPTB_APB_REGFILE_PROJECT_ARGS)
 
 docs-build: docs-sphinx-build docs-zensical-build
 
@@ -486,6 +517,46 @@ $(CPPTB_COMPONENTS_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/components_test.cpp
 cpptb-components-test: $(CPPTB_COMPONENTS_TEST)
 	$(CPPTB_COMPONENTS_TEST)
 
+$(CPPTB_MEMORY_MODEL_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/memory_model_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -Iinclude -I. \
+		-I$(VERILATOR_ROOT)/include \
+		-I$(VERILATOR_ROOT)/include/vltstd \
+		tests/unit/memory_model_test.cpp -o $@
+
+cpptb-memory-model-test: $(CPPTB_MEMORY_MODEL_TEST)
+	$(CPPTB_MEMORY_MODEL_TEST)
+
+$(CPPTB_REGISTER_MODEL_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/register_model_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -Iinclude -I. \
+		-I$(VERILATOR_ROOT)/include \
+		-I$(VERILATOR_ROOT)/include/vltstd \
+		tests/unit/register_model_test.cpp -o $@
+
+cpptb-register-model-test: $(CPPTB_REGISTER_MODEL_TEST)
+	$(CPPTB_REGISTER_MODEL_TEST)
+
+$(CPPTB_REGISTER_SEQUENCES_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/register_sequences_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -Iinclude -I. \
+		-I$(VERILATOR_ROOT)/include \
+		-I$(VERILATOR_ROOT)/include/vltstd \
+		tests/unit/register_sequences_test.cpp -o $@
+
+cpptb-register-sequences-test: $(CPPTB_REGISTER_SEQUENCES_TEST)
+	$(CPPTB_REGISTER_SEQUENCES_TEST)
+
+$(CPPTB_REGISTER_COVERAGE_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/register_coverage_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -Iinclude -I. \
+		-I$(VERILATOR_ROOT)/include \
+		-I$(VERILATOR_ROOT)/include/vltstd \
+		tests/unit/register_coverage_test.cpp -o $@
+
+cpptb-register-coverage-test: $(CPPTB_REGISTER_COVERAGE_TEST)
+	$(CPPTB_REGISTER_COVERAGE_TEST)
+
 $(CPPTB_HIERARCHY_TEST): include/cpptb/hierarchy.hpp include/cpptb/probe.hpp \
 		include/cpptb/packed_bits.hpp tests/unit/hierarchy_test.cpp
 	mkdir -p $(CPPTB_BUILD_DIR)
@@ -557,6 +628,9 @@ cpp-apb-event-bench-run: $(CPPTB_BENCH_BUILD_DIR)/apb_event_bench_host
 
 cpptb-codegen-test:
 	$(CODEGEN_PYTHON) -m unittest discover -s tests/codegen
+
+cpptb-peakrdl-test:
+	$(PEAKRDL_PYTHON) -m unittest tests.codegen.test_peakrdl_exporter
 
 cpptb-codegen-frontend-check: $(CPPTB_EXAMPLE_FRONTEND_CHECK_TARGETS) \
 		authoring-core-dpi-codegen-check
@@ -729,10 +803,7 @@ $(AUTHORING_CORE_DPI_CODEGEN_STAMP): $(CPPTB_CODEGEN_SOURCES) \
 	touch $@
 
 $(AUTHORING_CORE_DPI_GENERATED): $(AUTHORING_CORE_DPI_CODEGEN_STAMP)
-	@if [ ! -f $@ ]; then \
-		$(CPPTB_CODEGEN) $(AUTHORING_CORE_DPI_MANIFEST); \
-	fi
-	@touch $@
+	@test -f $@
 
 authoring-core-dpi-codegen: $(AUTHORING_CORE_DPI_GENERATED)
 
@@ -754,7 +825,8 @@ define AUTHORING_CORE_DPI_template
 $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		$(AUTHORING_CORE_DPI_GENERATED) $(CPPTB_PUBLIC_HEADERS) \
-		Makefile $(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
+		$(CPPTB_CODEGEN_SOURCES) Makefile $(AUTHORING_CORE_BUILD_PROVENANCE) \
+		$(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
 	mkdir -p $$(dir $$@)
 	verilator $(if $(filter timing_phases,$(1)),--cc --exe --build --vpi,--binary) --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
@@ -769,6 +841,15 @@ $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp \
 		$(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
+	python3 $(AUTHORING_CORE_BUILD_PROVENANCE) stamp --mode cpp_dpi \
+		--kernel $(1) --binary $$@ \
+		--opt-fast="$$(AUTHORING_CORE_OPT_FAST)" \
+		--converge-limit="$$(AUTHORING_CORE_CONVERGE_LIMIT)" \
+		--extra-cflags="$$(AUTHORING_CORE_EXTRA_CFLAGS)" \
+		--extra-ldflags="$$(AUTHORING_CORE_EXTRA_LDFLAGS)" \
+		--cxx="$$(CXX)" --cxxflags="$$(CXXFLAGS)" \
+		--cppflags="$$(CPPFLAGS)" --ldflags="$$(LDFLAGS)" \
+		--verilator="verilator"
 endef
 
 $(eval $(call AUTHORING_CORE_DPI_template,control,0))
@@ -812,6 +893,20 @@ $(eval $(call AUTHORING_CORE_DPI_template,constrained_packet,37))
 $(eval $(call AUTHORING_CORE_DPI_template,constraint_extensions,38))
 $(eval $(call AUTHORING_CORE_DPI_template,coverage_sampling,39))
 $(eval $(call AUTHORING_CORE_DPI_template,apb_component,40))
+$(eval $(call AUTHORING_CORE_DPI_template,process_pipeline,41))
+$(eval $(call AUTHORING_CORE_DPI_template,memory_model,42))
+$(eval $(call AUTHORING_CORE_DPI_template,memory_model_direct,43))
+$(eval $(call AUTHORING_CORE_DPI_template,register_prediction_validity,44))
+$(eval $(call AUTHORING_CORE_DPI_template,register_backdoor,45))
+$(eval $(call AUTHORING_CORE_DPI_template,register_hierarchy,46))
+$(eval $(call AUTHORING_CORE_DPI_template,register_split,47))
+$(eval $(call AUTHORING_CORE_DPI_template,register_wide,48))
+$(eval $(call AUTHORING_CORE_DPI_template,register_enum,49))
+$(eval $(call AUTHORING_CORE_DPI_template,register_memory,50))
+$(eval $(call AUTHORING_CORE_DPI_template,register_sequences,51))
+$(eval $(call AUTHORING_CORE_DPI_template,register_coverage,52))
+$(eval $(call AUTHORING_CORE_DPI_template,register_maps,53))
+$(eval $(call AUTHORING_CORE_DPI_template,register_user_effects,54))
 
 define AUTHORING_CORE_SV_DPI_TIMING_template
 $(2)/Vdpi_authoring_core: $(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
@@ -864,6 +959,10 @@ authoring-core-timing-experiments-build: \
 
 AUTHORING_CORE_DPI_BINARIES := $(foreach kernel,$(AUTHORING_CORE_KERNELS),$(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(kernel)/Vdpi_authoring_core)
 
+.DELETE_ON_ERROR: $(AUTHORING_CORE_DPI_BINARIES) \
+	$(AUTHORING_CORE_SV_OBJ_DIR)/Vauthoring_core_sv_tb \
+	$(AUTHORING_CORE_BUILD_DIR)/force_direct_sv_obj/Vforce_direct_sv_tb
+
 authoring-core-dpi-build: $(AUTHORING_CORE_DPI_BINARIES)
 
 authoring-core-dpi-run: $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(AUTHORING_CORE_KERNEL)/Vdpi_authoring_core
@@ -872,7 +971,7 @@ authoring-core-dpi-run: $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(AUTHORING_CORE_KER
 
 $(AUTHORING_CORE_SV_OBJ_DIR)/Vauthoring_core_sv_tb: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_DIR)/testbenches/systemverilog/authoring_core_sv_tb.sv \
-		Makefile
+		Makefile $(AUTHORING_CORE_BUILD_PROVENANCE)
 	mkdir -p $(AUTHORING_CORE_SV_OBJ_DIR)
 	verilator --binary --timing \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
@@ -885,11 +984,21 @@ $(AUTHORING_CORE_SV_OBJ_DIR)/Vauthoring_core_sv_tb: \
 		--top-module authoring_core_sv_tb \
 		$(AUTHORING_CORE_RTL) \
 		$(AUTHORING_CORE_DIR)/testbenches/systemverilog/authoring_core_sv_tb.sv
+	python3 $(AUTHORING_CORE_BUILD_PROVENANCE) stamp --mode pure_sv \
+		--kernel shared --binary $@ \
+		--opt-fast="$(AUTHORING_CORE_OPT_FAST)" \
+		--converge-limit="$(AUTHORING_CORE_CONVERGE_LIMIT)" \
+		--extra-cflags="$(AUTHORING_CORE_EXTRA_CFLAGS)" \
+		--extra-ldflags="$(AUTHORING_CORE_EXTRA_LDFLAGS)" \
+		--cxx="$(CXX)" --cxxflags="$(CXXFLAGS)" \
+		--cppflags="$(CPPFLAGS)" --ldflags="$(LDFLAGS)" \
+		--verilator="verilator"
 
 authoring-core-sv-build: $(AUTHORING_CORE_SV_OBJ_DIR)/Vauthoring_core_sv_tb
 
 $(AUTHORING_CORE_BUILD_DIR)/force_direct_sv_obj/Vforce_direct_sv_tb: \
-		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_DIR)/testbenches/systemverilog/force_direct_sv_tb.sv Makefile
+		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_DIR)/testbenches/systemverilog/force_direct_sv_tb.sv \
+		Makefile $(AUTHORING_CORE_BUILD_PROVENANCE)
 	mkdir -p $(AUTHORING_CORE_BUILD_DIR)/force_direct_sv_obj
 	verilator --binary --timing \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL -Wno-PINMISSING \
@@ -900,6 +1009,15 @@ $(AUTHORING_CORE_BUILD_DIR)/force_direct_sv_obj/Vforce_direct_sv_tb: \
 		--top-module force_direct_sv_tb \
 		$(AUTHORING_CORE_RTL) \
 		$(AUTHORING_CORE_DIR)/testbenches/systemverilog/force_direct_sv_tb.sv
+	python3 $(AUTHORING_CORE_BUILD_PROVENANCE) stamp --mode pure_sv \
+		--kernel force_direct --binary $@ \
+		--opt-fast="$(AUTHORING_CORE_OPT_FAST)" \
+		--converge-limit="$(AUTHORING_CORE_CONVERGE_LIMIT)" \
+		--extra-cflags="$(AUTHORING_CORE_EXTRA_CFLAGS)" \
+		--extra-ldflags="$(AUTHORING_CORE_EXTRA_LDFLAGS)" \
+		--cxx="$(CXX)" --cxxflags="$(CXXFLAGS)" \
+		--cppflags="$(CPPFLAGS)" --ldflags="$(LDFLAGS)" \
+		--verilator="verilator"
 
 authoring-core-force-direct-sv-build: $(AUTHORING_CORE_BUILD_DIR)/force_direct_sv_obj/Vforce_direct_sv_tb
 

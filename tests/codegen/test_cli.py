@@ -6,10 +6,23 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from cpptb_codegen.cli import main
+from cpptb_codegen.cli import _parser, main
 
 
 class PublicCliTests(unittest.TestCase):
+    def test_help_describes_commands_and_timeout_units(self):
+        root_help = _parser().format_help()
+        self.assertIn("build", root_help)
+        self.assertIn("list", root_help)
+        self.assertIn("test", root_help)
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit):
+            _parser().parse_args(["test", "--help"])
+        test_help = output.getvalue()
+        self.assertIn("wall-time limit in seconds for each test process", test_help)
+        self.assertIn("result directory", test_help)
+
     def test_test_without_names_runs_the_complete_catalog(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

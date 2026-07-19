@@ -15,11 +15,15 @@
 #include <new>
 #include <optional>
 #include <queue>
+#include <source_location>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
+#ifndef NDEBUG
+#include <thread>
+#endif
 
 #include "cpptb/packed_bits.hpp"
 #include "vpi_user.h"
@@ -27,6 +31,14 @@
 #define CPPTB_CORO_PACKED_SIGNAL_API 1
 #define CPPTB_CORO_UNPACKED_ARRAY_API 1
 #define CPPTB_CORO_MULTIDIMENSIONAL_ARRAY_API 1
+
+#if defined(_MSC_VER)
+#define CPPTB_CORO_ALWAYS_INLINE __forceinline
+#elif defined(__GNUC__) || defined(__clang__)
+#define CPPTB_CORO_ALWAYS_INLINE inline __attribute__((always_inline))
+#else
+#define CPPTB_CORO_ALWAYS_INLINE inline
+#endif
 
 namespace cpptb::coro {
 
@@ -572,6 +584,7 @@ class CoroutineFramePool {
     }
 
     void* allocate(size_t size) {
+        require_owner_thread();
         const size_t bucket = bucket_for(size);
         if (bucket == kBucketCount) {
 #ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
@@ -597,6 +610,7 @@ class CoroutineFramePool {
 
     void deallocate(void* pointer, size_t size) noexcept {
         if (!pointer) return;
+        require_owner_thread();
         const size_t bucket = bucket_for(size);
         if (bucket == kBucketCount ||
             cached_counts_[bucket] == kMaxCachedPerBucket) {
@@ -631,15 +645,38 @@ class CoroutineFramePool {
         return (size - 1) / kAlignment;
     }
 
+    void require_owner_thread() const noexcept {
+#ifndef NDEBUG
+        if (owner_thread_ != std::this_thread::get_id()) {
+            std::fprintf(
+                stderr,
+                "cpptb: coroutine frame pool used from multiple OS threads; "
+                "keep one simulator thread or define "
+                "CPPTB_CORO_THREAD_LOCAL_FRAME_POOL\n");
+            std::abort();
+        }
+#endif
+    }
+
     std::array<FreeNode*, kBucketCount> free_lists_{};
     std::array<uint16_t, kBucketCount> cached_counts_{};
 #ifdef CPPTB_CORO_FRAME_POOL_DIAGNOSTICS
     CoroutineFramePoolStats stats_{};
 #endif
+#ifndef NDEBUG
+    std::thread::id owner_thread_ = std::this_thread::get_id();
+#endif
 };
 
 inline CoroutineFramePool& coroutine_frame_pool() {
+    // Scheduler/runtime APIs are simulator-thread confined. Keep allocation
+    // process-global on that hot path; multi-runtime embeddings opt into a
+    // thread-local pool with CPPTB_CORO_THREAD_LOCAL_FRAME_POOL.
+#ifdef CPPTB_CORO_THREAD_LOCAL_FRAME_POOL
     static thread_local CoroutineFramePool pool;
+#else
+    static CoroutineFramePool pool;
+#endif
     return pool;
 }
 
@@ -883,6 +920,11 @@ struct ProcessCompletionHandler {
         }
     }
 
+    void dismiss() noexcept {
+        owner = nullptr;
+        finish = nullptr;
+    }
+
     void reset() noexcept {
         if (!owner || !finish) {
             owner = nullptr;
@@ -897,7 +939,24 @@ struct ProcessCompletionHandler {
     FinishFn finish = nullptr;
 };
 
+struct ProcessExecutionContext {
+    using CleanupFn = void (*)(ProcessExecutionContext*) noexcept;
+
+    void* owner = nullptr;
+    uint64_t id = 0;
+    const char* description = "";
+    std::source_location declaration;
+    CleanupFn cleanup = nullptr;
+
+    void release_resources() noexcept {
+        if (!cleanup) return;
+        auto completed_cleanup = std::exchange(cleanup, nullptr);
+        completed_cleanup(this);
+    }
+};
+
 using ProcessOwnerMatcher = bool (*)(void*, void*) noexcept;
+using ProcessOwnerCleanup = void (*)(void*) noexcept;
 
 struct ProcessControl {
     Scheduler* scheduler = nullptr;
@@ -913,6 +972,17 @@ struct ProcessControl {
     bool done = false;
     bool cancelled = false;
     bool cancellation_requested = false;
+    bool owns_execution_context = false;
+};
+
+struct OwnedProcessControl final : ProcessControl {
+    ProcessExecutionContext execution_context;
+};
+
+struct DeferredOwnerCleanup {
+    void* owner = nullptr;
+    ProcessOwnerMatcher matcher = nullptr;
+    ProcessOwnerCleanup cleanup = nullptr;
 };
 
 namespace detail {
@@ -931,6 +1001,11 @@ class ProcessControlPool {
             ::operator delete(free_list_);
             free_list_ = next;
         }
+        while (owned_free_list_) {
+            auto* next = owned_free_list_->next;
+            ::operator delete(owned_free_list_);
+            owned_free_list_ = next;
+        }
     }
 
     ProcessControl* create() {
@@ -947,8 +1022,38 @@ class ProcessControlPool {
         return control;
     }
 
+    CPPTB_CORO_ALWAYS_INLINE ProcessControl* create_owned(
+        const ProcessExecutionContext& context) {
+        void* storage = nullptr;
+        if (owned_free_list_) {
+            storage = owned_free_list_;
+            owned_free_list_ = owned_free_list_->next;
+            --owned_cached_;
+        } else {
+            storage = ::operator new(sizeof(OwnedProcessControl));
+        }
+        auto* owned =
+            ::new (storage) OwnedProcessControl{ProcessControl{}, context};
+        owned->pool = this;
+        owned->owns_execution_context = true;
+        return owned;
+    }
+
     void destroy(ProcessControl* control) noexcept {
         if (!control) return;
+        if (control->owns_execution_context) {
+            auto* owned = static_cast<OwnedProcessControl*>(control);
+            owned->~OwnedProcessControl();
+            if (owned_cached_ == kMaxCached) {
+                ::operator delete(owned);
+                return;
+            }
+            auto* node = static_cast<FreeNode*>(static_cast<void*>(owned));
+            node->next = owned_free_list_;
+            owned_free_list_ = node;
+            ++owned_cached_;
+            return;
+        }
         control->~ProcessControl();
         if (cached_ == kMaxCached) {
             ::operator delete(control);
@@ -966,11 +1071,17 @@ class ProcessControlPool {
     };
 
     FreeNode* free_list_ = nullptr;
+    FreeNode* owned_free_list_ = nullptr;
     size_t cached_ = 0;
+    size_t owned_cached_ = 0;
 };
 
 inline ProcessControlPool& process_control_pool() {
+#ifdef CPPTB_CORO_THREAD_LOCAL_FRAME_POOL
     static thread_local ProcessControlPool pool;
+#else
+    static ProcessControlPool pool;
+#endif
     return pool;
 }
 
@@ -1039,7 +1150,12 @@ class Scheduler {
                 control->cancelled = true;
                 control->cancellation_requested = false;
             }
-            control->completion_handler.notify(control->exception, true);
+            if (control->owns_execution_context) {
+                notify_owned_process_completion(*control, true);
+            } else {
+                control->completion_handler.notify(control->exception, true);
+            }
+            release_owned_execution_context(*control);
             control->state_index = std::numeric_limits<size_t>::max();
             control->scheduler_slot = std::numeric_limits<size_t>::max();
             release_process_control(std::exchange(control, nullptr));
@@ -1048,6 +1164,7 @@ class Scheduler {
         for (auto handle : handles) {
             handle.destroy();
         }
+        run_owner_cleanups();
     }
 
     Scheduler(const Scheduler&) = delete;
@@ -1068,6 +1185,55 @@ class Scheduler {
         control->scheduler = this;
         control->state_index = state_index;
         control->completion_handler = std::move(completion_handler);
+        if (free_process_slots_.empty()) {
+            control->scheduler_slot = process_controls_.size();
+            process_controls_.push_back(control);
+        } else {
+            control->scheduler_slot = free_process_slots_.back();
+            free_process_slots_.pop_back();
+            process_controls_[control->scheduler_slot] = control;
+        }
+        if (state_index >= process_by_state_.size()) {
+            process_by_state_.resize(state_index + 1, nullptr);
+        }
+        process_by_state_[state_index] = control;
+        Process process{control};
+        make_ready(state_index);
+        drain_ready();
+        return process;
+    }
+
+    CPPTB_CORO_ALWAYS_INLINE Process spawn_owned(
+        Task<void>&& task, const ProcessExecutionContext& context,
+        ProcessCompletionHandler::FinishFn finish) {
+        const auto abandon = [&] {
+            auto rejected_context = context;
+            ExceptionState exception;
+            if (finish) finish(&rejected_context, exception, true);
+            rejected_context.release_resources();
+        };
+        if (shutting_down_) {
+            abandon();
+            return {};
+        }
+        auto handle = task.release();
+        if (!handle) {
+            abandon();
+            return {};
+        }
+
+        auto& promise = handle.promise();
+        promise.scheduler = this;
+        promise.continuation = nullptr;
+        const size_t state_index = adopt(handle, promise);
+        auto* control = process_control_pool_->create_owned(context);
+        control->scheduler = this;
+        control->state_index = state_index;
+        auto* stored_context =
+            &static_cast<OwnedProcessControl*>(control)->execution_context;
+        promise.execution_context = stored_context;
+        control->completion_handler =
+            ProcessCompletionHandler{stored_context, finish};
         if (free_process_slots_.empty()) {
             control->scheduler_slot = process_controls_.size();
             process_controls_.push_back(control);
@@ -1117,11 +1283,19 @@ class Scheduler {
         if (state_index >= edge_wait_indices_by_state_.size()) {
             edge_wait_indices_by_state_.resize(state_index + 1);
         }
-        edge_wait_indices_by_state_[state_index].clear();
         if (state_index >= phase_wait_counts_by_state_.size()) {
             phase_wait_counts_by_state_.resize(state_index + 1);
         }
-        phase_wait_counts_by_state_[state_index].fill(0);
+#ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
+        if (!edge_wait_indices_by_state_[state_index].empty() ||
+            phase_wait_counts_by_state_[state_index][0] != 0 ||
+            phase_wait_counts_by_state_[state_index][1] != 0 ||
+            phase_wait_counts_by_state_[state_index][2] != 0) {
+            std::fprintf(stderr,
+                         "cpptb: recycled coroutine state retained wait metadata\n");
+            std::abort();
+        }
+#endif
         promise.state_index = state_index;
         ++active_coroutines_;
         return state_index;
@@ -1307,7 +1481,7 @@ class Scheduler {
 
     void defer_process_parent(std::coroutine_handle<> handle,
                               TaskPromiseBase& promise) {
-        auto& state = state_for(handle, promise);
+        static_cast<void>(state_for(handle, promise));
         make_ready(promise.state_index);
     }
 
@@ -1360,7 +1534,7 @@ class Scheduler {
         std::vector<ProcessControl*> owned;
         for (auto* control : process_controls_) {
             if (!control || control->done) continue;
-            void* process_owner = control->completion_handler.owner;
+            void* process_owner = owner_for(*control);
             if (matcher ? !matcher(process_owner, owner)
                         : process_owner != owner) continue;
             retain_process_control(control);
@@ -1368,6 +1542,16 @@ class Scheduler {
         }
         for (auto* control : owned) cancel_process(control);
         for (auto* control : owned) release_process_control(control);
+    }
+
+    bool defer_owner_cleanup(void* owner, ProcessOwnerMatcher matcher,
+                             ProcessOwnerCleanup cleanup) {
+        if (!owner || !cleanup || !has_process_owned_by(owner, matcher)) {
+            return false;
+        }
+        deferred_owner_cleanups_.push_back(
+            DeferredOwnerCleanup{owner, matcher, cleanup});
+        return true;
     }
 
     void finish_join_child(const std::shared_ptr<JoinState>& join_state,
@@ -1571,6 +1755,26 @@ class Scheduler {
                static_edge_sources_[signal_id];
     }
 
+    void configure_sticky_edge_source(uint32_t signal_id) {
+        if (wait_registered_) {
+            std::fprintf(stderr,
+                         "cpptb: sticky edge source %u must be configured "
+                         "before registering any waits\n",
+                         signal_id);
+            std::abort();
+        }
+        if (signal_id >= sticky_edge_sources_.size()) {
+            sticky_edge_sources_.resize(signal_id + 1, false);
+            sticky_edge_interest_.resize(signal_id + 1, kEdgeInterestNone);
+        }
+        sticky_edge_sources_[signal_id] = true;
+    }
+
+    bool is_sticky_edge_source(uint32_t signal_id) const {
+        return signal_id < sticky_edge_sources_.size() &&
+               sticky_edge_sources_[signal_id];
+    }
+
     uint64_t edge_interest_generation() const {
         return edge_interest_generation_;
     }
@@ -1666,10 +1870,67 @@ class Scheduler {
         process.done = true;
         process.cancelled = cancelled;
         process.cancellation_requested = false;
-        process.completion_handler.notify(process.exception, cancelled);
+        if (!process.owns_execution_context) [[likely]] {
+            process.completion_handler.notify(process.exception, cancelled);
+        } else {
+            notify_owned_process_completion(process, cancelled);
+        }
         if (process.has_completion_waiter ||
             !process.extra_completion_waiters.empty()) {
             resume_completion_waiters(process);
+        }
+    }
+
+    static void* owner_for(ProcessControl& process) noexcept {
+        return process.completion_handler.owner;
+    }
+
+    bool has_process_owned_by(void* owner,
+                              ProcessOwnerMatcher matcher) const noexcept {
+        for (auto* control : process_controls_) {
+            if (!control) continue;
+            void* process_owner = owner_for(*control);
+            if (matcher ? matcher(process_owner, owner)
+                        : process_owner == owner) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    CPPTB_CORO_ALWAYS_INLINE static void notify_owned_process_completion(
+        ProcessControl& process, bool cancelled) noexcept {
+        if (cancelled || !process.exception) {
+            return;
+        }
+        auto finish = process.completion_handler.finish;
+        if (process.completion_handler.owner && finish) {
+            finish(process.completion_handler.owner, process.exception,
+                   cancelled);
+        }
+    }
+
+    CPPTB_CORO_ALWAYS_INLINE void release_owned_execution_context(
+        ProcessControl& process) noexcept {
+        if (!process.owns_execution_context) return;
+        auto* context = static_cast<ProcessExecutionContext*>(
+            process.completion_handler.owner);
+        process.completion_handler.dismiss();
+        if (!context) return;
+        context->release_resources();
+    }
+
+    void run_owner_cleanups() noexcept {
+        for (size_t index = 0; index < deferred_owner_cleanups_.size();) {
+            const auto pending = deferred_owner_cleanups_[index];
+            if (has_process_owned_by(pending.owner, pending.matcher)) {
+                ++index;
+                continue;
+            }
+            deferred_owner_cleanups_[index] =
+                deferred_owner_cleanups_.back();
+            deferred_owner_cleanups_.pop_back();
+            pending.cleanup(pending.owner);
         }
     }
 
@@ -1774,7 +2035,14 @@ class Scheduler {
 
     void record_edge_interest_change(uint32_t signal_id, uint8_t previous) {
         const uint8_t current = edge_interest(signal_id);
-        if (current == previous) return;
+        if (is_sticky_edge_source(signal_id)) {
+            const uint8_t new_interest =
+                current & ~sticky_edge_interest_[signal_id];
+            if (new_interest == kEdgeInterestNone) return;
+            sticky_edge_interest_[signal_id] |= new_interest;
+        } else if (current == previous) {
+            return;
+        }
         ++edge_interest_generation_;
         if (!edge_interest_change_pending_[signal_id]) {
             edge_interest_change_pending_[signal_id] = true;
@@ -2121,6 +2389,7 @@ class Scheduler {
         auto handle = state.handle;
         auto* promise = state.promise;
         ProcessControl* control = nullptr;
+        bool released_owned_context = false;
         if (state_index < process_by_state_.size()) {
             control = process_by_state_[state_index];
             process_by_state_[state_index] = nullptr;
@@ -2138,11 +2407,18 @@ class Scheduler {
                 process_controls_[slot] = nullptr;
                 free_process_slots_.push_back(slot);
             }
+            if (control->owns_execution_context) [[unlikely]] {
+                release_owned_execution_context(*control);
+                released_owned_context = true;
+            }
             release_process_control(control);
         }
 
         promise->scheduler = nullptr;
         handle.destroy();
+        if (released_owned_context && !deferred_owner_cleanups_.empty()) {
+            run_owner_cleanups();
+        }
     }
 
     std::vector<CoroutineState> states_;
@@ -2151,6 +2427,7 @@ class Scheduler {
     std::vector<ProcessControl*> process_controls_;
     std::vector<ProcessControl*> process_by_state_;
     std::vector<ProcessControl*> pending_cancellations_;
+    std::vector<DeferredOwnerCleanup> deferred_owner_cleanups_;
     std::vector<size_t> free_states_;
     std::vector<size_t> free_process_slots_;
     std::vector<size_t> finished_states_;
@@ -2163,6 +2440,8 @@ class Scheduler {
     std::vector<std::array<uint32_t, 3>> edge_interest_counts_;
     std::vector<bool> edge_interest_change_pending_;
     std::vector<bool> static_edge_sources_;
+    std::vector<bool> sticky_edge_sources_;
+    std::vector<uint8_t> sticky_edge_interest_;
     std::deque<uint32_t> edge_interest_changes_;
     std::priority_queue<TimerRegistration, std::vector<TimerRegistration>,
                         TimerRegistrationLater>
@@ -3423,12 +3702,12 @@ class Lock {
     }
 
     bool locked() {
-        cleanup();
+        if (scheduler_) cleanup();
         return locked_;
     }
 
     bool try_acquire() {
-        cleanup();
+        if (scheduler_) cleanup();
         if (locked_) return false;
         locked_ = true;
         return true;
@@ -3464,7 +3743,7 @@ class Lock {
         }
 
         void await_resume() {
-            lock->finish_acquire(registration);
+            if (registration) lock->finish_acquire(registration);
             active = false;
         }
 
@@ -3476,6 +3755,16 @@ class Lock {
     AcquireAwaiter acquire() { return AcquireAwaiter{*this}; }
 
     void release() {
+        if (waiters_.empty() && !handoff_pending_) {
+            if (!locked_) {
+                std::fprintf(stderr,
+                             "cpptb: cannot release an unlocked Lock\n");
+                std::abort();
+            }
+            locked_ = false;
+            if (scheduler_) reset_binding();
+            return;
+        }
         cleanup();
         if (!locked_) {
             std::fprintf(stderr, "cpptb: cannot release an unlocked Lock\n");
@@ -3582,6 +3871,10 @@ class Lock {
     }
 
     void cleanup() {
+        if (waiters_.empty()) {
+            if (scheduler_) reset_binding();
+            return;
+        }
         bool return_ownership = false;
         auto output = waiters_.begin();
         for (auto& waiter : waiters_) {
@@ -3623,6 +3916,12 @@ class Testbench {
                                 std::move(completion_handler));
     }
 
+    Process spawn_owned(Task<void>&& task,
+                        const ProcessExecutionContext& context,
+                        ProcessCompletionHandler::FinishFn finish) {
+        return scheduler_.spawn_owned(std::move(task), context, finish);
+    }
+
     void spawn_detached(Task<void>&& task, void* execution_context = nullptr) {
         scheduler_.spawn_detached(std::move(task), execution_context);
     }
@@ -3630,6 +3929,11 @@ class Testbench {
     void cancel_processes_owned_by(void* owner,
                                    ProcessOwnerMatcher matcher = nullptr) {
         scheduler_.cancel_processes_owned_by(owner, matcher);
+    }
+
+    bool defer_owner_cleanup(void* owner, ProcessOwnerMatcher matcher,
+                             ProcessOwnerCleanup cleanup) {
+        return scheduler_.defer_owner_cleanup(owner, matcher, cleanup);
     }
 
     void notify_edge(uint32_t signal_id, EdgeKind edge) {
@@ -3700,6 +4004,14 @@ class Testbench {
 
     bool is_static_edge_source(uint32_t signal_id) const {
         return scheduler_.is_static_edge_source(signal_id);
+    }
+
+    void configure_sticky_edge_source(uint32_t signal_id) {
+        scheduler_.configure_sticky_edge_source(signal_id);
+    }
+
+    bool is_sticky_edge_source(uint32_t signal_id) const {
+        return scheduler_.is_sticky_edge_source(signal_id);
     }
 
     uint64_t edge_interest_generation() const {
@@ -3783,3 +4095,5 @@ class Testbench {
 };
 
 }  // namespace cpptb::coro
+
+#undef CPPTB_CORO_ALWAYS_INLINE

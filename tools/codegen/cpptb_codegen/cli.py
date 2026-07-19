@@ -76,12 +76,20 @@ def _parser() -> argparse.ArgumentParser:
 
     list_tests = commands.add_parser("list", help="list compiled tests")
     _add_project_options(list_tests)
-    list_tests.add_argument("--timeout", type=float)
+    list_tests.add_argument(
+        "--timeout",
+        type=float,
+        help="wall-time limit in seconds for catalog discovery",
+    )
 
     test = commands.add_parser("test", help="build and run tests")
     _add_project_options(test)
     test.add_argument("tests", nargs="*", help="test names (default: all)")
-    test.add_argument("--timeout", type=float)
+    test.add_argument(
+        "--timeout",
+        type=float,
+        help="wall-time limit in seconds for each test process",
+    )
     test.add_argument(
         "--result-dir",
         type=Path,

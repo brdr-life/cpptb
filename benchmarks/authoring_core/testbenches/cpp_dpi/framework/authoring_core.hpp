@@ -52,6 +52,20 @@
 #define AUTHORING_CORE_KERNEL_CONSTRAINT_EXTENSIONS 38
 #define AUTHORING_CORE_KERNEL_COVERAGE_SAMPLING 39
 #define AUTHORING_CORE_KERNEL_APB_COMPONENT 40
+#define AUTHORING_CORE_KERNEL_PROCESS_PIPELINE 41
+#define AUTHORING_CORE_KERNEL_MEMORY_MODEL 42
+#define AUTHORING_CORE_KERNEL_MEMORY_MODEL_DIRECT 43
+#define AUTHORING_CORE_KERNEL_REGISTER_PREDICTION_VALIDITY 44
+#define AUTHORING_CORE_KERNEL_REGISTER_BACKDOOR 45
+#define AUTHORING_CORE_KERNEL_REGISTER_HIERARCHY 46
+#define AUTHORING_CORE_KERNEL_REGISTER_SPLIT 47
+#define AUTHORING_CORE_KERNEL_REGISTER_WIDE 48
+#define AUTHORING_CORE_KERNEL_REGISTER_ENUM 49
+#define AUTHORING_CORE_KERNEL_REGISTER_MEMORY 50
+#define AUTHORING_CORE_KERNEL_REGISTER_SEQUENCES 51
+#define AUTHORING_CORE_KERNEL_REGISTER_COVERAGE 52
+#define AUTHORING_CORE_KERNEL_REGISTER_MAPS 53
+#define AUTHORING_CORE_KERNEL_REGISTER_USER_EFFECTS 54
 
 #ifndef AUTHORING_CORE_KERNEL
 #define AUTHORING_CORE_KERNEL AUTHORING_CORE_KERNEL_CONTROL
@@ -104,6 +118,14 @@ struct FeatureCounts {
     uint64_t constraint_extensions = 0;
     uint64_t coverage_sampling = 0;
     uint64_t apb_component = 0;
+    uint64_t memory_model = 0;
+    uint64_t memory_model_direct = 0;
+    uint64_t register_prediction_validity = 0;
+    uint64_t register_backdoor = 0;
+    uint64_t register_hierarchy = 0;
+    uint64_t register_split = 0;
+    uint64_t register_wide = 0;
+    uint64_t register_enum = 0;
 };
 
 struct BenchResult : cpptb::TestResult {
@@ -185,6 +207,8 @@ constexpr const char* kernel_name() {
     return "dynamic_spawn_suspending";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR
     return "dynamic_monitor";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_PROCESS_PIPELINE
+    return "process_pipeline";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ANALYSIS_FANOUT
     return "analysis_fanout";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_RANDOM_STIMULUS
@@ -197,6 +221,32 @@ constexpr const char* kernel_name() {
     return "coverage_sampling";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_APB_COMPONENT
     return "apb_component";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEMORY_MODEL
+    return "memory_model";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEMORY_MODEL_DIRECT
+    return "memory_model_direct";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_PREDICTION_VALIDITY
+    return "register_prediction_validity";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_BACKDOOR
+    return "register_backdoor";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_HIERARCHY
+    return "register_hierarchy";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_SPLIT
+    return "register_split";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_WIDE
+    return "register_wide";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_ENUM
+    return "register_enum";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_MEMORY
+    return "register_memory";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_SEQUENCES
+    return "register_sequences";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_COVERAGE
+    return "register_coverage";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_MAPS
+    return "register_maps";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_USER_EFFECTS
+    return "register_user_effects";
 #else
 #error "Unknown AUTHORING_CORE_KERNEL"
 #endif

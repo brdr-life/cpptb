@@ -62,7 +62,7 @@ class HierarchyGenerationTests(unittest.TestCase):
             self.assertEqual(catalog["module"], "hierarchy_catalog")
             by_path = {entry["path"]: entry for entry in catalog["signals"]}
             self.assertEqual(by_path["block1.memory"]["unpacked"], [
-                {"left": 2, "right": 5}
+                {"left": 2, "right": 8}
             ])
             self.assertFalse(by_path["wide_value"]["four_state"])
             self.assertTrue(by_path["four_state_value"]["four_state"])
@@ -181,6 +181,12 @@ class HierarchyGenerationTests(unittest.TestCase):
             self.assertIn("i_dut.lanes[1].block2.storage", wrapper)
             self.assertIn("2: i_dut.block1.memory[2] = value;", wrapper)
             self.assertIn("2: release i_dut.block1.memory[2];", wrapper)
+            self.assertIn("get_block4", header)
+            self.assertIn("deposit_block4", header)
+            self.assertIn("get_span", header)
+            self.assertIn("deposit_span", header)
+            self.assertIn("block read index %0d is out of bounds", wrapper)
+            self.assertIn("block deposit index %0d is out of bounds", wrapper)
             self.assertNotIn("force i_dut.block1.memory[index]", wrapper)
             self.assertIn("i_dut.block1.state = state_t'(value);", wrapper)
             self.assertIn(

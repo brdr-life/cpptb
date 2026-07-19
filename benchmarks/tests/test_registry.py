@@ -98,18 +98,27 @@ class RegistryTests(unittest.TestCase):
                 for entry in authoring
                 if entry.gate_policy is registry.GatePolicy.DIAGNOSTIC
             ),
-            ("dynamic_task",),
+            ("dynamic_spawn", "dynamic_task", "register_user_effects"),
         )
         self.assertTrue(
             all(
                 entry.gate_policy is registry.GatePolicy.HARD_1_10
                 for entry in authoring
-                if entry.name not in {"force_direct", "dynamic_task"}
+                if entry.name not in {
+                    "force_direct",
+                    "dynamic_spawn",
+                    "dynamic_task",
+                    "register_user_effects",
+                }
             )
         )
         self.assertEqual(
             registry.get_benchmark("test_lifecycle").default_iterations,
             5_000_000,
+        )
+        self.assertEqual(
+            registry.get_benchmark("register_user_effects").default_iterations,
+            10_000_000,
         )
         for name in (
             "dynamic_task",
@@ -124,6 +133,14 @@ class RegistryTests(unittest.TestCase):
                 )
         self.assertEqual(
             registry.get_benchmark("dynamic_monitor").default_iterations,
+            100_000,
+        )
+        self.assertEqual(
+            registry.get_benchmark("process_pipeline").gate_policy,
+            registry.GatePolicy.HARD_1_10,
+        )
+        self.assertEqual(
+            registry.get_benchmark("process_pipeline").default_iterations,
             100_000,
         )
         waiver = registry.get_benchmark("force_direct").waiver

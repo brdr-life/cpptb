@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -508,6 +509,87 @@ class Memory {
             std::abort();
         }
         return Element{index};
+    }
+
+    void get_into(std::int32_t first_index,
+                  std::span<value_type> values) const {
+#ifdef CPPTB_HIERARCHY_DISCOVERY
+        detail::mark_access<Path, Operation::Get>();
+        (void)first_index;
+        (void)values;
+#else
+        check_range(first_index, values.size());
+        if (values.empty()) return;
+        probe::detail::require_callback(Path.value);
+        if constexpr (
+            std::is_same_v<value_type, raw_value_type> &&
+            requires(std::span<raw_value_type> raw_values) {
+                Transport::template get_span<Width>(Id, first_index,
+                                                    raw_values);
+            }) {
+            Transport::template get_span<Width>(Id, first_index, values);
+            if constexpr (Width != 32 && Width != 64) {
+                for (auto& value : values) {
+                    value = detail::normalize(std::move(value), Width);
+                }
+            }
+        } else {
+            for (std::size_t offset = 0; offset < values.size(); ++offset) {
+                values[offset] = at(static_cast<std::int32_t>(
+                                        static_cast<std::int64_t>(first_index) +
+                                        static_cast<std::int64_t>(offset)))
+                                     .get();
+            }
+        }
+#endif
+    }
+
+    void deposit(std::int32_t first_index,
+                 std::span<const value_type> values) const
+        requires(Depositable) {
+#ifdef CPPTB_HIERARCHY_DISCOVERY
+        detail::mark_access<Path, Operation::Deposit>();
+        (void)first_index;
+        (void)values;
+#else
+        check_range(first_index, values.size());
+        if (values.empty()) return;
+        probe::detail::require_write_callback(Path.value, "deposit");
+        if constexpr (
+            std::is_same_v<value_type, raw_value_type> &&
+            requires(std::span<const raw_value_type> raw_values) {
+                Transport::template deposit_span<Width>(Id, first_index,
+                                                        raw_values);
+            }) {
+            Transport::template deposit_span<Width>(Id, first_index, values);
+        } else {
+            for (std::size_t offset = 0; offset < values.size(); ++offset) {
+                at(static_cast<std::int32_t>(
+                       static_cast<std::int64_t>(first_index) +
+                       static_cast<std::int64_t>(offset)))
+                    .deposit(values[offset]);
+            }
+        }
+#endif
+    }
+
+   private:
+    static void check_range(std::int32_t first_index, std::size_t count) {
+        const auto first = static_cast<std::int64_t>(first_index);
+        const auto available = first <= high
+                                   ? static_cast<std::uint64_t>(high - first + 1)
+                                   : 0;
+        if (first >= low && count <= available) return;
+        fail_range(first_index, count);
+    }
+
+    [[noreturn]] static void fail_range(std::int32_t first_index,
+                                        std::size_t count) {
+        std::fprintf(stderr,
+                     "cpptb: hierarchy memory '%s' range [%d, +%zu) is out "
+                     "of bounds [%d:%d]\n",
+                     Path.value, first_index, count, Left, Right);
+        std::abort();
     }
 };
 

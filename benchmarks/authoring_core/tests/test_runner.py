@@ -15,6 +15,7 @@ BENCH_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BENCH_DIR))
 
 import run_benchmark as runner  # noqa: E402
+import build_provenance  # noqa: E402
 import workload  # noqa: E402
 
 
@@ -27,6 +28,21 @@ def registry_example(
         "kernel": kernel or name,
         "gate_policy": gate_policy,
     }
+
+
+def valid_binary_metadata(kernel="control"):
+    metadata = {"provenance": {"valid": True, "reasons": []}}
+    return {
+        "cpp_dpi": {kernel: metadata},
+        "pure_sv": {kernel: metadata},
+    }
+
+
+TEST_BUILD_CONFIGURATION = {
+    "opt_fast": "-O3",
+    "compiler": {"version": "test compiler"},
+    "verilator": {"version": "test verilator"},
+}
 
 
 def sample(
@@ -55,6 +71,7 @@ def sample(
         "slot": slot,
         "sequence_index": sequence,
         "process_wall_ms": process_ms,
+        "child_cpu_ms": process_ms,
     }
 
 
@@ -133,6 +150,15 @@ class StatisticsTests(unittest.TestCase):
         self.assertAlmostEqual(stats["independent_median_ratio"], 1.1)
         self.assertAlmostEqual(stats["relative_disagreement"], 0.0)
         self.assertAlmostEqual(stats["stratum_gap"], 0.2 / 1.1)
+
+    def test_statistics_support_child_cpu_metric(self):
+        cpp, sv = paired_samples([1.05] * 16)
+        for sample_value in cpp:
+            sample_value["child_cpu_ms"] *= 2.0
+        stats = runner.paired_ratio_statistics(
+            cpp, sv, metric="child_cpu_ms"
+        )
+        self.assertAlmostEqual(stats["ratio"], 2.10)
 
     def test_invalid_process_samples_and_odd_counts(self):
         for bad_cpp, bad_sv in (
@@ -223,13 +249,15 @@ class GuardDecisionTests(unittest.TestCase):
             "relative_disagreement": 0.05,
             "one_sided_95_upper_median_bound": {"bound": 1.2},
         }
+        cpp, sv = paired_samples([1.0] * 16)
         with mock.patch.object(runner, "paired_ratio_statistics", return_value=base):
-            result = runner.evaluate_guard([{}] * 16, [{}] * 16)
+            result = runner.evaluate_guard(cpp, sv)
         self.assertEqual(result["status"], "needs_extra_batch")
         self.assertEqual(result["provisional_status"], "hard_failure")
 
         with mock.patch.object(runner, "paired_ratio_statistics", return_value=base):
-            result = runner.evaluate_guard([{}] * 32, [{}] * 32, final=True)
+            cpp, sv = paired_samples([1.0] * 32)
+            result = runner.evaluate_guard(cpp, sv, final=True)
         self.assertEqual(result["status"], "hard_failure")
 
         at_stratum_boundary = {
@@ -242,8 +270,10 @@ class GuardDecisionTests(unittest.TestCase):
         with mock.patch.object(
             runner, "paired_ratio_statistics", return_value=at_stratum_boundary
         ):
-            result = runner.evaluate_guard([{}] * 16, [{}] * 16)
-        self.assertEqual(result["status"], "invalid_environment")
+            cpp, sv = paired_samples([1.0] * 16)
+            result = runner.evaluate_guard(cpp, sv)
+        self.assertEqual(result["status"], "needs_extra_batch")
+        self.assertEqual(result["provisional_status"], "invalid_environment")
 
     def test_inconclusive_bound_requests_only_nonfinal_extra_batch(self):
         ratios = [1.0] * 10 + [1.2] * 6
@@ -251,6 +281,34 @@ class GuardDecisionTests(unittest.TestCase):
         final = self.guard(ratios, final=True)
         self.assertEqual(final["status"], "passed_inconclusive")
         self.assertIn("warning", final)
+
+    def test_cpu_ratio_disagreement_invalidates_the_measurement(self):
+        cpp, sv = paired_samples([1.2] * 16)
+        for sample_value in cpp:
+            sample_value["child_cpu_ms"] = 1.0
+        result = runner.evaluate_guard(cpp, sv, final=True)
+        self.assertEqual(result["status"], "invalid_environment")
+        self.assertIn("wall and child-CPU", result["error"])
+
+    def test_cpu_outlier_invalidates_without_filtering_pairs(self):
+        cpp, sv = paired_samples([1.0] * 16)
+        cpp[3]["child_cpu_ms"] = 2.0
+        result = runner.evaluate_guard(cpp, sv, final=True)
+        self.assertEqual(result["status"], "invalid_environment")
+        self.assertEqual(
+            result["cpu_corroboration"]["outliers"][0]["pair"], 4
+        )
+
+    def test_zero_child_cpu_is_invalid_instead_of_a_runner_error(self):
+        cpp, sv = paired_samples([1.0] * 16)
+        for sample_value in (*cpp, *sv):
+            sample_value["child_cpu_ms"] = 0.0
+        result = runner.evaluate_guard(cpp, sv, final=True)
+        self.assertEqual(result["status"], "invalid_environment")
+        self.assertIn(
+            "invalid child-CPU samples",
+            result["invalid_environment_reasons"][0],
+        )
 
 
 class ComparisonTests(unittest.TestCase):
@@ -368,7 +426,7 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(guard["measured_pairs"], 32)
         self.assertEqual(len(raw), 66)
 
-    def test_initial_invalid_environment_does_not_collect_extra(self):
+    def test_initial_order_sensitive_crossing_collects_confirmation_batch(self):
         calls = []
         fake = self.fake_runner(
             lambda _kernel, pair: 1.0 if pair % 2 else 1.3,
@@ -379,8 +437,9 @@ class ComparisonTests(unittest.TestCase):
         )
         guard = summaries["control"]["guard"]
         self.assertEqual(guard["status"], "invalid_environment")
-        self.assertFalse(guard["extra_batch_collected"])
-        self.assertEqual(len(raw), 34)
+        self.assertTrue(guard["extra_batch_collected"])
+        self.assertEqual(guard["measured_pairs"], 32)
+        self.assertEqual(len(raw), 66)
 
     def test_uncertain_kernel_collects_extra_even_when_peer_is_invalid(self):
         calls = []
@@ -491,7 +550,7 @@ class ComparisonTests(unittest.TestCase):
 
 
 class EnvironmentTests(unittest.TestCase):
-    def test_environment_evidence_vetoes_failures_and_qualifies_passes(self):
+    def test_environment_evidence_invalidates_failures_and_passes(self):
         invalid = {"valid": False, "reasons": ["thermal throttling"]}
         hard = {"guard": {"status": "hard_failure", "verdict": "failed",
                            "validity": "valid", "ratio": 1.2}}
@@ -501,8 +560,8 @@ class EnvironmentTests(unittest.TestCase):
         runner.apply_environment_validity(summaries, invalid)
         self.assertEqual(hard["guard"]["status"], "invalid_environment")
         self.assertTrue(hard["guard"]["environment_blocks_hard_failure"])
-        self.assertEqual(passed["guard"]["status"], "passed_inconclusive")
-        self.assertTrue(passed["guard"]["environment_limits_pass"])
+        self.assertEqual(passed["guard"]["status"], "invalid_environment")
+        self.assertTrue(passed["guard"]["environment_blocks_pass"])
         self.assertEqual(passed["guard"]["invalid_environment_reasons"],
                          ["thermal throttling"])
         self.assertEqual(passed["guard"]["ratio"], 1.0)
@@ -537,6 +596,15 @@ class EnvironmentTests(unittest.TestCase):
 
 
 class DurabilityTests(unittest.TestCase):
+    def setUp(self):
+        self.environment_probe = mock.patch.object(
+            runner, "collect_environment_probe", return_value={}
+        )
+        self.environment_probe.start()
+
+    def tearDown(self):
+        self.environment_probe.stop()
+
     def test_run_command_reports_child_cpu_resource_deltas(self):
         output, metrics = runner.run_command(
             [sys.executable, "-c", "sum(range(10000)); print('done')"],
@@ -657,6 +725,177 @@ class DurabilityTests(unittest.TestCase):
         self.assertEqual(measured["binary"], str(binary))
         self.assertIsNone(runner.binary_sha256(Path(directory) / "missing"))
 
+    def test_build_provenance_detects_binary_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "benchmark"
+            binary.write_bytes(b"fresh")
+            stamp = build_provenance.write_stamp(
+                "cpp_dpi", "dynamic_spawn", binary, TEST_BUILD_CONFIGURATION
+            )
+            self.assertEqual(stamp["binary_sha256"], runner.binary_sha256(binary))
+            self.assertTrue(
+                build_provenance.verify_stamp(
+                    "cpp_dpi", "dynamic_spawn", binary, TEST_BUILD_CONFIGURATION
+                )["valid"]
+            )
+            binary.write_bytes(b"changed")
+            verification = build_provenance.verify_stamp(
+                "cpp_dpi", "dynamic_spawn", binary, TEST_BUILD_CONFIGURATION
+            )
+        self.assertFalse(verification["valid"])
+        self.assertIn("binary_sha256 mismatch", verification["reasons"][0])
+
+    def test_build_provenance_detects_source_and_configuration_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            source = repository / "source.hpp"
+            binary = repository / "benchmark"
+            source.write_text("before\n", encoding="utf-8")
+            binary.write_bytes(b"binary")
+            with (
+                mock.patch.object(build_provenance, "REPO", repository),
+                mock.patch.object(
+                    build_provenance, "source_paths", return_value=[source]
+                ),
+            ):
+                build_provenance.write_stamp(
+                    "cpp_dpi",
+                    "dynamic_spawn",
+                    binary,
+                    TEST_BUILD_CONFIGURATION,
+                )
+                source.write_text("after\n", encoding="utf-8")
+                source_result = build_provenance.verify_stamp(
+                    "cpp_dpi",
+                    "dynamic_spawn",
+                    binary,
+                    TEST_BUILD_CONFIGURATION,
+                )
+                source.write_text("before\n", encoding="utf-8")
+                config_result = build_provenance.verify_stamp(
+                    "cpp_dpi",
+                    "dynamic_spawn",
+                    binary,
+                    {**TEST_BUILD_CONFIGURATION, "opt_fast": "-O2"},
+                )
+        self.assertFalse(source_result["valid"])
+        self.assertTrue(
+            any("source_sha256 mismatch" in reason for reason in source_result["reasons"])
+        )
+        self.assertFalse(config_result["valid"])
+        self.assertTrue(
+            any(
+                "build_configuration mismatch" in reason
+                for reason in config_result["reasons"]
+            )
+        )
+
+    def test_pure_sv_shared_kernel_normalization_is_load_bearing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            source = repository / "source.sv"
+            source.write_text("module source; endmodule\n", encoding="utf-8")
+            with (
+                mock.patch.object(build_provenance, "REPO", repository),
+                mock.patch.object(
+                    build_provenance, "source_paths", return_value=[source]
+                ) as paths,
+            ):
+                named = build_provenance.source_sha256(
+                    "pure_sv", "dynamic_spawn"
+                )
+                shared = build_provenance.source_sha256("pure_sv", "shared")
+        self.assertEqual(named, shared)
+        self.assertEqual(paths.call_args_list[0].args, ("pure_sv", "shared"))
+
+    def test_cpp_provenance_includes_manifest_and_codegen_sources(self):
+        relative = {
+            path.relative_to(build_provenance.REPO).as_posix()
+            for path in build_provenance.source_paths("cpp_dpi", "dynamic_spawn")
+        }
+        self.assertIn(
+            "benchmarks/authoring_core/testbenches/cpp_dpi/authoring_core.dpi.json",
+            relative,
+        )
+        self.assertIn(
+            "tools/codegen/cpptb_codegen/generate_dpi_bindings.py", relative
+        )
+        self.assertIn("pyproject.toml", relative)
+        self.assertIn("uv.lock", relative)
+
+    def test_default_build_configuration_matches_make_cxx_default(self):
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch.object(
+                build_provenance,
+                "_tool_metadata",
+                side_effect=lambda command: {"command": command},
+            ),
+        ):
+            configuration = build_provenance.build_configuration()
+        self.assertEqual(configuration["compiler"]["command"], "c++")
+
+    def test_serial_make_clears_parallel_job_state(self):
+        with mock.patch.object(runner, "run_command") as command:
+            runner.run_serial_make(["first", "second"])
+        self.assertEqual(
+            command.call_args.args[0], ["make", "-j1", "first", "second"]
+        )
+        environment = command.call_args.kwargs["environment"]
+        self.assertEqual(environment["MAKEFLAGS"], "-j1")
+        self.assertEqual(environment["MFLAGS"], "-j1")
+
+    def test_skip_build_rejects_stale_provenance(self):
+        binaries = {
+            "cpp_dpi": {
+                "dynamic_spawn": {
+                    "provenance": {
+                        "valid": False,
+                        "reasons": ["source_sha256 mismatch"],
+                    }
+                }
+            }
+        }
+        with self.assertRaisesRegex(RuntimeError, "rerun without --skip-build"):
+            runner.require_current_binaries(binaries)
+
+        with self.assertRaisesRegex(RuntimeError, "binary metadata is empty"):
+            runner.require_current_binaries({})
+
+    def test_main_refuses_invalid_admission_before_sampling(self):
+        invalid_probe = {"load": {"normalized_load_1m": 0.31}}
+        comparison = mock.Mock()
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                mock.patch.object(runner, "RESULT_DIR", Path(directory)),
+                mock.patch.object(
+                    runner, "_registry_lookup", return_value=registry_example()
+                ),
+                mock.patch.object(
+                    runner, "collect_metadata", return_value={"config": {}}
+                ),
+                mock.patch.object(
+                    runner,
+                    "collect_binary_metadata",
+                    return_value=valid_binary_metadata(),
+                ),
+                mock.patch.object(
+                    runner, "collect_environment_probe", return_value=invalid_probe
+                ),
+                mock.patch.object(runner, "run_comparison", comparison),
+                redirect_stdout(io.StringIO()),
+            ):
+                returncode = runner.main(
+                    ["--skip-build", "--example", "control"]
+                )
+            persisted = json.loads(
+                (Path(directory) / "control" / "latest.json").read_text()
+            )
+        self.assertEqual(returncode, 1)
+        self.assertEqual(persisted["status"], "invalid_environment")
+        self.assertEqual(persisted["raw_samples"], [])
+        comparison.assert_not_called()
+
     def test_main_persists_metadata_and_partial_samples_on_error(self):
         with tempfile.TemporaryDirectory() as directory:
             result_dir = Path(directory)
@@ -677,7 +916,11 @@ class DurabilityTests(unittest.TestCase):
                     return_value=registry_example(),
                 ),
                 mock.patch.object(runner, "collect_metadata", return_value=metadata),
-                mock.patch.object(runner, "collect_binary_metadata", return_value={}),
+                mock.patch.object(
+                    runner,
+                    "collect_binary_metadata",
+                    return_value=valid_binary_metadata(),
+                ),
                 mock.patch.object(runner, "run_comparison", side_effect=fail_comparison),
             ):
                 with redirect_stdout(io.StringIO()):
@@ -738,7 +981,11 @@ class DurabilityTests(unittest.TestCase):
                 ),
                 mock.patch.object(runner, "SampleJournal", TrackingJournal),
                 mock.patch.object(runner, "collect_metadata", side_effect=metadata),
-                mock.patch.object(runner, "collect_binary_metadata", return_value={}),
+                mock.patch.object(
+                    runner,
+                    "collect_binary_metadata",
+                    return_value=valid_binary_metadata(),
+                ),
                 mock.patch.object(
                     runner, "run_comparison", side_effect=RuntimeError("stop")
                 ),
@@ -776,7 +1023,11 @@ class DurabilityTests(unittest.TestCase):
                 mock.patch.object(
                     runner, "collect_metadata", return_value={"config": {}}
                 ),
-                mock.patch.object(runner, "collect_binary_metadata", return_value={}),
+                mock.patch.object(
+                    runner,
+                    "collect_binary_metadata",
+                    return_value=valid_binary_metadata("control"),
+                ),
                 mock.patch.object(runner, "run_comparison", comparison),
                 mock.patch.object(runner, "run_peripheral_preflight") as preflight,
                 redirect_stdout(io.StringIO()),
@@ -819,7 +1070,11 @@ class DurabilityTests(unittest.TestCase):
                     runner, "_registry_lookup", return_value=registry_example()
                 ),
                 mock.patch.object(runner, "collect_metadata", return_value={}),
-                mock.patch.object(runner, "collect_binary_metadata", return_value={}),
+                mock.patch.object(
+                    runner,
+                    "collect_binary_metadata",
+                    return_value=valid_binary_metadata(),
+                ),
                 mock.patch.object(runner, "run_sample", side_effect=semantic_sample),
                 mock.patch.object(runner, "run_comparison") as comparison,
                 redirect_stdout(io.StringIO()),
@@ -872,7 +1127,9 @@ class DurabilityTests(unittest.TestCase):
                 ),
                 mock.patch.object(runner, "collect_metadata", return_value={}),
                 mock.patch.object(
-                    runner, "collect_binary_metadata", return_value={}
+                    runner,
+                    "collect_binary_metadata",
+                    return_value=valid_binary_metadata(),
                 ),
                 mock.patch.object(
                     runner, "run_sample", side_effect=mismatched_sample
@@ -918,7 +1175,9 @@ class DurabilityTests(unittest.TestCase):
                 ),
                 mock.patch.object(runner, "collect_metadata", return_value={}),
                 mock.patch.object(
-                    runner, "collect_binary_metadata", return_value={}
+                    runner,
+                    "collect_binary_metadata",
+                    return_value=valid_binary_metadata("dynamic_task"),
                 ),
                 mock.patch.object(
                     runner, "run_comparison", return_value=(summary, [])
@@ -1010,7 +1269,9 @@ class DurabilityTests(unittest.TestCase):
                         return_value={"config": {}},
                     ),
                     mock.patch.object(
-                        runner, "collect_binary_metadata", return_value={}
+                        runner,
+                        "collect_binary_metadata",
+                        return_value=valid_binary_metadata(),
                     ),
                     mock.patch.object(
                         runner, "run_comparison", return_value=(summary, [])

@@ -41,12 +41,26 @@ KERNELS = (
     "dynamic_spawn_scheduler",
     "dynamic_spawn_suspending",
     "dynamic_monitor",
+    "process_pipeline",
     "analysis_fanout",
     "random_stimulus",
     "constrained_packet",
     "constraint_extensions",
     "coverage_sampling",
     "apb_component",
+    "memory_model",
+    "memory_model_direct",
+    "register_prediction_validity",
+    "register_backdoor",
+    "register_hierarchy",
+    "register_split",
+    "register_wide",
+    "register_enum",
+    "register_memory",
+    "register_sequences",
+    "register_coverage",
+    "register_maps",
+    "register_user_effects",
 )
 
 FEATURE_FIELDS = (
@@ -94,6 +108,14 @@ FEATURE_FIELDS = (
     "constraint_extensions",
     "coverage_sampling",
     "apb_component",
+    "memory_model",
+    "memory_model_direct",
+    "register_prediction_validity",
+    "register_backdoor",
+    "register_hierarchy",
+    "register_split",
+    "register_wide",
+    "register_enum",
 )
 
 RESULT_FIELDS = (
@@ -160,6 +182,14 @@ class ExpectedCounts:
     constraint_extensions: int = 0
     coverage_sampling: int = 0
     apb_component: int = 0
+    memory_model: int = 0
+    memory_model_direct: int = 0
+    register_prediction_validity: int = 0
+    register_backdoor: int = 0
+    register_hierarchy: int = 0
+    register_split: int = 0
+    register_wide: int = 0
+    register_enum: int = 0
 
     def fields(self) -> dict[str, int]:
         return asdict(self)
@@ -347,6 +377,16 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             queue_get=iterations,
         )
 
+    if kernel == "process_pipeline":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 4,
+            spawned_processes=3,
+            queue_put=2 * iterations,
+            queue_get=2 * iterations,
+        )
+
     if kernel == "analysis_fanout":
         return ExpectedCounts(
             iterations=iterations,
@@ -397,6 +437,106 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             transactions=2 * iterations,
             checks=5 * iterations + 4,
             apb_component=2 * iterations,
+        )
+
+    if kernel == "memory_model":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=2 * iterations,
+            checks=5 * iterations + 4,
+            memory_model=2 * iterations,
+        )
+
+    if kernel == "memory_model_direct":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=2 * iterations,
+            checks=3 * iterations + 2,
+            memory_model_direct=2 * iterations,
+        )
+
+    if kernel == "register_prediction_validity":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=5 * iterations + 4,
+            register_prediction_validity=iterations,
+        )
+
+    if kernel == "register_backdoor":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=iterations + 2,
+            register_backdoor=iterations,
+        )
+
+    if kernel == "register_hierarchy":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=5 * iterations + 2,
+            register_hierarchy=iterations,
+        )
+
+    if kernel == "register_split":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=4 * iterations,
+            checks=2 * iterations + 2,
+            register_split=iterations,
+        )
+
+    if kernel == "register_wide":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=20 * iterations,
+            checks=6 * iterations + 2,
+            register_wide=iterations,
+        )
+
+    if kernel == "register_enum":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=2 * iterations,
+            checks=2 * iterations + 2,
+            register_enum=iterations,
+        )
+
+    if kernel == "register_memory":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=6 * iterations + 2,
+        )
+
+    if kernel == "register_sequences":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=21 * iterations,
+            checks=46 * iterations + 2,
+        )
+
+    if kernel == "register_coverage":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=10 * iterations,
+            checks=12,
+            coverage_sampling=iterations,
+        )
+
+    if kernel == "register_maps":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=10 * iterations,
+            checks=8 * iterations + 2,
+        )
+
+    if kernel == "register_user_effects":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=2 * iterations,
+            checks=4 * iterations + 2,
         )
 
     return ExpectedCounts(
@@ -630,6 +770,12 @@ def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
         "dynamic_task",
         "dynamic_spawn_scheduler",
         "dynamic_spawn_suspending",
+        "register_prediction_validity",
+        "register_backdoor",
+        "register_hierarchy",
+        "register_split",
+        "register_wide",
+        "register_enum",
     ):
         return 0x811C9DC5
     checksum = 0x811C9DC5
@@ -652,7 +798,53 @@ def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
                 constraint_extension_payloads(iterations)
             )
         )
-    elif kernel == "apb_component":
+    elif kernel == "register_memory":
+        responses = (
+            stimulus(iteration * 4 + word) ^ 0x3C6E_F372
+            for iteration in range(iterations)
+            for word in range(4)
+        )
+    elif kernel == "register_sequences":
+        responses = (
+            (8 << 16) ^ 0x5A ^ iteration for iteration in range(iterations)
+        )
+    elif kernel == "register_coverage":
+        responses = iter(
+            (
+                8 * iterations,
+                iterations,
+                iterations,
+                2 * iterations,
+                2 * iterations,
+                iterations,
+                iterations,
+                2 * iterations,
+                2 * iterations,
+                2 * min(iterations, 4),
+            )
+        )
+    elif kernel == "register_maps":
+        responses = (
+            value
+            for iteration in range(iterations)
+            for value in (
+                stimulus(iteration),
+                stimulus(iteration) ^ 0x5A5A_A5A5,
+                (stimulus(iteration) + 0x1020_3040) & 0xFFFFFFFF,
+                (stimulus(iteration) + 1) & 0xFFFFFFFF,
+                (stimulus(iteration) + 2) & 0xFFFFFFFF,
+            )
+        )
+    elif kernel == "register_user_effects":
+        responses = (
+            value
+            for iteration in range(iterations)
+            for value in (
+                stimulus(iteration * 2 + 1) & 0xFF,
+                (~stimulus(iteration * 2 + 1)) & 0xFF,
+            )
+        )
+    elif kernel in ("apb_component", "memory_model", "memory_model_direct"):
         responses = (stimulus(iteration) for iteration in range(iterations))
     else:
         responses = (response(iteration) for iteration in range(iterations))

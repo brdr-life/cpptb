@@ -124,6 +124,20 @@ _AUTHORING_TEMPLATE_IDS = {
     "constraint_extensions": 38,
     "coverage_sampling": 39,
     "apb_component": 40,
+    "process_pipeline": 41,
+    "memory_model": 42,
+    "memory_model_direct": 43,
+    "register_prediction_validity": 44,
+    "register_backdoor": 45,
+    "register_hierarchy": 46,
+    "register_split": 47,
+    "register_wide": 48,
+    "register_enum": 49,
+    "register_memory": 50,
+    "register_sequences": 51,
+    "register_coverage": 52,
+    "register_maps": 53,
+    "register_user_effects": 54,
 }
 
 
@@ -229,8 +243,9 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     ),
     _authoring(
         "dynamic_spawn",
-        "Repeated dynamic process creation",
+        "Immediate dynamic process creation (diagnostic control)",
         default_iterations=5_000_000,
+        gate_policy=GatePolicy.DIAGNOSTIC,
     ),
     _authoring(
         "dynamic_task",
@@ -251,6 +266,10 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring(
         "dynamic_monitor",
         "Long-lived monitor processes",
+    ),
+    _authoring(
+        "process_pipeline",
+        "Finite driver, worker, and scoreboard processes",
     ),
     _authoring(
         "analysis_fanout",
@@ -275,6 +294,61 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring(
         "apb_component",
         "APB verification components",
+    ),
+    _authoring(
+        "memory_model",
+        "Sparse memory prediction",
+    ),
+    _authoring(
+        "memory_model_direct",
+        "Direct sparse memory model",
+    ),
+    _authoring(
+        "register_prediction_validity",
+        "Register prediction validity",
+    ),
+    _authoring(
+        "register_backdoor",
+        "Generated register backdoor",
+    ),
+    _authoring(
+        "register_hierarchy",
+        "Generated register hierarchy",
+    ),
+    _authoring(
+        "register_split",
+        "Split-width register frontdoor",
+    ),
+    _authoring(
+        "register_wide",
+        "Arbitrary-width register frontdoor",
+    ),
+    _authoring(
+        "register_enum",
+        "Typed register field enumeration",
+    ),
+    _authoring(
+        "register_memory",
+        "Generated register-backed memory access",
+        default_iterations=10_000_000,
+    ),
+    _authoring(
+        "register_sequences",
+        "Standard register sequences",
+    ),
+    _authoring(
+        "register_coverage",
+        "Passive register access coverage",
+    ),
+    _authoring(
+        "register_maps",
+        "Register address maps and custom frontdoors",
+    ),
+    _authoring(
+        "register_user_effects",
+        "Custom register read and write effects",
+        default_iterations=10_000_000,
+        gate_policy=GatePolicy.DIAGNOSTIC,
     ),
     Benchmark(
         name="dpi_counter",

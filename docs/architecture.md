@@ -45,6 +45,13 @@ ownership use non-atomic reference counting on the process hot path. Parallel
 host work must return its result through a simulator-thread integration point
 rather than calling framework APIs directly.
 
+Coroutine frames are cached in one process-wide pool under that ownership
+contract. This avoids a thread-local lookup for every task creation and
+reclamation. An embedding that runs independent simulator runtimes on separate
+OS threads may define `CPPTB_CORO_THREAD_LOCAL_FRAME_POOL` to give each thread
+its own pool; framework objects and callbacks must still remain on their owning
+simulator thread.
+
 Simulator-phase waits have a backend boundary below the public API. The
 portable path registers standard VPI callbacks for read/write synchronization,
 read-only synchronization, and the next timestep. When cpptb owns Verilator's

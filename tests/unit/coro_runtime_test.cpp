@@ -467,6 +467,34 @@ void finish_process_completion(void* owner, ExceptionState&,
     ++probe.releases;
 }
 
+struct OwnedProcessProbe {
+    uint32_t exceptional_completions = 0;
+    uint32_t resource_cleanups = 0;
+    uint32_t owner_cleanups = 0;
+};
+
+void finish_owned_process_probe(void* owner, ExceptionState& exception,
+                                bool cancelled) noexcept {
+    auto* context = static_cast<ProcessExecutionContext*>(owner);
+    auto& probe = *static_cast<OwnedProcessProbe*>(context->owner);
+    if (!cancelled && exception) ++probe.exceptional_completions;
+}
+
+void cleanup_owned_process_probe(ProcessExecutionContext* context) noexcept {
+    auto& probe = *static_cast<OwnedProcessProbe*>(context->owner);
+    ++probe.resource_cleanups;
+}
+
+bool match_owned_process_probe(void* process_owner,
+                               void* owner) noexcept {
+    auto* context = static_cast<ProcessExecutionContext*>(process_owner);
+    return context && context->owner == owner;
+}
+
+void cleanup_owned_process_owner(void* owner) noexcept {
+    ++static_cast<OwnedProcessProbe*>(owner)->owner_cleanups;
+}
+
 Task<void> append_immediately(std::vector<uint32_t>& order, uint32_t value) {
     order.push_back(value);
     co_return;
@@ -2856,6 +2884,84 @@ int main() {
                          cancelled.releases, 1);
     }
 
+    {
+        Testbench tb;
+        OwnedProcessProbe probe;
+        uint32_t runs = 0;
+        uint32_t destructions = 0;
+        auto successful = tb.spawn_owned(
+            immediate_root(runs, destructions),
+            ProcessExecutionContext{
+                .owner = &probe,
+                .id = 1,
+                .description = "successful owned process",
+                .cleanup = cleanup_owned_process_probe,
+            },
+            finish_owned_process_probe);
+        passed &= expect("successful owned process completes",
+                         successful.done() ? 1 : 0, 1);
+        passed &= expect("successful owned process skips exception callback",
+                         probe.exceptional_completions, 0);
+        passed &= expect("successful owned process cleans resources once",
+                         probe.resource_cleanups, 1);
+
+        auto exceptional = tb.spawn_owned(
+            throw_immediately(41),
+            ProcessExecutionContext{
+                .owner = &probe,
+                .id = 2,
+                .description = "exceptional owned process",
+                .cleanup = cleanup_owned_process_probe,
+            },
+            finish_owned_process_probe);
+        passed &= expect("exceptional owned process completes",
+                         exceptional.done() ? 1 : 0, 1);
+        passed &= expect("exceptional owned process reports once",
+                         probe.exceptional_completions, 1);
+        passed &= expect("exceptional owned process cleans resources once",
+                         probe.resource_cleanups, 2);
+
+        auto rejected = tb.spawn_owned(
+            Task<void>{},
+            ProcessExecutionContext{
+                .owner = &probe,
+                .id = 3,
+                .description = "rejected owned process",
+                .cleanup = cleanup_owned_process_probe,
+            },
+            finish_owned_process_probe);
+        passed &= expect("invalid owned process is rejected",
+                         rejected.valid() ? 1 : 0, 0);
+        passed &= expect("rejected owned process cleans resources once",
+                         probe.resource_cleanups, 3);
+    }
+
+    {
+        Testbench tb;
+        OwnedProcessProbe probe;
+        uint32_t marker = 0;
+        auto pending = tb.spawn_owned(
+            delay_marker(10_ns, 1, marker),
+            ProcessExecutionContext{
+                .owner = &probe,
+                .id = 4,
+                .description = "deferred owned process",
+                .cleanup = cleanup_owned_process_probe,
+            },
+            finish_owned_process_probe);
+        const bool deferred = tb.defer_owner_cleanup(
+            &probe, match_owned_process_probe, cleanup_owned_process_owner);
+        passed &= expect("owned cleanup waits for pending process",
+                         deferred ? 1 : 0, 1);
+        pending.cancel();
+        passed &= expect("cancelled owned process does not resume", marker, 0);
+        passed &= expect("cancelled owned process skips exception callback",
+                         probe.exceptional_completions, 0);
+        passed &= expect("cancelled owned process cleans resources once",
+                         probe.resource_cleanups, 1);
+        passed &= expect("owner cleanup runs after process release",
+                         probe.owner_cleanups, 1);
+    }
 
     {
         Testbench tb;
@@ -3199,6 +3305,47 @@ int main() {
                          kEdgeInterestNone);
         passed &= expect("interest change queue drains",
                          tb.consume_edge_interest_change().has_value(), 0);
+    }
+
+    {
+        Testbench tb;
+        Results results;
+        const Signal clock{nullptr, 35, "sticky_clock"};
+        tb.configure_sticky_edge_source(clock.id);
+        const auto initial_generation = tb.edge_interest_generation();
+
+        passed &= expect("configured sticky edge source",
+                         tb.is_sticky_edge_source(clock.id), 1);
+        const auto first = tb.spawn(wait_for_edges(clock, results));
+        auto change = tb.consume_edge_interest_change();
+        passed &= expect("sticky rising publishes once", change.has_value(), 1);
+        passed &= expect("sticky rising mask", change->interest,
+                         kEdgeInterestRising);
+
+        tb.notify_edge(clock.id, EdgeKind::Rising);
+        change = tb.consume_edge_interest_change();
+        passed &= expect("sticky falling publishes once", change.has_value(), 1);
+        passed &= expect("sticky falling mask", change->interest,
+                         kEdgeInterestFalling);
+        tb.notify_edge(clock.id, EdgeKind::Falling);
+        passed &= expect("sticky first waiter completes", first.done(), 1);
+        passed &= expect("sticky completion is not published",
+                         tb.consume_edge_interest_change().has_value(), 0);
+        passed &= expect("sticky directions advance generation twice",
+                         tb.edge_interest_generation(),
+                         initial_generation + 2);
+
+        const auto second = tb.spawn(wait_for_edges(clock, results));
+        passed &= expect("sticky rising does not republish",
+                         tb.consume_edge_interest_change().has_value(), 0);
+        tb.notify_edge(clock.id, EdgeKind::Rising);
+        passed &= expect("sticky falling does not republish",
+                         tb.consume_edge_interest_change().has_value(), 0);
+        tb.notify_edge(clock.id, EdgeKind::Falling);
+        passed &= expect("sticky second waiter completes", second.done(), 1);
+        passed &= expect("sticky generation remains stable",
+                         tb.edge_interest_generation(),
+                         initial_generation + 2);
     }
 
     {
