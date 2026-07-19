@@ -18,6 +18,7 @@ of the way.
 | [Watchdogs and timeouts](examples/watchdog-timeout.md) | Operations that may stall or need cancellation | Transaction, timeout, and process lifecycle |
 | [Fault injection](examples/fault-injection.md) | Internal access and controlled fault injection | Deposit, force, release, and explicit settling |
 | [Rich data](examples/rich-data.md) | Wide, fixed-point, array, struct, and enum ports | Typed construction and checking |
+| [Interfaces and inouts](examples/interfaces.md) | Parameterized interfaces, modports, interface arrays, and bidirectional pins | Named member access, independent clocks, drive, and release |
 | [Heavy benchmarks](examples/heavy-benchmarks.md) | Computationally substantial four-mode comparisons | FIR, packet CRC32, and matrix accelerator sequences |
 | [Open-source cores](examples/open-source-cores.md) | Real CPU, crypto, and network RTL comparisons | Firmware, register programming, and AXI-stream sequences |
 | [secworks AES register-model oracle](examples/secworks-aes-regmodel.md) | Ground-truth validation of generated register access | Upstream oracle, generated RegModel, and matched pure-SV sequence |
@@ -100,8 +101,8 @@ dut.resolved_value.force(0xa5);
 test.expect_eq("force readback", dut.resolved_value.get(), 0xa5u);
 dut.resolved_value.release();
 
-dut.memory.at(2).deposit(0xbeef);
-test.expect_eq("memory backdoor", dut.memory.at(2).get(), 0xbeefu);
+dut.memory[2].deposit(0xbeef);
+test.expect_eq("memory backdoor", dut.memory[2].get(), 0xbeefu);
 ```
 
 The full page explains immediate versus settled observations, variable and net

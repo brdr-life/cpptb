@@ -189,10 +189,10 @@ module dpi_scheduler_conformance;
     in_words[INPUT_SIGNAL_PACKED65O + 0] = packed65_o[0 +: 32];
     in_words[INPUT_SIGNAL_PACKED65O + 1] = packed65_o[32 +: 32];
     in_words[INPUT_SIGNAL_PACKED65O + 2] = packed65_o[64 +: 1];
-    for (int cpptb_array73_o_index = 4; cpptb_array73_o_index <= 7; cpptb_array73_o_index++) begin
-      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index - 4) * 3] = array73_o[cpptb_array73_o_index][0 +: 32];
-      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index - 4) * 3 + 1] = array73_o[cpptb_array73_o_index][32 +: 32];
-      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index - 4) * 3 + 2] = array73_o[cpptb_array73_o_index][64 +: 9];
+    for (int cpptb_array73_o_index_0 = 4; cpptb_array73_o_index_0 <= 7; cpptb_array73_o_index_0++) begin
+      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index_0 - 4) * 3] = array73_o[cpptb_array73_o_index_0][0 +: 32];
+      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index_0 - 4) * 3 + 1] = array73_o[cpptb_array73_o_index_0][32 +: 32];
+      in_words[INPUT_SIGNAL_ARRAY73O + (cpptb_array73_o_index_0 - 4) * 3 + 2] = array73_o[cpptb_array73_o_index_0][64 +: 9];
     end
     in_words[INPUT_SIGNAL_DERIVEDCLK] = derived_clk;
     in_words[INPUT_SIGNAL_EVENTOBSERVED] = event_observed;
@@ -222,8 +222,8 @@ module dpi_scheduler_conformance;
     drive_value = out_words[OUTPUT_SIGNAL_DRIVEVALUE][7:0];
     addend = out_words[OUTPUT_SIGNAL_ADDEND][7:0];
     packed65_i = {out_words[OUTPUT_SIGNAL_PACKED65I + 2][0:0], out_words[OUTPUT_SIGNAL_PACKED65I + 1], out_words[OUTPUT_SIGNAL_PACKED65I + 0]};
-    for (int cpptb_array73_i_index = 4; cpptb_array73_i_index <= 7; cpptb_array73_i_index++) begin
-      array73_i[cpptb_array73_i_index] = {out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index - 4) * 3 + 2][8:0], out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index - 4) * 3 + 1], out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index - 4) * 3]};
+    for (int cpptb_array73_i_index_0 = 4; cpptb_array73_i_index_0 <= 7; cpptb_array73_i_index_0++) begin
+      array73_i[cpptb_array73_i_index_0] = {out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index_0 - 4) * 3 + 2][8:0], out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index_0 - 4) * 3 + 1], out_words[OUTPUT_SIGNAL_ARRAY73I + (cpptb_array73_i_index_0 - 4) * 3]};
     end
   endtask
 
@@ -410,11 +410,11 @@ module dpi_scheduler_conformance;
     longint unsigned generation;
     requests = initial_requests;
     if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
+      edge_interest[SIGNAL_EVENTOBSERVED] = cpptb_dpi_edge_interest(SIGNAL_EVENTOBSERVED);
       edge_interest[SIGNAL_CLKA] |= cpptb_dpi_edge_interest(SIGNAL_CLKA);
       edge_interest[SIGNAL_CLKB] |= cpptb_dpi_edge_interest(SIGNAL_CLKB);
       edge_interest[SIGNAL_MANUALCLK] |= cpptb_dpi_edge_interest(SIGNAL_MANUALCLK);
       edge_interest[SIGNAL_DERIVEDCLK] |= cpptb_dpi_edge_interest(SIGNAL_DERIVEDCLK);
-      edge_interest[SIGNAL_EVENTOBSERVED] = cpptb_dpi_edge_interest(SIGNAL_EVENTOBSERVED);
     end
     if ((requests & STEP_TIMER_IDLE) != 0) begin
       timer_deadline = NO_TIMER;

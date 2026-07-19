@@ -14,6 +14,9 @@ from cpptb_codegen.design_ir import (
     HierarchyScope,
     HierarchySignal,
     Internal,
+    InterfaceConstructorPort,
+    InterfaceParameter,
+    InterfacePort,
     PackedEnumType,
     PackedEnumValue,
     PackedField,
@@ -87,7 +90,13 @@ def _create_compilation(
         raise CodegenError("Slang rejected the configured frontend options")
 
     driver.parseAllSources()
+    # A source-driven wrapper will provide concrete interface instances later.
+    # Slang otherwise diagnoses interface ports on the selected design top as
+    # unconnected before code generation has a chance to inspect them.
     compilation = driver.createCompilation()
+    compilation.options.flags |= type(
+        compilation.options.flags
+    ).AllowTopLevelIfacePorts
     diagnostics = _diagnostic_text(pyslang, compilation)
     if diagnostics:
         raise CodegenError("Slang could not elaborate the DUT:\n" + diagnostics)
@@ -143,6 +152,14 @@ def _port_shape(port_type: Any) -> tuple[Any, tuple[UnpackedRange, ...]]:
         )
         element_type = element_type.elementType
     return element_type, tuple(dimensions)
+
+
+def _declared_unpacked_ranges(ranges: Any) -> tuple[UnpackedRange, ...]:
+    if ranges is None:
+        return ()
+    return tuple(
+        UnpackedRange(int(item.left), int(item.right)) for item in ranges
+    )
 
 
 def _declared_type_name(data_type: Any) -> str | None:
@@ -424,6 +441,177 @@ def _resolve_internals(
     return tuple(internals)
 
 
+def _first_interface_instance(pyslang: Any, connection: Any) -> Any:
+    if connection.kind == pyslang.ast.SymbolKind.Instance:
+        return connection
+    if connection.kind != pyslang.ast.SymbolKind.InstanceArray:
+        raise CodegenError(
+            "Slang returned an unsupported interface connection kind "
+            f"{connection.kind}"
+        )
+    pending = list(connection.elements)
+    while pending:
+        candidate = pending.pop(0)
+        if candidate.kind == pyslang.ast.SymbolKind.Instance:
+            return candidate
+        if candidate.kind == pyslang.ast.SymbolKind.InstanceArray:
+            pending[0:0] = list(candidate.elements)
+    raise CodegenError("Slang returned an empty interface instance array")
+
+
+def _resolved_parameter_text(symbol: Any, interface_name: str) -> str:
+    try:
+        converted = symbol.value.convertToInt()
+        if converted.hasUnknown():
+            raise CodegenError(
+                f"interface {interface_name!r} parameter {symbol.name!r} "
+                "contains X or Z bits"
+            )
+        return str(int(converted.value))
+    except CodegenError:
+        raise
+    except Exception as error:
+        raise CodegenError(
+            f"interface {interface_name!r} parameter {symbol.name!r} is not "
+            "an integral value parameter; type and non-integral interface "
+            "parameters are not yet supported"
+        ) from error
+
+
+def _interface_contract(
+    pyslang: Any, symbol: Any, directions: dict[Any, str]
+) -> tuple[InterfacePort, tuple[Port, ...]]:
+    if symbol.isGeneric:
+        raise CodegenError(
+            f"interface port {symbol.name!r} is generic; select a concrete "
+            "interface type and modport"
+        )
+    if not symbol.modport:
+        raise CodegenError(
+            f"interface port {symbol.name!r} does not select a modport; "
+            "cpptb requires a modport so testbench drive and sample "
+            "directions are unambiguous"
+        )
+
+    connection = tuple(symbol.connection)
+    if len(connection) < 2:
+        raise CodegenError(
+            f"interface port {symbol.name!r} has no elaborated modport "
+            "connection"
+        )
+    instance = _first_interface_instance(pyslang, connection[0])
+    modport = connection[1]
+    if modport.kind != pyslang.ast.SymbolKind.Modport:
+        raise CodegenError(
+            f"interface port {symbol.name!r} selected object "
+            f"{modport.name!r} is not a modport"
+        )
+
+    interface_dimensions = _declared_unpacked_ranges(symbol.declaredRange)
+    constructor_ports: list[InterfaceConstructorPort] = []
+    constructor_names: set[str] = set()
+    for constructor in instance.body.portList:
+        if constructor.kind != pyslang.ast.SymbolKind.Port:
+            raise CodegenError(
+                f"interface {symbol.interfaceDef.name!r} constructor port "
+                f"{constructor.name!r} has unsupported kind {constructor.kind}"
+            )
+        direction = directions.get(constructor.direction)
+        if direction not in {"input", "output", "inout"}:
+            raise CodegenError(
+                f"interface {symbol.interfaceDef.name!r} constructor port "
+                f"{constructor.name!r} has unsupported direction "
+                f"{constructor.direction}"
+            )
+        element_type, unpacked = _port_shape(constructor.type)
+        if not element_type.isIntegral:
+            raise CodegenError(
+                f"interface {symbol.interfaceDef.name!r} constructor port "
+                f"{constructor.name!r} is not packed integral"
+            )
+        constructor_ports.append(
+            InterfaceConstructorPort(
+                name=constructor.name,
+                direction=direction,
+                width=int(element_type.bitWidth),
+                signed=bool(element_type.isSigned),
+                four_state=bool(element_type.isFourState),
+                unpacked=unpacked,
+            )
+        )
+        constructor_names.add(constructor.name)
+
+    parameters = tuple(
+        InterfaceParameter(
+            parameter.name,
+            _resolved_parameter_text(parameter, symbol.name),
+        )
+        for parameter in instance.body.parameters
+        if not parameter.isLocalParam
+    )
+    interface = InterfacePort(
+        name=symbol.name,
+        definition=symbol.interfaceDef.name,
+        modport=symbol.modport,
+        unpacked=interface_dimensions,
+        parameters=parameters,
+        constructor_ports=tuple(constructor_ports),
+    )
+
+    members: list[Port] = []
+    seen_members: set[str] = set()
+    for member in modport:
+        if member.kind != pyslang.ast.SymbolKind.ModportPort:
+            # Imported tasks, functions, and clocking blocks are not signal
+            # transport members. They remain available to the HDL itself.
+            continue
+        if member.name in seen_members:
+            raise CodegenError(
+                f"interface port {symbol.name!r} modport {symbol.modport!r} "
+                f"contains duplicate member {member.name!r}"
+            )
+        seen_members.add(member.name)
+        direction = directions.get(member.direction)
+        if direction is None:
+            raise CodegenError(
+                f"interface port {symbol.name!r} member {member.name!r} has "
+                f"unsupported direction {member.direction}"
+            )
+        member_type, member_dimensions = _port_shape(member.type)
+        packed_type = (
+            _packed_type(member_type) if member_type.isIntegral else None
+        )
+        kind = (
+            _transport_kind(packed_type)
+            if packed_type is not None
+            else _port_kind(member_type)
+        )
+        internal_name = member.internalSymbol.name
+        members.append(
+            Port(
+                name=f"{symbol.name}.{member.name}",
+                direction=direction,
+                width=(int(member_type.bitWidth) if member_type.isIntegral else 0),
+                cpp_path=(symbol.name, member.name),
+                type_kind=kind,
+                signed=bool(member_type.isSigned),
+                four_state=bool(member_type.isFourState),
+                unpacked=(*interface_dimensions, *member_dimensions),
+                packed_type=packed_type,
+                interface_name=symbol.name,
+                interface_member=internal_name,
+                interface_rank=len(interface_dimensions),
+                interface_constructor_port=internal_name in constructor_names,
+            )
+        )
+    if not members:
+        raise CodegenError(
+            f"interface port {symbol.name!r} modport {symbol.modport!r} has "
+            "no signal members"
+        )
+    return interface, tuple(members)
+
+
 class SlangFrontend:
     name = "slang"
 
@@ -451,16 +639,14 @@ class SlangFrontend:
             pyslang.ast.ArgumentDirection.Ref: "ref",
         }
         ports: list[Port] = []
+        interfaces: list[InterfacePort] = []
         for symbol in top.body.portList:
             if symbol.kind == pyslang.ast.SymbolKind.InterfacePort:
-                ports.append(
-                    Port(
-                        name=symbol.name,
-                        direction="interface",
-                        width=0,
-                        type_kind="interface",
-                    )
+                interface, members = _interface_contract(
+                    pyslang, symbol, directions
                 )
+                interfaces.append(interface)
+                ports.extend(members)
                 continue
             if symbol.kind != pyslang.ast.SymbolKind.Port:
                 ports.append(
@@ -510,4 +696,5 @@ class SlangFrontend:
             tuple(ports),
             _resolve_internals(pyslang, top, manifest),
             _elaborate_hierarchy(pyslang, top),
+            tuple(interfaces),
         )

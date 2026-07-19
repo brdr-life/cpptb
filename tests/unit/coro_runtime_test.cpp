@@ -49,6 +49,12 @@ concept ValidStaticPackedSpec = requires {
     typename cpptb::dpi::StaticPackedSignalSpec<1, Writable, Driven, 0, 0>;
 };
 
+template <bool Writable, bool Driven>
+concept ValidStaticPackedArraySpec = requires {
+    typename cpptb::dpi::StaticPackedArraySpec<
+        1, Writable, Driven, 0, 0, ArrayDimension<0, 1>>;
+};
+
 std::array<uint32_t, 4> static_on_demand_words{};
 
 void static_on_demand_get(uint32_t offset, uint32_t* words,
@@ -94,6 +100,8 @@ using StaticPackedScalar =
     cpptb::dpi::StaticPackedSignal<1, true, true, 3, 1>;
 using StaticObservedPacked =
     cpptb::dpi::StaticPackedSignal<64, false, false, 4, 0>;
+using StaticSchedulerClock =
+    cpptb::dpi::StaticPackedSignal<1, true, false, 2, 3>;
 using StaticOnDemandScalar =
     cpptb::dpi::StaticOnDemandSignal<1, true, true, 6>;
 using StaticOnDemandMatrix = cpptb::dpi::StaticOnDemandFixedArray<
@@ -104,6 +112,10 @@ static_assert(ValidStaticPackedSpec<true, true>);
 static_assert(ValidStaticPackedSpec<false, false>);
 static_assert(ValidStaticPackedSpec<true, false>);
 static_assert(!ValidStaticPackedSpec<false, true>);
+static_assert(ValidStaticPackedArraySpec<true, true>);
+static_assert(ValidStaticPackedArraySpec<false, false>);
+static_assert(ValidStaticPackedArraySpec<true, false>);
+static_assert(!ValidStaticPackedArraySpec<false, true>);
 static_assert(ValidStaticOnDemandSpec<true, true, static_on_demand_set>);
 static_assert(ValidStaticOnDemandSpec<false, false, nullptr>);
 static_assert(!ValidStaticOnDemandSpec<true, true, nullptr>);
@@ -1395,7 +1407,7 @@ int main() {
         cpptb::dpi::StaticBindingContext context{
             .inputs = inputs.data(),
             .outputs = outputs.data(),
-            .current_inputs = nullptr,
+            .current_inputs = inputs.data(),
             .configured_clock = configured_clock.data(),
             .edge_observer = edge_observer.data(),
             .local_edge_capable = local_edge_capable.data(),
@@ -1456,6 +1468,16 @@ int main() {
                          packed_dynamic_wakes, 1);
         passed &= expect("dynamic packed rising waiter completes",
                          packed_dynamic_waiter.done() ? 1 : 0, 1);
+
+        const StaticSchedulerClock scheduler_clock{&context,
+                                                    "scheduler_clock"};
+        inputs.at(3) = 1;
+        outputs.at(2) = 0;
+        passed &= expect("scheduler clock reads observed simulator value",
+                         scheduler_clock.get(), 1);
+        scheduler_clock.set(1);
+        passed &= expect("scheduler clock writes packed drive value",
+                         outputs.at(2), 1);
 
         static_on_demand_words.fill(0);
         outputs_dirty = false;
@@ -1568,7 +1590,7 @@ int main() {
         cpptb::probe::detail::DpiCallbackScope callback_scope;
         const auto value = cpptb::Bits<73>::from_words(
             {0x89ab'cdefu, 0x0123'4567u, 0xffff'ffffu});
-        memory.at(6).deposit(value);
+        memory[6].deposit(value);
         passed &= expect("memory probe low word", probe_words[6],
                          0x89ab'cdefu);
         passed &= expect("memory probe middle word", probe_words[7],
@@ -1576,7 +1598,7 @@ int main() {
         passed &= expect("memory probe masks high word", probe_words[8],
                          0x0000'01ffu);
         passed &= expect("memory probe get low word",
-                         memory.at(6).get().word(0), 0x89ab'cdefu);
+                         memory[6].get().word(0), 0x89ab'cdefu);
     }
     {
         static_assert(DrivenArray<32, 4, 7>::left() == 4);
@@ -1589,13 +1611,13 @@ int main() {
         const DrivenArray<32, 4, 7> narrow{
             3, "narrow_i", &transport, array_get, array_set, array_get_words,
             array_set_words};
-        narrow.at(4).set(0x1234'5678u);
-        narrow.at(7).set(0x89ab'cdefu);
+        narrow[4].set(0x1234'5678u);
+        narrow[7].set(0x89ab'cdefu);
         passed &= expect("ascending array low index id", transport.words[3],
                          0x1234'5678u);
         passed &= expect("ascending array high index id", transport.words[6],
                          0x89ab'cdefu);
-        passed &= expect("array scalar get", narrow.at(7).get(),
+        passed &= expect("array scalar get", narrow[7].get(),
                          0x89ab'cdefu);
 
         const DrivenArray<64, 3, 0> wide{

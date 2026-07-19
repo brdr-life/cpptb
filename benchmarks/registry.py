@@ -25,6 +25,7 @@ class AdapterKind(str, Enum):
     DPI_COUNTER = "dpi_counter"
     DPI_FAULT_INJECTION = "dpi_fault_injection"
     DPI_FIFO_SCOREBOARD = "dpi_fifo_scoreboard"
+    DPI_INTERFACES = "dpi_interfaces"
     DPI_MULTICLOCK = "dpi_multiclock"
     DPI_RICH_DATA = "dpi_rich_data"
     DPI_TIMER_ONLY = "dpi_timer_only"
@@ -580,6 +581,35 @@ BENCHMARKS: tuple[Benchmark, ...] = (
             commands=(
                 ("make", "cpp-dpi-rich-data-run"),
                 ("make", "cpp-dpi-rich-data-sv-run"),
+            ),
+        ),
+        default_iterations=1,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_interfaces",
+        label="DPI interfaces and inouts",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_INTERFACES,
+        build_targets=(
+            "cpp-dpi-interfaces-build",
+            "cpp-dpi-interfaces-sv-build",
+        ),
+        binaries=(
+            Binary(
+                "cpp_dpi",
+                "build/cpptb/interfaces/obj/Vdpi_stream_interfaces",
+            ),
+            Binary(
+                "pure_sv",
+                "build/cpptb/interfaces/systemverilog_obj/"
+                "Vstream_interfaces_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-interfaces-run"),
+                ("make", "cpp-dpi-interfaces-sv-run"),
             ),
         ),
         default_iterations=1,

@@ -76,6 +76,8 @@ class Runtime {
         if constexpr (static_binding_enabled) {
             static_binding_.inputs = inputs_.data();
             static_binding_.outputs = outputs_.data();
+            static_binding_.observed_transport_offsets =
+                observed_transport_offsets_.data();
             static_binding_.configured_clock = configured_clock_.data();
             static_binding_.edge_observer = edge_observer_.data();
             static_binding_.local_edge_capable = local_edge_capable_.data();
@@ -701,14 +703,14 @@ class Runtime {
 
     void validate_transport_word(
         uint32_t id, bool expected_driven,
-        std::array<bool, Adapter::signal_count>& transport_seen) const {
-        if (id >= transport_seen.size() || transport_seen[id] ||
+        std::array<bool, Adapter::signal_count>& role_seen) const {
+        if (id >= role_seen.size() || role_seen[id] ||
             driven_[id] != expected_driven) {
             std::fprintf(stderr, "%s: invalid DPI transport word %u\n",
                          Adapter::result_name, id);
             std::abort();
         }
-        transport_seen[id] = true;
+        role_seen[id] = true;
     }
 
     void register_on_demand(uint32_t id, uint32_t word_count,
@@ -741,18 +743,35 @@ class Runtime {
                           Adapter::driven_signal_word_ids;
                       }) {
             std::array<bool, Adapter::signal_count> transport_seen{};
+            std::array<bool, Adapter::signal_count> observed_seen{};
+            std::array<bool, Adapter::signal_count> driven_seen{};
             for (size_t word = 0;
                  word < Adapter::observed_signal_word_ids.size(); ++word) {
                 const auto id = Adapter::observed_signal_word_ids[word];
-                validate_transport_word(id, false, transport_seen);
+                if (id >= observed_seen.size() || observed_seen[id]) {
+                    std::fprintf(stderr,
+                                 "%s: invalid observed DPI transport word %u\n",
+                                 Adapter::result_name, id);
+                    std::abort();
+                }
+                observed_seen[id] = true;
+                transport_seen[id] = true;
                 observed_transport_offsets_[id] = static_cast<uint32_t>(word);
             }
             for (const auto id : Adapter::driven_signal_word_ids) {
-                validate_transport_word(id, true, transport_seen);
+                validate_transport_word(id, true, driven_seen);
+                transport_seen[id] = true;
             }
             for (uint32_t id = 0; id < transport_seen.size(); ++id) {
                 if (on_demand_get_words_[id]) {
-                    validate_transport_word(id, driven_[id], transport_seen);
+                    if (transport_seen[id]) {
+                        std::fprintf(
+                            stderr,
+                            "%s: signal word %u has duplicate DPI transport\n",
+                            Adapter::result_name, id);
+                        std::abort();
+                    }
+                    transport_seen[id] = true;
                 }
             }
             if constexpr (requires {
@@ -1039,7 +1058,7 @@ class Runtime {
             on_demand_get_words_[id](id - on_demand_base_ids_[id], &value, 1);
             return value;
         }
-        if (driven_[id]) return outputs_[id];
+        if (driven_[id] && !configured_clock_[id]) return outputs_[id];
         if constexpr (requires {
                           Adapter::compact_input_transport;
                           Adapter::observed_signal_word_ids;
@@ -1117,7 +1136,7 @@ class Runtime {
                                      word_count);
             return;
         }
-        if (driven_[id]) {
+        if (driven_[id] && !configured_clock_[id]) {
             for (uint32_t word = 0; word < word_count; ++word) {
                 words[word] = outputs_[id + word];
             }

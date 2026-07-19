@@ -329,6 +329,10 @@ class FixedUnpackedArray {
                 element_id, name, context, get_words_fn, set_words_fn};
         }
     }
+
+    [[nodiscard]] auto operator[](int32_t index) const {
+        return at(index);
+    }
 };
 
 template <size_t ElementWidth, int32_t Left, int32_t Right, bool Writable>

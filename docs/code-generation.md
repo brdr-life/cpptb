@@ -24,6 +24,11 @@ integrations and writes to `build/cpptb/<target>/generated` by default:
 uv run --frozen cpptb-codegen rtl/design.sv
 ```
 
+Top-level interface instances, selected modports, interface parameters,
+constructor connections, fixed interface arrays, and `inout` drive intent are
+also derived from the elaborated source. See
+[SystemVerilog interfaces and bidirectional signals](interfaces.md).
+
 Pass multiple RTL files together and use `--top` only when source elaboration
 cannot choose one root unambiguously. Code generation discovers port shape,
 but does not assign clock roles or timing. The C++ testbench does that:

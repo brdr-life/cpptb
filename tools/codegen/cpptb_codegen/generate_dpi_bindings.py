@@ -24,6 +24,8 @@ from cpptb_codegen.design_ir import (
     HierarchyScope,
     HierarchySignal,
     Internal,
+    InterfaceConstructorPort,
+    InterfacePort,
     PackedEnumType,
     PackedField,
     PackedIntegralType,
@@ -239,18 +241,32 @@ def load_discovered_clocks(path: Path) -> list[dict[str, Any]]:
         raise CodegenError("discovered clock file must contain a clocks list")
 
     clocks: list[dict[str, Any]] = []
-    seen: set[str] = set()
+    seen: set[int | str] = set()
     primary_count = 0
     for entry in entries:
         if not isinstance(entry, dict):
             raise CodegenError("each discovered clock must be an object")
         port = entry.get("port")
-        if not isinstance(port, str):
+        if not isinstance(port, str) or not port:
             raise CodegenError("each discovered clock must name a port")
-        validate_identifier(port, "discovered clock port")
-        if port in seen:
-            raise CodegenError(f"discovered clock port {port!r} appears more than once")
-        seen.add(port)
+        signal_id_value = entry.get("signal_id")
+        if signal_id_value is not None and (
+            not isinstance(signal_id_value, int)
+            or isinstance(signal_id_value, bool)
+            or signal_id_value < 0
+        ):
+            raise CodegenError(
+                f"discovered clock {port!r} signal_id must be nonnegative"
+            )
+        identity: int | str = (
+            signal_id_value if signal_id_value is not None else port
+        )
+        if identity in seen:
+            raise CodegenError(
+                f"discovered clock {port!r} signal {identity!r} appears more "
+                "than once"
+            )
+        seen.add(identity)
         period_fs = entry.get("period_fs")
         phase_fs = entry.get("phase_fs", 0)
         initial_value = entry.get("initial_value", 0)
@@ -276,6 +292,8 @@ def load_discovered_clocks(path: Path) -> list[dict[str, Any]]:
             "initial_value": initial_value,
             "primary": primary,
         }
+        if signal_id_value is not None:
+            clock["signal_id"] = signal_id_value
         if phase_fs:
             clock["phase"] = format_time_literal(phase_fs)
         clocks.append(clock)
@@ -352,28 +370,67 @@ def clock_source(clock: dict[str, Any]) -> str:
     return clock.get("source", "generated")
 
 
-def generated_clock_names(manifest: dict[str, Any]) -> set[str]:
-    return {
-        clock["port"]
-        for clock in clock_configs(manifest)
-        if clock_source(clock) == "generated"
-    }
-
-
-def literal_clock_names(manifest: dict[str, Any]) -> set[str]:
-    return {
-        clock["port"]
-        for clock in clock_configs(manifest)
-        if clock_source(clock) in {"generated", "registered"}
-    }
-
-
 def registered_clock_configs(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         clock
         for clock in clock_configs(manifest)
         if clock_source(clock) == "registered"
     ]
+
+
+def clock_signal_id_expression(clock: dict[str, Any]) -> str:
+    discovered = clock.get("signal_id")
+    if isinstance(discovered, int) and not isinstance(discovered, bool):
+        return str(discovered)
+    return signal_id(clock["port"])
+
+
+def same_clock(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    return clock_signal_id_expression(left) == clock_signal_id_expression(right)
+
+
+def _unflatten_port_index(
+    port: Port, linear_index: int
+) -> tuple[int, ...]:
+    indices = [0] * len(port.unpacked)
+    remainder = linear_index
+    for rank in reversed(range(len(port.unpacked))):
+        dimension = port.unpacked[rank]
+        indices[rank] = dimension.low + remainder % dimension.size
+        remainder //= dimension.size
+    return tuple(indices)
+
+
+def resolve_clock_port(
+    clock: dict[str, Any], ports: list[Port]
+) -> tuple[Port, tuple[int, ...]]:
+    discovered = clock.get("signal_id")
+    if isinstance(discovered, int) and not isinstance(discovered, bool):
+        offsets = signal_word_offsets(ports)
+        for port, begin, end in zip(ports, offsets, offsets[1:]):
+            if not (begin <= discovered < end):
+                continue
+            if port.width != 1:
+                raise CodegenError(
+                    f"clock signal ID {discovered} selects word storage inside "
+                    f"non-scalar port {port.name!r}"
+                )
+            linear_index = discovered - begin
+            return port, _unflatten_port_index(port, linear_index)
+        raise CodegenError(
+            f"clock signal ID {discovered} is outside the generated DUT ports"
+        )
+
+    name = clock.get("port")
+    port = next((candidate for candidate in ports if candidate.name == name), None)
+    if port is None:
+        raise CodegenError(f"clock port {name!r} was not found")
+    if port.unpacked:
+        raise CodegenError(
+            f"clock port {name!r} is an array; register a named element from "
+            "the generated Dut so discovery records its signal ID"
+        )
+    return port, ()
 
 
 def clock_period_femtoseconds(clock: dict[str, Any]) -> int:
@@ -397,17 +454,19 @@ def clock_phase_femtoseconds(clock: dict[str, Any]) -> int:
 
 def validate_clock_ports(manifest: dict[str, Any], ports: list[Port]) -> None:
     clocks = clock_configs(manifest)
-    ports_by_name = {port.name: port for port in ports}
-    seen_clocks: set[str] = set()
+    seen_clocks: set[int | str] = set()
     primary_count = 0
 
     for clock in clocks:
         clock_name = clock.get("port")
         if not isinstance(clock_name, str) or not clock_name:
             raise CodegenError("each clock must name a port")
-        if clock_name in seen_clocks:
-            raise CodegenError(f"clock port {clock_name!r} is configured more than once")
-        seen_clocks.add(clock_name)
+        clock_identity = clock_signal_id_expression(clock)
+        if clock_identity in seen_clocks:
+            raise CodegenError(
+                f"clock signal {clock_identity!r} is configured more than once"
+            )
+        seen_clocks.add(clock_identity)
 
         source = clock_source(clock)
         if source not in CLOCK_SOURCES:
@@ -417,8 +476,8 @@ def validate_clock_ports(manifest: dict[str, Any], ports: list[Port]) -> None:
                 f"expected one of {choices}"
             )
 
-        port = ports_by_name.get(clock_name)
-        if port is None or port.width != 1:
+        port, _ = resolve_clock_port(clock, ports)
+        if port.width != 1:
             raise CodegenError(
                 f"clock port {clock_name!r} must name one single-bit DUT port"
             )
@@ -480,11 +539,23 @@ def path_for_port(port_name: str, manifest: dict[str, Any]) -> tuple[str, ...]:
 
 def map_ports(ports: list[Port], manifest: dict[str, Any]) -> list[Port]:
     mapped = [
-        replace(port, cpp_path=path_for_port(port.name, manifest))
+        replace(
+            port,
+            cpp_path=(
+                port.cpp_path
+                if port.interface_name is not None
+                else path_for_port(port.name, manifest)
+            ),
+        )
         for port in ports
     ]
     paths: dict[tuple[str, ...], str] = {}
     for port in mapped:
+        for component in port.cpp_path:
+            validate_identifier(
+                component,
+                f"C++ path component for port {port.name!r}",
+            )
         previous = paths.setdefault(port.cpp_path, port.name)
         if previous != port.name:
             raise CodegenError(
@@ -570,12 +641,13 @@ def validate_transport_ports(ports: list[Port]) -> None:
                     f"port {port.name!r} contains unsupported packed union at "
                     f"{'.'.join(union_path)!r}"
                 )
-        if port.direction not in {"input", "output"}:
+        if port.direction not in {"input", "output", "inout"}:
             raise CodegenError(
                 f"port {port.name!r} has direction {port.direction!r}; "
-                "the current DPI transport only supports input and output ports"
+                "the current DPI transport supports input, output, and inout "
+                "ports"
             )
-        if port.width > 32 and port.four_state:
+        if port.width > 32 and port.four_state and port.direction != "inout":
             raise CodegenError(
                 f"port {port.name!r} is {port.width} bits wide and four-state; "
                 "wide transport currently requires a two-state bit port"
@@ -899,6 +971,75 @@ def port_export_name(
     return f"{manifest['top_module']}_port_{index}_{operation}"
 
 
+def inout_export_name(
+    manifest: dict[str, Any], index: int, operation: str
+) -> str:
+    return f"{manifest['top_module']}_inout_{index}_{operation}"
+
+
+def cpp_inout_helpers(ports: list[Port], manifest: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    for index, port in enumerate(ports):
+        if port.direction != "inout":
+            continue
+        value_type = f"coro::PackedSignalValue<{port.width}>"
+        drive_name = inout_export_name(manifest, index, "drive")
+        high_z_name = inout_export_name(manifest, index, "high_z")
+        if port.width <= 32:
+            exported_value = "unsigned int value"
+        elif port.width <= 64:
+            exported_value = "unsigned long long value"
+        else:
+            exported_value = "const svBitVecVal* value"
+        lines.extend(
+            [
+                f'extern "C" void {drive_name}(int index, {exported_value});',
+                f'extern "C" void {high_z_name}(int index);',
+                "",
+                f"inline void cpptb_inout_{index}_drive(",
+                f"    std::int32_t index, {value_type} value) {{",
+            ]
+        )
+        if port.width <= 64:
+            lines.append(f"    {drive_name}(index, value);")
+        else:
+            lines.append(
+                f"    {drive_name}(index, reinterpret_cast<const "
+                "svBitVecVal*>(value.words().data()));"
+            )
+        lines.extend(
+            [
+                "}",
+                "",
+                f"inline void cpptb_inout_{index}_high_z(std::int32_t index) {{",
+                f"    {high_z_name}(index);",
+                "}",
+                "",
+                "template <typename Observed>",
+                f"inline auto cpptb_make_inout_{index}(Observed observed) {{",
+            ]
+        )
+        callback_names = (
+            f"cpptb_inout_{index}_drive, cpptb_inout_{index}_high_z"
+        )
+        if port.unpacked:
+            dimensions = ", ".join(
+                f"coro::ArrayDimension<{dimension.left}, {dimension.right}>"
+                for dimension in port.unpacked
+            )
+            lines.append(
+                f"    return cpptb::InoutArray<{port.width}, Observed, "
+                f"{callback_names}, 0, {dimensions}>{{observed, 0}};"
+            )
+        else:
+            lines.append(
+                f"    return cpptb::InoutRef<{port.width}, Observed, "
+                f"{callback_names}>{{observed, 0}};"
+            )
+        lines.extend(["}", ""])
+    return lines
+
+
 def port_word_count(port: Port) -> int:
     count = (port.width + 31) // 32
     for dimension in port.unpacked:
@@ -943,21 +1084,81 @@ def on_demand_ports(ports: list[Port]) -> list[Port]:
     return [port for port in ports if port.transport == "on_demand"]
 
 
+def port_element_count(port: Port) -> int:
+    count = 1
+    for dimension in port.unpacked:
+        count *= dimension.size
+    return count
+
+
+def port_linear_index(port: Port, indices: tuple[int, ...]) -> int:
+    if len(indices) != len(port.unpacked):
+        raise CodegenError(
+            f"port {port.name!r} expected {len(port.unpacked)} indices, "
+            f"got {len(indices)}"
+        )
+    linear = 0
+    for dimension, index in zip(port.unpacked, indices):
+        if index < dimension.low or index > dimension.high:
+            raise CodegenError(
+                f"port {port.name!r} clock index {index} is outside "
+                f"[{dimension.left}:{dimension.right}]"
+            )
+        linear = linear * dimension.size + index - dimension.low
+    return linear
+
+
+def clock_owned_element_indices(
+    ports: list[Port],
+    manifest: dict[str, Any],
+    sources: set[str],
+) -> dict[str, set[int]]:
+    owned: dict[str, set[int]] = {}
+    for clock in clock_configs(manifest):
+        if clock_source(clock) not in sources:
+            continue
+        port, indices = resolve_clock_port(clock, ports)
+        owned.setdefault(port.name, set()).add(
+            port_linear_index(port, indices)
+        )
+    return owned
+
+
 def driven_port_names(ports: list[Port], manifest: dict[str, Any]) -> set[str]:
-    literal_clocks = literal_clock_names(manifest)
+    clock_owned = clock_owned_element_indices(
+        ports, manifest, {"generated", "registered"}
+    )
     return {
         port.name
         for port in ports
-        if port.direction == "input" and port.name not in literal_clocks
+        if port.direction == "input"
+        and len(clock_owned.get(port.name, set())) < port_element_count(port)
     }
 
 
 def writable_port_names(ports: list[Port], manifest: dict[str, Any]) -> set[str]:
-    generated_clocks = generated_clock_names(manifest)
+    generated_clock_owned = clock_owned_element_indices(
+        ports, manifest, {"generated"}
+    )
     return {
         port.name
         for port in ports
-        if port.direction == "input" and port.name not in generated_clocks
+        if port.direction == "input"
+        and len(generated_clock_owned.get(port.name, set()))
+        < port_element_count(port)
+    }
+
+
+def observed_port_names(
+    ports: list[Port], manifest: dict[str, Any]
+) -> set[str]:
+    clock_owned = clock_owned_element_indices(
+        ports, manifest, {"generated", "registered"}
+    )
+    return {
+        port.name
+        for port in ports
+        if port.direction != "input" or bool(clock_owned.get(port.name))
     }
 
 
@@ -975,19 +1176,26 @@ def static_packed_transport_offsets(
     ports: list[Port], manifest: dict[str, Any]
 ) -> dict[str, int]:
     driven_names = driven_port_names(ports, manifest)
+    observed_names = observed_port_names(ports, manifest)
     packed_observed = [
         port
         for port in ports
-        if port.transport == "packed" and port.name not in driven_names
+        if port.transport == "packed" and port.name in observed_names
     ]
     packed_driven = [
         port
         for port in ports
         if port.transport == "packed" and port.name in driven_names
     ]
+    driven_offsets = directional_transport_offsets(packed_driven)
+    observed_offsets = directional_transport_offsets(packed_observed)
     return {
-        **directional_transport_offsets(packed_observed),
-        **directional_transport_offsets(packed_driven),
+        port.name: (
+            driven_offsets[port.name]
+            if port.name in driven_offsets
+            else observed_offsets[port.name]
+        )
+        for port in [*packed_observed, *packed_driven]
     }
 
 
@@ -1013,9 +1221,9 @@ def edge_observer_ports(
             raise CodegenError(
                 f"edge observer port {name!r} is already a configured clock"
             )
-        if port.direction != "output":
+        if port.direction not in {"output", "inout"}:
             raise CodegenError(
-                f"edge observer port {name!r} must be a DUT output"
+                f"edge observer port {name!r} must be a DUT output or inout"
             )
         if port.unpacked:
             raise CodegenError(
@@ -1047,7 +1255,11 @@ def edge_observer_ports(
         for port in candidates:
             if port.name in clock_names or port.direction == "input":
                 continue
-            if port.direction != "output" or port.unpacked or port.width != 1:
+            if (
+                port.direction not in {"output", "inout"}
+                or port.unpacked
+                or port.width != 1
+            ):
                 if not strict_discovery:
                     continue
                 raise CodegenError(
@@ -1077,6 +1289,22 @@ def cpp_signal_type(port: Port, driven_names: set[str]) -> str:
     if port.width <= 32:
         return "coro::Signal"
     return f"coro::{direction}Signal<{port.width}>"
+
+
+def cpp_inout_type(port: Port, observed_type: str, index: int) -> str:
+    callbacks = f"cpptb_inout_{index}_drive, cpptb_inout_{index}_high_z"
+    if not port.unpacked:
+        return (
+            f"cpptb::InoutRef<{port.width}, {observed_type}, {callbacks}>"
+        )
+    dimensions = ", ".join(
+        f"coro::ArrayDimension<{dimension.left}, {dimension.right}>"
+        for dimension in port.unpacked
+    )
+    return (
+        f"cpptb::InoutArray<{port.width}, {observed_type}, {callbacks}, "
+        f"0, {dimensions}>"
+    )
 
 
 def cpp_static_signal_type(
@@ -1126,12 +1354,15 @@ def node_type(node: TreeNode, manifest: dict[str, Any]) -> str:
     return "".join(pascal_case(item) for item in node.path) + "Dut"
 
 
-def node_signature(node: TreeNode, manifest: dict[str, Any]) -> tuple[Any, ...]:
+def node_signature(
+    node: TreeNode,
+    manifest: dict[str, Any],
+    writable_names: set[str],
+) -> tuple[Any, ...]:
     signature = []
-    generated_clocks = generated_clock_names(manifest)
     for name, child in node.children.items():
         if isinstance(child, Port):
-            writable = child.direction == "input" and child.name not in generated_clocks
+            writable = child.name in writable_names
             dimensions = tuple(
                 (dimension.left, dimension.right) for dimension in child.unpacked
             )
@@ -1155,7 +1386,11 @@ def node_signature(node: TreeNode, manifest: dict[str, Any]) -> tuple[Any, ...]:
     return tuple(signature)
 
 
-def collect_structs(root: TreeNode, manifest: dict[str, Any]) -> list[TreeNode]:
+def collect_structs(
+    root: TreeNode,
+    manifest: dict[str, Any],
+    writable_names: set[str],
+) -> list[TreeNode]:
     ordered: list[TreeNode] = []
     by_type: dict[str, tuple[Any, ...]] = {}
 
@@ -1164,7 +1399,7 @@ def collect_structs(root: TreeNode, manifest: dict[str, Any]) -> list[TreeNode]:
             if isinstance(child, TreeNode):
                 visit(child)
         type_name = node_type(node, manifest)
-        signature = node_signature(node, manifest)
+        signature = node_signature(node, manifest, writable_names)
         previous = by_type.get(type_name)
         if previous is not None:
             if previous != signature:
@@ -1512,6 +1747,15 @@ def hierarchy_scope_type(path: tuple[str, ...]) -> str:
     return f"Hierarchy{suffix}Scope"
 
 
+def hierarchy_scope_array_type(
+    parent: tuple[str, ...], base_name: str
+) -> str:
+    suffix = "".join(
+        cpp_identifier(part, pascal=True) for part in (*parent, base_name)
+    )
+    return f"Hierarchy{suffix}Array"
+
+
 def hierarchy_signal_id(path: str) -> str:
     return "kHierarchy" + pascal_case(path)
 
@@ -1563,6 +1807,45 @@ def hierarchy_signal_cpp_type(
     return (
         f"cpptb::hierarchy::MemoryND<{common}, {depositable}, "
         f"{four_state}, {user_value}, {dimensions}>"
+    )
+
+
+def selected_hierarchy_signal_cpp_type(
+    signals: tuple[HierarchySignal, ...], packed_types: PackedCppRegistry
+) -> str:
+    signal = signals[0]
+    depositable = "true" if signal.depositable else "false"
+    four_state = "true" if signal.four_state else "false"
+    access_paths = (
+        "cpptb::hierarchy::AccessPathSet<"
+        + ", ".join(json.dumps(item.hdl_path) for item in signals)
+        + ">"
+    )
+    user_value = f"cpptb::probe::Value<{signal.width}>"
+    if isinstance(signal.packed_type, (PackedEnumType, PackedStructType)):
+        user_value = packed_types.lookup(signal.packed_type).value_name
+    if not signal.unpacked:
+        return (
+            f"cpptb::hierarchy::SelectedSignal<HierarchyTransport, "
+            f"{signal.width}, {depositable}, {user_value}, {four_state}, "
+            f"{access_paths}>"
+        )
+    if len(signal.unpacked) == 1:
+        dimension = signal.unpacked[0]
+        return (
+            f"cpptb::hierarchy::SelectedMemory<HierarchyTransport, "
+            f"{signal.width}, {dimension.left}, {dimension.right}, "
+            f"{depositable}, {user_value}, {four_state}, {access_paths}>"
+        )
+    dimensions = ", ".join(
+        f"cpptb::hierarchy::Dimension<{dimension.left}, {dimension.right}>"
+        for dimension in signal.unpacked
+    )
+    return (
+        f"cpptb::hierarchy::SelectedMemoryND<HierarchyTransport, "
+        f"{signal.width}, {depositable}, {four_state}, {user_value}, "
+        f"{access_paths}, "
+        f"{dimensions}>"
     )
 
 
@@ -2176,6 +2459,264 @@ def render_cpp_hierarchy(
     definitions = render_cpp_hierarchy_transport(
         hierarchy, accesses, manifest
     )
+    definitions.extend(
+        [
+            *(f"struct {hierarchy_scope_type(path)};" for path in sorted(
+                (path for path in node_paths if path)
+            )),
+            "",
+        ]
+    )
+
+    direct_children_by_parent: dict[
+        tuple[str, ...], list[tuple[str, tuple[str, ...]]]
+    ] = {}
+    array_groups: dict[
+        tuple[tuple[str, ...], str], list[tuple[int, tuple[str, ...]]]
+    ] = {}
+    for candidate in node_paths:
+        if not candidate:
+            continue
+        parent = candidate[:-1]
+        component = candidate[-1]
+        match = re.fullmatch(r"(.+)\[(-?\d+)\]", component)
+        if match:
+            array_groups.setdefault((parent, match.group(1)), []).append(
+                (int(match.group(2)), candidate)
+            )
+        else:
+            direct_children_by_parent.setdefault(parent, []).append(
+                (component, candidate)
+            )
+
+    def signal_signature(signal: HierarchySignal) -> tuple[Any, ...]:
+        return (
+            signal.symbol_kind,
+            signal.width,
+            signal.type_kind,
+            signal.signed,
+            signal.four_state,
+            tuple((item.left, item.right) for item in signal.unpacked),
+            (
+                signal.packed_type.structural_signature()
+                if signal.packed_type is not None
+                else None
+            ),
+        )
+
+    @dataclass(frozen=True)
+    class SelectedScopeSchema:
+        paths: tuple[tuple[str, ...], ...]
+        children: tuple[tuple[str, Any], ...]
+        signals: tuple[tuple[str, tuple[HierarchySignal, ...]], ...]
+        parameters: tuple[
+            tuple[str, tuple[HierarchyParameter, ...]], ...
+        ]
+
+    schema_cache: dict[
+        tuple[tuple[str, ...], ...], SelectedScopeSchema | None
+    ] = {}
+
+    def selected_scope_schema(
+        paths: tuple[tuple[str, ...], ...]
+    ) -> SelectedScopeSchema | None:
+        cached = schema_cache.get(paths)
+        if paths in schema_cache:
+            return cached
+
+        child_maps = [
+            {
+                name: child
+                for name, child in direct_children_by_parent.get(path, [])
+            }
+            for path in paths
+        ]
+        child_names = set(child_maps[0]) if child_maps else set()
+        if any(set(items) != child_names for items in child_maps[1:]):
+            schema_cache[paths] = None
+            return None
+        if any(
+            any(parent == path for parent, _ in array_groups)
+            for path in paths
+        ):
+            schema_cache[paths] = None
+            return None
+
+        signal_maps = [
+            {
+                signal.cpp_path[-1]: signal
+                for signal in signals_by_parent.get(path, [])
+            }
+            for path in paths
+        ]
+        signal_names = set(signal_maps[0]) if signal_maps else set()
+        if any(set(items) != signal_names for items in signal_maps[1:]):
+            schema_cache[paths] = None
+            return None
+        signal_groups: list[tuple[str, tuple[HierarchySignal, ...]]] = []
+        for name in sorted(signal_names):
+            grouped = tuple(items[name] for items in signal_maps)
+            if any(
+                signal_signature(signal) != signal_signature(grouped[0])
+                for signal in grouped[1:]
+            ):
+                schema_cache[paths] = None
+                return None
+            signal_groups.append((name, grouped))
+
+        parameter_maps = [
+            {
+                parameter.cpp_path[-1]: parameter
+                for parameter in parameters_by_parent.get(path, [])
+            }
+            for path in paths
+        ]
+        parameter_names = set(parameter_maps[0]) if parameter_maps else set()
+        if any(
+            set(items) != parameter_names for items in parameter_maps[1:]
+        ):
+            schema_cache[paths] = None
+            return None
+        parameter_groups = tuple(
+            (name, tuple(items[name] for items in parameter_maps))
+            for name in sorted(parameter_names)
+        )
+
+        child_groups: list[tuple[str, SelectedScopeSchema]] = []
+        for name in sorted(child_names):
+            child_paths = tuple(items[name] for items in child_maps)
+            child_schema = selected_scope_schema(child_paths)
+            if child_schema is None:
+                schema_cache[paths] = None
+                return None
+            child_groups.append((name, child_schema))
+
+        schema = SelectedScopeSchema(
+            paths,
+            tuple(child_groups),
+            tuple(signal_groups),
+            parameter_groups,
+        )
+        schema_cache[paths] = schema
+        return schema
+
+    compatible_arrays: dict[
+        tuple[tuple[str, ...], str], SelectedScopeSchema
+    ] = {}
+    for key, entries in array_groups.items():
+        paths = tuple(path for _, path in sorted(entries))
+        schema = selected_scope_schema(paths)
+        if schema is not None:
+            compatible_arrays[key] = schema
+
+    emitted_view_types: set[str] = set()
+
+    def render_selected_view(
+        type_name: str, schema: SelectedScopeSchema
+    ) -> list[str]:
+        if type_name in emitted_view_types:
+            return []
+        rendered: list[str] = []
+        child_types: list[tuple[str, str, SelectedScopeSchema]] = []
+        for name, child_schema in schema.children:
+            child_type = f"{type_name}{cpp_identifier(name, pascal=True)}"
+            rendered.extend(render_selected_view(child_type, child_schema))
+            child_types.append((name, child_type, child_schema))
+
+        emitted_view_types.add(type_name)
+        rendered.append(f"struct {type_name} {{")
+        for name, child_type, _ in child_types:
+            rendered.append(
+                f"    [[no_unique_address]] {child_type} "
+                f"{cpp_identifier(name)};"
+            )
+        for name, grouped in schema.signals:
+            rendered.append(
+                "    "
+                + selected_hierarchy_signal_cpp_type(grouped, packed_types)
+                + f" {cpp_identifier(name)};"
+            )
+        for name, _ in schema.parameters:
+            rendered.append(f"    std::int64_t {cpp_identifier(name)};")
+        rendered.extend(["};", ""])
+        return rendered
+
+    def selected_view_initializer(
+        schema: SelectedScopeSchema, selected: int, indent: int
+    ) -> list[str]:
+        prefix = " " * indent
+        values: list[list[str]] = []
+        for _, child_schema in schema.children:
+            values.append(selected_view_initializer(child_schema, selected, indent + 4))
+        for _, grouped in schema.signals:
+            signal = grouped[selected]
+            signal_index = signal_indices[signal.hdl_path]
+            values.append(
+                [
+                    " " * (indent + 4)
+                    + f'{{{signal_index}, "{signal.hdl_path}"}}'
+                ]
+            )
+        for _, grouped in schema.parameters:
+            values.append(
+                [" " * (indent + 4) + str(grouped[selected].value)]
+            )
+        lines = [prefix + "{"]
+        for index, value_lines in enumerate(values):
+            if index + 1 < len(values):
+                value_lines[-1] += ","
+            lines.extend(value_lines)
+        lines.append(prefix + "}")
+        return lines
+
+    for key, schema in sorted(compatible_arrays.items()):
+        parent, base_name = key
+        array_type = hierarchy_scope_array_type(parent, base_name)
+        view_type = f"{array_type}Element"
+        definitions.extend(render_selected_view(view_type, schema))
+        entries = sorted(array_groups[key])
+        element_types = ", ".join(
+            "cpptb::hierarchy::ScopeElement<"
+            f"{index}, {hierarchy_scope_type(path)}>"
+            for index, path in entries
+        )
+        definitions.extend(
+            [
+                f"struct {array_type} {{",
+                f"    using Compatibility = cpptb::hierarchy::ScopeArray<{element_types}>;",
+                "",
+                "    template <std::int32_t Index>",
+                "    [[nodiscard]] constexpr auto at() const {",
+                "        return Compatibility{}.template at<Index>();",
+                "    }",
+                "",
+                f"    [[nodiscard]] {view_type} operator[](",
+                "        std::int32_t index) const {",
+                "        switch (index) {",
+            ]
+        )
+        for selected, (index, _) in enumerate(entries):
+            definitions.append(f"            case {index}: return {view_type}")
+            initializer = selected_view_initializer(schema, selected, 16)
+            initializer[0] = "                " + initializer[0].lstrip()
+            initializer[-1] += ";"
+            definitions.extend(initializer)
+        path_label = ".".join((*parent, base_name))
+        valid_indices = ", ".join(str(index) for index, _ in entries)
+        definitions.extend(
+            [
+                "            default:",
+                "                std::fprintf(stderr,",
+                f'                    "cpptb: hierarchy scope array \'{path_label}\' "',
+                '                    "index %d is out of range; valid indices "',
+                f'                    "are {valid_indices}\\n", index);',
+                "                std::abort();",
+                "        }",
+                "    }",
+                "};",
+                "",
+            ]
+        )
 
     def direct_children(path: tuple[str, ...]) -> list[tuple[str, ...]]:
         return sorted(
@@ -2206,14 +2747,19 @@ def render_cpp_hierarchy(
                 f"{hierarchy_scope_type(child)} {cpp_identifier(component)};"
             )
         for base_name, entries in sorted(array_children.items()):
-            element_types = ", ".join(
-                "cpptb::hierarchy::ScopeElement<"
-                f"{index}, {hierarchy_scope_type(child)}>"
-                for index, child in sorted(entries)
-            )
+            key = (path, base_name)
+            if key in compatible_arrays:
+                field_type = hierarchy_scope_array_type(path, base_name)
+            else:
+                element_types = ", ".join(
+                    "cpptb::hierarchy::ScopeElement<"
+                    f"{index}, {hierarchy_scope_type(child)}>"
+                    for index, child in sorted(entries)
+                )
+                field_type = f"cpptb::hierarchy::ScopeArray<{element_types}>"
             lines.append(
-                "    [[no_unique_address]] cpptb::hierarchy::ScopeArray<"
-                f"{element_types}> {cpp_identifier(base_name)};"
+                f"    [[no_unique_address]] {field_type} "
+                f"{cpp_identifier(base_name)};"
             )
         for parameter in sorted(
             parameters_by_parent.get(path, []), key=lambda item: item.hdl_path
@@ -2297,6 +2843,7 @@ def render_cpp_dut(
     manifest: dict[str, Any],
     source: str,
     hierarchy: HierarchyCatalog | None = None,
+    interfaces: tuple[InterfacePort, ...] = (),
 ) -> str:
     hierarchy = hierarchy or HierarchyCatalog()
     packed_types = collect_packed_cpp_types(ports, hierarchy)
@@ -2322,10 +2869,12 @@ def render_cpp_dut(
         lines.append('#include "cpptb/probe.hpp"')
     if hierarchy.signals or hierarchy.scopes:
         lines.append('#include "cpptb/hierarchy.hpp"')
+    if any(port.direction == "inout" for port in ports):
+        lines.append('#include "cpptb/inout.hpp"')
     if any(
         access["operation"].endswith("_logic")
         for access in manifest.get("hierarchy_accesses", [])
-    ):
+    ) or any(port.direction == "inout" and port.width > 64 for port in ports):
         lines.append('#include "svdpi.h"')
     lines.extend(
         [
@@ -2339,6 +2888,7 @@ def render_cpp_dut(
     driven_names = driven_port_names(ports, manifest)
     writable_names = writable_port_names(ports, manifest)
     packed_transport_offsets = static_packed_transport_offsets(ports, manifest)
+    port_indices = {port.name: index for index, port in enumerate(ports)}
     hierarchy_edges = hierarchy_edge_paths(
         list(manifest.get("hierarchy_accesses", []))
     )
@@ -2368,6 +2918,7 @@ def render_cpp_dut(
         )
 
     lines.extend(render_packed_cpp_types(packed_types))
+    lines.extend(cpp_inout_helpers(ports, manifest))
     hierarchy_definitions, hierarchy_root_members = render_cpp_hierarchy(
         hierarchy,
         list(manifest.get("hierarchy_accesses", [])),
@@ -2376,27 +2927,132 @@ def render_cpp_dut(
     )
     lines.extend(hierarchy_definitions)
 
-    for node in collect_structs(root, manifest):
+    interfaces_by_path = {(interface.name,): interface for interface in interfaces}
+
+    def field_type_for(child: Port | Internal | TreeNode) -> str:
+        if isinstance(child, Port):
+            observed_type = (
+                cpp_static_signal_type(
+                    child,
+                    writable_names,
+                    driven_names,
+                    packed_transport_offsets,
+                )
+                if static_binding
+                else cpp_signal_type(child, driven_names)
+            )
+            if child.direction == "inout":
+                return cpp_inout_type(
+                    child, observed_type, port_indices[child.name]
+                )
+            return observed_type
+        if isinstance(child, Internal):
+            return cpp_internal_type(child)
+        return node_type(child, manifest)
+
+    def selected_type(value_type: str, depth: int) -> str:
+        result = value_type
+        for _ in range(depth):
+            result = (
+                "decltype(std::declval<" + result + ">()[std::int32_t{}])"
+            )
+        return result
+
+    def render_interface_array_node(
+        node: TreeNode, interface: InterfacePort
+    ) -> list[str]:
+        children = list(node.children.items())
+        if not children or not all(
+            isinstance(child, Port) for _, child in children
+        ):
+            raise CodegenError(
+                f"interface array {interface.name!r} has an invalid generated "
+                "C++ member tree"
+            )
+        rank = len(interface.unpacked)
+        if rank == 0:
+            raise CodegenError(
+                f"scalar interface {interface.name!r} reached array rendering"
+            )
+        types = {
+            name: field_type_for(child)
+            for name, child in children
+            if isinstance(child, Port)
+        }
+        rendered = [f"struct {node_type(node, manifest)} {{"]
+        for name, _ in children:
+            rendered.append(
+                f"    {types[name]} cpptb_{cpp_identifier(name)};"
+            )
+
+        for depth in range(rank, 0, -1):
+            selection_name = f"Selection{depth}"
+            rendered.append(f"    struct {selection_name} {{")
+            final = depth == rank
+            for name, _ in children:
+                member_name = (
+                    cpp_identifier(name)
+                    if final
+                    else f"cpptb_{cpp_identifier(name)}"
+                )
+                rendered.append(
+                    f"        {selected_type(types[name], depth)} {member_name};"
+                )
+            if not final:
+                rendered.extend(
+                    [
+                        "",
+                        f"        [[nodiscard]] Selection{depth + 1} "
+                        "operator[](std::int32_t index) const {",
+                        f"            return Selection{depth + 1}{{",
+                    ]
+                )
+                for index, (name, _) in enumerate(children):
+                    comma = "," if index + 1 < len(children) else ""
+                    rendered.append(
+                        "                cpptb_"
+                        f"{cpp_identifier(name)}[index]{comma}"
+                    )
+                rendered.extend(["            };", "        }"])
+            rendered.append("    };")
+
+        rendered.extend(
+            [
+                "",
+                "    [[nodiscard]] Selection1 "
+                "operator[](std::int32_t index) const {",
+                "        return Selection1{",
+            ]
+        )
+        for index, (name, _) in enumerate(children):
+            comma = "," if index + 1 < len(children) else ""
+            rendered.append(
+                f"            cpptb_{cpp_identifier(name)}[index]{comma}"
+            )
+        rendered.extend(
+            [
+                "        };",
+                "    }",
+                "",
+                "    [[nodiscard]] Selection1 at(std::int32_t index) const {",
+                "        return (*this)[index];",
+                "    }",
+                "};",
+                "",
+            ]
+        )
+        return rendered
+
+    for node in collect_structs(root, manifest, writable_names):
+        interface = interfaces_by_path.get(node.path)
+        if interface is not None and interface.unpacked:
+            lines.extend(render_interface_array_node(node, interface))
+            continue
         lines.append(f"struct {node_type(node, manifest)} {{")
         if static_binding and not node.path:
             lines.append("    static constexpr bool cpptb_static_binding = true;")
         for name, child in node.children.items():
-            field_type = (
-                (
-                    cpp_static_signal_type(
-                        child, writable_names, driven_names,
-                        packed_transport_offsets
-                    )
-                    if static_binding
-                    else cpp_signal_type(child, driven_names)
-                )
-                if isinstance(child, Port)
-                else (
-                    cpp_internal_type(child)
-                    if isinstance(child, Internal)
-                    else node_type(child, manifest)
-                )
-            )
+            field_type = field_type_for(child)
             lines.append(f"    {field_type} {name};")
         if not node.path:
             lines.extend(hierarchy_root_members)
@@ -2407,7 +3063,8 @@ def render_cpp_dut(
     if compatibility_root and compatibility_root != manifest["root_type"]:
         validate_identifier(compatibility_root, "compatibility root type")
         generated_types = {
-            node_type(node, manifest) for node in collect_structs(root, manifest)
+            node_type(node, manifest)
+            for node in collect_structs(root, manifest, writable_names)
         }
         if compatibility_root in generated_types:
             raise CodegenError(
@@ -2432,6 +3089,7 @@ def render_binding_expr(
     driven_names: set[str],
     internal_indices: dict[Internal, int],
     on_demand_indices: dict[Port, int],
+    port_indices: dict[Port, int],
     static_packed_offsets: dict[str, int] | None = None,
     indent: int = 4,
     bind_internals: bool = True,
@@ -2442,6 +3100,13 @@ def render_binding_expr(
     for index, child in enumerate(values):
         comma = "," if index + 1 < len(values) else ""
         if isinstance(child, Port):
+            def append_port(expression: str) -> None:
+                if child.direction == "inout":
+                    expression = (
+                        f"cpptb_make_inout_{port_indices[child]}({expression})"
+                    )
+                lines.append(" " * (indent + 4) + expression + comma)
+
             writable = "true" if child.name in writable_names else "false"
             driven = "true" if child.name in driven_names else "false"
             if static_packed_offsets is not None:
@@ -2484,7 +3149,7 @@ def render_binding_expr(
                     f"make_signal(cpptb::dpi::{spec_name}<{template_values}>{{}}, "
                     f'"{child.name}")'
                 )
-                lines.append(" " * (indent + 4) + expression + comma)
+                append_port(expression)
             elif child.unpacked:
                 declared_range = child.unpacked[0]
                 if len(child.unpacked) == 1:
@@ -2524,7 +3189,7 @@ def render_binding_expr(
                         f"make_signal({signal_spec}, {signal_id(child.name)}, "
                         f'"{child.name}"))'
                     )
-                lines.append(" " * (indent + 4) + expression + comma)
+                append_port(expression)
             elif child.width <= 32:
                 if child.transport == "packed":
                     expression = (
@@ -2541,7 +3206,7 @@ def render_binding_expr(
                         f"make_signal({signal_spec}, {signal_id(child.name)}, "
                         f'"{child.name}")'
                     )
-                lines.append(" " * (indent + 4) + expression + comma)
+                append_port(expression)
             else:
                 transport_spec = (
                     f"coro::SignalSpec<{child.width}, {writable}>{{}}"
@@ -2549,11 +3214,11 @@ def render_binding_expr(
                 signal_spec = render_signal_spec(
                     child, transport_spec, on_demand_indices, writable
                 )
-                lines.append(
-                    " " * (indent + 4)
-                    + f"make_signal({signal_spec}, "
-                    + f'{signal_id(child.name)}, "{child.name}"){comma}'
+                expression = (
+                    f"make_signal({signal_spec}, {signal_id(child.name)}, "
+                    f'"{child.name}")'
                 )
+                append_port(expression)
         elif isinstance(child, Internal):
             expression = (
                 f"make_internal_{internal_indices[child]}()"
@@ -2568,6 +3233,7 @@ def render_binding_expr(
                 driven_names,
                 internal_indices,
                 on_demand_indices,
+                port_indices,
                 static_packed_offsets,
                 indent + 4,
                 bind_internals,
@@ -2900,12 +3566,13 @@ def render_cpp_binding(
     manifest: dict[str, Any],
     source: str,
 ) -> str:
-    clock_names = {clock["port"] for clock in clock_configs(manifest)}
+    clocks = clock_configs(manifest)
     edge_observers = edge_observer_ports(ports, manifest)
     hierarchy_edges = hierarchy_edge_paths(
         list(manifest.get("hierarchy_accesses", []))
     )
     driven_names = driven_port_names(ports, manifest)
+    observed_names = observed_port_names(ports, manifest)
     writable_names = writable_port_names(ports, manifest)
     compact_input_transport = bool(
         manifest.get("run", {}).get("compact_input_transport", True)
@@ -2917,7 +3584,7 @@ def render_cpp_binding(
         compact_input_transport or bool(selected_on_demand) or static_binding
     )
     driven = [port for port in ports if port.name in driven_names]
-    observed = [port for port in ports if port.name not in driven_names]
+    observed = [port for port in ports if port.name in observed_names]
     packed_driven = packed_ports(driven)
     packed_observed = packed_ports(observed)
     packed_transport_offsets = static_packed_transport_offsets(ports, manifest)
@@ -2957,11 +3624,12 @@ def render_cpp_binding(
             "",
             f"inline constexpr bool kCompactInputTransport = "
             f"{'true' if effective_compact_input_transport else 'false'};",
-            f"inline constexpr std::array<uint32_t, {len(clock_names)}> kClockSignalIds = {{",
+            f"inline constexpr std::array<uint32_t, {len(clocks)}> kClockSignalIds = {{",
         ]
     )
     lines.extend(
-        f"    {signal_id(clock['port'])}," for clock in clock_configs(manifest)
+        f"    {clock_signal_id_expression(clock)},"
+        for clock in clocks
     )
     lines.extend([
         "};",
@@ -2969,7 +3637,7 @@ def render_cpp_binding(
         f"{len(registered_clocks)}> kRegisteredClockConfigs = {{{{",
     ])
     lines.extend(
-        f"    {{{signal_id(clock['port'])}, "
+        f"    {{{clock_signal_id_expression(clock)}, "
         f"{clock_period_femtoseconds(clock)}ULL, "
         f"{clock_phase_femtoseconds(clock)}ULL, "
         f"{int(clock.get('initial_value', 0))}u}},"
@@ -3017,18 +3685,28 @@ def render_cpp_binding(
     lines.extend(f"    {word_id}," for word_id in signal_word_ids(packed_driven))
     lines.extend(["};", ""])
     if static_binding:
-        static_packed_ports = [*packed_observed, *packed_driven]
+        static_packed_ports = [
+            *((port, False) for port in packed_observed),
+            *((port, True) for port in packed_driven),
+        ]
+        observed_offsets = directional_transport_offsets(packed_observed)
+        driven_offsets = directional_transport_offsets(packed_driven)
         lines.extend(
             [
                 f"inline constexpr std::array<cpptb::dpi::StaticPackedBindingSpan, "
                 f"{len(static_packed_ports)}> kStaticPackedBindingSpans = {{{{",
             ]
         )
-        for port in static_packed_ports:
-            driven_value = "true" if port.name in driven_names else "false"
+        for port, driven_role in static_packed_ports:
+            transport_offset = (
+                driven_offsets[port.name]
+                if driven_role
+                else observed_offsets[port.name]
+            )
             lines.append(
                 f"    {{{signal_id(port.name)}, {port_word_count(port)}, "
-                f"{packed_transport_offsets[port.name]}, {driven_value}}},"
+                f"{transport_offset}, "
+                f"{'true' if driven_role else 'false'}}},"
             )
         lines.extend(
             [
@@ -3056,6 +3734,7 @@ def render_cpp_binding(
             for index, port in enumerate(ports)
             if port.transport == "on_demand"
         },
+        {port: index for index, port in enumerate(ports)},
         packed_transport_offsets if static_binding else None,
         4,
     )
@@ -3078,6 +3757,7 @@ def render_cpp_binding(
                 for index, port in enumerate(ports)
                 if port.transport == "on_demand"
             },
+            {port: index for index, port in enumerate(ports)},
             packed_transport_offsets,
             4,
             False,
@@ -3228,57 +3908,214 @@ def render_cpp_clock_discovery(manifest: dict[str, Any], source: str) -> str:
 
 
 def sv_decl(port: Port) -> str:
+    if port.interface_name is not None:
+        raise CodegenError(
+            f"interface member {port.name!r} cannot be declared as a flat port"
+        )
     packed = "" if port.width == 1 else f" [{port.width - 1}:0]"
-    value_type = "bit" if port.width > 32 else "logic"
+    value_type = (
+        "tri"
+        if port.direction == "inout"
+        else ("bit" if port.width > 32 else "logic")
+    )
     unpacked = "".join(
         f" [{dimension.left}:{dimension.right}]" for dimension in port.unpacked
     )
     return f"  {value_type}{packed} {port.name}{unpacked};"
 
 
-def sv_array_loops(port: Port) -> tuple[list[str], list[str], str, str]:
-    indices = (
-        [f"cpptb_{port.name}_index"]
-        if len(port.unpacked) == 1
-        else [
-            f"cpptb_{port.name}_index_{rank}"
-            for rank in range(len(port.unpacked))
-        ]
+def sv_interface_bridge_name(
+    interface: InterfacePort | str, member: InterfaceConstructorPort | str
+) -> str:
+    interface_name = (
+        interface.name if isinstance(interface, InterfacePort) else interface
     )
-    lines = []
-    for rank, (dimension, index) in enumerate(zip(port.unpacked, indices)):
-        lines.append(
-            "    " + "  " * rank
-            + f"for (int {index} = {dimension.low}; "
-            + f"{index} <= {dimension.high}; {index}++) begin"
+    member_name = (
+        member.name if isinstance(member, InterfaceConstructorPort) else member
+    )
+    return f"cpptb_{cpp_identifier(interface_name)}_{cpp_identifier(member_name)}"
+
+
+def sv_inout_storage_name(port: Port, suffix: str) -> str:
+    return f"cpptb_{cpp_identifier(port.name)}_{suffix}"
+
+
+def sv_index_tuples(port: Port) -> list[tuple[int, ...]]:
+    if not port.unpacked:
+        return [()]
+    return list(
+        product(
+            *(
+                range(dimension.low, dimension.high + 1)
+                for dimension in port.unpacked
+            )
         )
-    source = port.name + "".join(f"[{index}]" for index in indices)
-    linear = f"({indices[0]} - {port.unpacked[0].low})"
-    for dimension, index in zip(port.unpacked[1:], indices[1:]):
-        linear = f"({linear} * {dimension.size} + ({index} - {dimension.low}))"
-    return lines, indices, source, linear
+    )
+
+
+def sv_inout_declarations(port: Port) -> list[str]:
+    packed = "" if port.width == 1 else f" [{port.width - 1}:0]"
+    unpacked = "".join(
+        f" [{dimension.left}:{dimension.right}]"
+        for dimension in port.unpacked
+    )
+    drive_name = sv_inout_storage_name(port, "drive")
+    enable_name = sv_inout_storage_name(port, "oe")
+    lines = [
+        f"  logic{packed} {drive_name}{unpacked};",
+        f"  bit {enable_name}{unpacked};",
+    ]
+    for indices in sv_index_tuples(port):
+        index_suffix = "".join(f"[{index}]" for index in indices)
+        target = sv_port_reference(port, [str(index) for index in indices])
+        lines.append(
+            f"  assign {target} = {enable_name}{index_suffix} ? "
+            f"{drive_name}{index_suffix} : 'z;"
+        )
+    return lines
+
+
+def sv_interface_declarations(interface: InterfacePort) -> list[str]:
+    lines: list[str] = []
+    interface_ranges = "".join(
+        f" [{dimension.left}:{dimension.right}]"
+        for dimension in interface.unpacked
+    )
+    for constructor in interface.constructor_ports:
+        net_type = "wire" if constructor.direction in {"output", "inout"} else (
+            "logic" if constructor.four_state else "bit"
+        )
+        packed = "" if constructor.width == 1 else f" [{constructor.width - 1}:0]"
+        unpacked = "".join(
+            f" [{dimension.left}:{dimension.right}]"
+            for dimension in (*interface.unpacked, *constructor.unpacked)
+        )
+        lines.append(
+            f"  {net_type}{packed} "
+            f"{sv_interface_bridge_name(interface, constructor)}{unpacked};"
+        )
+
+    parameters = ""
+    if interface.parameters:
+        assignments = ", ".join(
+            f".{parameter.name}({parameter.value})"
+            for parameter in interface.parameters
+        )
+        parameters = f" #({assignments})"
+    lines.append(
+        f"  {interface.definition}{parameters} {interface.name}"
+        f"{interface_ranges} ("
+    )
+    for index, constructor in enumerate(interface.constructor_ports):
+        comma = "," if index + 1 < len(interface.constructor_ports) else ""
+        lines.append(
+            f"      .{constructor.name}("
+            f"{sv_interface_bridge_name(interface, constructor)}){comma}"
+        )
+    lines.append("  );")
+    return lines
+
+
+def sv_port_reference(port: Port, indices: list[str] | tuple[str, ...] = ()) -> str:
+    if len(indices) != len(port.unpacked):
+        raise CodegenError(
+            f"port {port.name!r} reference expected {len(port.unpacked)} "
+            f"indices, got {len(indices)}"
+        )
+    if port.interface_name is None:
+        return port.name + "".join(f"[{index}]" for index in indices)
+
+    interface_indices = indices[: port.interface_rank]
+    member_indices = indices[port.interface_rank :]
+    if port.interface_constructor_port:
+        target = sv_interface_bridge_name(
+            port.interface_name, port.interface_member or ""
+        )
+        return target + "".join(f"[{index}]" for index in indices)
+    target = port.interface_name + "".join(
+        f"[{index}]" for index in interface_indices
+    )
+    target += f".{port.interface_member}"
+    return target + "".join(f"[{index}]" for index in member_indices)
+
+
+def sv_scalar_port_reference(port: Port) -> str:
+    return sv_port_reference(port)
+
+
+def sv_array_contexts(
+    port: Port,
+) -> list[tuple[list[str], int, str, str]]:
+    """Return loops and references, unrolling interface instance indices.
+
+    Interface instance array selections are hierarchical and therefore must be
+    constant in SystemVerilog. Ordinary unpacked member dimensions remain
+    compact generated loops.
+    """
+
+    interface_dimensions = port.unpacked[: port.interface_rank]
+    member_dimensions = port.unpacked[port.interface_rank :]
+    constant_indices = (
+        product(
+            *(
+                range(dimension.low, dimension.high + 1)
+                for dimension in interface_dimensions
+            )
+        )
+        if interface_dimensions
+        else [()]
+    )
+    contexts: list[tuple[list[str], int, str, str]] = []
+    for constants in constant_indices:
+        variable_indices = [
+            f"cpptb_{cpp_identifier(port.name)}_index_{rank + port.interface_rank}"
+            for rank in range(len(member_dimensions))
+        ]
+        indices = [*(str(value) for value in constants), *variable_indices]
+        lines: list[str] = []
+        for rank, (dimension, index) in enumerate(
+            zip(member_dimensions, variable_indices)
+        ):
+            lines.append(
+                "    "
+                + "  " * rank
+                + f"for (int {index} = {dimension.low}; "
+                + f"{index} <= {dimension.high}; {index}++) begin"
+            )
+        source = sv_port_reference(port, indices)
+        linear = f"({indices[0]} - {port.unpacked[0].low})"
+        for dimension, index in zip(port.unpacked[1:], indices[1:]):
+            linear = (
+                f"({linear} * {dimension.size} + "
+                f"({index} - {dimension.low}))"
+            )
+        contexts.append((lines, len(variable_indices), source, linear))
+    return contexts
 
 
 def sv_pack_assignments(port: Port, signal: str | None = None) -> list[str]:
     signal = signal or sv_signal_constant(port)
     if port.unpacked:
         words = element_word_count(port)
-        lines, indices, source, linear = sv_array_loops(port)
-        body_indent = "    " + "  " * len(indices)
-        for word in range(words):
-            lsb = word * 32
-            width = min(32, port.width - lsb)
-            word_source = source
-            if port.width > 32:
-                word_source += f"[{lsb} +: {width}]"
-            offset = f"{linear} * {words}"
-            if word:
-                offset += f" + {word}"
-            lines.append(
-                f"{body_indent}in_words[{signal} + {offset}] = {word_source};"
-            )
-        for rank in reversed(range(len(indices))):
-            lines.append("    " + "  " * rank + "end")
+        lines: list[str] = []
+        for loop_lines, loop_count, source, linear in sv_array_contexts(port):
+            lines.extend(loop_lines)
+            body_indent = "    " + "  " * loop_count
+            for word in range(words):
+                lsb = word * 32
+                width = min(32, port.width - lsb)
+                word_source = source
+                if port.width > 32:
+                    word_source += f"[{lsb} +: {width}]"
+                offset = f"{linear} * {words}"
+                if word:
+                    offset += f" + {word}"
+                lines.append(
+                    f"{body_indent}in_words[{signal} + {offset}] = "
+                    f"{word_source};"
+                )
+            for rank in reversed(range(loop_count)):
+                lines.append("    " + "  " * rank + "end")
         return lines
 
     lines = []
@@ -3286,43 +4123,66 @@ def sv_pack_assignments(port: Port, signal: str | None = None) -> list[str]:
         lsb = word * 32
         width = min(32, port.width - lsb)
         if port.width <= 32:
-            source = port.name
+            source = sv_scalar_port_reference(port)
         else:
-            source = f"{port.name}[{lsb} +: {width}]"
+            source = f"{sv_scalar_port_reference(port)}[{lsb} +: {width}]"
         index = signal if element_word_count(port) == 1 else f"{signal} + {word}"
         lines.append(f"    in_words[{index}] = {source};")
     return lines
 
 
-def sv_output_assignments(port: Port, signal: str | None = None) -> list[str]:
+def sv_output_assignments(
+    port: Port,
+    signal: str | None = None,
+    skip_linear_indices: set[int] | None = None,
+) -> list[str]:
     signal = signal or sv_signal_constant(port)
+    skipped = skip_linear_indices or set()
     if port.unpacked:
         words = element_word_count(port)
-        lines, indices, target, linear = sv_array_loops(port)
-        body_indent = "    " + "  " * len(indices)
-        offset = f"{linear} * {words}"
-        if port.width > 32:
-            chunks = []
-            for word in reversed(range(words)):
-                lsb = word * 32
-                width = min(32, port.width - lsb)
-                word_offset = offset if word == 0 else f"{offset} + {word}"
-                source = f"out_words[{signal} + {word_offset}]"
-                if width < 32:
-                    source += f"[{width - 1}:0]"
-                chunks.append(source)
-            lines.append(f"{body_indent}{target} = {{{', '.join(chunks)}}};")
-        else:
-            source = f"out_words[{signal} + {offset}]"
-            if port.width == 1:
-                source += "[0]"
-            elif port.width < 32:
-                source += f"[{port.width - 1}:0]"
-            lines.append(f"{body_indent}{target} = {source};")
-        for rank in reversed(range(len(indices))):
-            lines.append("    " + "  " * rank + "end")
+        lines: list[str] = []
+        for loop_lines, loop_count, target, linear in sv_array_contexts(port):
+            lines.extend(loop_lines)
+            body_indent = "    " + "  " * loop_count
+            assignment_indent = body_indent
+            if skipped:
+                condition = " && ".join(
+                    f"(({linear}) != {index})" for index in sorted(skipped)
+                )
+                lines.append(f"{body_indent}if ({condition}) begin")
+                assignment_indent += "  "
+            offset = f"{linear} * {words}"
+            if port.width > 32:
+                chunks = []
+                for word in reversed(range(words)):
+                    lsb = word * 32
+                    width = min(32, port.width - lsb)
+                    word_offset = (
+                        offset if word == 0 else f"{offset} + {word}"
+                    )
+                    source = f"out_words[{signal} + {word_offset}]"
+                    if width < 32:
+                        source += f"[{width - 1}:0]"
+                    chunks.append(source)
+                lines.append(
+                    f"{assignment_indent}{target} = "
+                    f"{{{', '.join(chunks)}}};"
+                )
+            else:
+                source = f"out_words[{signal} + {offset}]"
+                if port.width == 1:
+                    source += "[0]"
+                elif port.width < 32:
+                    source += f"[{port.width - 1}:0]"
+                lines.append(f"{assignment_indent}{target} = {source};")
+            if skipped:
+                lines.append(f"{body_indent}end")
+            for rank in reversed(range(loop_count)):
+                lines.append("    " + "  " * rank + "end")
         return lines
 
+    if 0 in skipped:
+        return []
     if port.width > 32:
         chunks = []
         for word in reversed(range(element_word_count(port))):
@@ -3332,7 +4192,10 @@ def sv_output_assignments(port: Port, signal: str | None = None) -> list[str]:
             if width < 32:
                 source += f"[{width - 1}:0]"
             chunks.append(source)
-        return [f"    {port.name} = {{{', '.join(chunks)}}};"]
+        return [
+            f"    {sv_scalar_port_reference(port)} = "
+            f"{{{', '.join(chunks)}}};"
+        ]
 
     lines = []
     for word in range(element_word_count(port)):
@@ -3345,9 +4208,9 @@ def sv_output_assignments(port: Port, signal: str | None = None) -> list[str]:
                 source += "[0]"
             elif port.width < 32:
                 source += f"[{port.width - 1}:0]"
-            target = port.name
+            target = sv_scalar_port_reference(port)
         else:
-            target = f"{port.name}[{lsb} +: {width}]"
+            target = f"{sv_scalar_port_reference(port)}[{lsb} +: {width}]"
         lines.append(f"    {target} = {source};")
     return lines
 
@@ -3355,6 +4218,47 @@ def sv_output_assignments(port: Port, signal: str | None = None) -> list[str]:
 def sv_signal_constant(port: Port) -> str:
     name = signal_id(port.name).replace("kSignal", "SIGNAL_").upper()
     return name
+
+
+def sv_clock_signal_expression(
+    clock: dict[str, Any], ports: list[Port]
+) -> str:
+    discovered = clock.get("signal_id")
+    if isinstance(discovered, int) and not isinstance(discovered, bool):
+        return str(discovered)
+    port, _ = resolve_clock_port(clock, ports)
+    return sv_signal_constant(port)
+
+
+def sv_zero_assignments(
+    port: Port,
+    indent: str = "    ",
+    skip_linear_indices: set[int] | None = None,
+) -> list[str]:
+    skipped = skip_linear_indices or set()
+    if not port.unpacked:
+        if 0 in skipped:
+            return []
+        return [f"{indent}{sv_scalar_port_reference(port)} = '0;"]
+    if not skipped and port.interface_name is None:
+        return [f"{indent}{port.name} = '{{default: '0}};"]
+    adjusted: list[str] = []
+    for lines, loop_count, target, linear in sv_array_contexts(port):
+        adjusted.extend(indent + line[4:] for line in lines)
+        body_indent = indent + "  " * loop_count
+        assignment_indent = body_indent
+        if skipped:
+            condition = " && ".join(
+                f"(({linear}) != {index})" for index in sorted(skipped)
+            )
+            adjusted.append(f"{body_indent}if ({condition}) begin")
+            assignment_indent += "  "
+        adjusted.append(f"{assignment_indent}{target} = '0;")
+        if skipped:
+            adjusted.append(f"{body_indent}end")
+        for rank in reversed(range(loop_count)):
+            adjusted.append(indent + "  " * rank + "end")
+    return adjusted
 
 
 def sv_hierarchy_edge_constant(path: str) -> str:
@@ -4074,8 +4978,9 @@ def sv_port_export_functions(
         index_formals = ", ".join(
             f"input int index_{rank}" for rank in range(len(port.unpacked))
         )
-        target = port.name + "".join(
-            f"[index_{rank}]" for rank in range(len(port.unpacked))
+        target = sv_port_reference(
+            port,
+            [f"index_{rank}" for rank in range(len(port.unpacked))],
         )
         value_type = (
             "int unsigned"
@@ -4126,12 +5031,96 @@ def sv_port_export_functions(
     return lines
 
 
+def sv_inout_export_functions(
+    ports: list[Port], manifest: dict[str, Any]
+) -> list[str]:
+    lines: list[str] = []
+    for port_index, port in enumerate(ports):
+        if port.direction != "inout":
+            continue
+        value_type = (
+            "int unsigned"
+            if port.width <= 32
+            else (
+                "longint unsigned"
+                if port.width <= 64
+                else f"bit [{port.width - 1}:0]"
+            )
+        )
+        drive_name = inout_export_name(manifest, port_index, "drive")
+        high_z_name = inout_export_name(manifest, port_index, "high_z")
+        drive_storage = sv_inout_storage_name(port, "drive")
+        enable_storage = sv_inout_storage_name(port, "oe")
+        indexed = list(enumerate(sv_index_tuples(port)))
+
+        lines.extend(
+            [
+                f'  export "DPI-C" function {drive_name};',
+                f"  function void {drive_name}(",
+                "      input int index, input " + value_type + " value);",
+            ]
+        )
+        if port.unpacked:
+            lines.append("    case (index)")
+            for linear, indices in indexed:
+                suffix = "".join(f"[{item}]" for item in indices)
+                lines.extend(
+                    [
+                        f"      {linear}: begin",
+                        f"        {drive_storage}{suffix} = value;",
+                        f"        {enable_storage}{suffix} = 1'b1;",
+                        "      end",
+                    ]
+                )
+            lines.extend(
+                [
+                    f'      default: $fatal(1, "inout {port.name} index %0d '
+                    'is out of bounds", index);',
+                    "    endcase",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    f"    {drive_storage} = value;",
+                    f"    {enable_storage} = 1'b1;",
+                ]
+            )
+        lines.extend(
+            [
+                "  endfunction",
+                "",
+                f'  export "DPI-C" function {high_z_name};',
+                f"  function void {high_z_name}(input int index);",
+            ]
+        )
+        if port.unpacked:
+            lines.append("    case (index)")
+            for linear, indices in indexed:
+                suffix = "".join(f"[{item}]" for item in indices)
+                lines.append(
+                    f"      {linear}: {enable_storage}{suffix} = 1'b0;"
+                )
+            lines.extend(
+                [
+                    f'      default: $fatal(1, "inout {port.name} index %0d '
+                    'is out of bounds", index);',
+                    "    endcase",
+                ]
+            )
+        else:
+            lines.append(f"    {enable_storage} = 1'b0;")
+        lines.extend(["  endfunction", ""])
+    return lines
+
+
 def render_sv(
     ports: list[Port],
     internals: list[Internal],
     manifest: dict[str, Any],
     source: str,
     hierarchy: HierarchyCatalog | None = None,
+    interfaces: tuple[InterfacePort, ...] = (),
 ) -> str:
     hierarchy = hierarchy or HierarchyCatalog()
     clocks = clock_configs(manifest)
@@ -4143,14 +5132,14 @@ def render_sv(
         signal.hdl_path: signal for signal in hierarchy.signals
     }
     dynamic_clocks = bool(manifest.get("run", {}).get("dynamic_clocks", False))
-    generated_clocks = generated_clock_names(manifest)
-    registered_literal_clocks = {
-        clock["port"] for clock in registered_clock_configs(manifest)
-    }
     driven_names = driven_port_names(ports, manifest)
+    observed_names = observed_port_names(ports, manifest)
+    clock_owned = clock_owned_element_indices(
+        ports, manifest, {"generated", "registered"}
+    )
     run = manifest.get("run", {})
     compact_input_transport = bool(run.get("compact_input_transport", True))
-    observed_ports = [port for port in ports if port.name not in driven_names]
+    observed_ports = [port for port in ports if port.name in observed_names]
     driven_ports = [port for port in ports if port.name in driven_names]
     dynamic_clock_ports = [
         port
@@ -4199,12 +5188,14 @@ def render_sv(
         if clock_source(clock) in {"generated", "registered"}
     ]
     calendar_clock_names = {clock["port"] for clock in calendar_clocks}
-    clock_port_names = {clock["port"] for clock in clocks}
-    clock_interest_ports = [
-        port for port in ports if port.name in clock_port_names
-    ]
-    edge_interest_ports = list(
-        {port.name: port for port in [*clock_interest_ports, *edge_observers]}.values()
+    edge_interest_entries: dict[str, bool] = {
+        sv_signal_constant(port): False for port in edge_observers
+    }
+    edge_interest_entries.update(
+        {
+            sv_clock_signal_expression(clock, ports): True
+            for clock in clocks
+        }
     )
     calendar_dynamic_ports = [
         port
@@ -4340,7 +5331,12 @@ def render_sv(
             ]
         )
     lines.append("")
-    lines.extend(sv_decl(port) for port in ports)
+    lines.extend(sv_decl(port) for port in ports if port.interface_name is None)
+    for interface in interfaces:
+        lines.extend(sv_interface_declarations(interface))
+    for port in ports:
+        if port.direction == "inout":
+            lines.extend(sv_inout_declarations(port))
     lines.extend(
         [
             "",
@@ -4386,13 +5382,11 @@ def render_sv(
     lines.extend(["  endtask", "", "  task automatic apply_outputs();"])
     for port in packed_driven_ports:
         assignments = sv_output_assignments(
-            port, f"OUTPUT_{sv_signal_constant(port)}"
+            port,
+            f"OUTPUT_{sv_signal_constant(port)}",
+            clock_owned.get(port.name),
         )
-        if port.name in registered_literal_clocks:
-            lines.append("    if (!clock_drivers_active) begin")
-            lines.extend(f"  {line}" for line in assignments)
-            lines.append("    end")
-        elif dynamic_clocks and port in dynamic_clock_ports:
+        if dynamic_clocks and port in dynamic_clock_ports:
             constant = sv_signal_constant(port)
             lines.append(
                 f"    if (!clock_drivers_active || !registered_clock[{constant}]) begin"
@@ -4589,15 +5583,14 @@ def render_sv(
             "    requests = initial_requests;",
         ]
     )
-    if edge_interest_ports or hierarchy_edge_paths_selected:
+    if edge_interest_entries or hierarchy_edge_paths_selected:
         lines.extend(
             [
                 "    if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin",
             ]
         )
-        for port in edge_interest_ports:
-            constant = sv_signal_constant(port)
-            assignment = "|=" if port.name in clock_port_names else "="
+        for constant, clock_interest in edge_interest_entries.items():
+            assignment = "|=" if clock_interest else "="
             lines.append(
                 f"      edge_interest[{constant}] {assignment} "
                 f"{edge_interest_function}({constant});"
@@ -4727,25 +5720,28 @@ def render_sv(
     )
     for index, clock in enumerate(calendar_clocks):
         clock_name = clock["port"]
-        port = next(port for port in ports if port.name == clock_name)
-        constant = sv_signal_constant(port)
+        port, clock_indices = resolve_clock_port(clock, ports)
+        clock_target = sv_port_reference(
+            port, [str(item) for item in clock_indices]
+        )
+        constant = sv_clock_signal_expression(clock, ports)
         primary_literal = (
             "1'b1"
             if primary_clock is not None
-            and clock_name == primary_clock["port"]
+            and same_clock(clock, primary_clock)
             else "1'b0"
         )
         lines.extend(
             [
                 f"    if (calendar_clock_active[{index}] &&",
                 f"        (calendar_clock_next_edge[{index}] <= $time)) begin",
-                f"      {clock_name} = ~{clock_name};",
+                f"      {clock_target} = ~{clock_target};",
                 f"      calendar_clock_next_edge[{index}] +=",
                 f"          calendar_clock_half_period[{index}];",
-                f"      event_edge = {clock_name} ? EDGE_RISING : EDGE_FALLING;",
+                f"      event_edge = {clock_target} ? EDGE_RISING : EDGE_FALLING;",
             ]
         )
-        if primary_clock is not None and clock_name == primary_clock["port"]:
+        if primary_clock is not None and same_clock(clock, primary_clock):
             lines.extend(
                 [
                     "      if (event_edge == EDGE_RISING) begin",
@@ -4770,14 +5766,15 @@ def render_sv(
     for dynamic_index, port in enumerate(calendar_dynamic_ports):
         index = len(calendar_clocks) + dynamic_index
         constant = sv_signal_constant(port)
+        clock_target = sv_scalar_port_reference(port)
         lines.extend(
             [
                 f"    if (calendar_clock_active[{index}] &&",
                 f"        (calendar_clock_next_edge[{index}] <= $time)) begin",
-                f"      {port.name} = ~{port.name};",
+                f"      {clock_target} = ~{clock_target};",
                 f"      calendar_clock_next_edge[{index}] +=",
                 f"          calendar_clock_half_period[{index}];",
-                f"      event_edge = {port.name} ? EDGE_RISING : EDGE_FALLING;",
+                f"      event_edge = {clock_target} ? EDGE_RISING : EDGE_FALLING;",
                 f"      if (primary_clock[{constant}] &&",
                 "          (event_edge == EDGE_RISING)) begin",
                 "        sim_cycles++;",
@@ -4847,12 +5844,15 @@ def render_sv(
 
     for index, clock in enumerate(clocks):
         clock_name = clock["port"]
-        port = next(port for port in ports if port.name == clock_name)
-        constant = sv_signal_constant(port)
+        port, clock_indices = resolve_clock_port(clock, ports)
+        clock_target = sv_port_reference(
+            port, [str(item) for item in clock_indices]
+        )
+        constant = sv_clock_signal_expression(clock, ports)
         primary_literal = (
             "1'b1"
             if primary_clock is not None
-            and clock_name == primary_clock["port"]
+            and same_clock(clock, primary_clock)
             else "1'b0"
         )
         if clock_source(clock) in {"generated", "registered"}:
@@ -4885,12 +5885,12 @@ def render_sv(
                     "`ifdef CPPTB_SV_DPI_TIMING",
                     "        note_time_step();",
                     "`endif",
-                    f"        {clock_name} = ~{clock_name};",
+                    f"        {clock_target} = ~{clock_target};",
                     f"        next_edge = next_edge + {clock.get('half_period', '1ns')};",
-                    f"        event_edge = {clock_name} ? EDGE_RISING : EDGE_FALLING;",
+                    f"        event_edge = {clock_target} ? EDGE_RISING : EDGE_FALLING;",
                 ]
             )
-            if primary_clock is not None and clock_name == primary_clock["port"]:
+            if primary_clock is not None and same_clock(clock, primary_clock):
                 lines.extend(
                     [
                         "        if (event_edge == EDGE_RISING) begin",
@@ -4924,14 +5924,14 @@ def render_sv(
                 "    int requests;",
                 "    int event_edge;",
                 "    while (status == 0) begin",
-                f"      @({clock_name});",
+                f"      @({clock_target});",
                 "`ifdef CPPTB_SV_DPI_TIMING",
                 "      note_time_step();",
                 "`endif",
-                f"      event_edge = {clock_name} ? EDGE_RISING : EDGE_FALLING;",
+                f"      event_edge = {clock_target} ? EDGE_RISING : EDGE_FALLING;",
             ]
         )
-        if primary_clock is not None and clock_name == primary_clock["port"]:
+        if primary_clock is not None and same_clock(clock, primary_clock):
             lines.extend(
                 [
                     "      if (event_edge == EDGE_RISING) begin",
@@ -4965,6 +5965,7 @@ def render_sv(
     if dynamic_clocks:
         for index, port in enumerate(dynamic_clock_ports):
             constant = sv_signal_constant(port)
+            clock_target = sv_scalar_port_reference(port)
             lines.extend(
                 [
                     f"  task automatic drive_registered_clock_{index}();",
@@ -4984,8 +5985,8 @@ def render_sv(
                     "`ifdef CPPTB_SV_DPI_TIMING",
                     "          note_time_step();",
                     "`endif",
-                    f"          {port.name} = ~{port.name};",
-                    f"          event_edge = {port.name} ? EDGE_RISING : EDGE_FALLING;",
+                    f"          {clock_target} = ~{clock_target};",
+                    f"          event_edge = {clock_target} ? EDGE_RISING : EDGE_FALLING;",
                     f"          if (primary_clock[{constant}] &&",
                     "              (event_edge == EDGE_RISING)) begin",
                     "            sim_cycles++;",
@@ -5009,18 +6010,19 @@ def render_sv(
 
     for index, port in enumerate(edge_observers):
         constant = sv_signal_constant(port)
+        signal_target = sv_scalar_port_reference(port)
         lines.extend(
             [
                 f"  task automatic observe_signal_{index}();",
                 "    int requests;",
                 "    int event_edge;",
                 "    while (status == 0) begin",
-                f"      @({port.name});",
+                f"      @({signal_target});",
                 "`ifdef CPPTB_SV_DPI_TIMING",
                 "      note_time_step();",
                 "`endif",
                 "      if (status == 0) begin",
-                f"        event_edge = {port.name} ? EDGE_RISING : EDGE_FALLING;",
+                f"        event_edge = {signal_target} ? EDGE_RISING : EDGE_FALLING;",
                 "        if (",
                 f"            ((event_edge == EDGE_RISING) && ((edge_interest[{constant}] & 1) != 0)) ||",
                 f"            ((event_edge == EDGE_FALLING) && ((edge_interest[{constant}] & 2) != 0))) begin",
@@ -5071,17 +6073,36 @@ def render_sv(
     lines.append("  initial begin")
     for clock in clocks:
         source_kind = clock_source(clock)
+        clock_port, clock_indices = resolve_clock_port(clock, ports)
+        clock_target = sv_port_reference(
+            clock_port, [str(item) for item in clock_indices]
+        )
         if source_kind == "generated":
-            lines.append(f"    {clock['port']} = 1'b0;")
+            lines.append(f"    {clock_target} = 1'b0;")
         elif source_kind == "registered":
             lines.append(
-                f"    {clock['port']} = "
+                f"    {clock_target} = "
                 f"1'b{int(clock.get('initial_value', 0))};"
             )
     for port in ports:
-        if port.direction == "input" and port.name not in literal_clock_names(manifest):
-            initial_value = "'{default: '0}" if port.unpacked else "'0"
-            lines.append(f"    {port.name} = {initial_value};")
+        if port.direction == "input":
+            lines.extend(
+                sv_zero_assignments(
+                    port,
+                    skip_linear_indices=clock_owned.get(port.name),
+                )
+            )
+        elif port.direction == "inout":
+            drive_storage = sv_inout_storage_name(port, "drive")
+            enable_storage = sv_inout_storage_name(port, "oe")
+            for indices in sv_index_tuples(port):
+                suffix = "".join(f"[{item}]" for item in indices)
+                lines.extend(
+                    [
+                        f"    {drive_storage}{suffix} = '0;",
+                        f"    {enable_storage}{suffix} = 1'b0;",
+                    ]
+                )
     lines.extend(
         [
             "    sim_cycles = 0;",
@@ -5197,11 +6218,20 @@ def render_sv(
         lines.append("  ) i_dut (")
     else:
         lines.append(f"  {manifest['module']} i_dut (")
-    for index, port in enumerate(ports):
-        comma = "," if index + 1 < len(ports) else ""
-        lines.append(f"      .{port.name}({port.name}){comma}")
+    dut_connections: list[tuple[str, str]] = [
+        (port.name, port.name)
+        for port in ports
+        if port.interface_name is None
+    ]
+    dut_connections.extend(
+        (interface.name, interface.name) for interface in interfaces
+    )
+    for index, (port_name, signal_name) in enumerate(dut_connections):
+        comma = "," if index + 1 < len(dut_connections) else ""
+        lines.append(f"      .{port_name}({signal_name}){comma}")
     lines.extend(["  );", ""])
     lines.extend(sv_port_export_functions(ports, manifest))
+    lines.extend(sv_inout_export_functions(ports, manifest))
     lines.extend(sv_internal_export_functions(internals, manifest))
     lines.extend(
         sv_hierarchy_export_functions(
@@ -5478,13 +6508,24 @@ def generate_manifest(
     paths = output_paths(manifest, base_dir)
     generated = {
         paths["cpp_dut"]: render_cpp_dut(
-            ports, internals, root, manifest, source, design.hierarchy
+            ports,
+            internals,
+            root,
+            manifest,
+            source,
+            design.hierarchy,
+            design.interfaces,
         ),
         paths["cpp_binding"]: render_cpp_binding(
             ports, internals, root, manifest, source
         ),
         paths["sv_wrapper"]: render_sv(
-            ports, internals, manifest, source, design.hierarchy
+            ports,
+            internals,
+            manifest,
+            source,
+            design.hierarchy,
+            design.interfaces,
         ),
     }
     if "cpp_adapter" in paths:

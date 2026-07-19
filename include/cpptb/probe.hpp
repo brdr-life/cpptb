@@ -222,6 +222,10 @@ class MemoryProbe {
         }
         return Element{index, name, get_fn, deposit_fn, force_fn, release_fn};
     }
+
+    [[nodiscard]] Element operator[](int32_t index) const {
+        return at(index);
+    }
 };
 
 }  // namespace cpptb::probe

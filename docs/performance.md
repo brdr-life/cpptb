@@ -767,6 +767,23 @@ only while its ratio is at most `1.20x`. Missing or malformed results, semantic
 differences, invalid environments, and ratios above that waiver ceiling still
 fail. All other authoring features retain the unmodified hard `1.10x` policy.
 
+## Interface semantic pair
+
+The `dpi_interfaces` integration entry runs the same eight checks and one
+primary-clock cycle in C++ DPI and pure SystemVerilog. It covers a
+parameterized modport, a two-element interface array, two independently
+registered clocks, an interface-member inout, and a top-level inout:
+
+```sh
+make feature-test FEATURE=dpi_interfaces
+make feature-benchmark FEATURE=dpi_interfaces
+```
+
+This short example is an exact semantic gate, not a stable timing ratio. It
+must match `iterations`, `checks`, `sim_cycles`, and `failures` exactly. The
+long-running authoring and open-core suites remain the performance-regression
+signal for changes to shared scheduler and transport paths.
+
 ## Heavy four-mode comparison
 
 The heavy suite runs independent reference models in pure SystemVerilog, C++

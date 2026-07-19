@@ -777,8 +777,8 @@ The test authors any later edge or observation phase explicitly. Direct DUT
 hierarchy remains available as the lowest-level escape hatch:
 
 ```cpp
-dut.u_core.instruction_ram.at(12).deposit(0x0000'0013);
-const auto opcode = dut.u_core.instruction_ram.at(12).get();
+dut.u_core.instruction_ram[12].deposit(0x0000'0013);
+const auto opcode = dut.u_core.instruction_ram[12].get();
 ```
 
 The generated handle adds logical SystemRDL mapping, bounds checks,

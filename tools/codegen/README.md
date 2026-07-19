@@ -90,8 +90,8 @@ directly; users do not name internal probes in a manifest:
 ```cpp
 check(dut.core.status.get(), expected_status);
 dut.core.pending_data.deposit(0x1234'5678u);
-dut.core.memory.at(address).force(expected);
-dut.core.memory.at(address).release();
+dut.core.memory[address].force(expected);
+dut.core.memory[address].release();
 ```
 
 Values up to 64 bits use native integer transport. Wider packed values use
@@ -225,17 +225,19 @@ in `tests/conformance/runtime`.
 
 The `DesignIR` records frontend-independent packed width, signedness, state
 metadata, and fixed unpacked ranges. The transport supports scalar and packed
-integral input/output ports plus any fixed number of unpacked dimensions. C++
-preserves declared bounds and exposes elements as
-`dut.port.at(i).at(j).get()` and `.set(value)`. Flattening keeps the last
+integral input, output, and inout ports, modport-selected interface members,
+and any fixed number of unpacked dimensions. C++ preserves declared bounds and
+exposes elements as `dut.port[i][j].get()` and `.set(value)`. Interface arrays
+retain their authored shape as `dut.interfaces[i].member`. Flattening keeps the last
 dimension contiguous and orders every dimension by increasing numeric index,
 so ascending, descending, and nonzero ranges retain
 their SystemVerilog element identity.
 
 Ports wider than 32 bits and wide array elements must be two-state `bit` and
 use `uint64_t` through 64 bits or `Bits<W>` above 64 bits. Four-state X/Z value
-propagation, dynamic arrays, interfaces, and `inout` ports remain explicit
-validation errors. Generated, testbench-driven, and
+propagation and dynamic arrays remain explicit simulator or generation limits.
+Inouts provide `drive(value)`, `high_z()`, and `get()`; interface directions
+come from an explicit modport. Generated, testbench-driven, and
 DUT-produced clocks may be mixed independently of those data-port shapes.
 Signedness is retained in the elaborated contract but values cross the current
 C++ API as raw bits; scalar `.get()` returns a zero-extended `uint32_t`, so a

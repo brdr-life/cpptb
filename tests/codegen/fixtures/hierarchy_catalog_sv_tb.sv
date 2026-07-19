@@ -106,6 +106,23 @@ module hierarchy_catalog_sv_tb;
     i_dut.lanes[1].block2.storage = 8'h9c;
     expect_eq("generated instance hierarchy",
               i_dut.lanes[1].block2.storage, 8'h9c);
+    expect_eq("selected hierarchy parameter",
+              i_dut.lanes[1].block2.WIDTH, 8);
+    i_dut.lanes[1].block2.storage = 8'hb4;
+    expect_eq("selected hierarchy typed view",
+              i_dut.lanes[1].block2.storage, 8'hb4);
+    i_dut.lanes[1].block2.storage = 8'ha5;
+    expect_eq("selected hierarchy four-state deposit",
+              i_dut.lanes[1].block2.storage, 8'ha5);
+    force i_dut.lanes[1].block2.storage = 8'h3d;
+    expect_eq("selected hierarchy force",
+              i_dut.lanes[1].block2.storage, 8'h3d);
+    force i_dut.lanes[1].block2.storage = 8'h5a;
+    expect_eq("selected hierarchy four-state force",
+              i_dut.lanes[1].block2.storage, 8'h5a);
+    release i_dut.lanes[1].block2.storage;
+    expect_eq("selected hierarchy release",
+              i_dut.lanes[1].block2.storage, 8'h5a);
 
     i_dut.block1.state = DONE;
     expect_eq("typed enum deposit", i_dut.block1.state, DONE);

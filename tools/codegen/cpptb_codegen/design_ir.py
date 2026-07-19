@@ -193,6 +193,42 @@ class Port:
     unpacked: tuple[UnpackedRange, ...] = ()
     packed_type: PackedType | None = field(default=None, compare=False)
     transport: str = "packed"
+    interface_name: str | None = field(default=None, compare=False)
+    interface_member: str | None = field(default=None, compare=False)
+    interface_rank: int = field(default=0, compare=False)
+    interface_constructor_port: bool = field(default=False, compare=False)
+
+
+@dataclass(frozen=True)
+class InterfaceParameter:
+    """One resolved value parameter needed to instantiate an interface."""
+
+    name: str
+    value: str
+
+
+@dataclass(frozen=True)
+class InterfaceConstructorPort:
+    """One interface declaration port connected through generated storage."""
+
+    name: str
+    direction: str
+    width: int
+    signed: bool = False
+    four_state: bool = True
+    unpacked: tuple[UnpackedRange, ...] = ()
+
+
+@dataclass(frozen=True)
+class InterfacePort:
+    """One elaborated top-level interface port and selected modport."""
+
+    name: str
+    definition: str
+    modport: str
+    unpacked: tuple[UnpackedRange, ...] = ()
+    parameters: tuple[InterfaceParameter, ...] = ()
+    constructor_ports: tuple[InterfaceConstructorPort, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -265,6 +301,7 @@ class DesignIR:
     ports: tuple[Port, ...]
     internals: tuple[Internal, ...] = ()
     hierarchy: HierarchyCatalog = field(default_factory=HierarchyCatalog)
+    interfaces: tuple[InterfacePort, ...] = ()
 
     def transport_signature(
         self,

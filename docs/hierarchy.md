@@ -7,8 +7,8 @@ not list probes in JSON and does not use a separate `internal` namespace:
 ```cpp
 const auto status = dut.block1.block2.status.get();
 dut.block1.block2.control.deposit(0x12);
-dut.lanes.at<1>().state.force(3);
-dut.lanes.at<1>().state.release();
+dut.lanes[1].state.force(3);
+dut.lanes[1].state.release();
 ```
 
 The C++ path mirrors the elaborated SystemVerilog instance, generate-block,
@@ -103,24 +103,31 @@ SystemVerilog semantics.
 Fixed unpacked memories preserve their declared index range:
 
 ```cpp
-dut.memory.at(5).deposit(0xbeef);
-const auto value = dut.memory.at(5).get();
+dut.memory[5].deposit(0xbeef);
+const auto value = dut.memory[5].get();
 ```
 
 Multidimensional arrays take one index per dimension:
 
 ```cpp
-dut.coefficients.at(1, 3).deposit(7);
+dut.coefficients[1][3].deposit(7);
 ```
 
-Elaborated instance and generate arrays use a compile-time index:
+Elaborated instance and generate arrays use the same syntax and accept either
+a literal or runtime index:
 
 ```cpp
-const auto lane_state = dut.lanes.at<2>().state.get();
+const auto lane_state = dut.lanes[2].state.get();
+const auto selected = dut.lanes[index].state.get();
+const auto width = dut.lanes[index].block.WIDTH;
 ```
 
-The compile-time form keeps the returned scope fully typed and rejects an
-out-of-range index during compilation.
+Homogeneous array elements return one generated typed view. An out-of-range
+runtime index reports the complete scope-array path and valid indices.
+Elaborated parameters remain read-only values on that selected view. Because a
+runtime index may select any element, using an operation on an array field
+generates that operation for the corresponding field in every homogeneous
+element. Unused fields and unused arrays still emit no DPI transport.
 
 ## Packed and typed values
 
