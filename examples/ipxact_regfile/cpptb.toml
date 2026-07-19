@@ -1,0 +1,11 @@
+[design]
+sources = ["ipxact_regfile.sv"]
+top = "ipxact_regfile"
+
+[testbench]
+sources = ["testbench.cpp"]
+include_dirs = ["../../build/cpptb/ipxact_regfile/generated"]
+
+[build]
+name = "ipxact_regfile"
+target = "ipxact_regfile"

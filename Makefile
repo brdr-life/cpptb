@@ -132,6 +132,7 @@ FEATURE_REGRESSION_RUNNER := python3 benchmarks/run_regression.py
 UV_CACHE_DIR ?= $(BUILD_DIR)/uv-cache
 CODEGEN_PYTHON := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen python
 PEAKRDL_PYTHON := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen --extra peakrdl python
+PEAKRDL := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen --extra peakrdl peakrdl
 DOCS_RUN := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen --group docs
 CPPTB_CODEGEN := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb-codegen
 CPPTB := UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb
@@ -279,6 +280,33 @@ $(eval $(call CPPTB_EXAMPLE_template,component-fifo,COMPONENT_FIFO,component_fif
 $(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb,component_apb_test))
 CPPTB_EXAMPLE_PHONY_TARGETS += cpp-dpi-apb-regfile-suite-test
 CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-apb-regfile-suite-test
+$(eval $(call CPPTB_EXAMPLE_template,ipxact-regfile,IPXACT_REGFILE,ipxact_regfile,ipxact_regfile,dpi_ipxact_regfile,ipxact_regfile_sv_tb,ipxact_register_model_test))
+CPPTB_IPXACT_REGFILE_MODEL := $(CPPTB_IPXACT_REGFILE_GENERATED_DIR)/ipxact_regs.hpp
+CPPTB_IPXACT_REGFILE_MODEL_TEST := $(CPPTB_IPXACT_REGFILE_BUILD_DIR)/model_contract
+CPPTB_EXAMPLE_PHONY_TARGETS += cpptb-ipxact-regfile-model-test
+CPPTB_EXAMPLE_TEST_TARGETS += cpptb-ipxact-regfile-model-test
+
+$(CPPTB_IPXACT_REGFILE_MODEL): \
+		examples/ipxact_regfile/component.xml $(CPPTB_CODEGEN_SOURCES)
+	mkdir -p $(CPPTB_IPXACT_REGFILE_GENERATED_DIR)
+	$(PEAKRDL) cpptb $< -o $@ \
+		--namespace ipxact_regs --rename peripheral
+
+cpp-dpi-ipxact-regfile-codegen cpp-dpi-ipxact-regfile-codegen-check \
+		cpp-dpi-ipxact-regfile-frontend-check cpp-dpi-ipxact-regfile-build: \
+		$(CPPTB_IPXACT_REGFILE_MODEL)
+
+$(CPPTB_IPXACT_REGFILE_MODEL_TEST): \
+		examples/ipxact_regfile/model_contract.cpp \
+		$(CPPTB_IPXACT_REGFILE_MODEL) $(CPPTB_PUBLIC_HEADERS)
+	$(CXX) -std=c++20 -O2 -Iinclude -I. \
+		-I$(VERILATOR_ROOT)/include \
+		-I$(VERILATOR_ROOT)/include/vltstd \
+		-I$(CPPTB_IPXACT_REGFILE_GENERATED_DIR) \
+		examples/ipxact_regfile/model_contract.cpp -o $@
+
+cpptb-ipxact-regfile-model-test: $(CPPTB_IPXACT_REGFILE_MODEL_TEST)
+	$(CPPTB_IPXACT_REGFILE_MODEL_TEST)
 $(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_timeout,stalling_responder,dpi_stalling_responder,stalling_responder_sv_tb,watchdog_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb,fault_injection_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb,rich_data_sequence))

@@ -456,6 +456,14 @@ Retain SystemRDL as the source of truth when read/write effects, nested
 memories, or project-specific properties would be lost in an interchange
 round-trip.
 
+The runnable [IP-XACT register-model example](../examples/ipxact-regfile.md)
+starts from a checked-in 1685-2014 component and covers fields, an enum,
+register arrays, and a native memory address block. Its generated model is
+compiled against both a fake memory-mapped master and a real APB4 DUT, with a
+matching pure-SystemVerilog sequence. Unknown vendor extensions require an
+explicit PeakRDL import mapping; cpptb cannot preserve properties the importer
+does not expose.
+
 ## Native RgGen input
 
 An existing RgGen YAML, JSON, or TOML contract can be consumed directly. No
