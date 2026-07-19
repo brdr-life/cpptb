@@ -179,7 +179,7 @@ class Runtime {
                     std::abort();
                 }
                 configured_clock_[id] = true;
-                scheduler_->configure_static_edge_source(id);
+                scheduler_->configure_sticky_edge_source(id);
             }
             local_edge_delivery_enabled_ = true;
         } else {
@@ -650,7 +650,7 @@ class Runtime {
         ++registered_clock_count_;
         configured_clock_[id] = true;
         testbench_clock_[id] = true;
-        scheduler_->configure_static_edge_source(id);
+        scheduler_->configure_sticky_edge_source(id);
     }
 
     void validate_registered_clock_setup() const {
@@ -801,7 +801,8 @@ class Runtime {
                 access_violation_ = true;
                 continue;
             }
-            observer_changed = observer_changed || edge_observer_[id];
+            observer_changed = observer_changed || configured_clock_[id] ||
+                               edge_observer_[id];
         }
         return observer_changed;
     }

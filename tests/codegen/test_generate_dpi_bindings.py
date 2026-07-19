@@ -722,6 +722,21 @@ class CodegenTests(unittest.TestCase):
         self.assertIn("cpptb_dpi_next_timer_deadline", wrapper)
         self.assertIn("cpptb_dpi_edge_interest", wrapper)
         self.assertIn(
+            "edge_interest[SIGNAL_WRITECLK] |= "
+            "cpptb_dpi_edge_interest(SIGNAL_WRITECLK);",
+            wrapper,
+        )
+        self.assertIn(
+            "edge_interest[SIGNAL_READCLK] |= "
+            "cpptb_dpi_edge_interest(SIGNAL_READCLK);",
+            wrapper,
+        )
+        self.assertIn(
+            "((event_edge == EDGE_RISING) && "
+            "((edge_interest[SIGNAL_WRITECLK] & 1) != 0))",
+            wrapper,
+        )
+        self.assertIn(
             'import "DPI-C" function longint unsigned '
             "cpptb_dpi_next_timer_deadline();",
             wrapper,

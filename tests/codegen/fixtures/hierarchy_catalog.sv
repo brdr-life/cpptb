@@ -19,7 +19,7 @@ module hierarchy_leaf #(
     output logic [WIDTH-1:0] value
 );
   logic [WIDTH-1:0] storage;
-  logic [15:0] memory [2:5];
+  logic [15:0] memory [2:8];
   logic [7:0] matrix [1:0] [4:2];
   wire [WIDTH-1:0] inverted = ~storage;
   state_t state;

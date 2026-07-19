@@ -1,0 +1,23 @@
+[design]
+sources = [
+  "../../framework_comparison/open_cores/third_party/secworks_aes/*.v",
+  "observers/aes_bus_observer.sv",
+]
+top = "aes"
+
+[testbench]
+sources = ["cpptb/testbench.cpp"]
+include_dirs = ["../../../build/benchmarks/regmodel_ground_truth/secworks_aes/generated"]
+
+[build]
+directory = "../../../build/benchmarks/regmodel_ground_truth/secworks_aes"
+name = "secworks_aes_regmodel"
+target = "secworks_aes_regmodel"
+verilator_args = [
+  "-MAKEFLAGS",
+  "OPT_FAST=-O3",
+  "--no-sched-zero-delay",
+  "-Wno-TIMESCALEMOD",
+  "-Wno-WIDTH",
+  "-Wno-UNUSEDSIGNAL",
+]

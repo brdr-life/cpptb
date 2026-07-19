@@ -2,9 +2,11 @@
 // Do not edit by hand.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include "cpptb/dpi_static_binding.hpp"
@@ -325,6 +327,8 @@ void dpi_authoring_core_hierarchy_15_deposit(int index, unsigned int value);
 void dpi_authoring_core_hierarchy_17_deposit(int index, unsigned int value);
 void dpi_authoring_core_hierarchy_11_force(int index, unsigned int value);
 void dpi_authoring_core_hierarchy_11_release(int index);
+void dpi_authoring_core_hierarchy_15_get_block4(int first_index, int count, unsigned int* values);
+void dpi_authoring_core_hierarchy_15_deposit_block4(int first_index, int count, const unsigned int* values);
 void dpi_authoring_core_hierarchy_12_get_logic(int index, svLogicVecVal* value);
 void dpi_authoring_core_hierarchy_12_deposit_logic(int index, const svLogicVecVal* value);
 }  // extern "C"
@@ -446,6 +450,68 @@ struct HierarchyTransport {
             }
         }
         fail("force", id);
+    }
+
+    template <std::size_t Width>
+    static void get_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                case 15: {
+                    static_assert(Width == 32);
+                    for (std::size_t offset = 0;
+                         offset < values.size();
+                         offset += kBlockEntries) {
+                        const std::size_t count = std::min(
+                            kBlockEntries, values.size() - offset);
+                        std::array<std::uint32_t, 4> words{};
+                        dpi_authoring_core_hierarchy_15_get_block4(
+                            static_cast<int>(first_index + offset),
+                            static_cast<int>(count), words.data());
+                        for (std::size_t word = 0;
+                             word < count; ++word) {
+                            values[offset + word] = static_cast<cpptb::probe::Value<Width>>(words[word]);
+                        }
+                    }
+                    return;
+                }
+                default: break;
+            }
+        }
+        fail("get_span", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<const cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                case 15: {
+                    static_assert(Width == 32);
+                    for (std::size_t offset = 0;
+                         offset < values.size();
+                         offset += kBlockEntries) {
+                        const std::size_t count = std::min(
+                            kBlockEntries, values.size() - offset);
+                        std::array<std::uint32_t, 4> words{};
+                        for (std::size_t word = 0;
+                             word < count; ++word) {
+                            words[word] = static_cast<std::uint32_t>(values[offset + word]);
+                        }
+                        dpi_authoring_core_hierarchy_15_deposit_block4(
+                            static_cast<int>(first_index + offset),
+                            static_cast<int>(count), words.data());
+                    }
+                    return;
+                }
+                default: break;
+            }
+        }
+        fail("deposit_span", id);
     }
 
     template <std::size_t Width>
@@ -589,6 +655,71 @@ struct AuthoringCoreDut {
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 16, "pending", 1, true, cpptb::probe::Value<1>, true> pending;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 17, "pending_data", 32, true, cpptb::probe::Value<32>, true> pending_data;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 18, "row", 32, true, cpptb::probe::Value<32>, false> row;
+    template <cpptb::hierarchy::FixedString Path>
+    [[nodiscard]] constexpr auto cpptb_signal() const {
+        if constexpr (Path.view() == "apb_index") {
+            return (*this).apb_index;
+        }
+        else if constexpr (Path.view() == "apb_memory") {
+            return (*this).apb_memory;
+        }
+        else if constexpr (Path.view() == "byte_index") {
+            return (*this).byte_index;
+        }
+        else if constexpr (Path.view() == "column") {
+            return (*this).column;
+        }
+        else if constexpr (Path.view() == "cycle_count") {
+            return (*this).cycle_count;
+        }
+        else if constexpr (Path.view() == "delay_count") {
+            return (*this).delay_count;
+        }
+        else if constexpr (Path.view() == "fixed_magnitude") {
+            return (*this).fixed_magnitude;
+        }
+        else if constexpr (Path.view() == "fixed_product") {
+            return (*this).fixed_product;
+        }
+        else if constexpr (Path.view() == "fixed_quotient") {
+            return (*this).fixed_quotient;
+        }
+        else if constexpr (Path.view() == "fixed_remainder") {
+            return (*this).fixed_remainder;
+        }
+        else if constexpr (Path.view() == "fixed_rounded") {
+            return (*this).fixed_rounded;
+        }
+        else if constexpr (Path.view() == "force_target") {
+            return (*this).force_target;
+        }
+        else if constexpr (Path.view() == "hierarchy_logic") {
+            return (*this).hierarchy_logic;
+        }
+        else if constexpr (Path.view() == "hierarchy_wide") {
+            return (*this).hierarchy_wide;
+        }
+        else if constexpr (Path.view() == "index") {
+            return (*this).index;
+        }
+        else if constexpr (Path.view() == "memory") {
+            return (*this).memory;
+        }
+        else if constexpr (Path.view() == "pending") {
+            return (*this).pending;
+        }
+        else if constexpr (Path.view() == "pending_data") {
+            return (*this).pending_data;
+        }
+        else if constexpr (Path.view() == "row") {
+            return (*this).row;
+        }
+        else {
+            static_assert(Path.view().empty(),
+                          "HDL path is not present in the generated DUT hierarchy");
+            return cpptb::hierarchy::UnsupportedSignal{};
+        }
+    }
 };
 
 }  // namespace cpptb::benchmarks::authoring_core

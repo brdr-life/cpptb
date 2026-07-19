@@ -125,6 +125,7 @@ examples/fault-injection
 examples/rich-data
 examples/heavy-benchmarks
 examples/open-source-cores
+examples/secworks-aes-regmodel
 ```
 """
 
@@ -143,10 +144,23 @@ randomization/reproducibility
 ```
 """
 
+_VERIFICATION_COMPONENTS_TOCTREE = """
+```{toctree}
+:hidden:
+:maxdepth: 2
+
+verification-components/memory-model
+memory-register-models
+verification-components/register-generation
+verification-components/register-sequences
+```
+"""
+
 _NAVIGATION_TOCTREES = {
     "index": _ROOT_TOCTREE,
     "examples": _EXAMPLES_TOCTREE,
     "random-stimulus": _RANDOMIZATION_TOCTREE,
+    "verification-components": _VERIFICATION_COMPONENTS_TOCTREE,
 }
 
 

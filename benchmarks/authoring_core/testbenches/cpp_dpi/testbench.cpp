@@ -157,6 +157,18 @@ void check137(Context& context, const char* label, const Bits<137>& actual,
     }
 }
 
+void check128(Context& context, const char* label, const Bits<128>& actual,
+              const Bits<128>& expected) {
+    ++context.result.checks;
+    if (actual == expected) return;
+    ++context.result.failures;
+    if (context.result.failures <= 8) {
+        std::printf("AUTHORING_CORE_MISMATCH mode=cpp_dpi kernel=%s "
+                    "label=%s actual_word0=0x%08x expected_word0=0x%08x\n",
+                    kernel_name(), label, actual.word(0), expected.word(0));
+    }
+}
+
 void check65(Context& context, const char* label, const Bits<65>& actual,
              const Bits<65>& expected) {
     ++context.result.checks;
@@ -689,7 +701,10 @@ void report(Context& context) {
         "timing_phases=%llu test_lifecycle=%llu dynamic_spawn=%llu "
         "analysis_write=%llu analysis_delivery=%llu random_stimulus=%llu "
         "constrained_packet=%llu constraint_extensions=%llu "
-        "coverage_sampling=%llu apb_component=%llu "
+        "coverage_sampling=%llu apb_component=%llu memory_model=%llu "
+        "memory_model_direct=%llu register_prediction_validity=%llu "
+        "register_backdoor=%llu register_hierarchy=%llu register_split=%llu "
+        "register_wide=%llu register_enum=%llu "
         "wall_ms=%.3f\n",
         kernel_name(), context.iterations,
         static_cast<unsigned long long>(context.result.transactions),
@@ -741,6 +756,14 @@ void report(Context& context) {
         static_cast<unsigned long long>(feature.constraint_extensions),
         static_cast<unsigned long long>(feature.coverage_sampling),
         static_cast<unsigned long long>(feature.apb_component),
+        static_cast<unsigned long long>(feature.memory_model),
+        static_cast<unsigned long long>(feature.memory_model_direct),
+        static_cast<unsigned long long>(feature.register_prediction_validity),
+        static_cast<unsigned long long>(feature.register_backdoor),
+        static_cast<unsigned long long>(feature.register_hierarchy),
+        static_cast<unsigned long long>(feature.register_split),
+        static_cast<unsigned long long>(feature.register_wide),
+        static_cast<unsigned long long>(feature.register_enum),
         static_cast<double>(elapsed_us) / 1000.0);
 }
 
@@ -909,6 +932,74 @@ Task<void> run_dynamic_monitor(Context context) {
     co_await wait_for_response_count(context);
     check64(context, "observed response edges", response_edges,
             context.iterations);
+    check(context, "request count", context.dut.request_count.get(),
+          context.iterations);
+    check(context, "response count", context.dut.response_count.get(),
+          context.iterations);
+    report(context);
+}
+
+Task<void> process_pipeline_driver(Context context,
+                                   Queue<uint32_t>& expected_values) {
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        co_await expected_values.put(expected_response(iteration));
+        ++context.result.features.queue_put;
+        co_await drive_request(context, stimulus(iteration));
+    }
+}
+
+Task<void> process_pipeline_worker(Context context,
+                                   Queue<uint32_t>& observed_values) {
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        co_await RisingEdge{context.dut.rsp_valid};
+        co_await Delay{1_ps};
+        co_await observed_values.put(context.dut.rsp_data.get());
+        ++context.result.features.queue_put;
+    }
+}
+
+Task<void> process_pipeline_scoreboard(Context context,
+                                       Queue<uint32_t>& expected_values,
+                                       Queue<uint32_t>& observed_values) {
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t expected = co_await expected_values.get();
+        const uint32_t actual = co_await observed_values.get();
+        context.result.features.queue_get += 2;
+        check(context, "pipeline response", actual, expected);
+        context.result.checksum =
+            (context.result.checksum ^ actual) * 0x0100'0193u;
+        ++context.result.transactions;
+    }
+}
+
+Task<void> run_process_pipeline(Context context) {
+    context.dut.rst_n.set(0);
+    context.dut.req_valid.set(0);
+    context.dut.req_data.set(0);
+    context.dut.rsp_ready.set(1);
+    for (uint32_t cycle = 0; cycle < 4; ++cycle) {
+        co_await RisingEdge{context.dut.clk};
+    }
+    context.dut.rst_n.set(1);
+
+    TestContext test{context.scheduler, context.result};
+    Queue<uint32_t> expected_values{8};
+    Queue<uint32_t> observed_values{8};
+    context.result.spawned_processes += 3;
+
+    auto driver = test.spawn(
+        process_pipeline_driver(context, expected_values));
+    auto worker = test.spawn(
+        process_pipeline_worker(context, observed_values));
+    auto scoreboard = test.spawn(
+        process_pipeline_scoreboard(context, expected_values, observed_values));
+
+    co_await driver;
+    co_await worker;
+    co_await scoreboard;
+    check(context, "expected queue empty", expected_values.empty(), 1);
+    check(context, "observed queue empty", observed_values.empty(), 1);
+    co_await wait_for_response_count(context);
     check(context, "request count", context.dut.request_count.get(),
           context.iterations);
     check(context, "response count", context.dut.response_count.get(),
@@ -1153,6 +1244,1334 @@ Task<void> run_apb_component(Context context) {
     check64(context, "APB protocol violations", checker.violations(), 0);
     report(context);
 }
+
+template <MemoryMappedMaster Master>
+Task<void> run_memory_model_sequence(Context context, Master& master,
+                                     Event& done) {
+    const auto all_bytes = Master::all_bytes();
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const auto address = static_cast<typename Master::address_type>(
+            (iteration & 15u) * 4u);
+        const auto value =
+            static_cast<typename Master::data_type>(stimulus(iteration));
+
+        const auto write = co_await master.write(address, value, all_bytes);
+        check(context, "memory-model APB write status",
+              static_cast<uint32_t>(write.status),
+              static_cast<uint32_t>(MemoryStatus::Okay));
+        ++context.result.transactions;
+        ++context.result.features.memory_model;
+
+        const auto read = co_await master.read(address);
+        check(context, "memory-model APB read data", read.data, value);
+        check(context, "memory-model APB read status",
+              static_cast<uint32_t>(read.status),
+              static_cast<uint32_t>(MemoryStatus::Okay));
+        ++context.result.transactions;
+        ++context.result.features.memory_model;
+        context.result.checksum =
+            (context.result.checksum ^ read.data) * 0x0100'0193u;
+    }
+    done.set();
+}
+
+Task<void> run_memory_model(Context context) {
+    context.dut.rst_n.set(0);
+    context.dut.apb_psel_i.set(0);
+    context.dut.apb_penable_i.set(0);
+    context.dut.apb_pwrite_i.set(0);
+    context.dut.apb_paddr_i.set(0);
+    context.dut.apb_pwdata_i.set(0);
+    context.dut.apb_pstrb_i.set(0);
+    for (uint32_t cycle = 0; cycle < 4; ++cycle) {
+        co_await RisingEdge{context.dut.clk};
+    }
+    context.dut.rst_n.set(1);
+
+    const auto bus = ApbBus{
+        context.dut.clk,           context.dut.apb_psel_i,
+        context.dut.apb_penable_i, context.dut.apb_pwrite_i,
+        context.dut.apb_paddr_i,   context.dut.apb_pwdata_i,
+        context.dut.apb_prdata_o,  context.dut.apb_pready_o,
+        context.dut.apb_pslverr_o, context.dut.apb_pstrb_i};
+    ApbMaster master{bus};
+    using Transaction = typename decltype(master)::transaction_type;
+    TestContext test{context.scheduler, context.result};
+    AnalysisPort<Transaction> observed;
+    ApbMonitor monitor{bus};
+    ApbProtocolChecker checker{test, bus};
+    SparseMemory memory;
+    memory.add_region(MemoryRegionConfig{
+        .name = "register-bank", .base = 0, .size = 64});
+    auto predictor = make_memory_predictor<Transaction>(
+        test, memory, "memory-model APB transaction");
+    Event done;
+    auto prediction_connection = observed.connect(predictor);
+
+    co_await Join{
+        run_memory_model_sequence(context, master, done),
+        monitor.run(observed, static_cast<std::size_t>(context.iterations) * 2u),
+        checker.run_until([&done] { return done.is_set(); })};
+
+    check64(context, "memory-model reads", predictor.reads(),
+            context.iterations);
+    check64(context, "memory-model writes", predictor.writes(),
+            context.iterations);
+    check64(context, "memory-model mismatches", predictor.mismatches(), 0);
+    check64(context, "memory-model APB protocol violations",
+            checker.violations(), 0);
+    report(context);
+}
+
+Task<void> run_memory_model_direct(Context context) {
+    SparseMemory memory;
+    memory.add_region(MemoryRegionConfig{
+        .name = "register-bank", .base = 0, .size = 64});
+    uint64_t reads = 0;
+    uint64_t writes = 0;
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t address = (iteration & 15u) * 4u;
+        const uint32_t value = stimulus(iteration);
+        const auto write = memory.write_word(address, value, uint8_t{0xf});
+        check(context, "direct memory-model write status",
+              static_cast<uint32_t>(write.status),
+              static_cast<uint32_t>(MemoryStatus::Okay));
+        ++writes;
+        ++context.result.transactions;
+        ++context.result.features.memory_model_direct;
+
+        const auto read = memory.read_word<uint32_t>(address);
+        check(context, "direct memory-model read data", read.data, value);
+        check(context, "direct memory-model read status",
+              static_cast<uint32_t>(read.status),
+              static_cast<uint32_t>(MemoryStatus::Okay));
+        ++reads;
+        ++context.result.transactions;
+        ++context.result.features.memory_model_direct;
+        context.result.checksum =
+            (context.result.checksum ^ read.data) * 0x0100'0193u;
+    }
+    check64(context, "direct memory-model reads", reads, context.iterations);
+    check64(context, "direct memory-model writes", writes, context.iterations);
+    report(context);
+    co_return;
+}
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_PREDICTION_VALIDITY
+struct RegisterPredictionMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type) {
+        co_return write_response_type{};
+    }
+
+    Task<read_response_type> read(read_request_type) {
+        co_return read_response_type{};
+    }
+};
+
+constexpr std::array kRegisterPredictionFields{
+    RegisterFieldDescriptor{
+        .name = "control",
+        .path = "benchmark.control",
+        .lsb = 0,
+        .width = 8,
+        .access = RegisterAccess::ReadWrite,
+        .reset_value = 0x5a,
+        .reset_mask = 0xff,
+    },
+    RegisterFieldDescriptor{
+        .name = "pending",
+        .path = "benchmark.pending",
+        .lsb = 8,
+        .width = 8,
+        .access = RegisterAccess::ReadWrite,
+        .write_effect = RegisterWriteEffect::WriteOneClear,
+    },
+    RegisterFieldDescriptor{
+        .name = "sampled",
+        .path = "benchmark.sampled",
+        .lsb = 16,
+        .width = 8,
+        .access = RegisterAccess::ReadOnly,
+        .read_effect = RegisterReadEffect::Clear,
+    },
+    RegisterFieldDescriptor{
+        .name = "opaque",
+        .path = "benchmark.opaque",
+        .lsb = 24,
+        .width = 8,
+        .access = RegisterAccess::ReadOnly,
+        .read_effect = RegisterReadEffect::User,
+    },
+};
+
+constexpr RegisterDescriptor kRegisterPredictionDescriptor{
+    .name = "prediction",
+    .path = "benchmark.prediction",
+    .width = 32,
+    .access_width = 32,
+    .reset_value = 0x5a,
+    .reset_mask = 0xff,
+    .fields = kRegisterPredictionFields,
+};
+
+Task<void> run_register_prediction_validity(Context context) {
+    using Transaction = MemoryTransaction<uint32_t, uint32_t, uint8_t>;
+    TestContext test{context.scheduler, context.result};
+    RegisterPredictionMaster master;
+    RegisterHandle model{test, master, kRegisterPredictionDescriptor};
+    auto pending = model.field(kRegisterPredictionFields[1]);
+    std::array<RegisterHandle<RegisterPredictionMaster>*, 1> handles{&model};
+    RegisterPredictor predictor{
+        test,
+        std::span<RegisterHandle<RegisterPredictionMaster>* const>{handles}};
+    AnalysisPort<Transaction> observed;
+    auto prediction_connection = observed.connect(predictor);
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+        model.reset();
+        check(context, "register reset validity", model.mirrored_valid_mask(),
+              0xff);
+
+        pending.set_desired(value >> 8u);
+        check(context, "register field desired validity",
+              model.desired_valid_mask(), 0xffff);
+
+        model.predict(value, RegisterPrediction::Direct);
+        check(context, "register direct prediction validity",
+              model.mirrored_valid_mask(), 0xffff'ffffu);
+
+        observed.write(Transaction{
+            .operation = MemoryOperation::Write,
+            .address = 0,
+            .data = value ^ 0x5a5a'a5a5u,
+            .byte_enable = 0xf,
+        });
+        observed.write(Transaction{
+            .operation = MemoryOperation::Read,
+            .address = 0,
+            .data = value,
+            .byte_enable = 0xf,
+        });
+        check(context, "register read-effect validity",
+              model.mirrored_valid_mask(), 0x00ff'ffffu);
+
+        model.reset();
+        observed.write(Transaction{
+            .operation = MemoryOperation::Write,
+            .address = 0,
+            .data = value,
+            .byte_enable = 0x2,
+        });
+        check(context, "register partial write validity",
+              model.mirrored_valid_mask(), 0xffu | (value & 0xff00u));
+        ++context.result.features.register_prediction_validity;
+    }
+
+    check64(context, "register validity operations",
+            context.result.features.register_prediction_validity,
+            context.iterations);
+    check64(context, "register validity transactions",
+            context.result.transactions, 0);
+    check64(context, "register predictor reads", predictor.reads(),
+            context.iterations);
+    check64(context, "register predictor writes", predictor.writes(),
+            static_cast<uint64_t>(context.iterations) * 2u);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_BACKDOOR
+struct RegisterBackdoorMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type) {
+        co_return write_response_type{};
+    }
+    Task<read_response_type> read(read_request_type) {
+        co_return read_response_type{};
+    }
+};
+
+constexpr std::array kRegisterBackdoorSlices{
+    RegisterBackdoorSliceDescriptor{
+        .path = "pending_data", .register_lsb = 0, .width = 32},
+};
+
+constexpr RegisterDescriptor kRegisterBackdoorDescriptor{
+    .name = "pending_data",
+    .path = "benchmark.pending_data",
+    .width = 32,
+    .access_width = 32,
+    .backdoor_slices = kRegisterBackdoorSlices,
+};
+
+class BenchmarkRegisterBackdoor final : public RegisterBackdoor<uint64_t> {
+   public:
+    explicit BenchmarkRegisterBackdoor(AuthoringCoreDut dut) : dut_(dut) {}
+
+    uint64_t peek(const RegisterDescriptor&, uint64_t) override {
+        const auto signal =
+            dut_.template cpptb_signal<"pending_data">();
+        return static_cast<uint32_t>(
+            register_detail::read_hdl_full<32>(signal));
+    }
+
+    void poke(const RegisterDescriptor&, uint64_t, uint64_t value) override {
+        const auto signal =
+            dut_.template cpptb_signal<"pending_data">();
+        register_detail::write_hdl_full<32>(signal, value);
+    }
+
+   private:
+    AuthoringCoreDut dut_;
+};
+
+Task<void> run_register_backdoor(Context context) {
+    TestContext test{context.scheduler, context.result};
+    RegisterBackdoorMaster master;
+    BenchmarkRegisterBackdoor backdoor{context.dut};
+    RegisterHandle model{
+        test, master, kRegisterBackdoorDescriptor, 0, &backdoor};
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration) ^ 0x6b51'27d9u;
+        model.poke(value);
+        check(context, "generated register backdoor", model.peek(), value);
+        ++context.result.features.register_backdoor;
+    }
+    check64(context, "generated register backdoor operations",
+            context.result.features.register_backdoor, context.iterations);
+    check64(context, "generated register backdoor transactions",
+            context.result.transactions, 0);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_HIERARCHY
+struct RegisterHierarchyMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type) {
+        co_return write_response_type{};
+    }
+    Task<read_response_type> read(read_request_type) {
+        co_return read_response_type{};
+    }
+};
+
+constexpr std::array<RegisterDescriptor, 4> kRegisterHierarchyDescriptors{{
+    {.name = "lane0", .path = "benchmark.lane[0]", .address = 0,
+     .width = 32, .access_width = 32},
+    {.name = "lane1", .path = "benchmark.lane[1]", .address = 4,
+     .width = 32, .access_width = 32},
+    {.name = "lane2", .path = "benchmark.lane[2]", .address = 8,
+     .width = 32, .access_width = 32},
+    {.name = "lane3", .path = "benchmark.lane[3]", .address = 12,
+     .width = 32, .access_width = 32},
+}};
+
+Task<void> run_register_hierarchy(Context context) {
+    TestContext test{context.scheduler, context.result};
+    RegisterHierarchyMaster master;
+    RegisterHandle lane0{test, master, kRegisterHierarchyDescriptors[0]};
+    RegisterHandle lane1{test, master, kRegisterHierarchyDescriptors[1]};
+    RegisterHandle lane2{test, master, kRegisterHierarchyDescriptors[2]};
+    RegisterHandle lane3{test, master, kRegisterHierarchyDescriptors[3]};
+    RegisterViewArray lanes{lane0, lane1, lane2, lane3};
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+        lanes.at<0>().predict(value + 0u);
+        lanes.at<1>().predict(value + 1u);
+        lanes.at<2>().predict(value + 2u);
+        lanes.at<3>().predict(value + 3u);
+        check(context, "register hierarchy lane 0", lanes.at<0>().mirrored(),
+              value + 0u);
+        check(context, "register hierarchy lane 1", lanes.at<1>().mirrored(),
+              value + 1u);
+        check(context, "register hierarchy lane 2", lanes.at<2>().mirrored(),
+              value + 2u);
+        check(context, "register hierarchy lane 3", lanes.at<3>().mirrored(),
+              value + 3u);
+        uint64_t traversal_sum = 0;
+        lanes.for_each(
+            [&](auto& lane) { traversal_sum += lane.mirrored(); });
+        check64(context, "register hierarchy traversal", traversal_sum,
+                static_cast<uint64_t>(value) * 4u + 6u);
+        ++context.result.features.register_hierarchy;
+    }
+    check64(context, "register hierarchy operations",
+            context.result.features.register_hierarchy, context.iterations);
+    check64(context, "register hierarchy transactions",
+            context.result.transactions, 0);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_SPLIT
+struct RegisterSplitMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type request) {
+        const uint32_t index = request.address / 2u;
+        words[index] = static_cast<uint16_t>(request.data);
+        ++result.transactions;
+        co_return write_response_type{};
+    }
+
+    Task<read_response_type> read(read_request_type request) {
+        const uint32_t index = request.address / 2u;
+        ++result.transactions;
+        co_return read_response_type{.data = words[index]};
+    }
+
+    BenchResult& result;
+    std::array<uint16_t, 2> words{};
+};
+
+constexpr RegisterDescriptor kRegisterSplitDescriptor{
+    .name = "split",
+    .path = "benchmark.split",
+    .width = 32,
+    .access_width = 16,
+};
+
+Task<void> run_register_split(Context context) {
+    TestContext test{context.scheduler, context.result};
+    RegisterSplitMaster master{context.result};
+    RegisterHandle model{test, master, kRegisterSplitDescriptor};
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+        const auto write = co_await model.write(value);
+        const auto read = co_await model.read();
+        check64(context, "split register read", read.data, value);
+        check64(context, "split register mirror", model.mirrored(), value);
+        if (!write.okay() || !read.okay()) {
+            throw std::runtime_error("split register transport failed");
+        }
+        ++context.result.features.register_split;
+    }
+    check64(context, "split register operations",
+            context.result.features.register_split, context.iterations);
+    check64(context, "split register transactions", context.result.transactions,
+            static_cast<uint64_t>(context.iterations) * 4u);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_WIDE
+struct RegisterWideMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type request) {
+        words[request.address / 4u] = request.data;
+        ++result.transactions;
+        co_return write_response_type{};
+    }
+    Task<read_response_type> read(read_request_type request) {
+        ++result.transactions;
+        co_return read_response_type{.data = words[request.address / 4u]};
+    }
+
+    BenchResult& result;
+    std::array<uint32_t, 8> words{};
+};
+
+struct RegisterWideBackdoor final : WideRegisterBackdoor {
+    void peek_words(const RegisterDescriptor&, uint64_t,
+                    std::span<uint32_t> destination) override {
+        std::copy(storage.words().begin(), storage.words().end(),
+                  destination.begin());
+    }
+    void poke_words(const RegisterDescriptor&, uint64_t,
+                    std::span<const uint32_t> source) override {
+        Bits<128>::word_array words{};
+        std::copy(source.begin(), source.end(), words.begin());
+        storage = Bits<128>::from_words(words);
+    }
+
+    Bits<128> storage;
+};
+
+struct RegisterWideMemoryBackdoor final : WideRegisterMemoryBackdoor {
+    void peek_words(const RegisterMemoryDescriptor&, uint64_t, uint64_t,
+                    std::span<uint32_t> destination) override {
+        std::copy(storage.words().begin(), storage.words().end(),
+                  destination.begin());
+    }
+    void poke_words(const RegisterMemoryDescriptor&, uint64_t, uint64_t,
+                    std::span<const uint32_t> source) override {
+        Bits<128>::word_array words{};
+        std::copy(source.begin(), source.end(), words.begin());
+        storage = Bits<128>::from_words(words);
+    }
+
+    Bits<128> storage;
+};
+
+constexpr RegisterDescriptor kRegisterWideDescriptor{
+    .name = "wide",
+    .path = "benchmark.wide",
+    .width = 128,
+    .access_width = 32,
+};
+
+constexpr RegisterMemoryDescriptor kRegisterWideMemoryDescriptor{
+    .name = "wide_memory",
+    .path = "benchmark.wide_memory",
+    .address = 0x10,
+    .entries = 1,
+    .width = 128,
+    .access_width = 32,
+    .access = RegisterAccess::ReadWrite,
+};
+
+Task<void> run_register_wide(Context context) {
+    TestContext test{context.scheduler, context.result};
+    RegisterWideMaster master{context.result};
+    RegisterWideBackdoor backdoor;
+    RegisterWideMemoryBackdoor memory_backdoor;
+    WideRegisterHandle<128, RegisterWideMaster> model{
+        test, master, kRegisterWideDescriptor, &backdoor};
+    WideRegisterMemoryHandle<128, RegisterWideMaster> memory{
+        master, kRegisterWideMemoryDescriptor, 0, &memory_backdoor};
+    std::array<WideRegisterHandle<128, RegisterWideMaster>*, 1> handles{
+        &model};
+    WideRegisterPredictor predictor{
+        test,
+        std::span<WideRegisterHandle<128, RegisterWideMaster>* const>{
+            handles}};
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        Bits<128> value;
+        for (uint32_t word = 0; word < 4; ++word) {
+            value.set_word(word, stimulus(iteration * 4u + word));
+        }
+        const auto write = co_await model.write(value);
+        const auto read = co_await model.read();
+        check128(context, "wide register read", read.data, value);
+        check128(context, "wide register mirror", model.mirrored(), value);
+        model.poke(value);
+        check128(context, "wide register backdoor", model.peek(), value);
+
+        const auto memory_write = co_await memory.write(0, value);
+        const auto memory_read = co_await memory.read(0);
+        check128(context, "wide memory read", memory_read.data, value);
+        memory.poke(0, value);
+        check128(context, "wide memory backdoor", memory.peek(0), value);
+
+        model.reset();
+        for (uint32_t word = 0; word < 4; ++word) {
+            predictor.write(MemoryTransaction<uint32_t, uint32_t, uint8_t>{
+                .operation = MemoryOperation::Write,
+                .address = word * 4u,
+                .data = value.word(word),
+                .byte_enable = 0xf,
+            });
+            ++context.result.transactions;
+        }
+        check128(context, "wide passive prediction", model.mirrored(), value);
+        if (!write.okay() || !read.okay() || !memory_write.okay() ||
+            !memory_read.okay()) {
+            throw std::runtime_error("wide register transport failed");
+        }
+        ++context.result.features.register_wide;
+    }
+    check64(context, "wide register operations",
+            context.result.features.register_wide, context.iterations);
+    check64(context, "wide register transactions", context.result.transactions,
+            static_cast<uint64_t>(context.iterations) * 20u);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_ENUM
+enum class BenchmarkMode : uint64_t {
+    Idle = 0,
+    Active = 3,
+    Diagnostic = 7,
+};
+
+struct RegisterEnumMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type request) {
+        storage = static_cast<uint8_t>(request.data);
+        ++result.transactions;
+        co_return write_response_type{};
+    }
+    Task<read_response_type> read(read_request_type) {
+        ++result.transactions;
+        co_return read_response_type{.data = storage};
+    }
+
+    BenchResult& result;
+    uint8_t storage = 0;
+};
+
+constexpr std::array kRegisterEnumFields{
+    RegisterFieldDescriptor{
+        .name = "mode",
+        .path = "benchmark.enum.mode",
+        .lsb = 0,
+        .width = 3,
+        .access = RegisterAccess::ReadWrite,
+    },
+};
+constexpr RegisterDescriptor kRegisterEnumDescriptor{
+    .name = "enum",
+    .path = "benchmark.enum",
+    .width = 8,
+    .access_width = 8,
+    .fields = kRegisterEnumFields,
+};
+
+Task<void> run_register_enum(Context context) {
+    TestContext test{context.scheduler, context.result};
+    RegisterEnumMaster master{context.result};
+    RegisterHandle model{test, master, kRegisterEnumDescriptor};
+    RegisterEnumFieldHandle<BenchmarkMode,
+                            RegisterFieldHandle<RegisterEnumMaster>>
+        mode{model, kRegisterEnumFields[0]};
+    constexpr std::array values{
+        BenchmarkMode::Idle, BenchmarkMode::Active, BenchmarkMode::Diagnostic};
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const auto value = values[(iteration + 1u) % values.size()];
+        const auto write = co_await mode.write(value);
+        const auto read = co_await mode.read();
+        check64(context, "enum register read", static_cast<uint64_t>(read.data),
+                static_cast<uint64_t>(value));
+        check64(context, "enum register mirror",
+                static_cast<uint64_t>(mode.mirrored()),
+                static_cast<uint64_t>(value));
+        if (!write.okay() || !read.okay()) {
+            throw std::runtime_error("enum register transport failed");
+        }
+        ++context.result.features.register_enum;
+    }
+    check64(context, "enum register operations",
+            context.result.features.register_enum, context.iterations);
+    check64(context, "enum register transactions", context.result.transactions,
+            static_cast<uint64_t>(context.iterations) * 2u);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_SEQUENCES
+struct RegisterSequenceMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type request) {
+        storage = request.data;
+        ++result->transactions;
+        co_return write_response_type{};
+    }
+
+    Task<read_response_type> read(read_request_type) {
+        ++result->transactions;
+        co_return read_response_type{.data = storage};
+    }
+
+    BenchResult* result = nullptr;
+    uint32_t storage = 0;
+};
+
+constexpr std::array kRegisterSequenceFields{
+    RegisterFieldDescriptor{
+        .name = "value",
+        .path = "benchmark.sequence.value",
+        .width = 8,
+        .access = RegisterAccess::ReadWrite,
+        .reset_value = 0x5a,
+        .reset_mask = 0xff,
+    },
+};
+
+constexpr RegisterDescriptor kRegisterSequenceDescriptor{
+    .name = "sequence",
+    .path = "benchmark.sequence",
+    .width = 32,
+    .access_width = 32,
+    .reset_value = 0x5a,
+    .reset_mask = 0xff,
+    .fields = kRegisterSequenceFields,
+};
+
+class RegisterSequenceBackdoor final : public RegisterBackdoor<uint64_t> {
+   public:
+    explicit RegisterSequenceBackdoor(RegisterSequenceMaster& master)
+        : master_(&master) {}
+
+    uint64_t peek(const RegisterDescriptor&, uint64_t) override {
+        return master_->storage;
+    }
+
+    void poke(const RegisterDescriptor&, uint64_t, uint64_t value) override {
+        master_->storage = static_cast<uint32_t>(value);
+    }
+
+   private:
+    RegisterSequenceMaster* master_;
+};
+
+class RegisterSequenceModel {
+   public:
+    RegisterSequenceModel(TestContext test, RegisterSequenceMaster& master,
+                          RegisterSequenceBackdoor& backdoor)
+        : sequence(std::move(test), master, kRegisterSequenceDescriptor,
+                   &backdoor) {}
+
+    template <typename Function>
+    Task<void> for_each_register_async(Function& function) {
+        co_await function(sequence);
+    }
+
+    RegisterHandle<RegisterSequenceMaster> sequence;
+};
+
+Task<void> run_register_sequences(Context context) {
+    TestContext test{context.scheduler, context.result};
+    RegisterSequenceMaster master{.result = &context.result};
+    RegisterSequenceBackdoor backdoor{master};
+    RegisterSequenceModel model{test, master, backdoor};
+    uint64_t operations = 0;
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        master.storage = 0x5a;
+        model.sequence.reset();
+
+        const auto reset_frontdoor =
+            co_await register_reset_check(test, model);
+        const auto reset_backdoor = co_await register_reset_check(
+            test, model, {.path = AccessPath::Backdoor});
+        const auto access = co_await register_access_check(test, model);
+        const auto bash_frontdoor =
+            co_await register_bit_bash(test, model);
+        const auto bash_backdoor = co_await register_bit_bash(
+            test, model, {.path = AccessPath::Backdoor});
+
+        check64(context, "reset frontdoor register count",
+                reset_frontdoor.registers_tested, 1);
+        check64(context, "reset backdoor read count",
+                reset_backdoor.backdoor_reads, 1);
+        check64(context, "access register count", access.registers_tested, 1);
+        check64(context, "frontdoor bit-bash count",
+                bash_frontdoor.bits_tested, 8);
+        check64(context, "backdoor bit-bash count",
+                bash_backdoor.bits_tested, 8);
+
+        context.result.checksum =
+            (context.result.checksum ^
+             ((bash_frontdoor.bits_tested << 16u) ^ master.storage ^
+              iteration)) *
+            0x0100'0193u;
+        ++operations;
+    }
+
+    check64(context, "register sequence operations", operations,
+            context.iterations);
+    check64(context, "register sequence transactions",
+            context.result.transactions,
+            static_cast<uint64_t>(context.iterations) * 21u);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_COVERAGE
+constexpr std::array kRegisterCoverageFields{
+    RegisterFieldDescriptor{
+        .name = "command",
+        .path = "benchmark.coverage.control.command",
+        .lsb = 0,
+        .width = 8,
+        .access = RegisterAccess::ReadWrite,
+    },
+    RegisterFieldDescriptor{
+        .name = "status",
+        .path = "benchmark.coverage.control.status",
+        .lsb = 8,
+        .width = 8,
+        .access = RegisterAccess::ReadOnly,
+    },
+};
+
+constexpr std::array kRegisterCoverageRegisters{
+    RegisterDescriptor{
+        .name = "control",
+        .path = "benchmark.coverage.control",
+        .width = 16,
+        .access_width = 16,
+        .fields = kRegisterCoverageFields,
+    },
+};
+
+constexpr std::array kRegisterCoverageMemories{
+    RegisterMemoryDescriptor{
+        .name = "memory",
+        .path = "benchmark.coverage.memory",
+        .address = 0x100,
+        .entries = 4,
+        .width = 32,
+        .access_width = 32,
+        .access = RegisterAccess::ReadWrite,
+    },
+};
+
+constexpr RegisterBlockDescriptor kRegisterCoverageBlock{
+    .name = "coverage",
+    .registers = kRegisterCoverageRegisters,
+    .memories = kRegisterCoverageMemories,
+};
+
+Task<void> run_register_coverage(Context context) {
+    using Transaction = MemoryTransaction<uint32_t, uint32_t, uint8_t>;
+    RegisterAccessCoverage coverage{kRegisterCoverageBlock};
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t index = iteration & 3u;
+        coverage.write(Transaction{
+            .operation = MemoryOperation::Write,
+            .address = 0,
+            .data = stimulus(iteration),
+            .byte_enable = 0x1,
+        });
+        coverage.write(Transaction{
+            .operation = MemoryOperation::Read,
+            .address = 0,
+        });
+        coverage.write(Transaction{
+            .operation = MemoryOperation::Write,
+            .address = 0x100u + index * 4u,
+            .data = stimulus(iteration),
+            .byte_enable = 0xf,
+        });
+        coverage.write(Transaction{
+            .operation = MemoryOperation::Read,
+            .address = 0x100u + index * 4u,
+        });
+        coverage.write(Transaction{
+            .operation = MemoryOperation::Read,
+            .address = 0x1000,
+        });
+        coverage.write(Transaction{
+            .operation = MemoryOperation::Read,
+            .address = 0,
+            .status = MemoryStatus::SlaveError,
+        });
+        coverage.sample_register(kRegisterCoverageRegisters[0],
+                                 MemoryOperation::Write);
+        coverage.sample_register(kRegisterCoverageRegisters[0],
+                                 MemoryOperation::Read);
+        coverage.sample_memory(kRegisterCoverageMemories[0], index,
+                               MemoryOperation::Write);
+        coverage.sample_memory(kRegisterCoverageMemories[0], index,
+                               MemoryOperation::Read);
+        context.result.transactions += 10;
+        ++context.result.features.coverage_sampling;
+    }
+
+    const auto snapshot = coverage.snapshot();
+    const auto* control = snapshot.find("benchmark.coverage.control");
+    const auto* command = snapshot.find("benchmark.coverage.control.command");
+    const auto* status = snapshot.find("benchmark.coverage.control.status");
+    const auto* memory = snapshot.find("benchmark.coverage.memory");
+    if (!control || !command || !status || !memory) {
+        throw std::runtime_error("register coverage snapshot is incomplete");
+    }
+    const uint64_t iterations = context.iterations;
+    check64(context, "register coverage samples", snapshot.samples,
+            iterations * 8u);
+    check64(context, "register coverage failed", snapshot.failed, iterations);
+    check64(context, "register coverage unmapped", snapshot.unmapped,
+            iterations);
+    check64(context, "register coverage frontdoor aggregate",
+            control->frontdoor_reads + control->frontdoor_writes,
+            iterations * 2u);
+    check64(context, "register coverage backdoor aggregate",
+            control->backdoor_reads + control->backdoor_writes,
+            iterations * 2u);
+    check64(context, "register coverage command writes",
+            command->frontdoor_writes, iterations);
+    check64(context, "register coverage status reads",
+            status->frontdoor_reads, iterations);
+    check64(context, "register coverage memory frontdoor",
+            memory->frontdoor_reads + memory->frontdoor_writes,
+            iterations * 2u);
+    check64(context, "register coverage memory backdoor",
+            memory->backdoor_reads + memory->backdoor_writes,
+            iterations * 2u);
+    check64(context, "register coverage unique memory indices",
+            memory->unique_read_indices + memory->unique_written_indices,
+            std::min<uint64_t>(iterations, 4u) * 2u);
+    check64(context, "register coverage iterations",
+            context.result.features.coverage_sampling, iterations);
+    check64(context, "register coverage transactions",
+            context.result.transactions, iterations * 10u);
+    constexpr uint32_t kFnvPrime = 0x0100'0193u;
+    const std::array<uint64_t, 10> coverage_values{
+        snapshot.samples,
+        snapshot.failed,
+        snapshot.unmapped,
+        control->frontdoor_reads + control->frontdoor_writes,
+        control->backdoor_reads + control->backdoor_writes,
+        command->frontdoor_writes,
+        status->frontdoor_reads,
+        memory->frontdoor_reads + memory->frontdoor_writes,
+        memory->backdoor_reads + memory->backdoor_writes,
+        memory->unique_read_indices + memory->unique_written_indices,
+    };
+    for (const uint64_t value : coverage_values) {
+        context.result.checksum =
+            (context.result.checksum ^ static_cast<uint32_t>(value)) *
+            kFnvPrime;
+    }
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_MAPS
+struct RegisterMapMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type request) {
+        words.at(request.address / 4u) = request.data;
+        ++result.transactions;
+        co_return write_response_type{};
+    }
+
+    Task<read_response_type> read(read_request_type request) {
+        ++result.transactions;
+        co_return read_response_type{.data = words.at(request.address / 4u)};
+    }
+
+    BenchResult& result;
+    std::array<uint32_t, 16 * 1024> words{};
+};
+
+struct BenchmarkRegisterFrontdoor final
+    : RegisterFrontdoor<RegisterMapMaster> {
+    explicit BenchmarkRegisterFrontdoor(BenchResult& selected_result)
+        : result(selected_result) {}
+
+    Task<write_response_type> write(
+        RegisterMapMaster&, const RegisterDescriptor&,
+        write_request_type request) override {
+        storage = request.data;
+        last_address = request.address;
+        ++result.transactions;
+        co_return write_response_type{};
+    }
+
+    Task<read_response_type> read(
+        RegisterMapMaster&, const RegisterDescriptor&,
+        read_request_type request) override {
+        last_address = request.address;
+        ++result.transactions;
+        co_return read_response_type{.data = storage};
+    }
+
+    BenchResult& result;
+    uint32_t storage = 0;
+    uint32_t last_address = 0;
+};
+
+constexpr RegisterDescriptor kRegisterMapDescriptor{
+    .name = "control",
+    .path = "benchmark.maps.control",
+    .address = 0x20,
+    .width = 32,
+    .access_width = 32,
+};
+
+constexpr RegisterMemoryDescriptor kRegisterMapMemoryDescriptor{
+    .name = "buffer",
+    .path = "benchmark.maps.buffer",
+    .address = 0x100,
+    .entries = 4,
+    .width = 32,
+    .access_width = 32,
+    .access = RegisterAccess::ReadWrite,
+};
+
+Task<void> run_register_maps(Context context) {
+    TestContext test{context.scheduler, context.result};
+    RegisterMapMaster master{context.result};
+    BenchmarkRegisterFrontdoor custom{context.result};
+    RegisterHandle model{test, master, kRegisterMapDescriptor};
+    RegisterMemoryHandle memory{master, kRegisterMapMemoryDescriptor};
+
+    RegisterAddressMap primary{"primary", master, 0x1000};
+    RegisterAddressMap alias{"alias", master, 0x8000};
+    alias.route(kRegisterMapDescriptor, 0x40)
+        .route(kRegisterMapMemoryDescriptor, 0x200);
+    RegisterAddressMap indirect{"indirect", master, 0x9000};
+    indirect.route(kRegisterMapDescriptor, 0x60, &custom);
+
+    uint64_t operations = 0;
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t value = stimulus(iteration);
+
+        static_cast<void>(co_await model.write(value, primary));
+        const auto primary_read = co_await model.read(primary);
+        check(context, "primary map read", primary_read.data, value);
+        check64(context, "primary map address",
+                primary.effective_address(kRegisterMapDescriptor), 0x1020);
+
+        const uint32_t alias_value = value ^ 0x5a5a'a5a5u;
+        static_cast<void>(co_await model.write(alias_value, alias));
+        const auto alias_read = co_await model.read(alias);
+        check(context, "alias map read", alias_read.data, alias_value);
+        check64(context, "alias map address",
+                alias.effective_address(kRegisterMapDescriptor), 0x8040);
+
+        const uint32_t indirect_value = value + 0x1020'3040u;
+        static_cast<void>(co_await model.write(indirect_value, indirect));
+        const auto indirect_read = co_await model.read(indirect);
+        check(context, "custom frontdoor read", indirect_read.data,
+              indirect_value);
+        check64(context, "custom frontdoor address", custom.last_address,
+                0x9060);
+
+        const uint32_t index = iteration & 1u;
+        const std::array<uint32_t, 2> values{value + 1u, value + 2u};
+        std::array<uint32_t, 2> readback{};
+        static_cast<void>(co_await memory.write(index, values, alias));
+        static_cast<void>(co_await memory.read_into(index, readback, alias));
+        check(context, "mapped memory first element", readback[0], values[0]);
+        check(context, "mapped memory second element", readback[1],
+              values[1]);
+        const std::array<uint32_t, 5> observed_values{
+            static_cast<uint32_t>(primary_read.data),
+            static_cast<uint32_t>(alias_read.data),
+            static_cast<uint32_t>(indirect_read.data), readback[0],
+            readback[1]};
+        for (const uint32_t observed : observed_values) {
+            context.result.checksum =
+                (context.result.checksum ^ observed) * 0x0100'0193u;
+        }
+        ++operations;
+    }
+
+    check64(context, "register map operations", operations,
+            context.iterations);
+    check64(context, "register map transactions", context.result.transactions,
+            static_cast<uint64_t>(context.iterations) * 10u);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_USER_EFFECTS
+struct RegisterUserEffectMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type request) {
+        storage ^= request.data & 0xffu;
+        ++result.transactions;
+        co_return write_response_type{};
+    }
+
+    Task<read_response_type> read(read_request_type) {
+        const uint32_t sampled = storage;
+        storage = (~storage) & 0xffu;
+        ++result.transactions;
+        co_return read_response_type{.data = sampled};
+    }
+
+    BenchResult& result;
+    uint32_t storage = 0;
+};
+
+struct BenchmarkUserEffectPolicy final : RegisterUserEffectPolicy {
+    bool encode_write(
+        const RegisterUserEffectBitContext& context) override {
+        return context.previous_valid ? context.previous != context.value
+                                      : context.value;
+    }
+
+    RegisterUserEffectBitResult predict_write(
+        const RegisterUserEffectBitContext& context) override {
+        return {.value = context.previous != context.value,
+                .valid = context.previous_valid};
+    }
+
+    RegisterUserEffectBitResult predict_read(
+        const RegisterUserEffectBitContext& context) override {
+        return {.value = !context.value, .valid = true};
+    }
+
+    uint64_t encode_write_field(
+        const RegisterUserEffectFieldContext& context) override {
+        return context.previous ^ context.value;
+    }
+
+    RegisterUserEffectFieldResult predict_write_field(
+        const RegisterUserEffectFieldContext& context) override {
+        return {.value = context.previous ^ context.value,
+                .valid_mask = context.previous_valid_mask};
+    }
+
+    RegisterUserEffectFieldResult predict_read_field(
+        const RegisterUserEffectFieldContext& context) override {
+        return {.value = ~context.value,
+                .valid_mask = register_mask(
+                    context.field_descriptor.width)};
+    }
+};
+
+constexpr std::array kBenchmarkUserEffectFields{
+    RegisterFieldDescriptor{
+        .name = "custom",
+        .path = "benchmark.user_effects.custom",
+        .lsb = 0,
+        .width = 8,
+        .access = RegisterAccess::ReadWrite,
+        .read_effect = RegisterReadEffect::User,
+        .write_effect = RegisterWriteEffect::User,
+    },
+};
+
+constexpr RegisterDescriptor kBenchmarkUserEffectDescriptor{
+    .name = "user_effects",
+    .path = "benchmark.user_effects",
+    .width = 32,
+    .access_width = 32,
+    .fields = kBenchmarkUserEffectFields,
+};
+
+Task<void> run_register_user_effects(Context context) {
+    TestContext test{context.scheduler, context.result};
+    RegisterUserEffectMaster master{context.result};
+    BenchmarkUserEffectPolicy policy;
+    RegisterHandle model{test, master, kBenchmarkUserEffectDescriptor,
+                         nullptr, &policy};
+    uint64_t operations = 0;
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint32_t initial = stimulus(iteration * 2u) & 0xffu;
+        const uint32_t desired = stimulus(iteration * 2u + 1u) & 0xffu;
+        master.storage = initial;
+        model.predict(initial, RegisterPrediction::Direct);
+        model.set_desired(desired);
+        const auto write = co_await model.update();
+        check(context, "user effect write mirror", model.mirrored(), desired);
+        check(context, "user effect write DUT", master.storage, desired);
+
+        const auto read = co_await model.read();
+        check(context, "user effect read mirror", model.mirrored(),
+              master.storage);
+        check(context, "user effect validity",
+              static_cast<uint32_t>(model.mirrored_valid_mask() & 0xffu),
+              0xffu);
+        context.result.checksum =
+            (context.result.checksum ^ desired) * 0x0100'0193u;
+        context.result.checksum =
+            (context.result.checksum ^ (master.storage & 0xffu)) *
+            0x0100'0193u;
+        if (!write.okay() || !read.okay()) {
+            throw std::runtime_error("register user-effect transport failed");
+        }
+        ++operations;
+    }
+
+    check64(context, "register user-effect operations", operations,
+            context.iterations);
+    check64(context, "register user-effect transactions",
+            context.result.transactions,
+            static_cast<uint64_t>(context.iterations) * 2u);
+    report(context);
+    co_return;
+}
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_MEMORY
+struct RegisterMemoryMaster {
+    using address_type = uint32_t;
+    using data_type = uint32_t;
+    using byte_enable_type = uint8_t;
+    using write_request_type =
+        MemoryWriteRequest<address_type, data_type, byte_enable_type>;
+    using read_request_type = MemoryReadRequest<address_type>;
+    using write_response_type = MemoryWriteResponse;
+    using read_response_type = MemoryReadResponse<data_type>;
+
+    Task<write_response_type> write(write_request_type) {
+        co_return write_response_type{};
+    }
+    Task<read_response_type> read(read_request_type) {
+        co_return read_response_type{};
+    }
+};
+
+constexpr RegisterMemoryDescriptor kRegisterMemoryDescriptor{
+    .name = "memory",
+    .path = "benchmark.memory",
+    .address = 0x100,
+    .entries = 256,
+    .width = 32,
+    .access_width = 32,
+    .access = RegisterAccess::ReadWrite,
+};
+
+class BenchmarkMemoryBackdoor final
+    : public RegisterMemoryBackdoor<uint32_t> {
+   public:
+    explicit BenchmarkMemoryBackdoor(AuthoringCoreDut dut) : dut_(dut) {}
+
+    uint32_t peek(const RegisterMemoryDescriptor&, uint64_t index,
+                  uint64_t) override {
+        return static_cast<uint32_t>(
+            dut_.memory.at(static_cast<int32_t>(index)).get());
+    }
+
+    void poke(const RegisterMemoryDescriptor&, uint64_t index, uint64_t,
+              uint32_t value) override {
+        dut_.memory.at(static_cast<int32_t>(index)).deposit(value);
+    }
+
+    void peek_into(const RegisterMemoryDescriptor&, uint64_t first_index,
+                   uint64_t, std::span<uint32_t> values) override {
+        dut_.memory.get_into(static_cast<int32_t>(first_index), values);
+    }
+
+    void poke(const RegisterMemoryDescriptor&, uint64_t first_index,
+              uint64_t, std::span<const uint32_t> values) override {
+        dut_.memory.deposit(static_cast<int32_t>(first_index), values);
+    }
+
+   private:
+    AuthoringCoreDut dut_;
+};
+
+Task<void> run_register_memory(Context context) {
+    RegisterMemoryMaster master;
+    BenchmarkMemoryBackdoor backdoor{context.dut};
+    RegisterMemoryHandle memory{
+        master, kRegisterMemoryDescriptor, 0x4000, &backdoor};
+    uint64_t operations = 0;
+
+    for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
+        const uint64_t first_index = (iteration & 63u) * 4u;
+        std::array<uint32_t, 4> values{};
+        std::array<uint32_t, 4> readback{};
+        for (uint32_t word = 0; word < values.size(); ++word) {
+            values[word] = stimulus(iteration * 4u + word) ^ 0x3c6e'f372u;
+        }
+        typename decltype(memory)::write_response_type write;
+        typename decltype(memory)::read_response_type read;
+        if (iteration % 3u == 0) {
+            auto window = memory.slice(first_index, values.size());
+            write = co_await window.write(values, AccessPath::Backdoor);
+            read = co_await window.read(readback, AccessPath::Backdoor);
+        } else if (iteration % 3u == 1) {
+            const uint64_t byte_offset = first_index * memory.element_bytes();
+            write = co_await memory.write_offset(
+                byte_offset, values, AccessPath::Backdoor);
+            read = co_await memory.read_offset(
+                byte_offset, readback, AccessPath::Backdoor);
+        } else {
+            const uint64_t absolute_address =
+                memory.base_address() + first_index * memory.element_bytes();
+            write = co_await memory.write_absolute(
+                absolute_address, values, AccessPath::Backdoor);
+            read = co_await memory.read_absolute(
+                absolute_address, readback, AccessPath::Backdoor);
+        }
+        check64(context, "register memory write count",
+                write.transfers_completed, values.size());
+        check64(context, "register memory read count",
+                read.transfers_completed, readback.size());
+        for (uint32_t word = 0; word < values.size(); ++word) {
+            check(context, "register memory readback", readback[word],
+                  values[word]);
+            context.result.checksum =
+                (context.result.checksum ^ readback[word]) * 0x0100'0193u;
+        }
+        ++operations;
+    }
+    check64(context, "register memory operations", operations,
+            context.iterations);
+    check64(context, "register memory transactions",
+            context.result.transactions, 0);
+    report(context);
+    co_return;
+}
+#endif
 
 Task<void> run(Context context) {
     context.dut.rst_n.set(0);
@@ -1476,12 +2895,54 @@ void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_DYNAMIC_MONITOR
     scheduler.spawn_detached(
         run_dynamic_monitor(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_PROCESS_PIPELINE
+    scheduler.spawn_detached(
+        run_process_pipeline(Context{scheduler, dut, iterations, result}));
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_ANALYSIS_FANOUT
     scheduler.spawn_detached(
         run_analysis_fanout(Context{scheduler, dut, iterations, result}));
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_APB_COMPONENT
     scheduler.spawn_detached(
         run_apb_component(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEMORY_MODEL
+    scheduler.spawn_detached(
+        run_memory_model(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEMORY_MODEL_DIRECT
+    scheduler.spawn_detached(
+        run_memory_model_direct(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_PREDICTION_VALIDITY
+    scheduler.spawn_detached(run_register_prediction_validity(
+        Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_BACKDOOR
+    scheduler.spawn_detached(
+        run_register_backdoor(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_HIERARCHY
+    scheduler.spawn_detached(
+        run_register_hierarchy(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_SPLIT
+    scheduler.spawn_detached(
+        run_register_split(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_WIDE
+    scheduler.spawn_detached(
+        run_register_wide(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_ENUM
+    scheduler.spawn_detached(
+        run_register_enum(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_MEMORY
+    scheduler.spawn_detached(
+        run_register_memory(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_SEQUENCES
+    scheduler.spawn_detached(
+        run_register_sequences(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_COVERAGE
+    scheduler.spawn_detached(
+        run_register_coverage(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_MAPS
+    scheduler.spawn_detached(
+        run_register_maps(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_USER_EFFECTS
+    scheduler.spawn_detached(run_register_user_effects(
+        Context{scheduler, dut, iterations, result}));
 #else
     scheduler.spawn_detached(run(Context{scheduler, dut, iterations, result}));
 #endif

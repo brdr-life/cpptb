@@ -17,6 +17,11 @@ enum class MemoryOperation : uint8_t {
     Write,
 };
 
+enum class AccessPath : uint8_t {
+    Frontdoor,
+    Backdoor,
+};
+
 enum class MemoryStatus : uint8_t {
     Okay,
     SlaveError,

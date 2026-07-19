@@ -19,6 +19,7 @@ of the way.
 | [Rich data](examples/rich-data.md) | Wide, fixed-point, array, struct, and enum ports | Typed construction and checking |
 | [Heavy benchmarks](examples/heavy-benchmarks.md) | Computationally substantial four-mode comparisons | FIR, packet CRC32, and matrix accelerator sequences |
 | [Open-source cores](examples/open-source-cores.md) | Real CPU, crypto, and network RTL comparisons | Firmware, register programming, and AXI-stream sequences |
+| [secworks AES register-model oracle](examples/secworks-aes-regmodel.md) | Ground-truth validation of generated register access | Upstream oracle, generated RegModel, and matched pure-SV sequence |
 
 ## Constructing a bench
 

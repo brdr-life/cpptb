@@ -449,6 +449,7 @@ module dpi_authoring_core;
     longint unsigned generation;
     requests = initial_requests;
     if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
+      edge_interest[SIGNAL_CLK] |= authoring_core_dpi_edge_interest(SIGNAL_CLK);
       edge_interest[SIGNAL_RSPVALID] = authoring_core_dpi_edge_interest(SIGNAL_RSPVALID);
     end
     if ((requests & STEP_TIMER_IDLE) != 0) begin
@@ -533,8 +534,12 @@ module dpi_authoring_core;
       if (event_edge == EDGE_RISING) begin
         sim_cycles++;
       end
-      if ((event_edge == EDGE_RISING) ||
-          track_falling_edges) begin
+      if (
+          ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLK] & 1) != 0)) ||
+          ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLK] & 2) != 0)) ||
+          ((event_edge == EDGE_RISING) &&
+           1'b1 &&
+           (timer_deadline == NO_TIMER))) begin
         run_step(PHASE_EDGE, SIGNAL_CLK, event_edge, requests);
         service_requests(requests);
       end
@@ -599,8 +604,12 @@ module dpi_authoring_core;
         if (event_edge == EDGE_RISING) begin
           sim_cycles++;
         end
-        if ((event_edge == EDGE_RISING) ||
-            track_falling_edges) begin
+        if (
+            ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLK] & 1) != 0)) ||
+            ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLK] & 2) != 0)) ||
+            ((event_edge == EDGE_RISING) &&
+             1'b1 &&
+             (timer_deadline == NO_TIMER))) begin
           run_step(PHASE_EDGE, SIGNAL_CLK,
                    event_edge, requests);
           service_requests(requests);
@@ -835,9 +844,28 @@ module dpi_authoring_core;
     dpi_authoring_core_hierarchy_15_get = $unsigned(i_dut.memory[index]);
   endfunction
 
+  export "DPI-C" function dpi_authoring_core_hierarchy_15_get_block4;
+  function void dpi_authoring_core_hierarchy_15_get_block4(
+      input int first_index, input int count,
+      output bit [127:0] values);
+    values = '0;
+    for (int offset = 0; offset < count; offset++) begin
+      values[offset * 32 +: 32] = $unsigned(i_dut.memory[first_index + offset]);
+    end
+  endfunction
+
   export "DPI-C" function dpi_authoring_core_hierarchy_15_deposit;
   function void dpi_authoring_core_hierarchy_15_deposit(input int index, input int unsigned value);
     i_dut.memory[index] = value;
+  endfunction
+
+  export "DPI-C" function dpi_authoring_core_hierarchy_15_deposit_block4;
+  function void dpi_authoring_core_hierarchy_15_deposit_block4(
+      input int first_index, input int count,
+      input bit [127:0] values);
+    for (int offset = 0; offset < count; offset++) begin
+      i_dut.memory[first_index + offset] = values[offset * 32 +: 32];
+    end
   endfunction
 
   export "DPI-C" function dpi_authoring_core_hierarchy_17_get;

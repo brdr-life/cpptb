@@ -54,11 +54,8 @@ inline CallbackPhase current_callback_phase() {
     return dpi_callback_state.phase;
 }
 
-inline void require_write_allowed(const char* name, const char* operation) {
-    const auto& state = dpi_callback_state;
-    if (state.depth == 0 || state.phase != CallbackPhase::ReadOnly) {
-        return;
-    }
+[[noreturn]] inline void fail_write_not_allowed(const char* name,
+                                                const char* operation) {
     std::fprintf(
         stderr,
         "cpptb: %s() is not allowed during ReadOnly for signal '%s'; "
@@ -67,12 +64,31 @@ inline void require_write_allowed(const char* name, const char* operation) {
     std::abort();
 }
 
-inline void require_callback(const char* name) {
-    if (dpi_callback_state.depth != 0) return;
+[[noreturn]] inline void fail_outside_callback(const char* name) {
     std::fprintf(stderr,
                  "cpptb: internal probe '%s' used outside a DPI callback\n",
                  name ? name : "<unnamed>");
     std::abort();
+}
+
+inline void require_write_allowed(const char* name, const char* operation) {
+    const auto& state = dpi_callback_state;
+    if (state.depth == 0 || state.phase != CallbackPhase::ReadOnly) {
+        return;
+    }
+    fail_write_not_allowed(name, operation);
+}
+
+inline void require_callback(const char* name) {
+    if (dpi_callback_state.depth != 0) return;
+    fail_outside_callback(name);
+}
+
+inline void require_write_callback(const char* name, const char* operation) {
+    const auto& state = dpi_callback_state;
+    if (state.depth == 0) fail_outside_callback(name);
+    if (state.phase != CallbackPhase::ReadOnly) return;
+    fail_write_not_allowed(name, operation);
 }
 
 inline void require_signal_callback(const char* name) {
@@ -124,8 +140,7 @@ class Probe {
     }
 
     void deposit(value_type value) const requires(Writable) {
-        detail::require_callback(name);
-        detail::require_write_allowed(name, "deposit");
+        detail::require_write_callback(name, "deposit");
         if (!deposit_fn) {
             std::fprintf(stderr,
                          "cpptb: internal probe '%s' has no deposit callback\n",
@@ -137,8 +152,7 @@ class Probe {
     }
 
     void force(value_type value) const requires(Forceable) {
-        detail::require_callback(name);
-        detail::require_write_allowed(name, "force");
+        detail::require_write_callback(name, "force");
         if (!force_fn) {
             std::fprintf(stderr,
                          "cpptb: internal probe '%s' has no force callback\n",
@@ -150,8 +164,7 @@ class Probe {
     }
 
     void release() const requires(Forceable) {
-        detail::require_callback(name);
-        detail::require_write_allowed(name, "release");
+        detail::require_write_callback(name, "release");
         if (!release_fn) {
             std::fprintf(stderr,
                          "cpptb: internal probe '%s' has no release callback\n",

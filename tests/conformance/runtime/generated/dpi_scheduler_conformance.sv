@@ -410,6 +410,10 @@ module dpi_scheduler_conformance;
     longint unsigned generation;
     requests = initial_requests;
     if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
+      edge_interest[SIGNAL_CLKA] |= cpptb_dpi_edge_interest(SIGNAL_CLKA);
+      edge_interest[SIGNAL_CLKB] |= cpptb_dpi_edge_interest(SIGNAL_CLKB);
+      edge_interest[SIGNAL_MANUALCLK] |= cpptb_dpi_edge_interest(SIGNAL_MANUALCLK);
+      edge_interest[SIGNAL_DERIVEDCLK] |= cpptb_dpi_edge_interest(SIGNAL_DERIVEDCLK);
       edge_interest[SIGNAL_EVENTOBSERVED] = cpptb_dpi_edge_interest(SIGNAL_EVENTOBSERVED);
     end
     if ((requests & STEP_TIMER_IDLE) != 0) begin
@@ -497,8 +501,12 @@ module dpi_scheduler_conformance;
       if (event_edge == EDGE_RISING) begin
         sim_cycles++;
       end
-      if ((event_edge == EDGE_RISING) ||
-          track_falling_edges) begin
+      if (
+          ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLKA] & 1) != 0)) ||
+          ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLKA] & 2) != 0)) ||
+          ((event_edge == EDGE_RISING) &&
+           1'b1 &&
+           (timer_deadline == NO_TIMER))) begin
         run_step(PHASE_EDGE, SIGNAL_CLKA, event_edge, requests);
         service_requests(requests);
       end
@@ -509,8 +517,12 @@ module dpi_scheduler_conformance;
       calendar_clock_next_edge[1] +=
           calendar_clock_half_period[1];
       event_edge = clk_b ? EDGE_RISING : EDGE_FALLING;
-      if ((event_edge == EDGE_RISING) ||
-          track_falling_edges) begin
+      if (
+          ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLKB] & 1) != 0)) ||
+          ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLKB] & 2) != 0)) ||
+          ((event_edge == EDGE_RISING) &&
+           1'b0 &&
+           (timer_deadline == NO_TIMER))) begin
         run_step(PHASE_EDGE, SIGNAL_CLKB, event_edge, requests);
         service_requests(requests);
       end
@@ -575,8 +587,12 @@ module dpi_scheduler_conformance;
         if (event_edge == EDGE_RISING) begin
           sim_cycles++;
         end
-        if ((event_edge == EDGE_RISING) ||
-            track_falling_edges) begin
+        if (
+            ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLKA] & 1) != 0)) ||
+            ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLKA] & 2) != 0)) ||
+            ((event_edge == EDGE_RISING) &&
+             1'b1 &&
+             (timer_deadline == NO_TIMER))) begin
           run_step(PHASE_EDGE, SIGNAL_CLKA,
                    event_edge, requests);
           service_requests(requests);
@@ -601,8 +617,12 @@ module dpi_scheduler_conformance;
         clk_b = ~clk_b;
         next_edge = next_edge + 3ns;
         event_edge = clk_b ? EDGE_RISING : EDGE_FALLING;
-        if ((event_edge == EDGE_RISING) ||
-            track_falling_edges) begin
+        if (
+            ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLKB] & 1) != 0)) ||
+            ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLKB] & 2) != 0)) ||
+            ((event_edge == EDGE_RISING) &&
+             1'b0 &&
+             (timer_deadline == NO_TIMER))) begin
           run_step(PHASE_EDGE, SIGNAL_CLKB,
                    event_edge, requests);
           service_requests(requests);
@@ -620,7 +640,12 @@ module dpi_scheduler_conformance;
       note_time_step();
 `endif
       event_edge = manual_clk ? EDGE_RISING : EDGE_FALLING;
-      if ((event_edge == EDGE_RISING) || track_falling_edges) begin
+      if (
+          ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_MANUALCLK] & 1) != 0)) ||
+          ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_MANUALCLK] & 2) != 0)) ||
+          ((event_edge == EDGE_RISING) &&
+           1'b0 &&
+           (timer_deadline == NO_TIMER))) begin
         if (status == 0) begin
           run_step(PHASE_EDGE, SIGNAL_MANUALCLK,
                    event_edge, requests);
@@ -642,7 +667,12 @@ module dpi_scheduler_conformance;
       note_time_step();
 `endif
       event_edge = derived_clk ? EDGE_RISING : EDGE_FALLING;
-      if ((event_edge == EDGE_RISING) || track_falling_edges) begin
+      if (
+          ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_DERIVEDCLK] & 1) != 0)) ||
+          ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_DERIVEDCLK] & 2) != 0)) ||
+          ((event_edge == EDGE_RISING) &&
+           1'b0 &&
+           (timer_deadline == NO_TIMER))) begin
         if (status == 0) begin
           run_step(PHASE_EDGE, SIGNAL_DERIVEDCLK,
                    event_edge, requests);
