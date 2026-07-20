@@ -36,8 +36,10 @@ struct DpiAdapter {
 
     static void register_testbench(coro::Testbench& scheduler, Dut dut,
                                    uint32_t iterations, Result& result,
-                                   coro::ClockRegistrar clocks) {
-        register_benchmark(scheduler, dut, iterations, result, clocks);
+                                   coro::ClockRegistrar clocks,
+                                   cpptb::detail::SimLogEndpoint& sim_logs) {
+        register_benchmark(scheduler, dut, iterations, result, clocks,
+                           sim_logs);
     }
 
     static void dispatch_phase(uint32_t phase) {

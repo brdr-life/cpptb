@@ -755,6 +755,9 @@ module dpi_peripheral_suite;
     end
 
     cpptb_dpi_init(iterations, TIMEPRECISION_FS);
+`ifdef CPPTB_ENABLE_SV_LOGGING
+    cpptb_log_pkg::configure();
+`endif
 `ifdef CPPTB_SV_DPI_CALENDAR_TIMING
     calendar_initialize();
 `endif

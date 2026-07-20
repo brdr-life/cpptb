@@ -19,6 +19,9 @@ def main() -> int:
 
     required_suffixes = {
         "include/cpptb/cpptb.hpp",
+        "include/cpptb/sv/cpptb_log_pkg.sv",
+        "include/cpptb/sv/cpptb_log.svh",
+        "include/cpptb/sv/cpptb_sv_log_bridge.cpp",
         "include/cpptb_vc/cpptb_vc.hpp",
         "include/cpptb_vc/apb.hpp",
     }
@@ -31,7 +34,7 @@ def main() -> int:
         print(f"{wheel}: missing public headers: {', '.join(missing)}", file=sys.stderr)
         return 1
 
-    print(f"{wheel}: core and verification-component headers present")
+    print(f"{wheel}: core, SV logging, and verification-component assets present")
     return 0
 
 

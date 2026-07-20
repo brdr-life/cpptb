@@ -61,6 +61,9 @@ KERNELS = (
     "register_coverage",
     "register_maps",
     "register_user_effects",
+    "structured_logging",
+    "structured_log_history",
+    "mixed_logging",
 )
 
 FEATURE_FIELDS = (
@@ -346,6 +349,29 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             checks=3 * iterations,
             spawned_processes=1,
             test_lifecycle=iterations,
+        )
+
+    if kernel == "structured_logging":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=4,
+            spawned_processes=1,
+        )
+
+    if kernel == "structured_log_history":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=0,
+            checks=6,
+            spawned_processes=1,
+        )
+
+    if kernel == "mixed_logging":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 9,
         )
 
     if kernel in (
@@ -766,6 +792,8 @@ def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
         "force_direct",
         "timing_phases",
         "test_lifecycle",
+        "structured_logging",
+        "structured_log_history",
         "dynamic_spawn",
         "dynamic_task",
         "dynamic_spawn_scheduler",

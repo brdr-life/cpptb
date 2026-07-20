@@ -144,7 +144,6 @@ module dpi_heavy_benchmark;
   longint unsigned sim_cycles;
   longint unsigned timer_generation;
   longint unsigned timer_deadline;
-  longint unsigned step_timer_deadline;
   longint unsigned timer_owner_target;
   event timer_kick;
   event phase_outputs_pending;
@@ -391,13 +390,13 @@ module dpi_heavy_benchmark;
     longint unsigned generation;
     requests = initial_requests;
     if ((requests & STEP_EDGE_INTEREST_CHANGED) != 0) begin
-      edge_interest[SIGNAL_CLK] |= heavy_dpi_edge_interest(SIGNAL_CLK);
       edge_interest[SIGNAL_FIROUTVALID] = heavy_dpi_edge_interest(SIGNAL_FIROUTVALID);
       edge_interest[SIGNAL_CRCOUTVALID] = heavy_dpi_edge_interest(SIGNAL_CRCOUTVALID);
       edge_interest[SIGNAL_MATOUTVALID] = heavy_dpi_edge_interest(SIGNAL_MATOUTVALID);
       edge_interest[SIGNAL_FIRINREADY] = heavy_dpi_edge_interest(SIGNAL_FIRINREADY);
       edge_interest[SIGNAL_CRCINREADY] = heavy_dpi_edge_interest(SIGNAL_CRCINREADY);
       edge_interest[SIGNAL_MATLOADREADY] = heavy_dpi_edge_interest(SIGNAL_MATLOADREADY);
+      edge_interest[0] |= heavy_dpi_edge_interest(0);
     end
     if ((requests & STEP_TIMER_IDLE) != 0) begin
       timer_deadline = NO_TIMER;
@@ -482,12 +481,12 @@ module dpi_heavy_benchmark;
         sim_cycles++;
       end
       if (
-          ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLK] & 1) != 0)) ||
-          ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLK] & 2) != 0)) ||
+          ((event_edge == EDGE_RISING) && ((edge_interest[0] & 1) != 0)) ||
+          ((event_edge == EDGE_FALLING) && ((edge_interest[0] & 2) != 0)) ||
           ((event_edge == EDGE_RISING) &&
            1'b1 &&
            (timer_deadline == NO_TIMER))) begin
-        run_step(PHASE_EDGE, SIGNAL_CLK, event_edge, requests);
+        run_step(PHASE_EDGE, 0, event_edge, requests);
         service_requests(requests);
       end
     end
@@ -552,12 +551,12 @@ module dpi_heavy_benchmark;
           sim_cycles++;
         end
         if (
-            ((event_edge == EDGE_RISING) && ((edge_interest[SIGNAL_CLK] & 1) != 0)) ||
-            ((event_edge == EDGE_FALLING) && ((edge_interest[SIGNAL_CLK] & 2) != 0)) ||
+            ((event_edge == EDGE_RISING) && ((edge_interest[0] & 1) != 0)) ||
+            ((event_edge == EDGE_FALLING) && ((edge_interest[0] & 2) != 0)) ||
             ((event_edge == EDGE_RISING) &&
              1'b1 &&
              (timer_deadline == NO_TIMER))) begin
-          run_step(PHASE_EDGE, SIGNAL_CLK,
+          run_step(PHASE_EDGE, 0,
                    event_edge, requests);
           service_requests(requests);
         end
@@ -747,6 +746,9 @@ module dpi_heavy_benchmark;
     end
 
     heavy_dpi_init(iterations, TIMEPRECISION_FS);
+`ifdef CPPTB_ENABLE_SV_LOGGING
+    cpptb_log_pkg::configure();
+`endif
 `ifdef CPPTB_SV_DPI_CALENDAR_TIMING
     calendar_initialize();
 `endif

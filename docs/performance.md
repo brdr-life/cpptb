@@ -61,6 +61,55 @@ make feature-test FEATURE=test_lifecycle
 make feature-benchmark FEATURE=test_lifecycle
 ```
 
+## Structured logging
+
+The `structured_logging` pair models a hot scoreboard loop with realistic
+sparse output. Each of 5,000,000 iterations attempts one lazy debug message
+below the active `Info` threshold. Every 1,024 iterations emits one constant
+info record through a counting sink. Both implementations use one owned
+process and check the emitted count, provenance count, metadata count, and
+disabled-factory count.
+
+The `structured_logging` C++ path constructs no disabled messages and retains
+no log records. The pure-SV peer performs the same runtime level comparisons
+and sparse sink updates. Exact semantic parity passes at 5,000,000 iterations.
+The first formal timing attempt was rejected before sampling because normalized
+one-minute host load was `0.644`, above the `0.300` admission limit; no
+performance ratio is published from that run.
+
+The separate `structured_log_history` pair retains each enabled record rather
+than hiding storage cost inside the baseline. Both implementations own the
+level, message, scope, test name, source and process provenance, sequence, and
+simulation time. Six checks compare output count, output metadata, retained
+count, chronological order, retained metadata, and disabled lazy formatting.
+The exact 5,000,000-iteration semantic workload passes. Its first formal timing
+attempt was rejected during environment settling: normalized one-minute load
+started at `0.526`, above the `0.300` admission limit, and did not settle before
+the runner timeout. No retained-history ratio is published from that run.
+
+The `mixed_logging` pair exercises the complete cross-language path. Every
+transaction attempts one disabled C++ debug message and one disabled RTL debug
+message. Every 1,024 transactions, C++ and RTL each emit one retained info
+record. Both sides validate the same request/response traffic, record count,
+language origin, source metadata, and chronological ordering. This keeps the
+DPI callback frequency and retained metadata visible instead of timing an
+empty bridge. Its 5,000,000-transaction semantic pair passes exactly. The
+first formal timing attempt was rejected before sampling after normalized
+one-minute load remained above the `0.300` admission limit for 60 seconds
+(`0.480` initially and `0.882` at timeout), so no mixed-language ratio is
+published from that run.
+
+```sh
+make feature-test FEATURE=structured_logging
+make feature-benchmark FEATURE=structured_logging
+make feature-test FEATURE=structured_log_history
+make feature-benchmark FEATURE=structured_log_history
+make feature-test FEATURE=mixed_logging
+make feature-benchmark FEATURE=mixed_logging
+```
+
+See [Structured logging](logging.md) for the user API and sink contract.
+
 ## Dynamic process creation
 
 Four exact C++/pure-SV pairs separate coroutine construction, core scheduling,

@@ -1,3 +1,9 @@
+`ifdef CPPTB_ENABLE_SV_LOGGING
+`ifdef AUTHORING_CORE_MIXED_LOGGING
+`include "cpptb/sv/cpptb_log.svh"
+`endif
+`endif
+
 package authoring_types_pkg;
   typedef enum bit signed [2:0] {
     STATE_NEGATIVE = -1,
@@ -150,6 +156,15 @@ module authoring_core_dut (
         delay_count <= 2'd1;
         pending_data <= req_data;
         request_count <= request_count + 1'b1;
+`ifdef CPPTB_ENABLE_SV_LOGGING
+`ifdef AUTHORING_CORE_MIXED_LOGGING
+        `cpptb_debug($sformatf("SV transaction %0d", request_count),
+                     "rtl.request")
+        if (request_count[9:0] == 0) begin
+          `cpptb_info("SV checkpoint", "rtl.request")
+        end
+`endif
+`endif
       end
 
       if (pending) begin

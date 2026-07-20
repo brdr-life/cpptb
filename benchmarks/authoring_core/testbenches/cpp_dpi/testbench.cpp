@@ -25,6 +25,7 @@ struct Context {
     AuthoringCoreDut dut;
     uint32_t iterations;
     BenchResult& result;
+    cpptb::detail::SimLogEndpoint* sim_logs = nullptr;
 };
 
 struct CoverageTransaction {
@@ -790,6 +791,125 @@ Task<void> run_test_lifecycle(Context context) {
     co_await Delay{1_ps};
     report(context);
 }
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_STRUCTURED_LOGGING || \
+    AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_STRUCTURED_LOG_HISTORY
+struct StructuredLogSink final : LogSink {
+    uint64_t records = 0;
+    uint64_t attributed_records = 0;
+    uint64_t complete_records = 0;
+
+    void emit(const LogRecord& record) override {
+        ++records;
+        if (record.process_id != 0 && record.process == "spawned process" &&
+            !record.process_source_file.empty() &&
+            record.process_source_line != 0) {
+            ++attributed_records;
+        }
+        if (record.level == LogLevel::Info &&
+            record.scope == "scoreboard" &&
+            record.message == "transaction checkpoint" &&
+            record.test_name == kernel_name() &&
+            !record.source_file.empty() && record.source_line != 0 &&
+            record.sequence == records) {
+            ++complete_records;
+        }
+    }
+};
+
+Task<void> structured_logging_process(TestContext test, uint32_t iterations,
+                                      uint64_t& disabled_factories) {
+    auto log = test.logger("scoreboard");
+    for (uint32_t iteration = 0; iteration < iterations; ++iteration) {
+        log.debug([&] {
+            ++disabled_factories;
+            return "transaction " + std::to_string(iteration);
+        });
+        if ((iteration & 1023u) == 0) {
+            log.info("transaction checkpoint");
+        }
+    }
+    co_return;
+}
+
+Task<void> run_structured_logging(Context context) {
+    StructuredLogSink sink;
+    context.result.test_name = "structured_logging";
+    TestContext test{
+        context.scheduler, context.result, {}, nullptr,
+        LoggingOptions{.minimum_level = LogLevel::Info, .sink = &sink}};
+    uint64_t disabled_factories = 0;
+    ++context.result.spawned_processes;
+    auto process = test.spawn(structured_logging_process(
+        test, context.iterations, disabled_factories));
+    co_await process;
+
+    const uint64_t expected_records =
+        (static_cast<uint64_t>(context.iterations) + 1023u) / 1024u;
+    check64(context, "structured log records", sink.records,
+            expected_records);
+    check64(context, "structured log attribution", sink.attributed_records,
+            expected_records);
+    check64(context, "structured log metadata", sink.complete_records,
+            expected_records);
+    check64(context, "disabled log factories", disabled_factories, 0);
+    co_await Delay{1_ps};
+    report(context);
+}
+
+Task<void> run_structured_log_history(Context context) {
+    StructuredLogSink sink;
+    LogHistory history;
+    const uint64_t expected_records =
+        (static_cast<uint64_t>(context.iterations) + 1023u) / 1024u;
+    history.reserve(expected_records);
+    context.result.test_name = "structured_log_history";
+    TestContext test{
+        context.scheduler, context.result, {}, nullptr,
+        LoggingOptions{.minimum_level = LogLevel::Info,
+                       .sink = &sink,
+                       .history = &history}};
+    uint64_t disabled_factories = 0;
+    ++context.result.spawned_processes;
+    auto process = test.spawn(structured_logging_process(
+        test, context.iterations, disabled_factories));
+    co_await process;
+
+    uint64_t ordered_records = 0;
+    uint64_t complete_history_records = 0;
+    uint64_t previous_time = 0;
+    for (size_t index = 0; index < history.size(); ++index) {
+        const auto& record = history[index];
+        if (record.sequence == index + 1 &&
+            (index == 0 || record.simulation_time_fs >= previous_time)) {
+            ++ordered_records;
+        }
+        previous_time = record.simulation_time_fs;
+        if (record.level == LogLevel::Info &&
+            record.scope == "scoreboard" &&
+            record.message == "transaction checkpoint" &&
+            !record.source_file.empty() && record.source_line != 0 &&
+            record.process_id != 0 && record.process == "spawned process" &&
+            !record.process_source_file.empty() &&
+            record.process_source_line != 0) {
+            ++complete_history_records;
+        }
+    }
+
+    check64(context, "structured log output", sink.records, expected_records);
+    check64(context, "structured log output metadata", sink.complete_records,
+            expected_records);
+    check64(context, "structured log history", history.size(),
+            expected_records);
+    check64(context, "structured log history order", ordered_records,
+            expected_records);
+    check64(context, "structured log history metadata",
+            complete_history_records, expected_records);
+    check64(context, "disabled log factories", disabled_factories, 0);
+    co_await Delay{1_ps};
+    report(context);
+}
+#endif
 
 Task<void> dynamic_spawn_child(TestContext test, uint32_t value,
                                uint32_t iteration) {
@@ -2573,7 +2693,53 @@ Task<void> run_register_memory(Context context) {
 }
 #endif
 
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MIXED_LOGGING
+struct MixedLogSink final : LogSink {
+    uint64_t records = 0;
+    uint64_t cpp_records = 0;
+    uint64_t sv_records = 0;
+    uint64_t complete_records = 0;
+
+    void emit(const LogRecord& record) override {
+        ++records;
+        if (record.origin == LogOrigin::Cpp) ++cpp_records;
+        if (record.origin == LogOrigin::SystemVerilog) ++sv_records;
+        const bool cpp_complete =
+            record.origin == LogOrigin::Cpp &&
+            record.message == "C++ checkpoint" &&
+            record.scope == "scoreboard" && record.hierarchy.empty();
+        const bool sv_complete =
+            record.origin == LogOrigin::SystemVerilog &&
+            record.message == "SV checkpoint" &&
+            record.scope == "rtl.request" && !record.hierarchy.empty() &&
+            record.process_id == 0;
+        if ((cpp_complete || sv_complete) &&
+            record.test_name == "mixed_logging" &&
+            !record.source_file.empty() && record.source_line != 0 &&
+            record.sequence == records) {
+            ++complete_records;
+        }
+    }
+};
+#endif
+
 Task<void> run(Context context) {
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MIXED_LOGGING
+    MixedLogSink mixed_log_sink;
+    LogHistory mixed_log_history;
+    const uint64_t expected_language_records =
+        (static_cast<uint64_t>(context.iterations) + 1023u) / 1024u;
+    mixed_log_history.reserve(2u * expected_language_records);
+    context.result.test_name = "mixed_logging";
+    TestContext mixed_log_test{
+        context.scheduler, context.result, {}, nullptr,
+        LoggingOptions{.minimum_level = LogLevel::Info,
+                       .sink = &mixed_log_sink,
+                       .history = &mixed_log_history}};
+    mixed_log_test.bind_sim_logs(*context.sim_logs);
+    auto mixed_log = mixed_log_test.logger("scoreboard");
+    uint64_t disabled_mixed_log_factories = 0;
+#endif
     context.dut.rst_n.set(0);
     context.dut.req_valid.set(0);
     context.dut.req_data.set(0);
@@ -2660,6 +2826,14 @@ Task<void> run(Context context) {
 
     for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
         uint32_t payload = stimulus(iteration);
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MIXED_LOGGING
+        mixed_log.debug([&] {
+            ++disabled_mixed_log_factories;
+            return "C++ transaction " + std::to_string(iteration);
+        });
+        if ((iteration & 1023u) == 0) mixed_log.info("C++ checkpoint");
+#endif
 
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_RANDOM_STIMULUS
         payload = random.randint<uint32_t>(
@@ -2826,6 +3000,34 @@ Task<void> run(Context context) {
 #endif
     }
 
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MIXED_LOGGING
+    uint64_t ordered_mixed_records = 0;
+    uint64_t previous_mixed_time = 0;
+    for (size_t index = 0; index < mixed_log_history.size(); ++index) {
+        const auto& record = mixed_log_history[index];
+        if (record.sequence == index + 1 &&
+            (index == 0 ||
+             record.simulation_time_fs >= previous_mixed_time)) {
+            ++ordered_mixed_records;
+        }
+        previous_mixed_time = record.simulation_time_fs;
+    }
+    check64(context, "mixed log output", mixed_log_sink.records,
+            2u * expected_language_records);
+    check64(context, "mixed log history", mixed_log_history.size(),
+            2u * expected_language_records);
+    check64(context, "mixed log order", ordered_mixed_records,
+            2u * expected_language_records);
+    check64(context, "mixed C++ records", mixed_log_sink.cpp_records,
+            expected_language_records);
+    check64(context, "mixed SV records", mixed_log_sink.sv_records,
+            expected_language_records);
+    check64(context, "mixed log metadata", mixed_log_sink.complete_records,
+            2u * expected_language_records);
+    check64(context, "disabled mixed log factories",
+            disabled_mixed_log_factories, 0);
+#endif
+
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_COVERAGE_SAMPLING
     const auto coverage = functional_coverage.snapshot();
     uint64_t opcode_accounted = 0;
@@ -2863,7 +3065,8 @@ Task<void> run(Context context) {
 
 void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
                         uint32_t iterations, BenchResult& result,
-                        coro::ClockRegistrar clocks) {
+                        coro::ClockRegistrar clocks,
+                        cpptb::detail::SimLogEndpoint& sim_logs) {
     result = BenchResult{};
     result.start = std::chrono::steady_clock::now();
     dut.clk.set(0);
@@ -2943,6 +3146,15 @@ void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_USER_EFFECTS
     scheduler.spawn_detached(run_register_user_effects(
         Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_STRUCTURED_LOGGING
+    scheduler.spawn_detached(
+        run_structured_logging(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_STRUCTURED_LOG_HISTORY
+    scheduler.spawn_detached(run_structured_log_history(
+        Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MIXED_LOGGING
+    scheduler.spawn_detached(
+        run(Context{scheduler, dut, iterations, result, &sim_logs}));
 #else
     scheduler.spawn_detached(run(Context{scheduler, dut, iterations, result}));
 #endif

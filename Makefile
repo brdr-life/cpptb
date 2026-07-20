@@ -8,6 +8,10 @@ CPPTB_BUILD_DIR := $(BUILD_DIR)/cpptb
 CPPTB_OBJ_DIR := $(CPPTB_BUILD_DIR)/obj
 CPPTB_PUBLIC_HEADERS := $(sort $(shell find include/cpptb include/cpptb_vc \
 	-type f -name '*.hpp'))
+CPPTB_SV_LOGGING_ASSETS := \
+	include/cpptb/sv/cpptb_log_pkg.sv \
+	include/cpptb/sv/cpptb_log.svh \
+	include/cpptb/sv/cpptb_sv_log_bridge.cpp
 CPPTB_CORO_RUNTIME_TEST := $(CPPTB_BUILD_DIR)/coro_runtime_test
 CPPTB_PACKED_VALUE_TEST := $(CPPTB_BUILD_DIR)/packed_value_test
 CPPTB_RANDOM_TEST := $(CPPTB_BUILD_DIR)/random_test
@@ -62,7 +66,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor process_pipeline analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component memory_model memory_model_direct register_prediction_validity register_backdoor register_hierarchy register_split register_wide register_enum register_memory register_sequences register_coverage register_maps register_user_effects
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor process_pipeline analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component memory_model memory_model_direct register_prediction_validity register_backdoor register_hierarchy register_split register_wide register_enum register_memory register_sequences register_coverage register_maps register_user_effects structured_logging structured_log_history mixed_logging
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
 AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
@@ -313,6 +317,13 @@ $(eval $(call CPPTB_EXAMPLE_template,watchdog-timeout,WATCHDOG_TIMEOUT,watchdog_
 $(eval $(call CPPTB_EXAMPLE_template,fault-injection,FAULT_INJECTION,fault_injection,fault_injection,dpi_fault_injection,fault_injection_sv_tb,fault_injection_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,rich-data,RICH_DATA,rich_data,rich_data,dpi_rich_data,rich_data_sv_tb,rich_data_sequence))
 $(eval $(call CPPTB_EXAMPLE_template,interfaces,INTERFACES,interfaces,stream_interfaces,dpi_stream_interfaces,stream_interfaces_sv_tb,interface_test,slang-only))
+$(eval $(call CPPTB_EXAMPLE_template,mixed-logging,MIXED_LOGGING,mixed_logging,mixed_logging,dpi_mixed_logging,mixed_logging_sv_tb,mixed_language_logging))
+CPPTB_EXAMPLE_PHONY_TARGETS += cpp-dpi-mixed-logging-output-test
+CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-mixed-logging-output-test
+
+cpp-dpi-mixed-logging-output-test: cpp-dpi-mixed-logging-build
+	python3 examples/mixed_logging/check_output.py \
+		$(CPPTB_MIXED_LOGGING_OBJ_DIR)/Vdpi_mixed_logging
 
 .PHONY: help all test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
@@ -856,21 +867,25 @@ define AUTHORING_CORE_DPI_template
 $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		$(AUTHORING_CORE_DPI_GENERATED) $(CPPTB_PUBLIC_HEADERS) \
+		$(if $(filter mixed_logging,$(1)),$(CPPTB_SV_LOGGING_ASSETS)) \
 		$(CPPTB_CODEGEN_SOURCES) Makefile $(AUTHORING_CORE_BUILD_PROVENANCE) \
 		$(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
 	mkdir -p $$(dir $$@)
 	verilator $(if $(filter timing_phases,$(1)),--cc --exe --build --vpi,--binary) --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
 		-Wno-MULTIDRIVEN \
+		$(if $(filter mixed_logging,$(1)),-I$$(CURDIR)/include -DCPPTB_ENABLE_SV_LOGGING -DAUTHORING_CORE_MIXED_LOGGING) \
 		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
 		-CFLAGS "-I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $(if $(filter timing_phases,$(1)),-DCPPTB_VERILATED_TOP=Vdpi_authoring_core -DCPPTB_VERILATOR_DIRECT_TIMING) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
 		$$(if $$(strip $$(AUTHORING_CORE_EXTRA_LDFLAGS)),-LDFLAGS "$$(AUTHORING_CORE_EXTRA_LDFLAGS)",) \
 		--Mdir $$(dir $$@) \
 		--top-module dpi_authoring_core \
+		$(if $(filter mixed_logging,$(1)),include/cpptb/sv/cpptb_log_pkg.sv) \
 		$(AUTHORING_CORE_RTL) \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/generated/dpi_authoring_core.sv \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp \
+		$(if $(filter mixed_logging,$(1)),include/cpptb/sv/cpptb_sv_log_bridge.cpp) \
 		$(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
 	python3 $(AUTHORING_CORE_BUILD_PROVENANCE) stamp --mode cpp_dpi \
 		--kernel $(1) --binary $$@ \
@@ -938,6 +953,9 @@ $(eval $(call AUTHORING_CORE_DPI_template,register_sequences,51))
 $(eval $(call AUTHORING_CORE_DPI_template,register_coverage,52))
 $(eval $(call AUTHORING_CORE_DPI_template,register_maps,53))
 $(eval $(call AUTHORING_CORE_DPI_template,register_user_effects,54))
+$(eval $(call AUTHORING_CORE_DPI_template,structured_logging,55))
+$(eval $(call AUTHORING_CORE_DPI_template,structured_log_history,56))
+$(eval $(call AUTHORING_CORE_DPI_template,mixed_logging,57))
 
 define AUTHORING_CORE_SV_DPI_TIMING_template
 $(2)/Vdpi_authoring_core: $(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \

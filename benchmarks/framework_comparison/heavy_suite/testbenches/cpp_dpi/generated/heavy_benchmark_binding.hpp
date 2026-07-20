@@ -13,10 +13,10 @@ namespace cpptb::benchmarks::heavy::generated {
 
 inline constexpr bool kCompactInputTransport = true;
 inline constexpr std::array<uint32_t, 1> kClockSignalIds = {
-    kSignalClk,
+    0,
 };
 inline constexpr std::array<cpptb::dpi::RegisteredClockConfig, 1> kRegisteredClockConfigs = {{
-    {kSignalClk, 2000000ULL, 0ULL, 0u},
+    {0, 2000000ULL, 0ULL, 0u},
 }};
 inline constexpr std::array<uint32_t, 6> kEdgeObserverSignalIds = {
     kSignalFirOutValid,

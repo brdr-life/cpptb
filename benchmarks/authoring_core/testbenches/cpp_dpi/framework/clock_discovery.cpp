@@ -22,7 +22,9 @@ int main(int argc, char** argv) {
         [](cpptb::coro::Testbench& scheduler,
            authoring::AuthoringCoreDut dut, authoring::BenchResult& result,
            cpptb::coro::ClockRegistrar clocks) {
-            authoring::register_benchmark(scheduler, dut, 1, result, clocks);
+            cpptb::detail::SimLogEndpoint sim_logs;
+            authoring::register_benchmark(scheduler, dut, 1, result, clocks,
+                                          sim_logs);
             return true;
         });
     if (result != 0) return result;

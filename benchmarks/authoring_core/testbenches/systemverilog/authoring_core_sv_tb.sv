@@ -1825,6 +1825,253 @@ module authoring_core_sv_tb;
     $finish;
   endtask
 
+  task automatic structured_logging_process(
+      ref longint unsigned records,
+      ref longint unsigned attributed_records,
+      ref longint unsigned complete_records,
+      ref longint unsigned disabled_factories);
+    int minimum_log_level = 2;
+    string disabled_message;
+    void'($value$plusargs("AUTHORING_CORE_LOG_LEVEL=%d", minimum_log_level));
+    for (int unsigned i = 0; i < iterations; i++) begin
+      if (1 >= minimum_log_level) begin
+        disabled_factories++;
+        disabled_message = $sformatf("transaction %0d", i);
+      end
+      if ((i & 1023) == 0 && 2 >= minimum_log_level) begin
+        records++;
+        attributed_records++;
+        complete_records++;
+      end
+    end
+  endtask
+
+  task automatic run_structured_logging();
+    longint unsigned records = 0;
+    longint unsigned attributed_records = 0;
+    longint unsigned complete_records = 0;
+    longint unsigned disabled_factories = 0;
+    longint unsigned expected_records = (iterations + 1023) / 1024;
+    spawned_processes++;
+    fork
+      structured_logging_process(records, attributed_records,
+                                 complete_records, disabled_factories);
+    join
+    check64(records, expected_records, "structured log records");
+    check64(attributed_records, expected_records,
+            "structured log attribution");
+    check64(complete_records, expected_records, "structured log metadata");
+    check64(disabled_factories, 0, "disabled log factories");
+    #1ps;
+  endtask
+
+  task automatic structured_log_history_process(
+      ref longint unsigned records,
+      ref longint unsigned complete_records,
+      ref longint unsigned history_records,
+      ref longint unsigned ordered_records,
+      ref longint unsigned complete_history_records,
+      ref longint unsigned disabled_factories);
+    int minimum_log_level = 2;
+    string disabled_message;
+    longint unsigned sequence_history[$];
+    longint unsigned time_history[$];
+    longint unsigned process_id_history[$];
+    int unsigned source_line_history[$];
+    int unsigned process_source_line_history[$];
+    int level_history[$];
+    string message_history[$];
+    string scope_history[$];
+    string test_name_history[$];
+    string source_file_history[$];
+    string process_history[$];
+    string process_source_file_history[$];
+    longint unsigned previous_time = 0;
+
+    void'($value$plusargs("AUTHORING_CORE_LOG_LEVEL=%d", minimum_log_level));
+    for (int unsigned i = 0; i < iterations; i++) begin
+      if (1 >= minimum_log_level) begin
+        disabled_factories++;
+        disabled_message = $sformatf("transaction %0d", i);
+      end
+      if ((i & 1023) == 0 && 2 >= minimum_log_level) begin
+        records++;
+        complete_records++;
+        sequence_history.push_back(records);
+        time_history.push_back($time);
+        process_id_history.push_back(1);
+        source_line_history.push_back(`__LINE__);
+        process_source_line_history.push_back(`__LINE__);
+        level_history.push_back(2);
+        message_history.push_back("transaction checkpoint");
+        scope_history.push_back("scoreboard");
+        test_name_history.push_back("structured_log_history");
+        source_file_history.push_back(`__FILE__);
+        process_history.push_back("spawned process");
+        process_source_file_history.push_back(`__FILE__);
+        history_records++;
+      end
+    end
+
+    for (int unsigned i = 0; i < sequence_history.size(); i++) begin
+      if (sequence_history[i] == i + 1 &&
+          (i == 0 || time_history[i] >= previous_time)) begin
+        ordered_records++;
+      end
+      previous_time = time_history[i];
+      if (level_history[i] == 2 &&
+          message_history[i] == "transaction checkpoint" &&
+          scope_history[i] == "scoreboard" &&
+          test_name_history[i] == "structured_log_history" &&
+          source_file_history[i] != "" && source_line_history[i] != 0 &&
+          process_id_history[i] != 0 &&
+          process_history[i] == "spawned process" &&
+          process_source_file_history[i] != "" &&
+          process_source_line_history[i] != 0) begin
+        complete_history_records++;
+      end
+    end
+  endtask
+
+  task automatic run_structured_log_history();
+    longint unsigned records = 0;
+    longint unsigned complete_records = 0;
+    longint unsigned history_records = 0;
+    longint unsigned ordered_records = 0;
+    longint unsigned complete_history_records = 0;
+    longint unsigned disabled_factories = 0;
+    longint unsigned expected_records = (iterations + 1023) / 1024;
+    spawned_processes++;
+    fork
+      structured_log_history_process(records, complete_records, history_records,
+                                     ordered_records,
+                                     complete_history_records,
+                                     disabled_factories);
+    join
+    check64(records, expected_records, "structured log output");
+    check64(complete_records, expected_records,
+            "structured log output metadata");
+    check64(history_records, expected_records,
+            "structured log history");
+    check64(ordered_records, expected_records,
+            "structured log history order");
+    check64(complete_history_records, expected_records,
+            "structured log history metadata");
+    check64(disabled_factories, 0, "disabled log factories");
+    #1ps;
+  endtask
+
+  task automatic run_mixed_logging();
+    int minimum_log_level = 2;
+    string disabled_message;
+    longint unsigned records = 0;
+    longint unsigned cpp_records = 0;
+    longint unsigned sv_records = 0;
+    longint unsigned complete_records = 0;
+    longint unsigned ordered_records = 0;
+    longint unsigned disabled_factories = 0;
+    longint unsigned expected_language_records = (iterations + 1023) / 1024;
+    longint unsigned sequence_history[$];
+    longint unsigned time_history[$];
+    longint unsigned previous_time = 0;
+    int origin_history[$];
+    string message_history[$];
+    string scope_history[$];
+    string test_name_history[$];
+    string source_file_history[$];
+    int unsigned source_line_history[$];
+    string hierarchy_history[$];
+    longint unsigned process_id_history[$];
+
+    void'($value$plusargs("AUTHORING_CORE_LOG_LEVEL=%d", minimum_log_level));
+    for (int unsigned i = 0; i < iterations; i++) begin
+      if (1 >= minimum_log_level) begin
+        disabled_factories++;
+        disabled_message = $sformatf("C++ transaction %0d", i);
+      end
+      if ((i & 1023) == 0 && 2 >= minimum_log_level) begin
+        records++;
+        cpp_records++;
+        sequence_history.push_back(records);
+        time_history.push_back($time);
+        origin_history.push_back(0);
+        message_history.push_back("C++ checkpoint");
+        scope_history.push_back("scoreboard");
+        test_name_history.push_back("mixed_logging");
+        source_file_history.push_back(`__FILE__);
+        source_line_history.push_back(`__LINE__);
+        hierarchy_history.push_back("");
+        process_id_history.push_back(0);
+      end
+
+      wait_ready_raw();
+      @(negedge clk);
+      req_data = stimulus(i);
+      req_valid = 1'b1;
+      @(posedge clk);
+      if (1 >= minimum_log_level) begin
+        disabled_factories++;
+        disabled_message = $sformatf("SV transaction %0d", i);
+      end
+      if ((i & 1023) == 0 && 2 >= minimum_log_level) begin
+        records++;
+        sv_records++;
+        sequence_history.push_back(records);
+        time_history.push_back($time);
+        origin_history.push_back(1);
+        message_history.push_back("SV checkpoint");
+        scope_history.push_back("rtl.request");
+        test_name_history.push_back("mixed_logging");
+        source_file_history.push_back(`__FILE__);
+        source_line_history.push_back(`__LINE__);
+        hierarchy_history.push_back("TOP.authoring_core_sv_tb.i_dut");
+        process_id_history.push_back(0);
+      end
+      @(negedge clk);
+      req_valid = 1'b0;
+      forever begin
+        @(posedge clk);
+        #1ps;
+        if (rsp_valid) break;
+      end
+      check32(rsp_data, expected_response(i), "response");
+      checksum = (checksum ^ rsp_data) * 32'h0100_0193;
+      transactions++;
+    end
+
+    for (int unsigned i = 0; i < sequence_history.size(); i++) begin
+      if (sequence_history[i] == i + 1 &&
+          (i == 0 || time_history[i] >= previous_time)) begin
+        ordered_records++;
+      end
+      previous_time = time_history[i];
+      if (test_name_history[i] == "mixed_logging" &&
+          source_file_history[i] != "" && source_line_history[i] != 0 &&
+          sequence_history[i] == i + 1 &&
+          ((origin_history[i] == 0 &&
+            message_history[i] == "C++ checkpoint" &&
+            scope_history[i] == "scoreboard" &&
+            hierarchy_history[i] == "") ||
+           (origin_history[i] == 1 &&
+            message_history[i] == "SV checkpoint" &&
+            scope_history[i] == "rtl.request" &&
+            hierarchy_history[i] != "" && process_id_history[i] == 0))) begin
+        complete_records++;
+      end
+    end
+
+    check64(records, 2 * expected_language_records, "mixed log output");
+    check64(sequence_history.size(), 2 * expected_language_records,
+            "mixed log history");
+    check64(ordered_records, 2 * expected_language_records,
+            "mixed log order");
+    check64(cpp_records, expected_language_records, "mixed C++ records");
+    check64(sv_records, expected_language_records, "mixed SV records");
+    check64(complete_records, 2 * expected_language_records,
+            "mixed log metadata");
+    check64(disabled_factories, 0, "disabled mixed log factories");
+  endtask
+
   task automatic dynamic_spawn_child(input logic [31:0] value,
                                      input int unsigned iteration);
     check32(value, stimulus(iteration), "dynamic process value");
@@ -2404,6 +2651,8 @@ module authoring_core_sv_tb;
         kernel != "register_coverage" &&
         kernel != "register_maps" &&
         kernel != "register_user_effects" &&
+        kernel != "structured_logging" &&
+        kernel != "structured_log_history" &&
         kernel != "test_lifecycle" && kernel != "dynamic_spawn" &&
         kernel != "dynamic_task" &&
         kernel != "dynamic_spawn_scheduler" &&
@@ -2467,6 +2716,9 @@ module authoring_core_sv_tb;
       "register_coverage": run_register_coverage();
       "register_maps": run_register_maps();
       "register_user_effects": run_register_user_effects();
+      "structured_logging": run_structured_logging();
+      "structured_log_history": run_structured_log_history();
+      "mixed_logging": run_mixed_logging();
       default: $fatal(1, "unknown AUTHORING_CORE_KERNEL=%s", kernel);
     endcase
 
@@ -2483,6 +2735,8 @@ module authoring_core_sv_tb;
         kernel != "register_coverage" &&
         kernel != "register_maps" &&
         kernel != "register_user_effects" &&
+        kernel != "structured_logging" &&
+        kernel != "structured_log_history" &&
         kernel != "test_lifecycle" &&
         kernel != "dynamic_spawn" && kernel != "dynamic_task" &&
         kernel != "dynamic_spawn_scheduler" &&

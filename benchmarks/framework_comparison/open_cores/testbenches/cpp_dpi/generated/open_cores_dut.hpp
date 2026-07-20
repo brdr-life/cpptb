@@ -2,9 +2,11 @@
 // Do not edit by hand.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include "cpptb/dpi_static_binding.hpp"
@@ -105,6 +107,32 @@ struct HierarchyTransport {
     }
 
     template <std::size_t Width>
+    static void get_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("get_span", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<const cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("deposit_span", id);
+    }
+
+    template <std::size_t Width>
     static cpptb::LogicBits<Width> get_logic(
         std::uint32_t id, std::int32_t index) {
         switch (id) {
@@ -157,6 +185,14 @@ private:
         std::abort();
     }
 };
+
+struct HierarchyGAesScope;
+struct HierarchyGFcsScope;
+struct HierarchyGPicorv32Scope;
+struct HierarchyGPicorv32CoreScope;
+struct HierarchyGPicorv32CoreGenblk1Scope;
+struct HierarchyGPicorv32CoreGenblk2Scope;
+struct HierarchyGPicorv32CoreGenblk3Scope;
 
 struct HierarchyGPicorv32CoreGenblk1Scope {
 };
@@ -500,6 +536,749 @@ struct Dut {
     [[no_unique_address]] HierarchyGFcsScope g_fcs;
     [[no_unique_address]] HierarchyGPicorv32Scope g_picorv32;
     static constexpr std::int64_t WORKLOAD = 0;
+    template <cpptb::hierarchy::FixedString Path>
+    [[nodiscard]] constexpr auto cpptb_signal() const {
+        if constexpr (Path.view() == "g_picorv32.core.alu_add_sub") {
+            return (*this).g_picorv32.core.alu_add_sub;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_eq") {
+            return (*this).g_picorv32.core.alu_eq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_lts") {
+            return (*this).g_picorv32.core.alu_lts;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_ltu") {
+            return (*this).g_picorv32.core.alu_ltu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_out") {
+            return (*this).g_picorv32.core.alu_out;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_out_0") {
+            return (*this).g_picorv32.core.alu_out_0;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_out_0_q") {
+            return (*this).g_picorv32.core.alu_out_0_q;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_out_q") {
+            return (*this).g_picorv32.core.alu_out_q;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_shl") {
+            return (*this).g_picorv32.core.alu_shl;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_shr") {
+            return (*this).g_picorv32.core.alu_shr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_wait") {
+            return (*this).g_picorv32.core.alu_wait;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.alu_wait_2") {
+            return (*this).g_picorv32.core.alu_wait_2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cached_ascii_instr") {
+            return (*this).g_picorv32.core.cached_ascii_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cached_insn_imm") {
+            return (*this).g_picorv32.core.cached_insn_imm;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cached_insn_opcode") {
+            return (*this).g_picorv32.core.cached_insn_opcode;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cached_insn_rd") {
+            return (*this).g_picorv32.core.cached_insn_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cached_insn_rs1") {
+            return (*this).g_picorv32.core.cached_insn_rs1;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cached_insn_rs2") {
+            return (*this).g_picorv32.core.cached_insn_rs2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.clear_prefetched_high_word") {
+            return (*this).g_picorv32.core.clear_prefetched_high_word;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.clear_prefetched_high_word_q") {
+            return (*this).g_picorv32.core.clear_prefetched_high_word_q;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.clk") {
+            return (*this).g_picorv32.core.clk;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.compressed_instr") {
+            return (*this).g_picorv32.core.compressed_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.count_cycle") {
+            return (*this).g_picorv32.core.count_cycle;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.count_instr") {
+            return (*this).g_picorv32.core.count_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cpu_state") {
+            return (*this).g_picorv32.core.cpu_state;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cpuregs") {
+            return (*this).g_picorv32.core.cpuregs;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cpuregs_rs1") {
+            return (*this).g_picorv32.core.cpuregs_rs1;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cpuregs_rs2") {
+            return (*this).g_picorv32.core.cpuregs_rs2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cpuregs_wrdata") {
+            return (*this).g_picorv32.core.cpuregs_wrdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.cpuregs_write") {
+            return (*this).g_picorv32.core.cpuregs_write;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.current_pc") {
+            return (*this).g_picorv32.core.current_pc;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_ascii_instr") {
+            return (*this).g_picorv32.core.dbg_ascii_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_ascii_state") {
+            return (*this).g_picorv32.core.dbg_ascii_state;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_insn_addr") {
+            return (*this).g_picorv32.core.dbg_insn_addr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_insn_imm") {
+            return (*this).g_picorv32.core.dbg_insn_imm;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_insn_opcode") {
+            return (*this).g_picorv32.core.dbg_insn_opcode;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_insn_rd") {
+            return (*this).g_picorv32.core.dbg_insn_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_insn_rs1") {
+            return (*this).g_picorv32.core.dbg_insn_rs1;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_insn_rs2") {
+            return (*this).g_picorv32.core.dbg_insn_rs2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_mem_addr") {
+            return (*this).g_picorv32.core.dbg_mem_addr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_mem_instr") {
+            return (*this).g_picorv32.core.dbg_mem_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_mem_rdata") {
+            return (*this).g_picorv32.core.dbg_mem_rdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_mem_ready") {
+            return (*this).g_picorv32.core.dbg_mem_ready;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_mem_valid") {
+            return (*this).g_picorv32.core.dbg_mem_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_mem_wdata") {
+            return (*this).g_picorv32.core.dbg_mem_wdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_mem_wstrb") {
+            return (*this).g_picorv32.core.dbg_mem_wstrb;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_next") {
+            return (*this).g_picorv32.core.dbg_next;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_rs1val") {
+            return (*this).g_picorv32.core.dbg_rs1val;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_rs1val_valid") {
+            return (*this).g_picorv32.core.dbg_rs1val_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_rs2val") {
+            return (*this).g_picorv32.core.dbg_rs2val;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_rs2val_valid") {
+            return (*this).g_picorv32.core.dbg_rs2val_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.dbg_valid_insn") {
+            return (*this).g_picorv32.core.dbg_valid_insn;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoded_imm") {
+            return (*this).g_picorv32.core.decoded_imm;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoded_imm_j") {
+            return (*this).g_picorv32.core.decoded_imm_j;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoded_rd") {
+            return (*this).g_picorv32.core.decoded_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoded_rs") {
+            return (*this).g_picorv32.core.decoded_rs;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoded_rs1") {
+            return (*this).g_picorv32.core.decoded_rs1;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoded_rs2") {
+            return (*this).g_picorv32.core.decoded_rs2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoder_pseudo_trigger") {
+            return (*this).g_picorv32.core.decoder_pseudo_trigger;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoder_pseudo_trigger_q") {
+            return (*this).g_picorv32.core.decoder_pseudo_trigger_q;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoder_trigger") {
+            return (*this).g_picorv32.core.decoder_trigger;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.decoder_trigger_q") {
+            return (*this).g_picorv32.core.decoder_trigger_q;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.do_waitirq") {
+            return (*this).g_picorv32.core.do_waitirq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.eoi") {
+            return (*this).g_picorv32.core.eoi;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.i") {
+            return (*this).g_picorv32.core.i;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_add") {
+            return (*this).g_picorv32.core.instr_add;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_addi") {
+            return (*this).g_picorv32.core.instr_addi;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_and") {
+            return (*this).g_picorv32.core.instr_and;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_andi") {
+            return (*this).g_picorv32.core.instr_andi;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_auipc") {
+            return (*this).g_picorv32.core.instr_auipc;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_beq") {
+            return (*this).g_picorv32.core.instr_beq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_bge") {
+            return (*this).g_picorv32.core.instr_bge;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_bgeu") {
+            return (*this).g_picorv32.core.instr_bgeu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_blt") {
+            return (*this).g_picorv32.core.instr_blt;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_bltu") {
+            return (*this).g_picorv32.core.instr_bltu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_bne") {
+            return (*this).g_picorv32.core.instr_bne;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_ecall_ebreak") {
+            return (*this).g_picorv32.core.instr_ecall_ebreak;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_fence") {
+            return (*this).g_picorv32.core.instr_fence;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_getq") {
+            return (*this).g_picorv32.core.instr_getq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_jal") {
+            return (*this).g_picorv32.core.instr_jal;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_jalr") {
+            return (*this).g_picorv32.core.instr_jalr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_lb") {
+            return (*this).g_picorv32.core.instr_lb;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_lbu") {
+            return (*this).g_picorv32.core.instr_lbu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_lh") {
+            return (*this).g_picorv32.core.instr_lh;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_lhu") {
+            return (*this).g_picorv32.core.instr_lhu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_lui") {
+            return (*this).g_picorv32.core.instr_lui;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_lw") {
+            return (*this).g_picorv32.core.instr_lw;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_maskirq") {
+            return (*this).g_picorv32.core.instr_maskirq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_or") {
+            return (*this).g_picorv32.core.instr_or;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_ori") {
+            return (*this).g_picorv32.core.instr_ori;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_rdcycle") {
+            return (*this).g_picorv32.core.instr_rdcycle;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_rdcycleh") {
+            return (*this).g_picorv32.core.instr_rdcycleh;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_rdinstr") {
+            return (*this).g_picorv32.core.instr_rdinstr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_rdinstrh") {
+            return (*this).g_picorv32.core.instr_rdinstrh;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_retirq") {
+            return (*this).g_picorv32.core.instr_retirq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_sb") {
+            return (*this).g_picorv32.core.instr_sb;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_setq") {
+            return (*this).g_picorv32.core.instr_setq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_sh") {
+            return (*this).g_picorv32.core.instr_sh;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_sll") {
+            return (*this).g_picorv32.core.instr_sll;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_slli") {
+            return (*this).g_picorv32.core.instr_slli;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_slt") {
+            return (*this).g_picorv32.core.instr_slt;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_slti") {
+            return (*this).g_picorv32.core.instr_slti;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_sltiu") {
+            return (*this).g_picorv32.core.instr_sltiu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_sltu") {
+            return (*this).g_picorv32.core.instr_sltu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_sra") {
+            return (*this).g_picorv32.core.instr_sra;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_srai") {
+            return (*this).g_picorv32.core.instr_srai;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_srl") {
+            return (*this).g_picorv32.core.instr_srl;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_srli") {
+            return (*this).g_picorv32.core.instr_srli;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_sub") {
+            return (*this).g_picorv32.core.instr_sub;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_sw") {
+            return (*this).g_picorv32.core.instr_sw;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_timer") {
+            return (*this).g_picorv32.core.instr_timer;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_trap") {
+            return (*this).g_picorv32.core.instr_trap;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_waitirq") {
+            return (*this).g_picorv32.core.instr_waitirq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_xor") {
+            return (*this).g_picorv32.core.instr_xor;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.instr_xori") {
+            return (*this).g_picorv32.core.instr_xori;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.irq") {
+            return (*this).g_picorv32.core.irq;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.irq_active") {
+            return (*this).g_picorv32.core.irq_active;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.irq_delay") {
+            return (*this).g_picorv32.core.irq_delay;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.irq_mask") {
+            return (*this).g_picorv32.core.irq_mask;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.irq_pending") {
+            return (*this).g_picorv32.core.irq_pending;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.irq_state") {
+            return (*this).g_picorv32.core.irq_state;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_alu_reg_imm") {
+            return (*this).g_picorv32.core.is_alu_reg_imm;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_alu_reg_reg") {
+            return (*this).g_picorv32.core.is_alu_reg_reg;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_beq_bne_blt_bge_bltu_bgeu") {
+            return (*this).g_picorv32.core.is_beq_bne_blt_bge_bltu_bgeu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_compare") {
+            return (*this).g_picorv32.core.is_compare;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_jalr_addi_slti_sltiu_xori_ori_andi") {
+            return (*this).g_picorv32.core.is_jalr_addi_slti_sltiu_xori_ori_andi;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_lb_lh_lw_lbu_lhu") {
+            return (*this).g_picorv32.core.is_lb_lh_lw_lbu_lhu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_lbu_lhu_lw") {
+            return (*this).g_picorv32.core.is_lbu_lhu_lw;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_lui_auipc_jal") {
+            return (*this).g_picorv32.core.is_lui_auipc_jal;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_lui_auipc_jal_jalr_addi_add_sub") {
+            return (*this).g_picorv32.core.is_lui_auipc_jal_jalr_addi_add_sub;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_rdcycle_rdcycleh_rdinstr_rdinstrh") {
+            return (*this).g_picorv32.core.is_rdcycle_rdcycleh_rdinstr_rdinstrh;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_sb_sh_sw") {
+            return (*this).g_picorv32.core.is_sb_sh_sw;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_sll_srl_sra") {
+            return (*this).g_picorv32.core.is_sll_srl_sra;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_slli_srli_srai") {
+            return (*this).g_picorv32.core.is_slli_srli_srai;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_slti_blt_slt") {
+            return (*this).g_picorv32.core.is_slti_blt_slt;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.is_sltiu_bltu_sltu") {
+            return (*this).g_picorv32.core.is_sltiu_bltu_sltu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.last_mem_valid") {
+            return (*this).g_picorv32.core.last_mem_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_branch") {
+            return (*this).g_picorv32.core.latched_branch;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_compr") {
+            return (*this).g_picorv32.core.latched_compr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_is_lb") {
+            return (*this).g_picorv32.core.latched_is_lb;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_is_lh") {
+            return (*this).g_picorv32.core.latched_is_lh;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_is_lu") {
+            return (*this).g_picorv32.core.latched_is_lu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_rd") {
+            return (*this).g_picorv32.core.latched_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_stalu") {
+            return (*this).g_picorv32.core.latched_stalu;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_store") {
+            return (*this).g_picorv32.core.latched_store;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.latched_trace") {
+            return (*this).g_picorv32.core.latched_trace;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.launch_next_insn") {
+            return (*this).g_picorv32.core.launch_next_insn;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_16bit_buffer") {
+            return (*this).g_picorv32.core.mem_16bit_buffer;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_addr") {
+            return (*this).g_picorv32.core.mem_addr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_busy") {
+            return (*this).g_picorv32.core.mem_busy;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_do_prefetch") {
+            return (*this).g_picorv32.core.mem_do_prefetch;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_do_rdata") {
+            return (*this).g_picorv32.core.mem_do_rdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_do_rinst") {
+            return (*this).g_picorv32.core.mem_do_rinst;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_do_wdata") {
+            return (*this).g_picorv32.core.mem_do_wdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_done") {
+            return (*this).g_picorv32.core.mem_done;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_instr") {
+            return (*this).g_picorv32.core.mem_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_addr") {
+            return (*this).g_picorv32.core.mem_la_addr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_firstword") {
+            return (*this).g_picorv32.core.mem_la_firstword;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_firstword_reg") {
+            return (*this).g_picorv32.core.mem_la_firstword_reg;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_firstword_xfer") {
+            return (*this).g_picorv32.core.mem_la_firstword_xfer;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_read") {
+            return (*this).g_picorv32.core.mem_la_read;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_secondword") {
+            return (*this).g_picorv32.core.mem_la_secondword;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_use_prefetched_high_word") {
+            return (*this).g_picorv32.core.mem_la_use_prefetched_high_word;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_wdata") {
+            return (*this).g_picorv32.core.mem_la_wdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_write") {
+            return (*this).g_picorv32.core.mem_la_write;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_la_wstrb") {
+            return (*this).g_picorv32.core.mem_la_wstrb;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_rdata") {
+            return (*this).g_picorv32.core.mem_rdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_rdata_latched") {
+            return (*this).g_picorv32.core.mem_rdata_latched;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_rdata_latched_noshuffle") {
+            return (*this).g_picorv32.core.mem_rdata_latched_noshuffle;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_rdata_q") {
+            return (*this).g_picorv32.core.mem_rdata_q;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_rdata_word") {
+            return (*this).g_picorv32.core.mem_rdata_word;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_ready") {
+            return (*this).g_picorv32.core.mem_ready;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_state") {
+            return (*this).g_picorv32.core.mem_state;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_valid") {
+            return (*this).g_picorv32.core.mem_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_wdata") {
+            return (*this).g_picorv32.core.mem_wdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_wordsize") {
+            return (*this).g_picorv32.core.mem_wordsize;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_wstrb") {
+            return (*this).g_picorv32.core.mem_wstrb;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.mem_xfer") {
+            return (*this).g_picorv32.core.mem_xfer;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.new_ascii_instr") {
+            return (*this).g_picorv32.core.new_ascii_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.next_insn_opcode") {
+            return (*this).g_picorv32.core.next_insn_opcode;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.next_irq_pending") {
+            return (*this).g_picorv32.core.next_irq_pending;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.next_pc") {
+            return (*this).g_picorv32.core.next_pc;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_div_rd") {
+            return (*this).g_picorv32.core.pcpi_div_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_div_ready") {
+            return (*this).g_picorv32.core.pcpi_div_ready;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_div_wait") {
+            return (*this).g_picorv32.core.pcpi_div_wait;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_div_wr") {
+            return (*this).g_picorv32.core.pcpi_div_wr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_insn") {
+            return (*this).g_picorv32.core.pcpi_insn;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_int_rd") {
+            return (*this).g_picorv32.core.pcpi_int_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_int_ready") {
+            return (*this).g_picorv32.core.pcpi_int_ready;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_int_wait") {
+            return (*this).g_picorv32.core.pcpi_int_wait;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_int_wr") {
+            return (*this).g_picorv32.core.pcpi_int_wr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_mul_rd") {
+            return (*this).g_picorv32.core.pcpi_mul_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_mul_ready") {
+            return (*this).g_picorv32.core.pcpi_mul_ready;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_mul_wait") {
+            return (*this).g_picorv32.core.pcpi_mul_wait;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_mul_wr") {
+            return (*this).g_picorv32.core.pcpi_mul_wr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_rd") {
+            return (*this).g_picorv32.core.pcpi_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_ready") {
+            return (*this).g_picorv32.core.pcpi_ready;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_rs1") {
+            return (*this).g_picorv32.core.pcpi_rs1;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_rs2") {
+            return (*this).g_picorv32.core.pcpi_rs2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_timeout") {
+            return (*this).g_picorv32.core.pcpi_timeout;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_timeout_counter") {
+            return (*this).g_picorv32.core.pcpi_timeout_counter;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_valid") {
+            return (*this).g_picorv32.core.pcpi_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_wait") {
+            return (*this).g_picorv32.core.pcpi_wait;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.pcpi_wr") {
+            return (*this).g_picorv32.core.pcpi_wr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.prefetched_high_word") {
+            return (*this).g_picorv32.core.prefetched_high_word;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.q_ascii_instr") {
+            return (*this).g_picorv32.core.q_ascii_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.q_insn_imm") {
+            return (*this).g_picorv32.core.q_insn_imm;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.q_insn_opcode") {
+            return (*this).g_picorv32.core.q_insn_opcode;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.q_insn_rd") {
+            return (*this).g_picorv32.core.q_insn_rd;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.q_insn_rs1") {
+            return (*this).g_picorv32.core.q_insn_rs1;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.q_insn_rs2") {
+            return (*this).g_picorv32.core.q_insn_rs2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.reg_next_pc") {
+            return (*this).g_picorv32.core.reg_next_pc;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.reg_op1") {
+            return (*this).g_picorv32.core.reg_op1;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.reg_op2") {
+            return (*this).g_picorv32.core.reg_op2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.reg_out") {
+            return (*this).g_picorv32.core.reg_out;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.reg_pc") {
+            return (*this).g_picorv32.core.reg_pc;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.reg_sh") {
+            return (*this).g_picorv32.core.reg_sh;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.resetn") {
+            return (*this).g_picorv32.core.resetn;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.set_mem_do_rdata") {
+            return (*this).g_picorv32.core.set_mem_do_rdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.set_mem_do_rinst") {
+            return (*this).g_picorv32.core.set_mem_do_rinst;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.set_mem_do_wdata") {
+            return (*this).g_picorv32.core.set_mem_do_wdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.timer") {
+            return (*this).g_picorv32.core.timer;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.trace_data") {
+            return (*this).g_picorv32.core.trace_data;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.trace_valid") {
+            return (*this).g_picorv32.core.trace_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.core.trap") {
+            return (*this).g_picorv32.core.trap;
+        }
+        else if constexpr (Path.view() == "g_picorv32.mem_addr") {
+            return (*this).g_picorv32.mem_addr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.mem_instr") {
+            return (*this).g_picorv32.mem_instr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.mem_rdata") {
+            return (*this).g_picorv32.mem_rdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.mem_ready") {
+            return (*this).g_picorv32.mem_ready;
+        }
+        else if constexpr (Path.view() == "g_picorv32.mem_valid") {
+            return (*this).g_picorv32.mem_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.mem_wdata") {
+            return (*this).g_picorv32.mem_wdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.mem_wstrb") {
+            return (*this).g_picorv32.mem_wstrb;
+        }
+        else if constexpr (Path.view() == "g_picorv32.memory") {
+            return (*this).g_picorv32.memory;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_eoi") {
+            return (*this).g_picorv32.unused_eoi;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_mem_la_addr") {
+            return (*this).g_picorv32.unused_mem_la_addr;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_mem_la_read") {
+            return (*this).g_picorv32.unused_mem_la_read;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_mem_la_wdata") {
+            return (*this).g_picorv32.unused_mem_la_wdata;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_mem_la_write") {
+            return (*this).g_picorv32.unused_mem_la_write;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_mem_la_wstrb") {
+            return (*this).g_picorv32.unused_mem_la_wstrb;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_pcpi_insn") {
+            return (*this).g_picorv32.unused_pcpi_insn;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_pcpi_rs1") {
+            return (*this).g_picorv32.unused_pcpi_rs1;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_pcpi_rs2") {
+            return (*this).g_picorv32.unused_pcpi_rs2;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_pcpi_valid") {
+            return (*this).g_picorv32.unused_pcpi_valid;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_trace_data") {
+            return (*this).g_picorv32.unused_trace_data;
+        }
+        else if constexpr (Path.view() == "g_picorv32.unused_trace_valid") {
+            return (*this).g_picorv32.unused_trace_valid;
+        }
+        else {
+            static_assert(Path.view().empty(),
+                          "HDL path is not present in the generated DUT hierarchy");
+            return cpptb::hierarchy::UnsupportedSignal{};
+        }
+    }
 };
 
 }  // namespace cpptb::benchmarks::open_cores

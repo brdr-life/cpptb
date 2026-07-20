@@ -83,6 +83,7 @@ testbench-authoring
 verification-components
 random-stimulus
 test-lifecycle
+logging
 running-tests
 hierarchy
 interfaces
@@ -127,6 +128,7 @@ examples/watchdog-timeout
 examples/fault-injection
 examples/rich-data
 examples/interfaces
+examples/mixed-logging
 examples/heavy-benchmarks
 examples/open-source-cores
 examples/secworks-aes-regmodel

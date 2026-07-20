@@ -21,7 +21,9 @@
 
 #include "cpptb/coro_runtime.hpp"
 #include "cpptb/diagnostic.hpp"
+#include "cpptb/logging.hpp"
 #include "cpptb/randomized.hpp"
+#include "cpptb/sim_logging.hpp"
 #include "cpptb/test_result.hpp"
 
 #if defined(_MSC_VER)
@@ -45,6 +47,7 @@ struct RunRequest {
     std::optional<coro::SimTime> simulation_timeout;
     std::optional<uint64_t> random_seed;
     std::string_view configuration_error;
+    LoggingOptions logging;
 };
 
 struct TestOptions {
@@ -110,6 +113,7 @@ inline RunRequest environment_run_request() {
     const char* selected = std::getenv("CPPTB_TEST");
     const char* seed_text = std::getenv("CPPTB_RANDOM_SEED");
     std::optional<uint64_t> random_seed;
+    LoggingOptions logging;
     std::string_view configuration_error;
     if (seed_text && seed_text[0] != '\0') {
         uint64_t seed = 0;
@@ -121,11 +125,22 @@ inline RunRequest environment_run_request() {
                 "unsigned 64-bit integer";
         }
     }
+    const char* log_level_text = std::getenv("CPPTB_LOG_LEVEL");
+    if (log_level_text && log_level_text[0] != '\0') {
+        if (const auto level = parse_log_level(log_level_text)) {
+            logging.minimum_level = *level;
+        } else if (configuration_error.empty()) {
+            configuration_error =
+                "CPPTB_LOG_LEVEL must be trace, debug, info, warning, "
+                "error, or off";
+        }
+    }
     return RunRequest{
         .test_name = selected ? std::string_view{selected} : std::string_view{},
         .list_only = environment_enabled("CPPTB_LIST_TESTS"),
         .random_seed = random_seed,
         .configuration_error = configuration_error,
+        .logging = logging,
     };
 }
 
@@ -147,11 +162,19 @@ using ProcessProvenance = coro::ProcessExecutionContext;
 class TestRunState {
    public:
     TestRunState(coro::Testbench& scheduler, TestResult& result,
-                 coro::ClockRegistrar clocks, ResultSink* sink = nullptr)
+                 coro::ClockRegistrar clocks, ResultSink* sink = nullptr,
+                 LoggingOptions logging = {})
         : scheduler_(&scheduler),
           result_(&result),
           clocks_(clocks),
-          sink_(sink) {}
+          sink_(sink),
+          minimum_log_level_(logging.minimum_level),
+          log_sink_(logging.sink ? logging.sink : &default_log_sink()),
+          log_history_(logging.history) {}
+
+    ~TestRunState() {
+        if (sim_logs_) sim_logs_->unbind(this, false);
+    }
 
     CPPTB_DETAIL_ALWAYS_INLINE void retain() noexcept { ++references_; }
 
@@ -167,6 +190,7 @@ class TestRunState {
 
     void begin(std::string_view name, const TestMetadata& metadata = {},
                uint64_t random_seed = kDefaultRandomSeed) {
+        next_log_sequence_ = 1;
         result_->checks = 0;
         result_->failures = 0;
         result_->warnings = 0;
@@ -257,6 +281,74 @@ class TestRunState {
                      stored.label.c_str());
     }
 
+    CPPTB_DETAIL_ALWAYS_INLINE bool log_enabled(LogLevel level) const {
+        return log_level_enabled(level, minimum_log_level_) &&
+               !result_->finished;
+    }
+
+    void record_log(LogLevel level, std::string_view scope,
+                    std::string_view message,
+                    std::source_location location) {
+        if (!log_enabled(level)) return;
+        record_enabled_log(level, scope, message, location);
+    }
+
+    void record_enabled_log(LogLevel level, std::string_view scope,
+                            std::string_view message,
+                            std::source_location location) {
+        if (result_->finished) return;
+        LogRecord record{
+            .level = level,
+            .message = message,
+            .scope = scope,
+            .test_name = result_->test_name,
+            .source_file = location.file_name(),
+            .sequence = next_log_sequence_++,
+            .simulation_time_fs = scheduler_->now().femtoseconds,
+            .source_line = location.line(),
+        };
+        attach_current_log_process(record);
+        emit_log_record(record);
+    }
+
+    void bind_sim_logs(SimLogEndpoint& endpoint) {
+        if (sim_logs_ && sim_logs_ != &endpoint) {
+            sim_logs_->unbind(this, false);
+        }
+        sim_logs_ = &endpoint;
+        endpoint.bind(this, emit_sim_log, minimum_log_level_);
+    }
+
+    void record_sim_log(const SimLogMessage& message) noexcept {
+        if (!log_enabled(message.level)) return;
+        try {
+            const LogRecord record{
+                .level = message.level,
+                .origin = LogOrigin::SystemVerilog,
+                .message = message.message,
+                .scope = message.scope,
+                .test_name = result_->test_name,
+                .source_file = message.source_file,
+                .hierarchy = message.hierarchy,
+                .sequence = next_log_sequence_++,
+                .simulation_time_fs = message.simulation_time_fs,
+                .source_line = message.source_line,
+            };
+            emit_log_record(record);
+        } catch (const std::exception& error) {
+            record_sim_log_exception(error.what(), message);
+        } catch (...) {
+            record_sim_log_exception("unknown exception", message);
+        }
+    }
+
+    void emit_log_record(const LogRecord& record) {
+        if (log_history_ && log_history_ != log_sink_) {
+            log_history_->emit(record);
+        }
+        log_sink_->emit(record);
+    }
+
     void record_exception(std::string_view message,
                           std::source_location location) {
         if (result_->finished) return;
@@ -336,6 +428,7 @@ class TestRunState {
         result_->status = requested;
         result_->simulation_time_fs = scheduler_->now().femtoseconds;
         result_->finished = true;
+        if (sim_logs_) sim_logs_->unbind(this, true);
         cancel_owned_processes();
         if (sink_) sink_->test_finished(*result_);
     }
@@ -397,6 +490,51 @@ class TestRunState {
     }
 
    private:
+    void record_sim_log_exception(std::string_view error,
+                                  const SimLogMessage& message) noexcept {
+        try {
+            if (result_->finished) return;
+            FailureRecord record{
+                .kind = FailureKind::Exception,
+                .label = std::string{error},
+                .source_file = std::string{message.source_file},
+                .source_line = message.source_line,
+            };
+            ++result_->failures;
+            result_->status = TestStatus::Error;
+            record.simulation_time_fs = message.simulation_time_fs;
+            result_->failure_records.push_back(std::move(record));
+            const auto& stored = result_->failure_records.back();
+            if (sink_) sink_->failure_recorded(stored);
+            if (!stored.source_file.empty()) {
+                std::fprintf(stderr, "cpptb: %s:%u: ",
+                             stored.source_file.c_str(), stored.source_line);
+            } else {
+                std::fputs("cpptb: ", stderr);
+            }
+            std::fprintf(stderr, "exception in SystemVerilog logging: %s\n",
+                         stored.label.c_str());
+            finish(TestStatus::Error);
+        } catch (...) {
+            std::fputs(
+                "cpptb: exception while reporting a SystemVerilog log sink "
+                "failure\n",
+                stderr);
+            if (result_->finished) return;
+            ++result_->failures;
+            result_->status = TestStatus::Error;
+            result_->simulation_time_fs = message.simulation_time_fs;
+            result_->finished = true;
+            if (sim_logs_) sim_logs_->unbind(this, true);
+            cancel_owned_processes();
+        }
+    }
+
+    static void emit_sim_log(void* owner,
+                             const SimLogMessage& message) noexcept {
+        static_cast<TestRunState*>(owner)->record_sim_log(message);
+    }
+
     static bool owns_process(void* process_owner,
                              void* test_owner) noexcept {
         auto* provenance = static_cast<ProcessProvenance*>(process_owner);
@@ -427,12 +565,27 @@ class TestRunState {
         record.process_source_line = process->declaration.line();
     }
 
+    void attach_current_log_process(LogRecord& record) const {
+        auto* process = static_cast<ProcessProvenance*>(
+            scheduler_->current_execution_context());
+        if (!process || process->owner != this) return;
+        record.process = process->description;
+        record.process_source_file = process->declaration.file_name();
+        record.process_id = process->id;
+        record.process_source_line = process->declaration.line();
+    }
+
     coro::Testbench* scheduler_;
     TestResult* result_;
     coro::ClockRegistrar clocks_;
     ResultSink* sink_;
+    LogLevel minimum_log_level_;
+    LogSink* log_sink_;
+    LogHistory* log_history_;
+    SimLogEndpoint* sim_logs_ = nullptr;
     std::unordered_map<uint64_t, Random> process_randoms_;
     uint64_t next_process_id_ = 1;
+    uint64_t next_log_sequence_ = 1;
     uint64_t master_random_seed_ = kDefaultRandomSeed;
     Random fallback_random_;
     ConstraintBackend* random_backend_ = &default_constraint_backend();
@@ -499,11 +652,71 @@ void finish_owned_process(void* owner, coro::ExceptionState& exception,
 
 }  // namespace detail
 
+class Logger {
+   public:
+    CPPTB_DETAIL_ALWAYS_INLINE bool enabled(LogLevel level) const {
+        return state_->log_enabled(level);
+    }
+
+    void log(
+        LogLevel level, std::string_view message,
+        std::source_location location = std::source_location::current()) const {
+        state_->record_log(level, scope_, message, location);
+    }
+
+    template <typename MessageFactory>
+        requires std::invocable<MessageFactory>
+    CPPTB_DETAIL_ALWAYS_INLINE void log_lazy(
+        LogLevel level, MessageFactory&& message_factory,
+        std::source_location location = std::source_location::current()) const {
+        if (!enabled(level)) return;
+        auto message = std::invoke(std::forward<MessageFactory>(message_factory));
+        state_->record_enabled_log(level, scope_, std::string_view{message},
+                                   location);
+    }
+
+#define CPPTB_DETAIL_LOG_METHOD(Name, Level)                                \
+    void Name(                                                             \
+        std::string_view message,                                           \
+        std::source_location location =                                    \
+            std::source_location::current()) const {                        \
+        log(LogLevel::Level, message, location);                            \
+    }                                                                       \
+    template <typename MessageFactory>                                      \
+        requires std::invocable<MessageFactory>                            \
+    CPPTB_DETAIL_ALWAYS_INLINE void Name(                                   \
+        MessageFactory&& message_factory,                                   \
+        std::source_location location =                                    \
+            std::source_location::current()) const {                        \
+        log_lazy(LogLevel::Level,                                           \
+                 std::forward<MessageFactory>(message_factory), location);   \
+    }
+
+    CPPTB_DETAIL_LOG_METHOD(trace, Trace)
+    CPPTB_DETAIL_LOG_METHOD(debug, Debug)
+    CPPTB_DETAIL_LOG_METHOD(info, Info)
+    CPPTB_DETAIL_LOG_METHOD(warning, Warning)
+    CPPTB_DETAIL_LOG_METHOD(error, Error)
+
+#undef CPPTB_DETAIL_LOG_METHOD
+
+   private:
+    friend class TestContext;
+
+    Logger(detail::TestRunStatePtr state, std::string_view scope)
+        : state_(std::move(state)), scope_(scope) {}
+
+    detail::TestRunStatePtr state_;
+    std::string scope_;
+};
+
 class TestContext {
    public:
     TestContext(coro::Testbench& scheduler, TestResult& result,
-                coro::ClockRegistrar clocks = {})
-        : state_(new detail::TestRunState(scheduler, result, clocks)) {}
+                coro::ClockRegistrar clocks = {}, ResultSink* sink = nullptr,
+                LoggingOptions logging = {})
+        : state_(new detail::TestRunState(scheduler, result, clocks, sink,
+                                         logging)) {}
 
     template <typename Actual, typename Expected>
         requires requires(const Actual& actual, const Expected& expected) {
@@ -553,6 +766,14 @@ class TestContext {
         std::string_view message,
         std::source_location location = std::source_location::current()) const {
         state_->record_warning(message, location);
+    }
+
+    Logger logger(std::string_view scope = {}) const {
+        return Logger{state_, scope};
+    }
+
+    void bind_sim_logs(detail::SimLogEndpoint& endpoint) const {
+        state_->bind_sim_logs(endpoint);
     }
 
     [[noreturn]] void skip(
@@ -864,9 +1085,15 @@ template <typename Dut>
 bool run_registered_test(coro::Testbench& scheduler, Dut dut,
                          TestResult& result, RunRequest request,
                          coro::ClockRegistrar clocks = {},
-                         ResultSink* sink = nullptr) {
+                         ResultSink* sink = nullptr,
+                         detail::SimLogEndpoint* sim_logs = nullptr) {
     detail::reset_selection_result(result);
     const auto entries = registered_tests<Dut>();
+    const auto finish_unowned_sim_logs = [&] {
+        if (sim_logs) {
+            sim_logs->finish_unowned(request.logging.minimum_level);
+        }
+    };
 
     if (request.list_only) {
         for (const auto& entry : entries) {
@@ -874,6 +1101,7 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
         }
         result.status = TestStatus::Passed;
         result.finished = true;
+        finish_unowned_sim_logs();
         return true;
     }
 
@@ -881,6 +1109,7 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
         const std::string message{request.configuration_error};
         std::fprintf(stderr, "cpptb: %s\n", message.c_str());
         detail::record_selection_error(result, message, sink);
+        finish_unowned_sim_logs();
         return false;
     }
 
@@ -898,6 +1127,7 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
                     std::string{request.test_name} + "'";
                 std::fprintf(stderr, "cpptb: %s\n", message.c_str());
                 detail::record_selection_error(result, message, sink);
+                finish_unowned_sim_logs();
                 return false;
             }
             selected = &entry;
@@ -911,6 +1141,7 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
             }
             std::fputc('\n', stderr);
             detail::record_selection_error(result, message, sink);
+            finish_unowned_sim_logs();
             return false;
         }
     } else if (entries.size() == 1) {
@@ -932,6 +1163,7 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
         }
         std::fputc('\n', stderr);
         detail::record_selection_error(result, message, sink);
+        finish_unowned_sim_logs();
         return false;
     }
 
@@ -943,13 +1175,16 @@ bool run_registered_test(coro::Testbench& scheduler, Dut dut,
             "simulation-time timeout must be greater than zero";
         std::fprintf(stderr, "cpptb: %s\n", message.c_str());
         detail::record_selection_error(result, message, sink);
+        finish_unowned_sim_logs();
         return false;
     }
 
     detail::TestRunStatePtr state{
-        new detail::TestRunState(scheduler, result, clocks, sink)};
+        new detail::TestRunState(scheduler, result, clocks, sink,
+                                 request.logging)};
     state->begin(selected->name, selected->metadata,
                  request.random_seed.value_or(kDefaultRandomSeed));
+    if (sim_logs) state->bind_sim_logs(*sim_logs);
     if (!selected->metadata.skip_reason.empty()) {
         state->record_skip(selected->metadata.skip_reason,
                            selected->declaration);

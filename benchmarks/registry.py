@@ -139,6 +139,9 @@ _AUTHORING_TEMPLATE_IDS = {
     "register_coverage": 52,
     "register_maps": 53,
     "register_user_effects": 54,
+    "structured_logging": 55,
+    "structured_log_history": 56,
+    "mixed_logging": 57,
 }
 
 
@@ -350,6 +353,21 @@ BENCHMARKS: tuple[Benchmark, ...] = (
         "Custom register read and write effects",
         default_iterations=10_000_000,
         gate_policy=GatePolicy.DIAGNOSTIC,
+    ),
+    _authoring(
+        "structured_logging",
+        "Structured process-aware logging",
+        default_iterations=5_000_000,
+    ),
+    _authoring(
+        "structured_log_history",
+        "Ordered structured log history",
+        default_iterations=5_000_000,
+    ),
+    _authoring(
+        "mixed_logging",
+        "Mixed C++ and SystemVerilog structured logging",
+        default_iterations=5_000_000,
     ),
     Benchmark(
         name="dpi_counter",
