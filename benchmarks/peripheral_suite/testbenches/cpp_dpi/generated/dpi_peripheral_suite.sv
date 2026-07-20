@@ -185,6 +185,7 @@ module dpi_peripheral_suite;
   import "DPI-C" function int unsigned cpptb_dpi_edge_interest(
       input int unsigned signal_id
   );
+  import "DPI-C" function int cpptb_dpi_report_starvation();
 
   logic HCLK;
   logic HRESETn;
@@ -784,6 +785,13 @@ module dpi_peripheral_suite;
       $fatal(1, "peripheral_suite_dut DPI testbench failed");
     end
     $finish;
+  end
+
+  final begin
+    if ((status == 0) &&
+        (cpptb_dpi_report_starvation() != 0)) begin
+      $fatal(1, "peripheral_suite_dut scheduler starvation");
+    end
   end
 
   peripheral_suite_dut #(

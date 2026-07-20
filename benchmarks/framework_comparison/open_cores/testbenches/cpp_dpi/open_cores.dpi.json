@@ -34,6 +34,7 @@
     "pull_outputs_function": "open_cores_dpi_pull_outputs",
     "next_deadline_function": "open_cores_dpi_next_timer_deadline",
     "edge_interest_function": "open_cores_dpi_edge_interest",
+    "starvation_function": "open_cores_dpi_report_starvation",
     "clock_config_function": "open_cores_dpi_clock_config",
     "dynamic_clocks": true,
     "iteration_plusarg": "OPEN_CORE_BENCH_ITERS",

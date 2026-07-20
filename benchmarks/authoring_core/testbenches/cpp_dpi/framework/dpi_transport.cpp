@@ -54,11 +54,12 @@ struct DpiAdapter {
 
 }  // namespace cpptb::benchmarks::authoring_core
 
-CPPTB_DEFINE_NAMED_DPI_RUNTIME(
+CPPTB_DEFINE_NAMED_DPI_RUNTIME_WITH_STARVATION(
     cpptb::benchmarks::authoring_core::DpiAdapter,
     authoring_core_dpi_init,
     authoring_core_dpi_step,
     authoring_core_dpi_pull_outputs,
     authoring_core_dpi_next_timer_deadline,
-    authoring_core_dpi_edge_interest)
+    authoring_core_dpi_edge_interest,
+    authoring_core_dpi_report_starvation)
 CPPTB_DEFINE_NAMED_DPI_CLOCK_API(authoring_core_dpi_clock_config)

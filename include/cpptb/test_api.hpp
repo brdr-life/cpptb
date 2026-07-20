@@ -201,6 +201,7 @@ class TestRunState {
         result_->tags = metadata.tags;
         result_->failure_records.clear();
         result_->warning_records.clear();
+        result_->wait_graph.reset();
         result_->random_seed = random_seed;
         result_->random_algorithm = kRandomAlgorithm;
         result_->constraint_backend.clear();
@@ -210,6 +211,7 @@ class TestRunState {
         result_->simulation_time_fs = scheduler_->now().femtoseconds;
         result_->wall_time_ns = 0;
         result_->finished = false;
+        pending_timeout_graph_.reset();
         expected_failure_ = metadata.expected_failure;
         expected_failure_reason_ = metadata.expected_failure_reason;
         master_random_seed_ = random_seed;
@@ -220,9 +222,14 @@ class TestRunState {
     CPPTB_DETAIL_ALWAYS_INLINE ProcessProvenance create_process(
         const char* description,
         std::source_location location = std::source_location::current()) {
+        uint64_t parent_id = 0;
+        auto* parent = static_cast<ProcessProvenance*>(
+            scheduler_->current_execution_context());
+        if (parent && parent->owner == this) parent_id = parent->id;
         return ProcessProvenance{
             .owner = this,
             .id = next_process_id_++,
+            .parent_id = parent_id,
             .description = description,
             .declaration = location,
         };
@@ -391,13 +398,28 @@ class TestRunState {
         if (result_->finished) return;
         result_->status_reason = "simulation-time limit of " +
                                  std::to_string(timeout.femtoseconds) + " fs";
+        if (pending_timeout_graph_) {
+            result_->wait_graph = std::move(pending_timeout_graph_);
+            if (result_->wait_graph->deadlocked()) {
+                result_->status_reason.append("; scheduler deadlock detected");
+            }
+        }
         record_failure(FailureRecord{
             .kind = FailureKind::Timeout,
             .label = result_->status_reason,
             .source_file = std::string{location.file_name()},
             .source_line = location.line(),
         });
+        if (result_->wait_graph) {
+            const auto formatted = format_wait_graph(*result_->wait_graph);
+            std::fprintf(stderr, "%s\n", formatted.c_str());
+        }
         finish(TestStatus::TimedOut);
+    }
+
+    template <typename T>
+    typename coro::TaskTimeoutAwaiter<T>::Observer timeout_observer() {
+        return {this, capture_timeout_wait_graph};
     }
 
     void finish(TestStatus requested) {
@@ -535,6 +557,12 @@ class TestRunState {
         static_cast<TestRunState*>(owner)->record_sim_log(message);
     }
 
+    static void capture_timeout_wait_graph(
+        void* owner, const coro::Scheduler& scheduler) {
+        auto& state = *static_cast<TestRunState*>(owner);
+        state.pending_timeout_graph_ = scheduler.wait_graph(&state);
+    }
+
     static bool owns_process(void* process_owner,
                              void* test_owner) noexcept {
         auto* provenance = static_cast<ProcessProvenance*>(process_owner);
@@ -583,6 +611,7 @@ class TestRunState {
     LogSink* log_sink_;
     LogHistory* log_history_;
     SimLogEndpoint* sim_logs_ = nullptr;
+    std::optional<WaitGraphSnapshot> pending_timeout_graph_;
     std::unordered_map<uint64_t, Random> process_randoms_;
     uint64_t next_process_id_ = 1;
     uint64_t next_log_sequence_ = 1;
@@ -809,6 +838,10 @@ class TestContext {
 
     coro::SimTime now() const { return state_->scheduler().now(); }
 
+    WaitGraphSnapshot wait_graph() const {
+        return state_->scheduler().wait_graph(state_.get());
+    }
+
     Random& random() const { return state_->current_random(); }
 
     ConstraintBackend& random_backend() const {
@@ -986,7 +1019,8 @@ coro::Task<void> invoke_registered_test(
     try {
         if (simulation_timeout) {
             const auto outcome = co_await coro::with_timeout(
-                function(dut, context), *simulation_timeout);
+                function(dut, context), *simulation_timeout,
+                state->timeout_observer<void>());
             if (outcome.timed_out()) {
                 state->record_timeout(*simulation_timeout, declaration);
                 co_return;
@@ -1017,6 +1051,7 @@ inline void reset_selection_result(TestResult& result) {
     result.tags.clear();
     result.failure_records.clear();
     result.warning_records.clear();
+    result.wait_graph.reset();
     result.random_seed.reset();
     result.random_algorithm.clear();
     result.constraint_backend.clear();

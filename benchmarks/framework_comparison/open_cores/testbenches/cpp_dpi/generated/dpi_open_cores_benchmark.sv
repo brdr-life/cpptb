@@ -96,6 +96,7 @@ module dpi_open_cores_benchmark;
   import "DPI-C" function int unsigned open_cores_dpi_edge_interest(
       input int unsigned signal_id
   );
+  import "DPI-C" function int open_cores_dpi_report_starvation();
 
   logic clk;
   logic rst_n;
@@ -701,6 +702,13 @@ module dpi_open_cores_benchmark;
       $fatal(1, "open_cores_benchmark_dut DPI testbench failed");
     end
     $finish;
+  end
+
+  final begin
+    if ((status == 0) &&
+        (open_cores_dpi_report_starvation() != 0)) begin
+      $fatal(1, "open_cores_benchmark_dut scheduler starvation");
+    end
   end
 
   open_cores_benchmark_dut i_dut (

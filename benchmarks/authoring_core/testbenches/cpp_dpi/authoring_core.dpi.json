@@ -33,6 +33,7 @@
     "pull_outputs_function": "authoring_core_dpi_pull_outputs",
     "next_deadline_function": "authoring_core_dpi_next_timer_deadline",
     "edge_interest_function": "authoring_core_dpi_edge_interest",
+    "starvation_function": "authoring_core_dpi_report_starvation",
     "clock_config_function": "authoring_core_dpi_clock_config",
     "phase_dispatch_function": "authoring_core_dpi_phase_dispatch",
     "dynamic_clocks": true,
