@@ -16,6 +16,7 @@ twin with the same stimulus, checks, and primary-clock cycle count.
 | [`fault_injection`](fault_injection/) | Internal `get()`/`deposit()`/`force()`/`release()` on nets, variables, and memory | `make cpp-dpi-fault-injection-run` |
 | [`rich_data`](rich_data/) | Wide values and slices, fixed point, arrays, packed structs, and enums | `make cpp-dpi-rich-data-run` |
 | [`interfaces`](interfaces/) | Parameterized interfaces, modports, interface arrays, independent clocks, and inouts | `make cpp-dpi-interfaces-run` |
+| [`mixed_logging`](mixed_logging/) | One ordered C++ and RTL log stream with source, hierarchy, and severity metadata | `make cpp-dpi-mixed-logging-run` |
 
 ## Which example should I copy?
 
@@ -38,6 +39,8 @@ twin with the same stimulus, checks, and primary-clock cycle count.
 - Start from `rich_data` for typed interfaces beyond scalar ports.
 - Start from `interfaces` for SystemVerilog interfaces, modports, or `inout`
   pins.
+- Start from `mixed_logging` when diagnostics authored in RTL should join the
+  C++ test trace.
 
 Run all C++/SV pairs through the normal test target:
 

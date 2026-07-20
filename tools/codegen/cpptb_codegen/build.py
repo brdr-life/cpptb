@@ -184,7 +184,14 @@ def _fingerprint(
             for path in directory.rglob("*")
             if path.is_file() and path.suffix.lower() in cpp_header_suffixes
         )
-    files.extend(sorted((framework_include / "cpptb").rglob("*.hpp")))
+    files.extend(
+        sorted(
+            path
+            for path in (framework_include / "cpptb").rglob("*")
+            if path.is_file()
+            and path.suffix.lower() in {".hpp", ".sv", ".svh", ".cpp"}
+        )
+    )
     files.extend(sorted(Path(__file__).resolve().parent.rglob("*.py")))
     for path in sorted(dict.fromkeys(files)):
         _hash_file(digest, path)
@@ -282,6 +289,12 @@ class VerilatorBackend:
         state_path = spec.target_build_dir / "build-state.json"
         clock_config = spec.metadata_dir / "clocks.json"
         access_config = spec.metadata_dir / "access.json"
+        sim_logging_dir = self.framework_include / "cpptb" / "sv"
+        sim_log_package = sim_logging_dir / "cpptb_log_pkg.sv"
+        sim_log_bridge = sim_logging_dir / "cpptb_sv_log_bridge.cpp"
+        for asset in (sim_log_package, sim_log_bridge):
+            if not asset.is_file():
+                raise BuildError(f"cannot locate CPPTB simulation logging asset: {asset}")
         generation_options = {
             "top": spec.top,
             "output_dir": spec.generated_dir,
@@ -366,7 +379,9 @@ class VerilatorBackend:
             "-Wno-BLKANDNBLK",
             "-Wno-MULTIDRIVEN",
             *spec.verilator_args,
+            f"-I{self.framework_include}",
             *(f"-I{path}" for path in spec.include_dirs),
+            "-DCPPTB_ENABLE_SV_LOGGING",
             *(f"-D{value}" for value in spec.defines),
             *(f"-G{name}={value}" for name, value in spec.parameters),
             "-CFLAGS",
@@ -375,9 +390,11 @@ class VerilatorBackend:
             str(spec.object_dir),
             "--top-module",
             spec.dpi_top,
+            str(sim_log_package),
             *(str(path) for path in spec.rtl_sources),
             str(spec.generated_dir / f"dpi_{spec.target}.sv"),
             str(spec.generated_dir / f"dpi_{spec.target}.cpp"),
+            str(sim_log_bridge),
             *(str(path) for path in spec.testbench_sources),
         ]
         log.run(verilator_command, cwd=spec.root, label="Verilator build")

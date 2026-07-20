@@ -16,6 +16,7 @@
 #include "cpptb/coro_runtime.hpp"
 #include "cpptb/dpi_static_binding.hpp"
 #include "cpptb/probe.hpp"
+#include "cpptb/sim_logging.hpp"
 #include "cpptb/test_reporting.hpp"
 #include "cpptb/test_result.hpp"
 #include "svdpi.h"
@@ -73,6 +74,7 @@ class Runtime {
         static_binding_enabled, StaticBindingContext, NoStaticBindingContext>;
 
     Runtime() {
+        cpptb::detail::register_sim_log_runtime(this, sim_logs_);
         if constexpr (static_binding_enabled) {
             static_binding_.inputs = inputs_.data();
             static_binding_.outputs = outputs_.data();
@@ -97,6 +99,10 @@ class Runtime {
         };
 #endif
     }
+    ~Runtime() {
+        scheduler_.reset();
+        cpptb::detail::unregister_sim_log_runtime(this);
+    }
     Runtime(const Runtime&) = delete;
     Runtime& operator=(const Runtime&) = delete;
 
@@ -104,6 +110,12 @@ class Runtime {
         probe::detail::DpiCallbackScope callback_scope;
         dpi_scope_ = svGetScope();
         scheduler_.reset();
+        sim_logs_.prepare_for_run();
+        const char* dpi_scope_name =
+            dpi_scope_ ? svGetNameFromScope(dpi_scope_) : nullptr;
+        cpptb::detail::update_sim_log_runtime_hierarchy(
+            this, dpi_scope_name ? std::string_view{dpi_scope_name}
+                                 : std::string_view{});
         inputs_.fill(0);
         outputs_.fill(0);
         driven_.fill(false);
@@ -207,6 +219,13 @@ class Runtime {
         start_ = std::chrono::steady_clock::now();
         const coro::ClockRegistrar clocks{this, register_clock_callback};
         if constexpr (requires {
+                          Adapter::register_testbench(
+                              *scheduler_, dut_, iterations_, result_, clocks,
+                              sim_logs_);
+                      }) {
+            Adapter::register_testbench(*scheduler_, dut_, iterations_,
+                                        result_, clocks, sim_logs_);
+        } else if constexpr (requires {
                           Adapter::register_testbench(
                               *scheduler_, dut_, iterations_, result_, clocks);
                       }) {
@@ -1361,6 +1380,7 @@ class Runtime {
         on_demand_set_words_{};
     std::array<uint32_t, Adapter::signal_count> on_demand_base_ids_{};
     [[no_unique_address]] StaticBindingStorage static_binding_{};
+    cpptb::detail::SimLogEndpoint sim_logs_;
     const uint32_t* current_inputs_ = nullptr;
     svScope dpi_scope_ = nullptr;
     std::unique_ptr<coro::Testbench> scheduler_;

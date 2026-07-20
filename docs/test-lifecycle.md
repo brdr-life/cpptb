@@ -14,6 +14,11 @@ The framework owns:
 - terminal test states and simulation-time timeout policy; and
 - optional in-process result callbacks through `ResultSink`.
 
+Process-aware diagnostic messages are provided by the separate
+[structured logging](logging.md) API. Log levels and ordered log histories
+remain observational; this page defines the warnings and checks that change
+structured test results.
+
 A harness may build simulator executables, start fresh processes, filter
 catalogs, enforce wall-time limits, and translate results into CI formats.
 Those policies are deliberately outside the lifecycle API. See

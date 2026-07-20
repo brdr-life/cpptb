@@ -35,6 +35,7 @@ include = ["cpptb_codegen*"]
 
 [tool.setuptools.data-files]
 "include/cpptb" = ["include/cpptb/*.hpp"]
+"include/cpptb/sv" = ["include/cpptb/sv/*.cpp", "include/cpptb/sv/*.sv", "include/cpptb/sv/*.svh"]
 "include/cpptb_vc" = ["include/cpptb_vc/*.hpp"]
 
 [dependency-groups]

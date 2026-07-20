@@ -66,6 +66,9 @@
 #define AUTHORING_CORE_KERNEL_REGISTER_COVERAGE 52
 #define AUTHORING_CORE_KERNEL_REGISTER_MAPS 53
 #define AUTHORING_CORE_KERNEL_REGISTER_USER_EFFECTS 54
+#define AUTHORING_CORE_KERNEL_STRUCTURED_LOGGING 55
+#define AUTHORING_CORE_KERNEL_STRUCTURED_LOG_HISTORY 56
+#define AUTHORING_CORE_KERNEL_MIXED_LOGGING 57
 
 #ifndef AUTHORING_CORE_KERNEL
 #define AUTHORING_CORE_KERNEL AUTHORING_CORE_KERNEL_CONTROL
@@ -247,6 +250,12 @@ constexpr const char* kernel_name() {
     return "register_maps";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_REGISTER_USER_EFFECTS
     return "register_user_effects";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_STRUCTURED_LOGGING
+    return "structured_logging";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_STRUCTURED_LOG_HISTORY
+    return "structured_log_history";
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MIXED_LOGGING
+    return "mixed_logging";
 #else
 #error "Unknown AUTHORING_CORE_KERNEL"
 #endif
@@ -254,6 +263,7 @@ constexpr const char* kernel_name() {
 
 void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
                         uint32_t iterations, BenchResult& result,
-                        coro::ClockRegistrar clocks);
+                        coro::ClockRegistrar clocks,
+                        cpptb::detail::SimLogEndpoint& sim_logs);
 
 }  // namespace cpptb::benchmarks::authoring_core

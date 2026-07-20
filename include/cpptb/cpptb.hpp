@@ -9,6 +9,7 @@
 #include "cpptb/fixed.hpp"
 #include "cpptb/hierarchy.hpp"
 #include "cpptb/inout.hpp"
+#include "cpptb/logging.hpp"
 #include "cpptb/logic_bits.hpp"
 #include "cpptb/packed_bits.hpp"
 #include "cpptb/probe.hpp"

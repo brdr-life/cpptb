@@ -19,6 +19,7 @@ of the way.
 | [Fault injection](examples/fault-injection.md) | Internal access and controlled fault injection | Deposit, force, release, and explicit settling |
 | [Rich data](examples/rich-data.md) | Wide, fixed-point, array, struct, and enum ports | Typed construction and checking |
 | [Interfaces and inouts](examples/interfaces.md) | Parameterized interfaces, modports, interface arrays, and bidirectional pins | Named member access, independent clocks, drive, and release |
+| [Mixed-language logging](examples/mixed-logging.md) | One ordered C++ and RTL diagnostic stream | C++ loggers, SV macros, source provenance, and hierarchy |
 | [Heavy benchmarks](examples/heavy-benchmarks.md) | Computationally substantial four-mode comparisons | FIR, packet CRC32, and matrix accelerator sequences |
 | [Open-source cores](examples/open-source-cores.md) | Real CPU, crypto, and network RTL comparisons | Firmware, register programming, and AXI-stream sequences |
 | [secworks AES register-model oracle](examples/secworks-aes-regmodel.md) | Ground-truth validation of generated register access | Upstream oracle, generated RegModel, and matched pure-SV sequence |
