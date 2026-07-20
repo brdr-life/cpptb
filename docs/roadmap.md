@@ -45,7 +45,7 @@ milestone blockers. The current development priority is the framework.
 | 4 | [Random stimulus and functional coverage](#4-reproducible-random-stimulus-and-functional-coverage) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Reproducible random streams, adaptive solving, and mergeable functional coverage |
 | 5 | [Memory and register verification components](#5-memory-and-register-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Optional protocol-independent memory and typed register models with frontdoor and backdoor adapters |
 | 6 | [Interfaces and simulator portability](#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--next">In progress</span> | Typed interfaces and inout intent are shipped; four-state and second-simulator conformance remain |
-| 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Logging, waveforms, wait diagnostics, and distributable packages |
+| 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--next">In progress</span> | Process-aware logging is shipped; waveforms, wait diagnostics, and distributable packages remain |
 | 8 | [Coherent clock and reset control](#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Runtime clock ownership and explicit reusable reset components |
 | 9 | [Batched execution and run-ahead experiments](#9-batched-execution-and-run-ahead-experiments) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Reduce DPI scheduler resumptions across fine-grained timing boundaries |
 
@@ -426,6 +426,12 @@ required to validate X/Z propagation end to end; Verilator remains the
 two-state performance reference. Simulator capability differences should be
 reported at startup rather than hidden in testbench code.
 
+Structured logging now converts `$realtime` through seconds rather than
+dividing by a `1fs` literal, avoiding a portability bug where a coarser
+`timeprecision` could round the divisor to zero. The Verilator integration test
+asserts the exact femtosecond timestamps received through DPI. The same
+assertion must pass when the second simulator joins the conformance matrix.
+
 The framework now has a fail-closed Verilator capability gate and cached
 semantic probe covering X/Z storage, high-impedance and conflicting-driver net
 resolution, and both DPI directions. Verilator 5.050 and current upstream
@@ -438,13 +444,30 @@ the conformance criteria required before transport is enabled.
 
 ## 7. Debugging and release tooling
 
-**Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>
+**Status:** <span class="roadmap-status roadmap-status--next">In progress</span>
 
-Add the facilities needed to diagnose and distribute real regressions:
+Scoped structured logging is implemented with:
 
-- scoped structured logging with simulation timestamps and `trace`, `debug`,
-  `info`, `warning`, and `error` levels;
-- lazy message formatting so disabled logs do not burden hot paths;
+- `trace`, `debug`, `info`, `warning`, and `error` levels plus `off`;
+- lazy callable messages that are not invoked below the configured threshold;
+- test name, simulation time, source location, and lifecycle process
+  provenance on every emitted record;
+- per-test sequence numbers and an opt-in owned `LogHistory` for stable
+  same-time ordering and sequential trace inspection;
+- SystemVerilog logging macros that capture source location and hierarchy and
+  merge HDL messages into the same test-owned sequence and history;
+- a synchronous harness-neutral `LogSink` that does not retain messages in
+  `TestResult`; and
+- matched `structured_logging` and `structured_log_history` C++/pure-SV
+  pairs plus a mixed C++/RTL logging pair with a pure-SV peer.
+
+The exact semantic pairs pass. Formal timing remains pending a host-load
+window admitted by the standard `1.10x` guard. See
+[Structured logging](logging.md) for API and sink-lifetime details.
+
+Remaining facilities needed to diagnose and distribute real regressions:
+
+- optional machine-readable export of structured log histories;
 - transaction recording with component and process provenance;
 - runtime waveform start/stop and scope selection;
 - waveform-on-failure support in the test runner;

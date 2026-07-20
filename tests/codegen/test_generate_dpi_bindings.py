@@ -64,6 +64,22 @@ def manifest():
 
 
 class CodegenTests(unittest.TestCase):
+    def test_shipped_logging_assets_use_portable_dpi_contract(self):
+        root = Path(__file__).resolve().parents[2]
+        macros = (root / "include/cpptb/sv/cpptb_log.svh").read_text()
+        package = (
+            root / "include/cpptb/sv/cpptb_log_pkg.sv"
+        ).read_text()
+
+        self.assertIn("$realtime / 1s * 1.0e15", macros)
+        self.assertNotIn("$realtime / 1fs", macros)
+        self.assertIn(
+            'import "DPI-C" function void cpptb_sv_log(', package
+        )
+        self.assertNotIn(
+            'import "DPI-C" context function void cpptb_sv_log(', package
+        )
+
     def test_source_defaults_keep_generated_files_in_build_tree(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             base = Path(temp_dir)
@@ -207,6 +223,7 @@ class CodegenTests(unittest.TestCase):
                 ports, [], tree, config, "counter.sv"
             )
             adapter = render_cpp_adapter(config, "counter.sv")
+            wrapper = render_sv(ports, [], config, "counter.sv")
 
             self.assertEqual(config["namespace"], "cpptb::generated::counter")
             self.assertEqual(config["root_type"], "Dut")
@@ -218,8 +235,11 @@ class CodegenTests(unittest.TestCase):
             self.assertIn("using CounterDut = Dut;", header)
             self.assertIn("struct DpiAdapter", adapter)
             self.assertIn("cpptb::run_registered_test", adapter)
+            self.assertIn("cpptb::detail::SimLogEndpoint& sim_logs", adapter)
             self.assertIn("cpptb_counter_dpi_init", adapter)
             self.assertIn("CPP_DPI_COUNTER_RESULT", adapter)
+            self.assertIn("`ifdef CPPTB_ENABLE_SV_LOGGING", wrapper)
+            self.assertIn("cpptb_log_pkg::configure();", wrapper)
 
     def test_source_defaults_defer_clock_timing_to_cpp_testbench(self):
         with tempfile.TemporaryDirectory() as temp_dir:

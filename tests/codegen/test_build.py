@@ -9,12 +9,15 @@ from cpptb_codegen.verilator_capabilities import VerilatorFourStateProbe
 
 
 class FakeCommandLog:
+    commands = []
+
     def __init__(self, path, verbose):
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text("")
 
     def run(self, command, *, cwd, label):
+        self.commands.append((label, list(command)))
         if label == "testbench discovery":
             Path(command[1]).write_text(
                 '{"schema_version": 1, "clocks": []}\n'
@@ -29,14 +32,24 @@ class FakeCommandLog:
             (object_dir / f"V{top}").write_text("binary\n")
 
 
+def write_framework_fixture(include):
+    (include / "cpptb" / "sv").mkdir(parents=True)
+    (include / "cpptb" / "cpptb.hpp").write_text("#pragma once\n")
+    (include / "cpptb" / "sv" / "cpptb_log_pkg.sv").write_text(
+        "package cpptb_log_pkg; endpackage\n"
+    )
+    (include / "cpptb" / "sv" / "cpptb_sv_log_bridge.cpp").write_text(
+        "// bridge\n"
+    )
+
+
 def experimental_four_state_fixture(root):
     rtl = root / "counter.sv"
     testbench = root / "testbench.cpp"
     rtl.write_text("module counter; endmodule\n")
     testbench.write_text("// testbench\n")
     include = root / "framework" / "include"
-    (include / "cpptb").mkdir(parents=True)
-    (include / "cpptb" / "cpptb.hpp").write_text("#pragma once\n")
+    write_framework_fixture(include)
     verilator_root = root / "verilator"
     (verilator_root / "include" / "vltstd").mkdir(parents=True)
     spec = ProjectSpec(
@@ -133,8 +146,7 @@ class BuildPipelineTests(unittest.TestCase):
             rtl.write_text("module counter; endmodule\n")
             testbench.write_text("// testbench\n")
             include = root / "framework" / "include"
-            (include / "cpptb").mkdir(parents=True)
-            (include / "cpptb" / "cpptb.hpp").write_text("#pragma once\n")
+            write_framework_fixture(include)
             verilator_root = root / "verilator"
             (verilator_root / "include" / "vltstd").mkdir(parents=True)
             spec = ProjectSpec(
@@ -152,6 +164,7 @@ class BuildPipelineTests(unittest.TestCase):
                     return str(verilator_root)
                 return "tool version 1"
 
+            FakeCommandLog.commands.clear()
             with mock.patch(
                 "cpptb_codegen.build.find_framework_include", return_value=include
             ), mock.patch(
@@ -188,6 +201,22 @@ class BuildPipelineTests(unittest.TestCase):
             )
             self.assertTrue(spec.binary.is_file())
             self.assertTrue((spec.target_build_dir / "build-state.json").is_file())
+            build_command = next(
+                command
+                for label, command in FakeCommandLog.commands
+                if label == "Verilator build"
+            )
+            package = str(include / "cpptb" / "sv" / "cpptb_log_pkg.sv")
+            bridge = str(
+                include / "cpptb" / "sv" / "cpptb_sv_log_bridge.cpp"
+            )
+            self.assertEqual(build_command.count(package), 1)
+            self.assertEqual(build_command.count(bridge), 1)
+            self.assertIn("-DCPPTB_ENABLE_SV_LOGGING", build_command)
+            self.assertIn(f"-I{include}", build_command)
+            for call in generate.call_args_list:
+                self.assertNotIn(Path(package), call.args[0])
+                self.assertNotIn("CPPTB_ENABLE_SV_LOGGING", call.kwargs["defines"])
 
 
 if __name__ == "__main__":

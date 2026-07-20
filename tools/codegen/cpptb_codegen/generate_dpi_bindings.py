@@ -3839,8 +3839,11 @@ def render_cpp_adapter(manifest: dict[str, Any], source: str) -> str:
         "",
         "    static void register_testbench(coro::Testbench& scheduler, Dut dut,",
         "                                   uint32_t, Result& result,",
-        "                                   coro::ClockRegistrar clocks) {",
-        "        cpptb::run_registered_test(scheduler, dut, result, clocks);",
+        "                                   coro::ClockRegistrar clocks,",
+        "                                   cpptb::detail::SimLogEndpoint& sim_logs) {",
+        "        cpptb::run_registered_test(",
+        "            scheduler, dut, result, cpptb::detail::environment_run_request(),",
+        "            clocks, nullptr, &sim_logs);",
         "    }",
         "",
         "    static void dispatch_phase(uint32_t phase) {",
@@ -6144,6 +6147,9 @@ def render_sv(
             "    end",
             "",
             f"    {init_function}(iterations, TIMEPRECISION_FS);",
+            "`ifdef CPPTB_ENABLE_SV_LOGGING",
+            "    cpptb_log_pkg::configure();",
+            "`endif",
         ]
     )
     if dynamic_clocks:

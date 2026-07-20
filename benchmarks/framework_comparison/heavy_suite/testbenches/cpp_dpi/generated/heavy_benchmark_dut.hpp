@@ -2,9 +2,11 @@
 // Do not edit by hand.
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string_view>
 
 #include "cpptb/dpi_static_binding.hpp"
@@ -112,6 +114,32 @@ struct HierarchyTransport {
     }
 
     template <std::size_t Width>
+    static void get_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("get_span", id);
+    }
+
+    template <std::size_t Width>
+    static void deposit_span(std::uint32_t id,
+                            std::int32_t first_index,
+                            std::span<const cpptb::probe::Value<Width>> values) {
+        constexpr std::size_t kBlockEntries = 4;
+        if constexpr (Width <= 64) {
+            switch (id) {
+                default: break;
+            }
+        }
+        fail("deposit_span", id);
+    }
+
+    template <std::size_t Width>
     static cpptb::LogicBits<Width> get_logic(
         std::uint32_t id, std::int32_t index) {
         switch (id) {
@@ -164,6 +192,9 @@ private:
         std::abort();
     }
 };
+
+struct HierarchyCrc32ByteScope;
+struct HierarchyFirCoefficientScope;
 
 struct HierarchyCrc32ByteScope {
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 1, "crc32_byte.bit_index", 32, true, cpptb::probe::Value<32>, false> bit_index;
@@ -222,6 +253,68 @@ struct Dut {
     [[no_unique_address]] cpptb::hierarchy::Memory<HierarchyTransport, 15, "matrix_b", 16, 0, 15, true, cpptb::probe::Value<16>, true> matrix_b;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 16, "row", 32, true, cpptb::probe::Value<32>, false> row;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 17, "tap", 32, true, cpptb::probe::Value<32>, false> tap;
+    template <cpptb::hierarchy::FixedString Path>
+    [[nodiscard]] constexpr auto cpptb_signal() const {
+        if constexpr (Path.view() == "column") {
+            return (*this).column;
+        }
+        else if constexpr (Path.view() == "crc32_byte.bit_index") {
+            return (*this).crc32_byte.bit_index;
+        }
+        else if constexpr (Path.view() == "crc32_byte.crc32_byte") {
+            return (*this).crc32_byte.crc32_byte;
+        }
+        else if constexpr (Path.view() == "crc32_byte.value") {
+            return (*this).crc32_byte.value;
+        }
+        else if constexpr (Path.view() == "crc_next") {
+            return (*this).crc_next;
+        }
+        else if constexpr (Path.view() == "crc_state") {
+            return (*this).crc_state;
+        }
+        else if constexpr (Path.view() == "element") {
+            return (*this).element;
+        }
+        else if constexpr (Path.view() == "fir_accumulator") {
+            return (*this).fir_accumulator;
+        }
+        else if constexpr (Path.view() == "fir_coefficient.fir_coefficient") {
+            return (*this).fir_coefficient.fir_coefficient;
+        }
+        else if constexpr (Path.view() == "fir_history") {
+            return (*this).fir_history;
+        }
+        else if constexpr (Path.view() == "index") {
+            return (*this).index;
+        }
+        else if constexpr (Path.view() == "mat_accumulator") {
+            return (*this).mat_accumulator;
+        }
+        else if constexpr (Path.view() == "mat_busy") {
+            return (*this).mat_busy;
+        }
+        else if constexpr (Path.view() == "mat_compute_index") {
+            return (*this).mat_compute_index;
+        }
+        else if constexpr (Path.view() == "matrix_a") {
+            return (*this).matrix_a;
+        }
+        else if constexpr (Path.view() == "matrix_b") {
+            return (*this).matrix_b;
+        }
+        else if constexpr (Path.view() == "row") {
+            return (*this).row;
+        }
+        else if constexpr (Path.view() == "tap") {
+            return (*this).tap;
+        }
+        else {
+            static_assert(Path.view().empty(),
+                          "HDL path is not present in the generated DUT hierarchy");
+            return cpptb::hierarchy::UnsupportedSignal{};
+        }
+    }
 };
 
 }  // namespace cpptb::benchmarks::heavy
