@@ -115,6 +115,7 @@ module dpi_scheduler_conformance;
   import "DPI-C" function int unsigned cpptb_dpi_edge_interest(
       input int unsigned signal_id
   );
+  import "DPI-C" function int cpptb_dpi_report_starvation();
 
   logic rst_n;
   logic clk_a;
@@ -785,6 +786,13 @@ module dpi_scheduler_conformance;
       $fatal(1, "scheduler_conformance DPI testbench failed");
     end
     $finish;
+  end
+
+  final begin
+    if ((status == 0) &&
+        (cpptb_dpi_report_starvation() != 0)) begin
+      $fatal(1, "scheduler_conformance scheduler starvation");
+    end
   end
 
   scheduler_conformance i_dut (

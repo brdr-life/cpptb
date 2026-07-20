@@ -15,7 +15,7 @@ from typing import Sequence
 
 
 TEST_PREFIX = "CPPTB_TEST "
-RESULT_SCHEMA_VERSIONS = {1, 2, 3, 4}
+RESULT_SCHEMA_VERSIONS = {1, 2, 3, 4, 5}
 RESULT_STATUSES = {
     "passed",
     "failed",

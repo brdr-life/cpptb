@@ -99,6 +99,7 @@ class RunnerTest(unittest.TestCase):
                 (2, "timed_out"),
                 (3, "passed"),
                 (4, "passed"),
+                (5, "passed"),
             ):
                 with self.subTest(schema_version=schema_version, status=status):
                     path.write_text(

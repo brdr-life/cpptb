@@ -110,6 +110,7 @@ module dpi_heavy_benchmark;
   import "DPI-C" function int unsigned heavy_dpi_edge_interest(
       input int unsigned signal_id
   );
+  import "DPI-C" function int heavy_dpi_report_starvation();
 
   logic clk;
   logic rst_n;
@@ -781,6 +782,13 @@ module dpi_heavy_benchmark;
       $fatal(1, "heavy_benchmark_dut DPI testbench failed");
     end
     $finish;
+  end
+
+  final begin
+    if ((status == 0) &&
+        (heavy_dpi_report_starvation() != 0)) begin
+      $fatal(1, "heavy_benchmark_dut scheduler starvation");
+    end
   end
 
   heavy_benchmark_dut i_dut (

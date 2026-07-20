@@ -45,9 +45,11 @@ struct DpiAdapter {
 
 }  // namespace cpptb::benchmarks::open_cores
 
-CPPTB_DEFINE_NAMED_DPI_RUNTIME(cpptb::benchmarks::open_cores::DpiAdapter,
+CPPTB_DEFINE_NAMED_DPI_RUNTIME_WITH_STARVATION(
+                               cpptb::benchmarks::open_cores::DpiAdapter,
                                open_cores_dpi_init, open_cores_dpi_step,
                                open_cores_dpi_pull_outputs,
                                open_cores_dpi_next_timer_deadline,
-                               open_cores_dpi_edge_interest)
+                               open_cores_dpi_edge_interest,
+                               open_cores_dpi_report_starvation)
 CPPTB_DEFINE_NAMED_DPI_CLOCK_API(open_cores_dpi_clock_config)

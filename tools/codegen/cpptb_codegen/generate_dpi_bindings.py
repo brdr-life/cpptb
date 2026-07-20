@@ -199,6 +199,7 @@ def source_manifest(
             "pull_outputs_function": f"{run_prefix}_pull_outputs",
             "next_deadline_function": f"{run_prefix}_next_timer_deadline",
             "edge_interest_function": f"{run_prefix}_edge_interest",
+            "starvation_function": f"{run_prefix}_report_starvation",
             "clock_config_function": f"{run_prefix}_clock_config",
             "phase_dispatch_function": f"{run_prefix}_phase_dispatch",
             "dynamic_clocks": dynamic_clocks,
@@ -3789,6 +3790,9 @@ def render_cpp_adapter(manifest: dict[str, Any], source: str) -> str:
             "next_deadline_function", "cpptb_dpi_next_timer_deadline"
         ),
         "edge": run.get("edge_interest_function", "cpptb_dpi_edge_interest"),
+        "starvation": run.get(
+            "starvation_function", "cpptb_dpi_report_starvation"
+        ),
         "clock": run.get("clock_config_function", "cpptb_dpi_clock_config"),
         "phase_dispatch": run.get(
             "phase_dispatch_function", "cpptb_dpi_phase_dispatch"
@@ -3858,9 +3862,10 @@ def render_cpp_adapter(manifest: dict[str, Any], source: str) -> str:
         "",
         f"}}  // namespace {namespace}::generated",
         "",
-        "CPPTB_DEFINE_NAMED_DPI_RUNTIME(",
+        "CPPTB_DEFINE_NAMED_DPI_RUNTIME_WITH_STARVATION(",
         f"    {adapter_type}, {functions['init']}, {functions['step']},",
-        f"    {functions['pull']}, {functions['deadline']}, {functions['edge']})",
+        f"    {functions['pull']}, {functions['deadline']}, {functions['edge']},",
+        f"    {functions['starvation']})",
     ]
     if dynamic_clocks:
         lines.extend(
@@ -5219,6 +5224,9 @@ def render_sv(
     edge_interest_function = run.get(
         "edge_interest_function", "cpptb_dpi_edge_interest"
     )
+    starvation_function = run.get(
+        "starvation_function", "cpptb_dpi_report_starvation"
+    )
     clock_config_function = run.get(
         "clock_config_function", "cpptb_dpi_clock_config"
     )
@@ -5322,6 +5330,7 @@ def render_sv(
             f'  import "DPI-C" function int unsigned {edge_interest_function}(',
             "      input int unsigned signal_id",
             "  );",
+            f'  import "DPI-C" function int {starvation_function}();',
         ]
     )
     if dynamic_clocks:
@@ -6210,6 +6219,13 @@ def render_sv(
             f'      $fatal(1, "{manifest["module"]} DPI testbench failed");',
             "    end",
             "    $finish;",
+            "  end",
+            "",
+            "  final begin",
+            "    if ((status == 0) &&",
+            f"        ({starvation_function}() != 0)) begin",
+            f'      $fatal(1, "{manifest["module"]} scheduler starvation");',
+            "    end",
             "  end",
             "",
         ]

@@ -45,7 +45,7 @@ milestone blockers. The current development priority is the framework.
 | 4 | [Random stimulus and functional coverage](#4-reproducible-random-stimulus-and-functional-coverage) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Reproducible random streams, adaptive solving, and mergeable functional coverage |
 | 5 | [Memory and register verification components](#5-memory-and-register-verification-components) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Optional protocol-independent memory and typed register models with frontdoor and backdoor adapters |
 | 6 | [Interfaces and simulator portability](#6-interfaces-bidirectional-signals-and-portability) | <span class="roadmap-status roadmap-status--next">In progress</span> | Typed interfaces and inout intent are shipped; four-state and second-simulator conformance remain |
-| 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--next">In progress</span> | Process-aware logging is shipped; waveforms, wait diagnostics, and distributable packages remain |
+| 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--next">In progress</span> | Process-aware logging and scheduler wait diagnostics are done; waveforms and distributable packages remain |
 | 8 | [Coherent clock and reset control](#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Runtime clock ownership and explicit reusable reset components |
 | 9 | [Batched execution and run-ahead experiments](#9-batched-execution-and-run-ahead-experiments) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Reduce DPI scheduler resumptions across fine-grained timing boundaries |
 
@@ -471,11 +471,18 @@ Remaining facilities needed to diagnose and distribute real regressions:
 - transaction recording with component and process provenance;
 - runtime waveform start/stop and scope selection;
 - waveform-on-failure support in the test runner;
-- a scheduler wait graph with process names, spawn sites, and outstanding
-  triggers for deadlock and timeout reports;
+- <strong class="roadmap-status roadmap-status--done">Done:</strong> a
+  scheduler wait graph with process parentage, spawn sites, outstanding
+  triggers, named synchronization resources, timeout capture, and conservative
+  deadlock classification;
 - clean attribution of HDL assertion failures;
 - simulator and generated-binding compatibility reports; and
 - versioned runtime and code-generator packages.
+
+The wait-graph semantic, conformance, negative, and full-example regressions
+pass. Its event hot-path performance guard is **Pending** until the benchmark
+runner admits a low-load host window; the last attempted run was rejected by
+the load gate before collecting samples.
 
 Keep the core runtime header-only and the Slang-backed generator separately
 installable.

@@ -329,6 +329,21 @@ Task<void> wait_for_read_write_twice(uint32_t& resumes) {
     ++resumes;
 }
 
+Task<void> wait_for_read_write_once(uint32_t& resumes) {
+    co_await ReadWrite{};
+    ++resumes;
+}
+
+Task<void> wait_for_read_only_once(uint32_t& resumes) {
+    co_await ReadOnly{};
+    ++resumes;
+}
+
+Task<void> wait_for_next_time_step_once(uint32_t& resumes) {
+    co_await NextTimeStep{};
+    ++resumes;
+}
+
 Task<void> invalid_read_write_after_read_only() {
     co_await ReadOnly{};
     co_await ReadWrite{};
@@ -1102,6 +1117,35 @@ Task<void> lock_worker(Lock& lock, uint32_t id,
     lock.release();
 }
 
+Task<void> wait_named_event(Event& event, uint32_t& completions) {
+    co_await event.wait();
+    ++completions;
+}
+
+Task<void> wait_named_event_with_timeout(Event& event,
+                                         uint32_t& child_completions,
+                                         uint32_t& timeout_completions) {
+    const auto result =
+        co_await with_timeout(wait_named_event(event, child_completions), 10_ns);
+    if (result.timed_out()) ++timeout_completions;
+}
+
+Task<void> wait_named_queue(Queue<uint32_t>& queue, uint32_t& value) {
+    value = co_await queue.get();
+}
+
+Task<void> wait_named_semaphore(Semaphore& semaphore,
+                                uint32_t& completions) {
+    co_await semaphore.acquire();
+    ++completions;
+}
+
+Task<void> wait_named_lock(Lock& lock, uint32_t& completions) {
+    co_await lock.acquire();
+    ++completions;
+    lock.release();
+}
+
 void trigger_event_cross_scheduler() {
     Event event;
     Testbench first;
@@ -1348,6 +1392,11 @@ bool expect_abort(const char* label, void (*trigger)(),
 int main() {
     static_assert(sizeof(CoroutineState) <= 32,
                   "hot coroutine state must remain compact");
+    static_assert(sizeof(BasicTriggerAwaiter<Delay>) == sizeof(Delay),
+                  "Delay diagnostics must not enlarge the hot awaiter");
+    static_assert(sizeof(BasicTriggerAwaiter<RisingEdge>) ==
+                      sizeof(RisingEdge),
+                  "edge diagnostics must not enlarge the hot awaiter");
     static_assert(sizeof(TaskPromise<void>) == sizeof(TaskPromiseBase),
                   "Task<void> must not carry typed result storage");
     static_assert(!std::default_initializable<NonDefaultMoveOnly>);
@@ -3604,6 +3653,338 @@ int main() {
                          callback.cancelled() ? 1 : 0, 1);
         passed &= expect("shutdown cancel target did not resume", target_value,
                          0);
+    }
+
+    {
+        Testbench tb;
+        Event event{"reset_done"};
+        Queue<uint32_t> queue{1, "request_words"};
+        Semaphore semaphore{0, "credits"};
+        Lock lock{"bus_lock"};
+        uint32_t event_completions = 0;
+        uint32_t queue_value = 0;
+        uint32_t semaphore_completions = 0;
+        uint32_t lock_completions = 0;
+        passed &= expect("diagnostic lock initially acquired",
+                         lock.try_acquire() ? 1 : 0, 1);
+
+        const auto event_process =
+            tb.spawn(wait_named_event(event, event_completions));
+        const auto queue_process =
+            tb.spawn(wait_named_queue(queue, queue_value));
+        const auto semaphore_process =
+            tb.spawn(wait_named_semaphore(semaphore, semaphore_completions));
+        const auto lock_process =
+            tb.spawn(wait_named_lock(lock, lock_completions));
+
+        const auto graph = tb.wait_graph();
+        passed &= expect("internal waits classify as deadlocked",
+                         graph.deadlocked() ? 1 : 0, 1);
+        const auto has_wait = [&](cpptb::WaitReason reason,
+                                  std::string_view resource) {
+            for (const auto& node : graph.nodes) {
+                if (node.reason == reason &&
+                    node.resource.find(resource) != std::string::npos &&
+                    node.wait_source_line != 0) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        passed &= expect("Event wait is attributed",
+                         has_wait(cpptb::WaitReason::Event, "reset_done"), 1);
+        passed &= expect("Queue wait is attributed",
+                         has_wait(cpptb::WaitReason::QueueGet,
+                                  "request_words"),
+                         1);
+        passed &= expect("Semaphore wait is attributed",
+                         has_wait(cpptb::WaitReason::Semaphore, "credits"), 1);
+        passed &= expect("Lock wait is attributed",
+                         has_wait(cpptb::WaitReason::Lock, "bus_lock"), 1);
+        const auto formatted = cpptb::format_wait_graph(graph);
+        passed &= expect("wait graph formatting is deterministic",
+                         formatted == cpptb::format_wait_graph(graph), 1);
+        passed &= expect("formatted graph names deadlock",
+                         formatted.find("deadlocked") != std::string::npos, 1);
+        passed &= expect("formatted graph names Queue resource",
+                         formatted.find("request_words") !=
+                             std::string::npos,
+                         1);
+
+        event.set();
+        queue.put_nowait(0x55u);
+        semaphore.release();
+        lock.release();
+        passed &= expect("Event waiter completes", event_process.done(), 1);
+        passed &= expect("Queue waiter completes", queue_process.done(), 1);
+        passed &= expect("Semaphore waiter completes",
+                         semaphore_process.done(), 1);
+        passed &= expect("Lock waiter completes", lock_process.done(), 1);
+        passed &= expect("Queue waiter receives value", queue_value, 0x55u);
+        passed &= expect("completed waits leave no graph nodes",
+                         tb.wait_graph().nodes.empty() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        Event first_event{"first_generation"};
+        Event recycled_event{"recycled_generation"};
+        uint32_t completions = 0;
+        auto first = tb.spawn(wait_named_event(first_event, completions));
+        const auto first_graph = tb.wait_graph();
+        const uint64_t first_id = first_graph.nodes.back().id;
+        first.cancel();
+
+        auto recycled =
+            tb.spawn(wait_named_event(recycled_event, completions));
+        const auto recycled_graph = tb.wait_graph();
+        passed &= expect("recycled scheduler slots receive new stable ids",
+                         recycled_graph.nodes.back().id > first_id, 1);
+        passed &= expect("recycled slot exposes only current wait resource",
+                         cpptb::format_wait_graph(recycled_graph).find(
+                             "first_generation") == std::string::npos,
+                         1);
+        recycled.cancel();
+        passed &= expect("recycled wait cancellation clears graph",
+                         tb.wait_graph().nodes.empty(), 1);
+    }
+
+    {
+        Testbench tb;
+        int first_owner = 0;
+        int second_owner = 0;
+        Event first_event{"first_owner_event"};
+        Event second_event{"second_owner_event"};
+        uint32_t first_completions = 0;
+        uint32_t second_completions = 0;
+        auto first = tb.spawn_owned(
+            wait_named_event(first_event, first_completions),
+            ProcessExecutionContext{.owner = &first_owner,
+                                    .id = 1,
+                                    .description = "first owner"},
+            nullptr);
+        auto second = tb.spawn_owned(
+            wait_named_event(second_event, second_completions),
+            ProcessExecutionContext{.owner = &second_owner,
+                                    .id = 2,
+                                    .description = "second owner"},
+            nullptr);
+        const auto first_graph = tb.wait_graph(&first_owner);
+        passed &= expect("owner-filtered graph includes owned process",
+                         first_graph.nodes.size(), 1);
+        passed &= expect("owner-filtered graph has expected resource",
+                         first_graph.nodes.front().resource.find(
+                             "first_owner_event") != std::string::npos,
+                         1);
+        passed &= expect("owner-filtered graph excludes foreign process",
+                         cpptb::format_wait_graph(first_graph).find(
+                             "second_owner_event") == std::string::npos,
+                         1);
+        first.cancel();
+        second.cancel();
+    }
+
+    {
+        Testbench tb;
+        Results results;
+        const Signal clock{nullptr, 61, "dut.clk"};
+        const auto edge_process = tb.spawn(join_child(clock, results.joined));
+        auto graph = tb.wait_graph();
+        passed &= expect("edge wait needs simulator progress",
+                         graph.status ==
+                                 cpptb::WaitGraphStatus::WaitingForSimulator,
+                         1);
+        passed &= expect("edge wait is not called a deadlock",
+                         graph.deadlocked() ? 1 : 0, 0);
+        passed &= expect("edge signal is named",
+                         graph.nodes.back().resource.find("dut.clk") !=
+                             std::string::npos,
+                         1);
+        tb.notify_edge(clock.id, EdgeKind::Rising);
+        passed &= expect("edge diagnostic process completes",
+                         edge_process.done(), 1);
+
+        const auto delay_process = tb.spawn(wait_for_delay(tb, results));
+        graph = tb.wait_graph();
+        passed &= expect("delay wait needs time progress",
+                         graph.status ==
+                                 cpptb::WaitGraphStatus::WaitingForTime,
+                         1);
+        bool found_deadline = false;
+        for (const auto& node : graph.nodes) {
+            found_deadline |= node.reason == cpptb::WaitReason::Delay &&
+                              node.deadline_fs == (7_ns).femtoseconds;
+        }
+        passed &= expect("delay diagnostic records deadline", found_deadline,
+                         1);
+        tb.set_time(7);
+        passed &= expect("delay diagnostic process completes",
+                         delay_process.done(), 1);
+    }
+
+    {
+        Testbench tb;
+        Event event{"timeout_rescued_event"};
+        uint32_t child_completions = 0;
+        uint32_t timeout_completions = 0;
+        const auto process = tb.spawn(wait_named_event_with_timeout(
+            event, child_completions, timeout_completions));
+        const auto graph = tb.wait_graph();
+        bool found_timeout_deadline = false;
+        for (const auto& node : graph.nodes) {
+            found_timeout_deadline |=
+                node.reason == cpptb::WaitReason::Timeout &&
+                node.deadline_fs == (10_ns).femtoseconds;
+        }
+        passed &= expect("live with_timeout classifies as time progress",
+                         graph.status ==
+                             cpptb::WaitGraphStatus::WaitingForTime,
+                         1);
+        passed &= expect("live with_timeout records rescue deadline",
+                         found_timeout_deadline, 1);
+        tb.set_time(10);
+        passed &= expect("with_timeout diagnostic process completes",
+                         process.done(), 1);
+        passed &= expect("with_timeout diagnostic records timeout",
+                         timeout_completions, 1);
+        passed &= expect("timed-out Event child does not complete",
+                         child_completions, 0);
+    }
+
+    {
+        Testbench tb;
+        Results results;
+        const Signal first{nullptr, 62, "dut.first"};
+        const Signal second{nullptr, 63, "dut.second"};
+        const auto process = tb.spawn(wait_for_join(first, second, results));
+        const auto graph = tb.wait_graph();
+        bool found_join = false;
+        for (const auto& node : graph.nodes) {
+            found_join |= node.reason == cpptb::WaitReason::Join &&
+                          node.dependencies.size() == 2;
+        }
+        passed &= expect("Join graph links both child tasks", found_join, 1);
+        passed &= expect("Join edge children need simulator progress",
+                         graph.status ==
+                                 cpptb::WaitGraphStatus::WaitingForSimulator,
+                         1);
+        process.cancel();
+        passed &= expect("cancelled Join removes all graph nodes",
+                         tb.wait_graph().nodes.empty() ? 1 : 0, 1);
+    }
+
+    {
+        Testbench tb;
+        Results results;
+        const Signal signal{nullptr, 64, "dut.event_line"};
+        uint32_t falling_wakes = 0;
+        uint32_t any_wakes = 0;
+        const auto falling =
+            tb.spawn(fast_path_cancelled_falling(signal, falling_wakes));
+        const auto any = tb.spawn(fast_path_any(signal, any_wakes));
+        auto graph = tb.wait_graph();
+        bool found_falling = false;
+        bool found_any = false;
+        for (const auto& node : graph.nodes) {
+            found_falling |=
+                node.reason == cpptb::WaitReason::FallingEdge;
+            found_any |= node.reason == cpptb::WaitReason::Edge;
+        }
+        passed &= expect("falling-edge wait appears in graph", found_falling,
+                         1);
+        passed &= expect("any-edge wait appears in graph", found_any, 1);
+        tb.notify_edge(signal.id, EdgeKind::Falling);
+        passed &= expect("falling-edge diagnostic process completes",
+                         falling.done(), 1);
+        passed &= expect("any-edge diagnostic process completes", any.done(),
+                         1);
+
+        const auto first = tb.spawn(wait_for_first(signal, results));
+        graph = tb.wait_graph();
+        bool found_first = false;
+        for (const auto& node : graph.nodes) {
+            found_first |= node.reason == cpptb::WaitReason::First &&
+                           node.deadline_fs.has_value();
+        }
+        passed &= expect("First graph records compound wait and deadline",
+                         found_first, 1);
+        tb.notify_edge(signal.id, EdgeKind::Rising);
+        passed &= expect("First edge winner completes", first.done(), 1);
+        passed &= expect("First loser is absent after completion",
+                         tb.wait_graph().nodes.empty(), 1);
+    }
+
+    {
+        Testbench tb;
+        uint32_t read_write = 0;
+        uint32_t read_only = 0;
+        uint32_t next_time_step = 0;
+        const auto rw = tb.spawn(wait_for_read_write_once(read_write));
+        const auto ro = tb.spawn(wait_for_read_only_once(read_only));
+        const auto nts =
+            tb.spawn(wait_for_next_time_step_once(next_time_step));
+        const auto graph = tb.wait_graph();
+        bool found_rw = false;
+        bool found_ro = false;
+        bool found_nts = false;
+        for (const auto& node : graph.nodes) {
+            found_rw |= node.reason == cpptb::WaitReason::ReadWrite;
+            found_ro |= node.reason == cpptb::WaitReason::ReadOnly;
+            found_nts |= node.reason == cpptb::WaitReason::NextTimeStep;
+        }
+        passed &= expect("ReadWrite wait appears in graph", found_rw, 1);
+        passed &= expect("ReadOnly wait appears in graph", found_ro, 1);
+        passed &= expect("NextTimeStep wait appears in graph", found_nts, 1);
+        tb.notify_read_write();
+        tb.notify_read_only();
+        tb.notify_next_time_step();
+        passed &= expect("phase diagnostic waiters complete",
+                         rw.done() && ro.done() && nts.done(), 1);
+    }
+
+    {
+        Testbench tb;
+        Queue<uint32_t> queue{1, "bounded_results"};
+        std::vector<uint32_t> completed;
+        passed &= expect("diagnostic Queue prefill", queue.put_nowait(1), 1);
+        const auto producer =
+            tb.spawn(bounded_queue_put(queue, 2, completed));
+        const auto graph = tb.wait_graph();
+        bool found_put = false;
+        for (const auto& node : graph.nodes) {
+            found_put |= node.reason == cpptb::WaitReason::QueuePut &&
+                         node.resource.find("bounded_results") !=
+                             std::string::npos;
+        }
+        passed &= expect("blocked Queue.put appears in graph", found_put, 1);
+        passed &= expect("blocked Queue.put is internally deadlocked",
+                         graph.deadlocked(), 1);
+        static_cast<void>(queue.get_nowait());
+        passed &= expect("Queue.put completes when capacity returns",
+                         producer.done(), 1);
+    }
+
+    {
+        Testbench tb;
+        Results results;
+        const auto worker = tb.spawn(process_worker(results));
+        const auto waiter = tb.spawn(wait_for_process(worker, results));
+        const auto graph = tb.wait_graph();
+        bool found_process_wait = false;
+        for (const auto& node : graph.nodes) {
+            found_process_wait |= node.reason == cpptb::WaitReason::Process;
+        }
+        passed &= expect("Process await appears in graph", found_process_wait,
+                         1);
+        passed &= expect("Process await follows target timer",
+                         graph.status ==
+                                 cpptb::WaitGraphStatus::WaitingForTime,
+                         1);
+        tb.set_time(3);
+        passed &= expect("Process diagnostic target completes", worker.done(),
+                         1);
+        passed &= expect("Process diagnostic waiter completes", waiter.done(),
+                         1);
     }
 
     passed &= expect_abort("invalid Process await abort",

@@ -31,7 +31,7 @@ A completed test records both seed and algorithm:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "test_name": "packet_sequence",
   "random_seed": 4660,
   "random_algorithm": "xoshiro256ss-v1",

@@ -99,6 +99,10 @@ struct UnexpectedPassDut {};
 struct TimeoutDut {
     bool* completed;
 };
+struct DeadlockDut {};
+struct WaitGraphDut {
+    cpptb::coro::Event* release;
+};
 struct ParameterizedDut {
     uint32_t* observed;
 };
@@ -343,6 +347,22 @@ cpptb::coro::Task<void> timeout_test(TimeoutDut dut,
                                      cpptb::TestContext&) {
     co_await cpptb::coro::Delay{cpptb::coro::operator""_ns(10)};
     *dut.completed = true;
+}
+
+cpptb::coro::Task<void> deadlock_timeout_test(DeadlockDut,
+                                              cpptb::TestContext&) {
+    cpptb::coro::Event response{"response_ready"};
+    co_await response.wait();
+}
+
+cpptb::coro::Task<void> wait_graph_child(cpptb::coro::Event& release) {
+    co_await release.wait();
+}
+
+cpptb::coro::Task<void> wait_graph_process_test(
+    WaitGraphDut dut, cpptb::TestContext& test) {
+    test.spawn_detached(wait_graph_child(*dut.release));
+    co_await dut.release->wait();
 }
 
 cpptb::coro::Task<void> parameterized_test(
@@ -771,7 +791,7 @@ int main() {
     }
     passed &= expect("result JSON readable", !json_text.empty(), true);
     passed &= expect("result JSON schema",
-                     json_text.find("\"schema_version\":4") !=
+                     json_text.find("\"schema_version\":5") !=
                          std::string::npos,
                      true);
     passed &= expect("result JSON status",
@@ -1521,6 +1541,101 @@ int main() {
                      timeout_result.failure_records[0].kind ==
                          cpptb::FailureKind::Timeout,
                      true);
+    passed &= expect("timeout preserves wait graph",
+                     timeout_result.wait_graph.has_value(), true);
+    passed &= expect(
+        "timer-backed timeout is not mislabeled as deadlock",
+        timeout_result.wait_graph->status ==
+            cpptb::WaitGraphStatus::WaitingForTime,
+        true);
+
+    const auto deadlock_timeout = cpptb::register_test(
+        "deadlock_timeout_test", deadlock_timeout_test,
+        cpptb::TestOptions{
+            .simulation_timeout = cpptb::coro::operator""_ns(2),
+        });
+    cpptb::coro::Testbench deadlock_scheduler;
+    cpptb::TestResult deadlock_result;
+    passed &= cpptb::run_registered_test(deadlock_scheduler, DeadlockDut{},
+                                         deadlock_result);
+    deadlock_scheduler.set_time(2);
+    passed &= expect("deadlock timeout status",
+                     deadlock_result.status == cpptb::TestStatus::TimedOut,
+                     true);
+    passed &= expect("deadlock timeout has structured graph",
+                     deadlock_result.wait_graph.has_value(), true);
+    passed &= expect("deadlock timeout classification",
+                     deadlock_result.wait_graph->deadlocked(), true);
+    passed &= expect(
+        "deadlock timeout reason is explicit",
+        deadlock_result.status_reason.find("deadlock detected") !=
+            std::string::npos,
+        true);
+    bool found_deadlocked_event = false;
+    for (const auto& node : deadlock_result.wait_graph->nodes) {
+        found_deadlocked_event |=
+            node.reason == cpptb::WaitReason::Event &&
+            node.resource.find("response_ready") != std::string::npos &&
+            node.wait_source_line != 0 && node.process_id != 0;
+    }
+    passed &= expect("deadlock Event includes resource and provenance",
+                     found_deadlocked_event, true);
+
+    const char* deadlock_json_path = "/tmp/cpptb-deadlock-result.json";
+    passed &= expect("deadlock JSON written",
+                     cpptb::write_test_result_json(deadlock_json_path,
+                                                   deadlock_result),
+                     true);
+    FILE* deadlock_json_file = std::fopen(deadlock_json_path, "r");
+    std::string deadlock_json;
+    if (deadlock_json_file) {
+        char buffer[512];
+        while (const size_t bytes = std::fread(
+                   buffer, 1, sizeof(buffer), deadlock_json_file)) {
+            deadlock_json.append(buffer, bytes);
+        }
+        std::fclose(deadlock_json_file);
+    }
+    passed &= expect(
+        "deadlock JSON contains graph and dependencies",
+        deadlock_json.find("\"wait_graph\":{") != std::string::npos &&
+            deadlock_json.find("\"status\":\"deadlocked\"") !=
+                std::string::npos &&
+            deadlock_json.find("\"reason\":\"Event\"") !=
+                std::string::npos &&
+            deadlock_json.find("\"dependencies\":[") !=
+                std::string::npos,
+        true);
+    std::remove(deadlock_json_path);
+
+    cpptb::coro::Event graph_release{"graph_release"};
+    const auto wait_graph_registration = cpptb::register_test(
+        "wait_graph_process_test", wait_graph_process_test);
+    cpptb::coro::Testbench wait_graph_scheduler;
+    cpptb::TestResult wait_graph_result;
+    passed &= cpptb::run_registered_test(
+        wait_graph_scheduler, WaitGraphDut{&graph_release}, wait_graph_result);
+    const auto process_graph = wait_graph_scheduler.wait_graph();
+    bool found_root_process = false;
+    bool found_child_process = false;
+    for (const auto& node : process_graph.nodes) {
+        found_root_process |= node.process_id == 1 &&
+                              node.parent_process_id == 0;
+        found_child_process |= node.process_id == 2 &&
+                               node.parent_process_id == 1 &&
+                               node.process == "spawned process" &&
+                               node.process_source_line != 0;
+    }
+    passed &= expect("wait graph includes root process provenance",
+                     found_root_process, true);
+    passed &= expect("wait graph includes spawned parentage",
+                     found_child_process, true);
+    graph_release.set();
+    passed &= expect("wait graph process test passes after release",
+                     wait_graph_result.status == cpptb::TestStatus::Passed,
+                     true);
+    passed &= expect("finished test has empty live wait graph",
+                     wait_graph_scheduler.wait_graph().nodes.empty(), true);
 
     const auto small_case = cpptb::register_test_case(
         "parameterized_test", "small", parameterized_test,

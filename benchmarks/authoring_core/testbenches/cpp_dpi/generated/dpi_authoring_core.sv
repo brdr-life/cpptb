@@ -132,6 +132,7 @@ module dpi_authoring_core;
   import "DPI-C" function int unsigned authoring_core_dpi_edge_interest(
       input int unsigned signal_id
   );
+  import "DPI-C" function int authoring_core_dpi_report_starvation();
 
   logic clk;
   logic rst_n;
@@ -723,6 +724,13 @@ module dpi_authoring_core;
       $fatal(1, "authoring_core_dut DPI testbench failed");
     end
     $finish;
+  end
+
+  final begin
+    if ((status == 0) &&
+        (authoring_core_dpi_report_starvation() != 0)) begin
+      $fatal(1, "authoring_core_dut scheduler starvation");
+    end
   end
 
   authoring_core_dut i_dut (

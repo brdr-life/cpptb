@@ -59,7 +59,13 @@ Task<void> timer_only_test(Dut dut, TestContext& test) {
                    (0x2000u + last * 29u) + 0x0102'0304u);
 }
 
+Task<void> timer_only_deadlock(Dut, TestContext&) {
+    Event response_ready{"timer_only.response_ready"};
+    co_await response_ready.wait();
+}
+
 CPPTB_REGISTER_TEST(timer_only_test);
+CPPTB_REGISTER_TEST(timer_only_deadlock);
 
 }  // namespace
 }  // namespace cpptb::examples::dpi_timer_only

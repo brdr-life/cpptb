@@ -327,3 +327,99 @@ clock at all.
 Waiters sharing an edge or deadline resume in registration order. Equal-time
 events from different simulator processes retain simulator process ordering;
 testbenches should not infer hardware priority from that ordering.
+
+## Wait graphs and deadlock diagnostics
+
+`TestContext::wait_graph()` returns an allocation-owning snapshot of every
+active coroutine in the current test. `Testbench::wait_graph()` provides the
+same scheduler-level view for custom harnesses. Snapshotting is read-only and
+does not resume, cancel, or otherwise alter a process.
+
+Give synchronization resources short names when their role is not obvious
+from the declaration:
+
+```cpp
+Event reset_done{"reset_done"};
+Queue<uint32_t> observed_words{16, "observed_words"};
+Semaphore credits{0, "response_credits"};
+Lock bus_lock{"bus_lock"};
+
+auto monitor = test.spawn(response_monitor(dut, observed_words));
+auto graph = test.wait_graph();
+
+for (const auto& node : graph.nodes) {
+    test.logger("diagnostics").debug([&] {
+        return "process " + std::to_string(node.process_id) +
+               " waits on " + std::string(wait_reason_name(node.reason));
+    });
+}
+```
+
+Use `co_await reset_done.wait()` when the exact wait call site matters. Direct
+`co_await reset_done` still reports the named event and its declaration, but it
+cannot capture the operator call site. Blocked queue operations currently
+report the queue declaration; the `get()` and `put(value)` signatures remain
+endpoint-compatible with verification components.
+
+The snapshot contains stable coroutine IDs, logical process IDs and parent
+process IDs, spawn provenance, outstanding trigger or synchronization reason,
+resource name, wait start time, optional deadline, and child dependencies.
+`format_wait_graph(graph)` produces deterministic line-oriented text suitable
+for a terminal or CI artifact:
+
+```text
+cpptb wait graph at 2000000 fs: deadlocked (3 active coroutines)
+  [1] root process #1 spawned at testbench.cpp:42
+      waiting on task since 0 fs
+      depends on [2]
+  [2] root process #1 child-of [1] spawned at testbench.cpp:42
+      waiting on task since 0 fs
+      depends on [3]
+  [3] root process #1 child-of [2] spawned at testbench.cpp:42
+      waiting on Event (Event response_ready) since 0 fs at testbench.cpp:45
+```
+
+`WaitGraphSnapshot::status` explains what can make progress:
+
+| Status | Meaning |
+|---|---|
+| `Complete` | No active coroutine remains |
+| `Runnable` | At least one leaf coroutine is running or ready |
+| `WaitingForTime` | A live delay or timeout can wake the scheduler |
+| `WaitingForSimulator` | A signal edge or simulator phase can resume work |
+| `Deadlocked` | Active leaf coroutines remain, but all are blocked on internal synchronization |
+
+The deadlock classification is deliberately conservative. A process waiting on
+`RisingEdge`, `ReadOnly`, or a future `Delay` is not called deadlocked merely
+because it has not resumed yet. An `Event`, empty `Queue`, exhausted
+`Semaphore`, or held `Lock` is classified as deadlocked only when no runnable,
+timed, or simulator-driven leaf can release it.
+
+Registered-test simulation timeouts automatically capture the graph before
+the timed task is cancelled. A deadlocked timeout says so in `status_reason`,
+prints the graph, and stores the structured snapshot in the result JSON. The
+global generated-wrapper watchdog and end-of-simulation starvation hook use
+the same formatter. This ordering is important: taking the snapshot after
+cancellation would erase the wait that caused the timeout.
+
+```cpp
+CPPTB_REGISTER_TEST(
+    response_test,
+    TestOptions{.simulation_timeout = 2_us});
+```
+
+The full integration regression is the `wait_graph_deadlock` negative case in
+`tests/conformance/runtime/testbench.cpp`. It parks on a named event, lets the
+real simulator watchdog expire, and requires the emitted report to identify
+`Event response_ready`.
+
+The clockless `timer_only_deadlock` example in
+`examples/timer_only/testbench.cpp` exercises the separate no-future-event
+path through the generated wrapper's SystemVerilog `final` hook. Its matching
+pure-SystemVerilog negative test waits on the same logical event.
+
+Projects with a handwritten transport that use
+`CPPTB_DEFINE_NAMED_DPI_RUNTIME` keep the legacy six-argument API. After
+regenerating wrappers with starvation reporting, migrate that transport to
+`CPPTB_DEFINE_NAMED_DPI_RUNTIME_WITH_STARVATION` and pass the generated
+`*_report_starvation` function name as its final argument.

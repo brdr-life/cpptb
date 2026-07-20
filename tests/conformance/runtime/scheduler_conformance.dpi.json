@@ -253,6 +253,11 @@
         "iterations": 15,
         "case": "readonly_phase_transition",
         "message": "cannot await ReadWrite after ReadOnly in the same timestep"
+      },
+      {
+        "iterations": 16,
+        "case": "wait_graph_deadlock",
+        "message": "Event response_ready"
       }
     ]
   }

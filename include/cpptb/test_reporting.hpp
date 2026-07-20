@@ -72,7 +72,7 @@ inline bool write_test_result_json(const char* path,
     FILE* stream = std::fopen(path, "w");
     if (!stream) return false;
 
-    std::fputs("{\n  \"schema_version\":4,\n  ", stream);
+    std::fputs("{\n  \"schema_version\":5,\n  ", stream);
     detail::write_json_field(stream, "test_name", result.test_name);
     std::fputs(",\n  ", stream);
     detail::write_json_field(stream, "case_name", result.case_name);
@@ -165,7 +165,66 @@ inline bool write_test_result_json(const char* path,
                      warning.process_source_line);
     }
     if (!result.warning_records.empty()) std::fputc('\n', stream);
-    std::fputs("  ]\n}\n", stream);
+    std::fputs("  ],\n  \"wait_graph\":", stream);
+    if (!result.wait_graph) {
+        std::fputs("null", stream);
+    } else {
+        const auto& graph = *result.wait_graph;
+        std::fputs("{", stream);
+        detail::write_json_field(stream, "status",
+                                 wait_graph_status_name(graph.status));
+        std::fprintf(stream, ",\"simulation_time_fs\":%llu,\"nodes\":[",
+                     static_cast<unsigned long long>(
+                         graph.simulation_time_fs));
+        for (size_t index = 0; index < graph.nodes.size(); ++index) {
+            const auto& node = graph.nodes[index];
+            std::fputs(index == 0 ? "{" : ",{", stream);
+            std::fprintf(stream,
+                         "\"id\":%llu,\"parent_id\":%llu,"
+                         "\"process_id\":%llu,\"parent_process_id\":%llu,",
+                         static_cast<unsigned long long>(node.id),
+                         static_cast<unsigned long long>(node.parent_id),
+                         static_cast<unsigned long long>(node.process_id),
+                         static_cast<unsigned long long>(
+                             node.parent_process_id));
+            detail::write_json_field(stream, "process", node.process);
+            std::fputs(",", stream);
+            detail::write_json_field(stream, "process_source_file",
+                                     node.process_source_file);
+            std::fprintf(stream, ",\"process_source_line\":%u,",
+                         node.process_source_line);
+            detail::write_json_field(stream, "reason",
+                                     wait_reason_name(node.reason));
+            std::fputs(",", stream);
+            detail::write_json_field(stream, "resource", node.resource);
+            std::fputs(",", stream);
+            detail::write_json_field(stream, "wait_source_file",
+                                     node.wait_source_file);
+            std::fprintf(stream,
+                         ",\"wait_source_line\":%u,"
+                         "\"wait_started_fs\":%llu,\"deadline_fs\":",
+                         node.wait_source_line,
+                         static_cast<unsigned long long>(node.wait_started_fs));
+            if (node.deadline_fs) {
+                std::fprintf(stream, "%llu",
+                             static_cast<unsigned long long>(*node.deadline_fs));
+            } else {
+                std::fputs("null", stream);
+            }
+            std::fputs(",\"dependencies\":[", stream);
+            for (size_t dependency = 0;
+                 dependency < node.dependencies.size(); ++dependency) {
+                std::fprintf(stream, "%s%llu", dependency == 0 ? "" : ",",
+                             static_cast<unsigned long long>(
+                                 node.dependencies[dependency]));
+            }
+            std::fprintf(stream, "],\"ready\":%s,\"running\":%s}",
+                         node.ready ? "true" : "false",
+                         node.running ? "true" : "false");
+        }
+        std::fputs("]}", stream);
+    }
+    std::fputs("\n}\n", stream);
     const bool success = std::fclose(stream) == 0;
     return success;
 }
