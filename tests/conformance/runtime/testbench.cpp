@@ -1645,6 +1645,11 @@ Task<void> queue_active_waiter_violation(ConformanceTb tb) {
     co_await Delay{1_ps};
 }
 
+Task<void> wait_graph_deadlock_violation(ConformanceTb) {
+    Event response_ready{"response_ready"};
+    co_await response_ready.wait();
+}
+
 Task<void> subprecision_delay_violation(ConformanceTb) {
     co_await Delay{1_fs};
 }
@@ -1833,6 +1838,10 @@ void register_user_testbench(ConformanceTb& tb) {
         }
         if (selected == "readonly_phase_transition") {
             tb.sequence(readonly_phase_transition_violation);
+            return;
+        }
+        if (selected == "wait_graph_deadlock") {
+            tb.sequence(wait_graph_deadlock_violation);
             return;
         }
     }

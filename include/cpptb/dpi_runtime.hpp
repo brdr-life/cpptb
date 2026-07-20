@@ -358,6 +358,7 @@ class Runtime {
                          Adapter::result_name,
                          static_cast<unsigned long long>(sim_time),
                          static_cast<unsigned long long>(sim_cycles_));
+            report_timeout_diagnostics("simulator watchdog expired");
             return -1;
         }
 
@@ -428,6 +429,13 @@ class Runtime {
     uint8_t edge_interest(uint32_t signal_id) const {
         return scheduler_ ? scheduler_->edge_interest(signal_id)
                           : coro::kEdgeInterestNone;
+    }
+
+    int report_starvation() {
+        if (!scheduler_ || reported_ || scheduler_->done()) return 0;
+        report_timeout_diagnostics(
+            "simulation ended with active scheduler processes");
+        return -1;
     }
 
     uint32_t pending_phase_mask() const {
@@ -1250,6 +1258,43 @@ class Runtime {
         return result_.failures == 0;
     }
 
+    void report_timeout_diagnostics(std::string_view reason) {
+        if (reported_ || !scheduler_) return;
+        const auto graph = scheduler_->wait_graph();
+        std::fprintf(stderr, "cpptb: %.*s%s\n",
+                     static_cast<int>(reason.size()), reason.data(),
+                     graph.deadlocked() ? "; scheduler deadlock detected" : "");
+        const auto formatted = format_wait_graph(graph);
+        std::fprintf(stderr, "%s\n", formatted.c_str());
+
+        if constexpr (std::is_base_of_v<TestResult, Result>) {
+            result_.wait_graph = graph;
+            result_.status_reason.assign(reason);
+            if (graph.deadlocked()) {
+                result_.status_reason.append("; scheduler deadlock detected");
+            }
+            result_.failure_records.push_back(FailureRecord{
+                .kind = FailureKind::Timeout,
+                .label = result_.status_reason,
+                .simulation_time_fs = scheduler_->now().femtoseconds,
+            });
+            ++result_.failures;
+            result_.status = TestStatus::TimedOut;
+            result_.simulation_time_fs = scheduler_->now().femtoseconds;
+            result_.finished = true;
+            if (const char* path = std::getenv("CPPTB_RESULT_FILE");
+                path && path[0] != '\0' &&
+                !write_test_result_json(path, result_)) {
+                std::fprintf(stderr,
+                             "cpptb: cannot write test result JSON to %s\n",
+                             path);
+                ++result_.failures;
+                result_.status = TestStatus::Error;
+            }
+        }
+        reported_ = true;
+    }
+
     int report_if_done() {
         if (!scheduler_->done()) return 0;
         if (reported_) return result_succeeded() ? 1 : -1;
@@ -1437,7 +1482,7 @@ class Runtime {
 #define CPPTB_DEFINE_VERILATOR_DIRECT_TIMING_API()
 #endif
 
-#define CPPTB_DEFINE_NAMED_DPI_RUNTIME(                                   \
+#define CPPTB_DEFINE_NAMED_DPI_RUNTIME_BASE(                              \
     AdapterType, InitFunction, StepFunction, PullOutputsFunction,          \
     NextDeadlineFunction, EdgeInterestFunction)                            \
     namespace {                                                           \
@@ -1467,12 +1512,28 @@ class Runtime {
     }                                                                     \
     CPPTB_DEFINE_VERILATOR_DIRECT_TIMING_API()
 
+#define CPPTB_DEFINE_NAMED_DPI_RUNTIME_WITH_STARVATION(                   \
+    AdapterType, InitFunction, StepFunction, PullOutputsFunction,          \
+    NextDeadlineFunction, EdgeInterestFunction, StarvationFunction)        \
+    CPPTB_DEFINE_NAMED_DPI_RUNTIME_BASE(                                  \
+        AdapterType, InitFunction, StepFunction, PullOutputsFunction,      \
+        NextDeadlineFunction, EdgeInterestFunction)                        \
+    extern "C" int StarvationFunction() {                               \
+        return g_cpptb_dpi_runtime.report_starvation();                   \
+    }
+
+#define CPPTB_DEFINE_NAMED_DPI_RUNTIME(                                   \
+    AdapterType, InitFunction, StepFunction, PullOutputsFunction,          \
+    NextDeadlineFunction, EdgeInterestFunction)                            \
+    CPPTB_DEFINE_NAMED_DPI_RUNTIME_BASE(                                   \
+        AdapterType, InitFunction, StepFunction, PullOutputsFunction,      \
+        NextDeadlineFunction, EdgeInterestFunction)
+
 #define CPPTB_DEFINE_DPI_RUNTIME(AdapterType)                              \
-    CPPTB_DEFINE_NAMED_DPI_RUNTIME(AdapterType, cpptb_dpi_init,            \
-                                   cpptb_dpi_step,                         \
-                                   cpptb_dpi_pull_outputs,                 \
-                                   cpptb_dpi_next_timer_deadline,          \
-                                   cpptb_dpi_edge_interest)
+    CPPTB_DEFINE_NAMED_DPI_RUNTIME_WITH_STARVATION(                        \
+        AdapterType, cpptb_dpi_init, cpptb_dpi_step,                      \
+        cpptb_dpi_pull_outputs, cpptb_dpi_next_timer_deadline,            \
+        cpptb_dpi_edge_interest, cpptb_dpi_report_starvation)
 
 #define CPPTB_DEFINE_NAMED_DPI_CLOCK_API(ClockConfigFunction)             \
     extern "C" unsigned long long ClockConfigFunction(                  \

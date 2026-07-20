@@ -45,9 +45,11 @@ struct DpiAdapter {
 
 }  // namespace cpptb::benchmarks::heavy
 
-CPPTB_DEFINE_NAMED_DPI_RUNTIME(cpptb::benchmarks::heavy::DpiAdapter,
+CPPTB_DEFINE_NAMED_DPI_RUNTIME_WITH_STARVATION(
+                               cpptb::benchmarks::heavy::DpiAdapter,
                                heavy_dpi_init, heavy_dpi_step,
                                heavy_dpi_pull_outputs,
                                heavy_dpi_next_timer_deadline,
-                               heavy_dpi_edge_interest)
+                               heavy_dpi_edge_interest,
+                               heavy_dpi_report_starvation)
 CPPTB_DEFINE_NAMED_DPI_CLOCK_API(heavy_dpi_clock_config)

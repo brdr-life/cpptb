@@ -255,13 +255,13 @@ formatting, and embedding callbacks.
 
 ## Structured results
 
-Each test result uses schema version 4 and records lifecycle metadata, its
+Each test result uses schema version 5 and records lifecycle metadata, its
 terminal status, check counts, simulation and wall time, and structured
 failure and warning records:
 
 ```json
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "test_name": "reset_defaults",
   "case_name": "",
   "status": "passed",
@@ -279,7 +279,8 @@ failure and warning records:
   "simulation_time_fs": 5001000,
   "wall_time_ns": 8000,
   "failure_records": [],
-  "warning_records": []
+  "warning_records": [],
+  "wait_graph": null
 }
 ```
 
@@ -287,7 +288,8 @@ Failure records distinguish expectations, requirements, exceptions, timeouts,
 unexpected passes, and test selection errors. Failure and warning records
 include the source location, simulation time, stable process ID, process spawn
 location, and formatted comparison values when applicable. Schema versions 1
-through 3 remain readable by the reference runner. The runner writes a JSON
+through 4 remain readable by the reference runner. A timed-out result may
+carry a structured `wait_graph`; passing results use `null`. The runner writes a JSON
 result and combined simulator log for every test, prints a compact summary, and returns
 nonzero when any test fails or encounters an infrastructure error.
 

@@ -16,6 +16,7 @@
 #include <optional>
 #include <queue>
 #include <source_location>
+#include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
@@ -26,6 +27,7 @@
 #endif
 
 #include "cpptb/packed_bits.hpp"
+#include "cpptb/wait_graph.hpp"
 #include "vpi_user.h"
 
 #define CPPTB_CORO_PACKED_SIGNAL_API 1
@@ -411,14 +413,32 @@ inline Signal make_vpi_signal(vpiHandle handle, uint32_t id,
 
 struct RisingEdge {
     Signal signal;
+    std::source_location location;
+
+    explicit RisingEdge(
+        Signal value,
+        std::source_location source = std::source_location::current())
+        : signal(value), location(source) {}
 };
 
 struct FallingEdge {
     Signal signal;
+    std::source_location location;
+
+    explicit FallingEdge(
+        Signal value,
+        std::source_location source = std::source_location::current())
+        : signal(value), location(source) {}
 };
 
 struct Edge {
     Signal signal;
+    std::source_location location;
+
+    explicit Edge(
+        Signal value,
+        std::source_location source = std::source_location::current())
+        : signal(value), location(source) {}
 };
 
 struct SimTime {
@@ -478,13 +498,45 @@ constexpr SimTime operator""_ms(unsigned long long value) {
 
 struct Delay {
     SimTime duration;
+    std::source_location location;
 
-    explicit constexpr Delay(SimTime value) : duration(value) {}
+    explicit constexpr Delay(
+        SimTime value,
+        std::source_location source = std::source_location::current())
+        : duration(value), location(source) {}
 };
 
-struct ReadWrite {};
-struct ReadOnly {};
-struct NextTimeStep {};
+struct ReadWrite {
+    std::source_location location;
+
+    explicit ReadWrite(
+        std::source_location source = std::source_location::current())
+        : location(source) {}
+};
+
+struct ReadOnly {
+    std::source_location location;
+
+    explicit ReadOnly(
+        std::source_location source = std::source_location::current())
+        : location(source) {}
+};
+
+struct NextTimeStep {
+    std::source_location location;
+
+    explicit NextTimeStep(
+        std::source_location source = std::source_location::current())
+        : location(source) {}
+};
+
+struct WaitDiagnostic {
+    WaitReason reason = WaitReason::None;
+    std::string_view resource;
+    std::string_view resource_type;
+    std::source_location location;
+    std::source_location resource_declaration;
+};
 
 template <typename... Triggers>
 struct First {
@@ -544,6 +596,37 @@ inline WaitRequest wait_request(ReadOnly) {
 
 inline WaitRequest wait_request(NextTimeStep) {
     return WaitRequest::phase(WaitKind::NextTimeStep);
+}
+
+inline WaitDiagnostic wait_diagnostic(RisingEdge trigger) {
+    return {WaitReason::RisingEdge, trigger.signal.name, "signal",
+            trigger.location, {}};
+}
+
+inline WaitDiagnostic wait_diagnostic(FallingEdge trigger) {
+    return {WaitReason::FallingEdge, trigger.signal.name, "signal",
+            trigger.location, {}};
+}
+
+inline WaitDiagnostic wait_diagnostic(Edge trigger) {
+    return {WaitReason::Edge, trigger.signal.name, "signal", trigger.location,
+            {}};
+}
+
+inline WaitDiagnostic wait_diagnostic(Delay trigger) {
+    return {WaitReason::Delay, {}, {}, trigger.location, {}};
+}
+
+inline WaitDiagnostic wait_diagnostic(ReadWrite trigger) {
+    return {WaitReason::ReadWrite, {}, {}, trigger.location, {}};
+}
+
+inline WaitDiagnostic wait_diagnostic(ReadOnly trigger) {
+    return {WaitReason::ReadOnly, {}, {}, trigger.location, {}};
+}
+
+inline WaitDiagnostic wait_diagnostic(NextTimeStep trigger) {
+    return {WaitReason::NextTimeStep, {}, {}, trigger.location, {}};
 }
 
 class Scheduler;
@@ -877,6 +960,15 @@ struct CoroutineState {
     uint32_t done : 1 = 0;
 };
 
+struct CoroutineDiagnosticState {
+    WaitDiagnostic wait;
+    uint64_t id = 0;
+    uint64_t wait_started = 0;
+    uint64_t wait_deadline = std::numeric_limits<uint64_t>::max();
+    uint8_t wait_progress = 0;
+    bool has_wait = false;
+};
+
 struct SchedulerLifetime {};
 
 struct ExternalWaitRegistration {
@@ -948,6 +1040,7 @@ struct ProcessExecutionContext {
 
     void* owner = nullptr;
     uint64_t id = 0;
+    uint64_t parent_id = 0;
     const char* description = "";
     std::source_location declaration;
     CleanupFn cleanup = nullptr;
@@ -1284,6 +1377,12 @@ class Scheduler {
         states_[state_index] = CoroutineState{};
         states_[state_index].handle = handle;
         states_[state_index].promise = &promise;
+        if (state_index >= diagnostic_states_.size()) {
+            diagnostic_states_.resize(state_index + 1);
+        }
+        diagnostic_states_[state_index] = CoroutineDiagnosticState{
+            .id = ++next_coroutine_id_,
+        };
         if (state_index >= edge_wait_indices_by_state_.size()) {
             edge_wait_indices_by_state_.resize(state_index + 1);
         }
@@ -1306,18 +1405,19 @@ class Scheduler {
     }
 
     void park(std::coroutine_handle<> handle, TaskPromiseBase& promise,
-              WaitRequest request,
+              WaitRequest request, const WaitDiagnostic& diagnostic,
               size_t* winner = nullptr, size_t winner_index = 0) {
         auto& state = state_for(handle, promise);
-        const uint64_t generation = begin_wait(state);
+        const uint64_t generation = begin_wait(state, diagnostic);
         register_wait(request, WaitRegistration{promise.state_index,
                                                 generation, winner, winner_index});
     }
 
     void park_edge(std::coroutine_handle<> handle, TaskPromiseBase& promise,
-                   uint32_t signal_id, EdgeKind edge) {
+                   uint32_t signal_id, EdgeKind edge,
+                   const WaitDiagnostic& diagnostic) {
         auto& state = state_for(handle, promise);
-        const uint64_t generation = begin_wait(state);
+        const uint64_t generation = begin_wait(state, diagnostic);
 #ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
         ++single_edge_park_counts_[static_cast<size_t>(edge)];
 #endif
@@ -1329,9 +1429,9 @@ class Scheduler {
     template <size_t TriggerCount>
     void park_first(std::coroutine_handle<> handle, TaskPromiseBase& promise,
                     const std::array<WaitRequest, TriggerCount>& requests,
-                    size_t* winner) {
+                    size_t* winner, const WaitDiagnostic& diagnostic) {
         auto& state = state_for(handle, promise);
-        const uint64_t generation = begin_wait(state);
+        const uint64_t generation = begin_wait(state, diagnostic);
 #ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
         ++compound_wait_parks_;
 #endif
@@ -1346,10 +1446,11 @@ class Scheduler {
     template <size_t ChildCount>
     std::shared_ptr<JoinState> start_join(
         std::coroutine_handle<> parent, TaskPromiseBase& parent_promise,
-        std::array<Task<void>, ChildCount>&& children) {
+        std::array<Task<void>, ChildCount>&& children,
+        const WaitDiagnostic& diagnostic) {
         static_assert(ChildCount >= 2, "Join requires at least two tasks");
         auto& parent_state = state_for(parent, parent_promise);
-        begin_wait(parent_state);
+        begin_wait(parent_state, diagnostic);
 
         auto join_state = std::make_shared<JoinState>();
         join_state->remaining = ChildCount;
@@ -1374,10 +1475,10 @@ class Scheduler {
     void start_timeout(std::coroutine_handle<> parent,
                        TaskPromiseBase& parent_promise,
                        std::coroutine_handle<TaskPromise<T>> child,
-                       SimTime timeout) {
+                       SimTime timeout, const WaitDiagnostic& diagnostic) {
         validate_delay(timeout);
         auto& parent_state = state_for(parent, parent_promise);
-        const uint64_t generation = begin_wait(parent_state);
+        const uint64_t generation = begin_wait(parent_state, diagnostic);
 
         auto join_state = std::make_shared<JoinState>();
         join_state->remaining = 1;
@@ -1397,7 +1498,8 @@ class Scheduler {
     }
 
     bool park_process(std::coroutine_handle<> handle, TaskPromiseBase& promise,
-                      ProcessControl* control) {
+                      ProcessControl* control,
+                      const WaitDiagnostic& diagnostic) {
         if (!control || control->scheduler != this) {
             std::fprintf(stderr, "cpptb: cannot await an invalid process\n");
             std::abort();
@@ -1405,7 +1507,7 @@ class Scheduler {
         if (control->done) return false;
 
         auto& state = state_for(handle, promise);
-        const uint64_t generation = begin_wait(state);
+        const uint64_t generation = begin_wait(state, diagnostic);
         const WaitRegistration registration{promise.state_index, generation,
                                             nullptr, 0};
         const bool used_inline_waiter = !control->has_completion_waiter;
@@ -1460,11 +1562,14 @@ class Scheduler {
             std::max(max_inline_process_depth_, inline_process_depth_ + 1);
 #endif
         void* previous_context = current_execution_context_;
+        const size_t previous_state = current_state_index_;
         current_execution_context_ = target.promise->execution_context;
+        current_state_index_ = control->state_index;
         ++inline_process_depth_;
         target.handle.resume();
         --inline_process_depth_;
         current_execution_context_ = previous_context;
+        current_state_index_ = previous_state;
         if (control->done && finished_root_states_.size() == 1 &&
             finished_root_states_.back() == control->state_index) {
             const size_t finished_index = finished_root_states_.back();
@@ -1574,10 +1679,11 @@ class Scheduler {
         make_ready(join_state->parent_index);
     }
 
-    ExternalWaitRegistration park_external(std::coroutine_handle<> handle,
-                                           TaskPromiseBase& promise) {
+    ExternalWaitRegistration park_external(
+        std::coroutine_handle<> handle, TaskPromiseBase& promise,
+        const WaitDiagnostic& diagnostic) {
         auto& state = state_for(handle, promise);
-        const uint64_t generation = begin_wait(state);
+        const uint64_t generation = begin_wait(state, diagnostic);
         return {this, lifetime_,
                 WaitRegistration{promise.state_index, generation, nullptr, 0}};
     }
@@ -1817,6 +1923,164 @@ class Scheduler {
 
     bool all_done() const { return active_coroutines_ == 0; }
 
+    WaitGraphSnapshot wait_graph(void* execution_owner = nullptr) const {
+        WaitGraphSnapshot graph;
+        graph.simulation_time_fs = now_time().femtoseconds;
+
+        const auto owned_context = [&](void* context)
+            -> const ProcessExecutionContext* {
+            if (!context) return nullptr;
+            for (const auto* control : process_controls_) {
+                if (!control || !control->owns_execution_context) continue;
+                const auto* candidate =
+                    &static_cast<const OwnedProcessControl*>(control)
+                         ->execution_context;
+                if (candidate == context) return candidate;
+            }
+            return nullptr;
+        };
+        const auto included = [&](size_t state_index) {
+            if (state_index >= states_.size()) return false;
+            const auto& state = states_[state_index];
+            if (!state.handle || state.done) return false;
+            if (!execution_owner) return true;
+            const auto* context =
+                owned_context(state.promise->execution_context);
+            return context && context->owner == execution_owner;
+        };
+        const auto parent_index = [&](size_t child_index) {
+            const auto& child = states_[child_index];
+            if (child.promise->join_state) {
+                const size_t parent = child.promise->join_state->parent_index;
+                if (included(parent)) return parent;
+            }
+            const auto continuation = child.promise->continuation;
+            if (continuation) {
+                for (size_t candidate = 0; candidate < states_.size();
+                     ++candidate) {
+                    if (!included(candidate)) continue;
+                    if (states_[candidate].handle.address() ==
+                        continuation.address()) {
+                        return candidate;
+                    }
+                }
+            }
+            return std::numeric_limits<size_t>::max();
+        };
+        const auto ticks_to_fs = [&](uint64_t ticks) {
+            const uint64_t max_time = std::numeric_limits<uint64_t>::max();
+            return ticks > max_time / femtoseconds_per_tick_
+                       ? max_time
+                       : ticks * femtoseconds_per_tick_;
+        };
+
+        std::vector<size_t> state_indices;
+        state_indices.reserve(states_.size());
+        for (size_t state_index = 0; state_index < states_.size();
+             ++state_index) {
+            if (!included(state_index)) continue;
+            state_indices.push_back(state_index);
+            const auto& state = states_[state_index];
+            const auto& diagnostic_state = diagnostic_states_[state_index];
+            WaitGraphNode node;
+            node.id = diagnostic_state.id;
+            node.ready = state.ready;
+            node.running = state_index == current_state_index_;
+            node.wait_started_fs =
+                ticks_to_fs(diagnostic_state.wait_started);
+
+            if (const auto* context =
+                    owned_context(state.promise->execution_context)) {
+                node.process_id = context->id;
+                node.parent_process_id = context->parent_id;
+                node.process = context->description;
+                node.process_source_file = context->declaration.file_name();
+                node.process_source_line = context->declaration.line();
+            }
+
+            if (diagnostic_state.has_wait) {
+                const auto& diagnostic = diagnostic_state.wait;
+                node.reason = diagnostic.reason;
+                node.wait_source_file = diagnostic.location.file_name();
+                node.wait_source_line = diagnostic.location.line();
+                if (!diagnostic.resource_type.empty()) {
+                    node.resource.assign(diagnostic.resource_type);
+                    if (!diagnostic.resource.empty()) {
+                        node.resource.push_back(' ');
+                        node.resource.append(diagnostic.resource);
+                    } else if (diagnostic.resource_declaration.line() != 0) {
+                        node.resource.append(" declared at ");
+                        node.resource.append(
+                            diagnostic.resource_declaration.file_name());
+                        node.resource.push_back(':');
+                        node.resource.append(std::to_string(
+                            diagnostic.resource_declaration.line()));
+                    }
+                } else {
+                    node.resource.assign(diagnostic.resource);
+                }
+            }
+            if (diagnostic_state.wait_deadline !=
+                std::numeric_limits<uint64_t>::max()) {
+                node.deadline_fs =
+                    ticks_to_fs(diagnostic_state.wait_deadline);
+            }
+            graph.nodes.push_back(std::move(node));
+        }
+
+        bool runnable = false;
+        bool time_progress = false;
+        bool simulator_progress = false;
+        for (size_t node_index = 0; node_index < state_indices.size();
+             ++node_index) {
+            const size_t state_index = state_indices[node_index];
+            const size_t parent = parent_index(state_index);
+            if (parent != std::numeric_limits<size_t>::max()) {
+                graph.nodes[node_index].parent_id =
+                    diagnostic_states_[parent].id;
+            }
+
+            auto& node = graph.nodes[node_index];
+            for (size_t child_index = 0;
+                 child_index < state_indices.size(); ++child_index) {
+                if (parent_index(state_indices[child_index]) != state_index) {
+                    continue;
+                }
+                node.dependencies.push_back(
+                    diagnostic_states_[state_indices[child_index]].id);
+                if (node.reason == WaitReason::None) {
+                    node.reason = states_[state_indices[child_index]]
+                                          .promise->join_state
+                                      ? WaitReason::Join
+                                      : WaitReason::Task;
+                }
+            }
+
+            if (node.dependencies.empty()) {
+                runnable |= node.ready || node.running;
+            }
+            time_progress |=
+                (diagnostic_states_[state_index].wait_progress &
+                 kWaitProgressTime) != 0;
+            simulator_progress |=
+                (diagnostic_states_[state_index].wait_progress &
+                 kWaitProgressSimulator) != 0;
+        }
+
+        if (graph.nodes.empty()) {
+            graph.status = WaitGraphStatus::Complete;
+        } else if (runnable) {
+            graph.status = WaitGraphStatus::Runnable;
+        } else if (time_progress) {
+            graph.status = WaitGraphStatus::WaitingForTime;
+        } else if (simulator_progress) {
+            graph.status = WaitGraphStatus::WaitingForSimulator;
+        } else {
+            graph.status = WaitGraphStatus::Deadlocked;
+        }
+        return graph;
+    }
+
 #ifdef CPPTB_CORO_WAIT_PATH_DIAGNOSTICS
     uint64_t single_edge_park_count(EdgeKind edge) const {
         return single_edge_park_counts_[static_cast<size_t>(edge)];
@@ -1858,6 +2122,10 @@ class Scheduler {
 #endif
 
    private:
+    static constexpr uint8_t kWaitProgressInternal = 1u << 0;
+    static constexpr uint8_t kWaitProgressTime = 1u << 1;
+    static constexpr uint8_t kWaitProgressSimulator = 1u << 2;
+
     void resume_completion_waiters(ProcessControl& process) {
         if (process.has_completion_waiter) {
             resume_registration(process.completion_waiter);
@@ -2089,9 +2357,47 @@ class Scheduler {
         edge_wait_indices_by_state_[state_index].clear();
     }
 
-    uint64_t begin_wait(CoroutineState& state) {
+    uint64_t begin_wait(CoroutineState& state,
+                        const WaitDiagnostic& diagnostic) {
         if (state.waiting) end_wait(state);
+        const size_t state_index =
+            static_cast<size_t>(&state - states_.data());
+        auto& diagnostic_state = diagnostic_states_[state_index];
         state.waiting = true;
+        diagnostic_state.wait = diagnostic;
+        diagnostic_state.has_wait = true;
+        diagnostic_state.wait_started = now_;
+        diagnostic_state.wait_deadline =
+            std::numeric_limits<uint64_t>::max();
+        diagnostic_state.wait_progress = 0;
+        {
+            switch (diagnostic.reason) {
+                case WaitReason::Delay:
+                case WaitReason::Timeout:
+                    diagnostic_state.wait_progress = kWaitProgressTime;
+                    break;
+                case WaitReason::RisingEdge:
+                case WaitReason::FallingEdge:
+                case WaitReason::Edge:
+                case WaitReason::ReadWrite:
+                case WaitReason::ReadOnly:
+                case WaitReason::NextTimeStep:
+                    diagnostic_state.wait_progress = kWaitProgressSimulator;
+                    break;
+                case WaitReason::None:
+                case WaitReason::Task:
+                case WaitReason::Process:
+                case WaitReason::Join:
+                case WaitReason::Event:
+                case WaitReason::QueueGet:
+                case WaitReason::QueuePut:
+                case WaitReason::Semaphore:
+                case WaitReason::Lock:
+                case WaitReason::First:
+                    diagnostic_state.wait_progress = kWaitProgressInternal;
+                    break;
+            }
+        }
         clear_ready(state);
         state.wait_generation = ++next_wait_generation_;
         return state.wait_generation;
@@ -2101,6 +2407,11 @@ class Scheduler {
         if (!state.waiting) return;
         state.waiting = false;
         const size_t state_index = static_cast<size_t>(&state - states_.data());
+        auto& diagnostic_state = diagnostic_states_[state_index];
+        diagnostic_state.has_wait = false;
+        diagnostic_state.wait_deadline =
+            std::numeric_limits<uint64_t>::max();
+        diagnostic_state.wait_progress = 0;
         auto& phase_counts = phase_wait_counts_by_state_[state_index];
         if (state.edge_wait_count == 0 && phase_counts[0] == 0 &&
             phase_counts[1] == 0 && phase_counts[2] == 0) {
@@ -2149,10 +2460,14 @@ class Scheduler {
         wait_registered_ = true;
         switch (request.kind) {
             case WaitKind::Edge:
+                diagnostic_states_[registration.state_index].wait_progress |=
+                    kWaitProgressSimulator;
                 register_edge_wait(request.signal_id, request.edge,
                                    registration);
                 break;
             case WaitKind::Delay: {
+                diagnostic_states_[registration.state_index].wait_progress |=
+                    kWaitProgressTime;
                 validate_delay(request.delay);
                 const uint64_t delay_ticks =
                     request.delay.femtoseconds / femtoseconds_per_tick_;
@@ -2160,6 +2475,10 @@ class Scheduler {
                 const uint64_t deadline =
                     delay_ticks > max_time - now_ ? max_time
                                                   : now_ + delay_ticks;
+                auto& diagnostic_state =
+                    diagnostic_states_[registration.state_index];
+                diagnostic_state.wait_deadline =
+                    std::min(diagnostic_state.wait_deadline, deadline);
                 const uint64_t previous_deadline = next_timer_deadline();
                 push_timer(TimerRegistration{
                     deadline, next_timer_sequence_++, registration});
@@ -2169,6 +2488,8 @@ class Scheduler {
             case WaitKind::ReadWrite:
             case WaitKind::ReadOnly:
             case WaitKind::NextTimeStep: {
+                diagnostic_states_[registration.state_index].wait_progress |=
+                    kWaitProgressSimulator;
                 if (current_phase_ == SimulationPhase::ReadOnly &&
                     request.kind != WaitKind::NextTimeStep) {
                     const char* trigger =
@@ -2331,9 +2652,12 @@ class Scheduler {
             state.ready = false;
             --live_ready_count_;
             void* previous_context = current_execution_context_;
+            const size_t previous_state = current_state_index_;
             current_execution_context_ = state.promise->execution_context;
+            current_state_index_ = state_index;
             state.handle.resume();
             current_execution_context_ = previous_context;
+            current_state_index_ = previous_state;
             apply_pending_cancellations();
             collect_finished_roots();
         }
@@ -2426,6 +2750,7 @@ class Scheduler {
     }
 
     std::vector<CoroutineState> states_;
+    std::vector<CoroutineDiagnosticState> diagnostic_states_;
     detail::ProcessControlPool* process_control_pool_ =
         &detail::process_control_pool();
     std::vector<ProcessControl*> process_controls_;
@@ -2457,8 +2782,10 @@ class Scheduler {
     size_t inline_process_depth_ = 0;
     uint64_t now_ = 0;
     uint64_t next_wait_generation_ = 0;
+    uint64_t next_coroutine_id_ = 0;
     uint64_t next_timer_sequence_ = 0;
     void* current_execution_context_ = nullptr;
+    size_t current_state_index_ = std::numeric_limits<size_t>::max();
     size_t active_coroutines_ = 0;
     size_t live_ready_count_ = 0;
     size_t falling_edge_registrations_ = 0;
@@ -2534,6 +2861,8 @@ struct Process::Awaiter {
     Process process;
     bool defer_parent = false;
 
+    explicit Awaiter(Process value) : process(std::move(value)) {}
+
     bool await_ready() {
         if (!process.valid()) {
             std::fprintf(stderr, "cpptb: cannot await an invalid process\n");
@@ -2556,7 +2885,16 @@ struct Process::Awaiter {
             scheduler->defer_process_parent(handle, promise);
             return true;
         }
-        return scheduler->park_process(handle, promise, process.control_);
+        WaitDiagnostic diagnostic{WaitReason::Process, {}, {}, {}, {}};
+        if (process.control_->owns_execution_context) {
+            const auto& context =
+                static_cast<OwnedProcessControl*>(process.control_)
+                    ->execution_context;
+            diagnostic.resource = context.description;
+            diagnostic.location = context.declaration;
+        }
+        return scheduler->park_process(handle, promise, process.control_,
+                                       diagnostic);
     }
 
     void await_resume() const {
@@ -2660,6 +2998,8 @@ template <typename Trigger>
 struct BasicTriggerAwaiter {
     Trigger trigger;
 
+    explicit BasicTriggerAwaiter(Trigger value) : trigger(std::move(value)) {}
+
     bool await_ready() const noexcept { return false; }
 
     template <typename Promise>
@@ -2671,21 +3011,22 @@ struct BasicTriggerAwaiter {
             std::fprintf(stderr, "cpptb: cannot wait without a scheduler\n");
             std::abort();
         }
-        scheduler->park(handle, promise, wait_request(trigger));
+        scheduler->park(handle, promise, wait_request(trigger),
+                        wait_diagnostic(trigger));
     }
 
     void await_resume() const noexcept {}
 };
 
-constexpr EdgeKind basic_trigger_edge_kind(RisingEdge) {
+inline EdgeKind basic_trigger_edge_kind(RisingEdge) {
     return EdgeKind::Rising;
 }
 
-constexpr EdgeKind basic_trigger_edge_kind(FallingEdge) {
+inline EdgeKind basic_trigger_edge_kind(FallingEdge) {
     return EdgeKind::Falling;
 }
 
-constexpr EdgeKind basic_trigger_edge_kind(Edge) { return EdgeKind::Any; }
+inline EdgeKind basic_trigger_edge_kind(Edge) { return EdgeKind::Any; }
 
 template <typename Trigger>
     requires(std::same_as<Trigger, RisingEdge> ||
@@ -2693,6 +3034,8 @@ template <typename Trigger>
              std::same_as<Trigger, Edge>)
 struct BasicTriggerAwaiter<Trigger> {
     Trigger trigger;
+
+    explicit BasicTriggerAwaiter(Trigger value) : trigger(std::move(value)) {}
 
     bool await_ready() const noexcept { return false; }
 
@@ -2706,45 +3049,49 @@ struct BasicTriggerAwaiter<Trigger> {
             std::abort();
         }
         scheduler->park_edge(handle, promise, trigger.signal.id,
-                             basic_trigger_edge_kind(trigger));
+                             basic_trigger_edge_kind(trigger),
+                             wait_diagnostic(trigger));
     }
 
     void await_resume() const noexcept {}
 };
 
 inline BasicTriggerAwaiter<RisingEdge> operator co_await(RisingEdge trigger) {
-    return {trigger};
+    return BasicTriggerAwaiter<RisingEdge>{trigger};
 }
 
 inline BasicTriggerAwaiter<FallingEdge> operator co_await(FallingEdge trigger) {
-    return {trigger};
+    return BasicTriggerAwaiter<FallingEdge>{trigger};
 }
 
 inline BasicTriggerAwaiter<Edge> operator co_await(Edge trigger) {
-    return {trigger};
+    return BasicTriggerAwaiter<Edge>{trigger};
 }
 
 inline BasicTriggerAwaiter<Delay> operator co_await(Delay trigger) {
-    return {trigger};
+    return BasicTriggerAwaiter<Delay>{trigger};
 }
 
 inline BasicTriggerAwaiter<ReadWrite> operator co_await(ReadWrite trigger) {
-    return {trigger};
+    return BasicTriggerAwaiter<ReadWrite>{trigger};
 }
 
 inline BasicTriggerAwaiter<ReadOnly> operator co_await(ReadOnly trigger) {
-    return {trigger};
+    return BasicTriggerAwaiter<ReadOnly>{trigger};
 }
 
 inline BasicTriggerAwaiter<NextTimeStep> operator co_await(
     NextTimeStep trigger) {
-    return {trigger};
+    return BasicTriggerAwaiter<NextTimeStep>{trigger};
 }
 
 template <typename... Triggers>
 struct FirstAwaiter {
     First<Triggers...> trigger;
     size_t winner = std::numeric_limits<size_t>::max();
+
+    explicit FirstAwaiter(First<Triggers...> value)
+        : trigger(std::move(value)) {}
 
     bool await_ready() const noexcept { return false; }
 
@@ -2763,7 +3110,10 @@ struct FirstAwaiter {
                     wait_request(values)...};
             },
             trigger.triggers);
-        scheduler->park_first(handle, promise, requests, &winner);
+        const WaitDiagnostic diagnostic{
+            WaitReason::First, {}, {},
+            wait_diagnostic(std::get<0>(trigger.triggers)).location, {}};
+        scheduler->park_first(handle, promise, requests, &winner, diagnostic);
     }
 
     size_t await_resume() const noexcept { return winner; }
@@ -2771,7 +3121,7 @@ struct FirstAwaiter {
 
 template <typename... Triggers>
 FirstAwaiter<Triggers...> operator co_await(First<Triggers...> trigger) {
-    return {std::move(trigger)};
+    return FirstAwaiter<Triggers...>{std::move(trigger)};
 }
 
 template <size_t ChildCount>
@@ -2811,8 +3161,9 @@ struct JoinAwaiter {
             std::fprintf(stderr, "cpptb: cannot wait on Join without a scheduler\n");
             std::abort();
         }
-        state = scheduler->start_join(handle, promise,
-                                      std::move(trigger.children));
+        state = scheduler->start_join(
+            handle, promise, std::move(trigger.children),
+            WaitDiagnostic{WaitReason::Join, {}, {}, {}, {}});
     }
 
     void await_resume() const {
@@ -2925,8 +3276,17 @@ template <typename T>
 struct TaskTimeoutAwaiter {
     using handle_type = typename Task<T>::handle_type;
 
-    TaskTimeoutAwaiter(Task<T>&& task, SimTime duration)
-        : child(task.release()), timeout(duration) {}
+    struct Observer {
+        void* context = nullptr;
+        void (*capture)(void*, const Scheduler&) = nullptr;
+    };
+
+    TaskTimeoutAwaiter(Task<T>&& task, SimTime duration, Observer value,
+                       std::source_location location)
+        : child(task.release()),
+          timeout(duration),
+          observer(value),
+          location(location) {}
 
     bool await_ready() const noexcept { return false; }
 
@@ -2947,7 +3307,9 @@ struct TaskTimeoutAwaiter {
                 "cpptb: cannot wait on a timed task without a scheduler\n");
             std::abort();
         }
-        scheduler->start_timeout(handle, promise, child, timeout);
+        scheduler->start_timeout(
+            handle, promise, child, timeout,
+            WaitDiagnostic{WaitReason::Timeout, {}, {}, location, {}});
     }
 
     TimeoutResult<T> await_resume() {
@@ -2986,6 +3348,7 @@ struct TaskTimeoutAwaiter {
             }
         }
 
+        if (observer.capture) observer.capture(observer.context, *scheduler);
         scheduler->cancel_awaited(child, promise);
         child = nullptr;
         return {};
@@ -2993,11 +3356,17 @@ struct TaskTimeoutAwaiter {
 
     handle_type child = nullptr;
     SimTime timeout;
+    Observer observer;
+    std::source_location location;
 };
 
 template <typename T>
-Task<TimeoutResult<T>> with_timeout(Task<T> task, SimTime timeout) {
-    co_return co_await TaskTimeoutAwaiter<T>{std::move(task), timeout};
+Task<TimeoutResult<T>> with_timeout(
+    Task<T> task, SimTime timeout,
+    typename TaskTimeoutAwaiter<T>::Observer observer = {},
+    std::source_location location = std::source_location::current()) {
+    co_return co_await TaskTimeoutAwaiter<T>{std::move(task), timeout,
+                                             observer, location};
 }
 
 template <typename SignalType, typename Predicate>
@@ -3013,7 +3382,10 @@ Task<void> wait_until(SignalType signal, Predicate predicate, Signal clock) {
 
 class Event {
    public:
-    Event() = default;
+    explicit Event(
+        std::string_view name = {},
+        std::source_location declaration = std::source_location::current())
+        : name_(name), declaration_(declaration) {}
     Event(const Event&) = delete;
     Event& operator=(const Event&) = delete;
 
@@ -3049,6 +3421,10 @@ class Event {
 
     struct Awaiter {
         Event* event;
+        std::source_location location;
+
+        Awaiter(Event& owner, std::source_location location)
+            : event(&owner), location(location) {}
 
         bool await_ready() const noexcept { return event->is_set(); }
 
@@ -3061,22 +3437,29 @@ class Event {
                              "cpptb: cannot wait on Event without a scheduler\n");
                 std::abort();
             }
-            return event->suspend(handle, promise, *promise.scheduler);
+            return event->suspend(handle, promise, *promise.scheduler,
+                                  location);
         }
 
         void await_resume() const noexcept {}
     };
 
-    Awaiter wait() { return Awaiter{this}; }
-    Awaiter operator co_await() { return wait(); }
+    Awaiter wait(
+        std::source_location location = std::source_location::current()) {
+        return Awaiter{*this, location};
+    }
+    Awaiter operator co_await() { return Awaiter{*this, declaration_}; }
 
    private:
     bool suspend(std::coroutine_handle<> handle, TaskPromiseBase& promise,
-                 Scheduler& scheduler) {
+                 Scheduler& scheduler, std::source_location location) {
         cleanup();
         if (set_) return false;
         bind(scheduler);
-        waiters_.push_back(scheduler.park_external(handle, promise));
+        waiters_.push_back(scheduler.park_external(
+            handle, promise,
+            WaitDiagnostic{WaitReason::Event, name_, "Event", location,
+                           declaration_}));
         return true;
     }
 
@@ -3110,6 +3493,8 @@ class Event {
     std::deque<ExternalWaitRegistration> waiters_;
     Scheduler* scheduler_ = nullptr;
     std::weak_ptr<SchedulerLifetime> lifetime_;
+    std::string name_;
+    std::source_location declaration_;
     bool set_ = false;
 };
 
@@ -3119,7 +3504,10 @@ class Queue {
                   "Queue values must be move constructible");
 
    public:
-    explicit Queue(size_t maxsize = 0) : maxsize_(maxsize) {}
+    explicit Queue(
+        size_t maxsize = 0, std::string_view name = {},
+        std::source_location declaration = std::source_location::current())
+        : name_(name), declaration_(declaration), maxsize_(maxsize) {}
     Queue(const Queue&) = delete;
     Queue& operator=(const Queue&) = delete;
 
@@ -3296,7 +3684,10 @@ class Queue {
         cleanup();
         if (items_.size() > reserved_items_) return false;
         bind(scheduler);
-        registration = scheduler.park_external(handle, promise);
+        registration = scheduler.park_external(
+            handle, promise,
+            WaitDiagnostic{WaitReason::QueueGet, name_, "Queue", declaration_,
+                           declaration_});
         get_waiters_.push_back(GetWaiter{*registration, false});
         return true;
     }
@@ -3308,7 +3699,10 @@ class Queue {
         cleanup();
         if (has_unreserved_slot()) return false;
         bind(scheduler);
-        registration = scheduler.park_external(handle, promise);
+        registration = scheduler.park_external(
+            handle, promise,
+            WaitDiagnostic{WaitReason::QueuePut, name_, "Queue", declaration_,
+                           declaration_});
         put_waiters_.push_back(PutWaiter{*registration, false});
         return true;
     }
@@ -3490,6 +3884,8 @@ class Queue {
     std::deque<PutWaiter> put_waiters_;
     Scheduler* scheduler_ = nullptr;
     std::weak_ptr<SchedulerLifetime> lifetime_;
+    std::string name_;
+    std::source_location declaration_;
     size_t reserved_items_ = 0;
     size_t reserved_put_slots_ = 0;
     size_t maxsize_ = 0;
@@ -3497,7 +3893,10 @@ class Queue {
 
 class Semaphore {
    public:
-    explicit Semaphore(size_t permits = 0) : permits_(permits) {}
+    explicit Semaphore(
+        size_t permits = 0, std::string_view name = {},
+        std::source_location declaration = std::source_location::current())
+        : name_(name), declaration_(declaration), permits_(permits) {}
     Semaphore(const Semaphore&) = delete;
     Semaphore& operator=(const Semaphore&) = delete;
 
@@ -3523,14 +3922,17 @@ class Semaphore {
     }
 
     struct AcquireAwaiter {
-        explicit AcquireAwaiter(Semaphore& owner) : semaphore(&owner) {}
+        explicit AcquireAwaiter(Semaphore& owner,
+                                std::source_location location)
+            : semaphore(&owner), location(location) {}
         AcquireAwaiter(const AcquireAwaiter&) = delete;
         AcquireAwaiter& operator=(const AcquireAwaiter&) = delete;
 
         AcquireAwaiter(AcquireAwaiter&& other) noexcept
             : semaphore(other.semaphore),
               registration(std::move(other.registration)),
-              active(std::exchange(other.active, false)) {}
+              active(std::exchange(other.active, false)),
+              location(other.location) {}
 
         ~AcquireAwaiter() {
             if (active && registration) semaphore->abandon(*registration);
@@ -3548,7 +3950,7 @@ class Semaphore {
                 std::abort();
             }
             return semaphore->suspend(handle, promise, *promise.scheduler,
-                                      registration);
+                                      registration, location);
         }
 
         void await_resume() {
@@ -3559,9 +3961,13 @@ class Semaphore {
         Semaphore* semaphore;
         std::optional<ExternalWaitRegistration> registration;
         bool active = true;
+        std::source_location location;
     };
 
-    AcquireAwaiter acquire() { return AcquireAwaiter{*this}; }
+    AcquireAwaiter acquire(
+        std::source_location location = std::source_location::current()) {
+        return AcquireAwaiter{*this, location};
+    }
 
     void release(size_t permits = 1) {
         if (permits == 0) return;
@@ -3585,14 +3991,18 @@ class Semaphore {
     bool suspend(
         std::coroutine_handle<> handle, TaskPromiseBase& promise,
         Scheduler& scheduler,
-        std::optional<ExternalWaitRegistration>& registration) {
+        std::optional<ExternalWaitRegistration>& registration,
+        std::source_location location) {
         cleanup();
         if (permits_ != 0) {
             --permits_;
             return false;
         }
         bind(scheduler);
-        registration = scheduler.park_external(handle, promise);
+        registration = scheduler.park_external(
+            handle, promise,
+            WaitDiagnostic{WaitReason::Semaphore, name_, "Semaphore", location,
+                           declaration_});
         waiters_.push_back(Waiter{*registration, false});
         return true;
     }
@@ -3688,12 +4098,17 @@ class Semaphore {
     std::deque<Waiter> waiters_;
     Scheduler* scheduler_ = nullptr;
     std::weak_ptr<SchedulerLifetime> lifetime_;
+    std::string name_;
+    std::source_location declaration_;
     size_t permits_ = 0;
 };
 
 class Lock {
    public:
-    Lock() = default;
+    explicit Lock(
+        std::string_view name = {},
+        std::source_location declaration = std::source_location::current())
+        : name_(name), declaration_(declaration) {}
     Lock(const Lock&) = delete;
     Lock& operator=(const Lock&) = delete;
 
@@ -3718,14 +4133,16 @@ class Lock {
     }
 
     struct AcquireAwaiter {
-        explicit AcquireAwaiter(Lock& owner) : lock(&owner) {}
+        explicit AcquireAwaiter(Lock& owner, std::source_location location)
+            : lock(&owner), location(location) {}
         AcquireAwaiter(const AcquireAwaiter&) = delete;
         AcquireAwaiter& operator=(const AcquireAwaiter&) = delete;
 
         AcquireAwaiter(AcquireAwaiter&& other) noexcept
             : lock(other.lock),
               registration(std::move(other.registration)),
-              active(std::exchange(other.active, false)) {}
+              active(std::exchange(other.active, false)),
+              location(other.location) {}
 
         ~AcquireAwaiter() {
             if (active && registration) lock->abandon(*registration);
@@ -3743,7 +4160,7 @@ class Lock {
                 std::abort();
             }
             return lock->suspend(handle, promise, *promise.scheduler,
-                                 registration);
+                                 registration, location);
         }
 
         void await_resume() {
@@ -3754,9 +4171,13 @@ class Lock {
         Lock* lock;
         std::optional<ExternalWaitRegistration> registration;
         bool active = true;
+        std::source_location location;
     };
 
-    AcquireAwaiter acquire() { return AcquireAwaiter{*this}; }
+    AcquireAwaiter acquire(
+        std::source_location location = std::source_location::current()) {
+        return AcquireAwaiter{*this, location};
+    }
 
     void release() {
         if (waiters_.empty() && !handoff_pending_) {
@@ -3799,14 +4220,18 @@ class Lock {
     bool suspend(
         std::coroutine_handle<> handle, TaskPromiseBase& promise,
         Scheduler& scheduler,
-        std::optional<ExternalWaitRegistration>& registration) {
+        std::optional<ExternalWaitRegistration>& registration,
+        std::source_location location) {
         cleanup();
         if (!locked_) {
             locked_ = true;
             return false;
         }
         bind(scheduler);
-        registration = scheduler.park_external(handle, promise);
+        registration = scheduler.park_external(
+            handle, promise,
+            WaitDiagnostic{WaitReason::Lock, name_, "Lock", location,
+                           declaration_});
         waiters_.push_back(Waiter{*registration, false});
         return true;
     }
@@ -3906,6 +4331,8 @@ class Lock {
     std::deque<Waiter> waiters_;
     Scheduler* scheduler_ = nullptr;
     std::weak_ptr<SchedulerLifetime> lifetime_;
+    std::string name_;
+    std::source_location declaration_;
     bool locked_ = false;
     bool handoff_pending_ = false;
 };
@@ -4038,6 +4465,10 @@ class Testbench {
 
     void* current_execution_context() const {
         return scheduler_.current_execution_context();
+    }
+
+    WaitGraphSnapshot wait_graph(void* execution_owner = nullptr) const {
+        return scheduler_.wait_graph(execution_owner);
     }
 
     bool done() const { return scheduler_.all_done(); }

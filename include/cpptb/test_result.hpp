@@ -6,6 +6,8 @@
 #include <string_view>
 #include <vector>
 
+#include "cpptb/wait_graph.hpp"
+
 namespace cpptb {
 
 enum class TestStatus : uint8_t {
@@ -113,6 +115,7 @@ struct TestResult {
     std::vector<std::string> tags;
     std::vector<FailureRecord> failure_records;
     std::vector<WarningRecord> warning_records;
+    std::optional<WaitGraphSnapshot> wait_graph;
     std::optional<uint64_t> random_seed;
     std::string random_algorithm;
     std::string constraint_backend;

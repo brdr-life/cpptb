@@ -281,6 +281,37 @@ $(eval $(call CPPTB_EXAMPLE_template,counter,COUNTER,counter,counter,dpi_counter
 CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-counter-suite-test
 $(eval $(call CPPTB_EXAMPLE_template,multiclock,MULTICLOCK,multiclock,dual_clock_mailbox,dpi_dual_clock_mailbox,dual_clock_mailbox_sv_tb,multiclock_test))
 $(eval $(call CPPTB_EXAMPLE_template,timer-only,TIMER_ONLY,timer_only,timer_only_probe,dpi_timer_only_probe,timer_only_probe_sv_tb,timer_only_test))
+CPPTB_TIMER_ONLY_DEADLOCK_SV_TB := \
+	examples/timer_only/systemverilog/timer_only_deadlock_sv_tb.sv
+CPPTB_TIMER_ONLY_DEADLOCK_SV_OBJ_DIR := \
+	$(CPPTB_TIMER_ONLY_BUILD_DIR)/systemverilog_deadlock_obj
+CPPTB_TIMER_ONLY_DEADLOCK_SV_BINARY := \
+	$(CPPTB_TIMER_ONLY_DEADLOCK_SV_OBJ_DIR)/Vtimer_only_deadlock_sv_tb
+CPPTB_EXAMPLE_PHONY_TARGETS += cpp-dpi-timer-only-deadlock-test
+CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-timer-only-deadlock-test
+
+$(CPPTB_TIMER_ONLY_DEADLOCK_SV_BINARY): $(CPPTB_TIMER_ONLY_DEADLOCK_SV_TB)
+	mkdir -p $(CPPTB_TIMER_ONLY_DEADLOCK_SV_OBJ_DIR)
+	verilator --binary --timing --no-sched-zero-delay \
+		--Mdir $(CPPTB_TIMER_ONLY_DEADLOCK_SV_OBJ_DIR) \
+		--top-module timer_only_deadlock_sv_tb \
+		$(CPPTB_TIMER_ONLY_DEADLOCK_SV_TB)
+
+cpp-dpi-timer-only-deadlock-test: cpp-dpi-timer-only-build \
+		$(CPPTB_TIMER_ONLY_DEADLOCK_SV_BINARY)
+	mkdir -p $(CPPTB_TIMER_ONLY_RESULT_DIR)
+	python3 tests/integration/check_expected_failure.py \
+		--contains "scheduler deadlock detected" \
+		--contains "Event timer_only.response_ready" \
+		--result-json $(CPPTB_TIMER_ONLY_RESULT_DIR)/deadlock-result.json \
+		--result-status timed_out --result-wait-status deadlocked -- \
+		env CPPTB_TEST=timer_only_deadlock \
+		CPPTB_RESULT_FILE=$(CPPTB_TIMER_ONLY_RESULT_DIR)/deadlock-result.json \
+		$(CPPTB_TIMER_ONLY_OBJ_DIR)/Vdpi_timer_only_probe
+	python3 tests/integration/check_expected_failure.py \
+		--contains "pure-SV deadlock" \
+		--contains "Event timer_only.response_ready" -- \
+		$(CPPTB_TIMER_ONLY_DEADLOCK_SV_BINARY)
 $(eval $(call CPPTB_EXAMPLE_template,fifo-scoreboard,FIFO_SCOREBOARD,fifo_scoreboard,stream_fifo,dpi_stream_fifo,stream_fifo_sv_tb,fifo_test))
 $(eval $(call CPPTB_EXAMPLE_template,component-fifo,COMPONENT_FIFO,component_fifo,component_fifo,dpi_component_fifo,component_fifo_sv_tb,component_fifo_test))
 $(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb,component_apb_test))

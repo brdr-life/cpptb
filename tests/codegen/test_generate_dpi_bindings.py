@@ -237,9 +237,22 @@ class CodegenTests(unittest.TestCase):
             self.assertIn("cpptb::run_registered_test", adapter)
             self.assertIn("cpptb::detail::SimLogEndpoint& sim_logs", adapter)
             self.assertIn("cpptb_counter_dpi_init", adapter)
+            self.assertIn("cpptb_counter_dpi_report_starvation", adapter)
+            self.assertIn(
+                "CPPTB_DEFINE_NAMED_DPI_RUNTIME_WITH_STARVATION", adapter
+            )
             self.assertIn("CPP_DPI_COUNTER_RESULT", adapter)
             self.assertIn("`ifdef CPPTB_ENABLE_SV_LOGGING", wrapper)
             self.assertIn("cpptb_log_pkg::configure();", wrapper)
+            self.assertIn(
+                'import "DPI-C" function int '
+                "cpptb_counter_dpi_report_starvation();",
+                wrapper,
+            )
+            self.assertIn("final begin", wrapper)
+            self.assertIn(
+                "cpptb_counter_dpi_report_starvation() != 0", wrapper
+            )
 
     def test_source_defaults_defer_clock_timing_to_cpp_testbench(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -741,6 +754,7 @@ class CodegenTests(unittest.TestCase):
         self.assertNotIn("sample_delay", wrapper)
         self.assertIn("cpptb_dpi_next_timer_deadline", wrapper)
         self.assertIn("cpptb_dpi_edge_interest", wrapper)
+        self.assertIn("cpptb_dpi_report_starvation", wrapper)
         self.assertIn(
             "edge_interest[SIGNAL_WRITECLK] |= "
             "cpptb_dpi_edge_interest(SIGNAL_WRITECLK);",
