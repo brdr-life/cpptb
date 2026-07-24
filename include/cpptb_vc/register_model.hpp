@@ -1851,8 +1851,12 @@ class RegisterMemoryHandle {
         read_response_type result{.path = AccessPath::Frontdoor};
         const auto request = typename Master::read_request_type{
             static_cast<address_type>(frontdoor_address(index, map))};
-        result.transport = map ? co_await map->read(*descriptor_, index, request)
-                               : co_await master_->read(request);
+        if (map) {
+            result.transport =
+                co_await map->read(*descriptor_, index, request);
+        } else {
+            result.transport = co_await master_->read(request);
+        }
         if (result.transport.okay()) {
             result.data = result.transport.data;
             result.transfers_completed = 1;
@@ -1870,8 +1874,12 @@ class RegisterMemoryHandle {
         const auto request = typename Master::write_request_type{
             static_cast<address_type>(frontdoor_address(index, map)), value,
             all_bytes()};
-        result.transport = map ? co_await map->write(*descriptor_, index, request)
-                               : co_await master_->write(request);
+        if (map) {
+            result.transport =
+                co_await map->write(*descriptor_, index, request);
+        } else {
+            result.transport = co_await master_->write(request);
+        }
         if (result.transport.okay()) {
             result.transfers_completed = 1;
         } else {
@@ -1890,9 +1898,12 @@ class RegisterMemoryHandle {
             const auto request = typename Master::write_request_type{
                 static_cast<address_type>(frontdoor_address(index, map)),
                 values[offset], all_bytes()};
-            result.transport =
-                map ? co_await map->write(*descriptor_, index, request)
-                    : co_await master_->write(request);
+            if (map) {
+                result.transport =
+                    co_await map->write(*descriptor_, index, request);
+            } else {
+                result.transport = co_await master_->write(request);
+            }
             if (!result.transport.okay()) {
                 result.failed_index = index;
                 co_return result;
@@ -1911,9 +1922,12 @@ class RegisterMemoryHandle {
             const uint64_t index = first_index + offset;
             const auto request = typename Master::read_request_type{
                 static_cast<address_type>(frontdoor_address(index, map))};
-            result.transport =
-                map ? co_await map->read(*descriptor_, index, request)
-                    : co_await master_->read(request);
+            if (map) {
+                result.transport =
+                    co_await map->read(*descriptor_, index, request);
+            } else {
+                result.transport = co_await master_->read(request);
+            }
             if (!result.transport.okay()) {
                 result.failed_index = index;
                 co_return result;
@@ -2580,9 +2594,12 @@ class WideRegisterMemoryHandle {
                 frontdoor_address(index, map) + transfer * transfer_bytes();
             const auto request = typename Master::read_request_type{
                 static_cast<address_type>(transfer_address)};
-            result.transport =
-                map ? co_await map->read(*descriptor_, index, request)
-                    : co_await master_->read(request);
+            if (map) {
+                result.transport =
+                    co_await map->read(*descriptor_, index, request);
+            } else {
+                result.transport = co_await master_->read(request);
+            }
             if (!result.transport.okay()) {
                 result.failed_index = index;
                 co_return result;
@@ -2603,9 +2620,12 @@ class WideRegisterMemoryHandle {
             const auto request = typename Master::write_request_type{
                 static_cast<address_type>(transfer_address),
                 transfer_value(value, transfer), all_transfer_bytes()};
-            result.transport =
-                map ? co_await map->write(*descriptor_, index, request)
-                    : co_await master_->write(request);
+            if (map) {
+                result.transport =
+                    co_await map->write(*descriptor_, index, request);
+            } else {
+                result.transport = co_await master_->write(request);
+            }
             if (!result.transport.okay()) {
                 result.failed_index = index;
                 co_return result;
@@ -2628,9 +2648,12 @@ class WideRegisterMemoryHandle {
                     transfer * transfer_bytes();
                 const auto request = typename Master::read_request_type{
                     static_cast<address_type>(transfer_address)};
-                result.transport =
-                    map ? co_await map->read(*descriptor_, index, request)
-                        : co_await master_->read(request);
+                if (map) {
+                    result.transport =
+                        co_await map->read(*descriptor_, index, request);
+                } else {
+                    result.transport = co_await master_->read(request);
+                }
                 if (!result.transport.okay()) {
                     result.failed_index = index;
                     co_return result;
@@ -2658,9 +2681,12 @@ class WideRegisterMemoryHandle {
                     static_cast<address_type>(transfer_address),
                     transfer_value(values[offset], transfer),
                     all_transfer_bytes()};
-                result.transport =
-                    map ? co_await map->write(*descriptor_, index, request)
-                        : co_await master_->write(request);
+                if (map) {
+                    result.transport =
+                        co_await map->write(*descriptor_, index, request);
+                } else {
+                    result.transport = co_await master_->write(request);
+                }
                 if (!result.transport.okay()) {
                     result.failed_index = index;
                     co_return result;
@@ -3014,9 +3040,12 @@ class RegisterHandle {
                 static_cast<bus_data_type>(
                     (write_value >> bit_offset) & chunk_mask),
                 all_bytes()};
-            const auto response = map
-                                      ? co_await map->write(*descriptor_, request)
-                                      : co_await master_->write(request);
+            typename Master::write_response_type response;
+            if (map) {
+                response = co_await map->write(*descriptor_, request);
+            } else {
+                response = co_await master_->write(request);
+            }
             result.transport = response;
             if (!response.okay()) {
                 result.failed_address = address;
@@ -3297,9 +3326,12 @@ class RegisterHandle {
             const uint64_t address = transfer_address(transfer, map);
             const typename Master::read_request_type request{
                 static_cast<address_type>(address)};
-            const auto response = map
-                                      ? co_await map->read(*descriptor_, request)
-                                      : co_await master_->read(request);
+            typename Master::read_response_type response;
+            if (map) {
+                response = co_await map->read(*descriptor_, request);
+            } else {
+                response = co_await master_->read(request);
+            }
             result.transport = response;
             if (!response.okay()) {
                 result.failed_address = address;
@@ -3337,9 +3369,12 @@ class RegisterHandle {
                 static_cast<address_type>(address),
                 static_cast<bus_data_type>((value >> bit_offset) & chunk_mask),
                 all_bytes()};
-            const auto response = map
-                                      ? co_await map->write(*descriptor_, request)
-                                      : co_await master_->write(request);
+            typename Master::write_response_type response;
+            if (map) {
+                response = co_await map->write(*descriptor_, request);
+            } else {
+                response = co_await master_->write(request);
+            }
             result.transport = response;
             if (!response.okay()) {
                 result.failed_address = address;
@@ -3367,9 +3402,12 @@ class RegisterHandle {
             const uint64_t address = transfer_address(transfer, map);
             const typename Master::read_request_type request{
                 static_cast<address_type>(address)};
-            const auto response = map
-                                      ? co_await map->read(*descriptor_, request)
-                                      : co_await master_->read(request);
+            typename Master::read_response_type response;
+            if (map) {
+                response = co_await map->read(*descriptor_, request);
+            } else {
+                response = co_await master_->read(request);
+            }
             result.transport = response;
             if (!response.okay()) {
                 result.failed_address = address;
@@ -4664,9 +4702,12 @@ class WideRegisterHandle {
             const typename Master::write_request_type request{
                 static_cast<address_type>(address),
                 static_cast<bus_data_type>(chunk), all_bytes()};
-            const auto response = map
-                                      ? co_await map->write(*descriptor_, request)
-                                      : co_await master_->write(request);
+            typename Master::write_response_type response;
+            if (map) {
+                response = co_await map->write(*descriptor_, request);
+            } else {
+                response = co_await master_->write(request);
+            }
             result.transport = response;
             if (!response.okay()) {
                 result.failed_address = address;
@@ -4693,9 +4734,12 @@ class WideRegisterHandle {
             const uint64_t address = transfer_address(transfer, map);
             const typename Master::read_request_type request{
                 static_cast<address_type>(address)};
-            const auto response = map
-                                      ? co_await map->read(*descriptor_, request)
-                                      : co_await master_->read(request);
+            typename Master::read_response_type response;
+            if (map) {
+                response = co_await map->read(*descriptor_, request);
+            } else {
+                response = co_await master_->read(request);
+            }
             result.transport = response;
             if (!response.okay()) {
                 result.failed_address = address;
