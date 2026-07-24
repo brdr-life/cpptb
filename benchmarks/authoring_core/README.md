@@ -79,6 +79,7 @@ feature.
 | `process_pipeline` | `queue_put=2N`, `queue_get=2N`, `spawned_processes=3`, `transactions=N` | `N + 4` |
 | `analysis_fanout` | `analysis_write=2N`, `analysis_delivery=3N`, `spawned_processes=1`, `transactions=N` | `N + 6` |
 | `apb_component` | `apb_component=2N`, `transactions=2N` | `5N + 4` |
+| `transaction_recording` | `analysis_write=4N`, `analysis_delivery=6N`, `transactions=2N`, retained record metadata and JSON payloads | `5N + 9` |
 | `memory_model` | `memory_model=2N`, `transactions=2N` | `5N + 4` |
 | `memory_model_direct` | `memory_model_direct=2N`, `transactions=2N` | `3N + 2` |
 | `register_prediction_validity` | `register_prediction_validity=N`, zero DUT transactions and cycles | `5N + 4` |

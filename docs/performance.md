@@ -550,13 +550,35 @@ scoreboard comparisons, response checks, and checksum updates. The C++ side
 uses the public `cpptb_vc` master, monitor, checker, analysis port, and
 scoreboard rather than benchmark-local helpers.
 
-The valid July 17, 2026 run measured `0.916x` C++ DPI over pure SV, with
-`0.925x` DPI-first, `0.899x` SV-first, `0.920x` independent, and `0.45%`
-paired/independent disagreement. It passes the standard `1.10x` hard guard.
+The July 17, 2026 baseline measured `0.916x` C++ DPI over pure SV, but it
+predates the monitor-owned observation envelope introduced with transaction
+recording. The current semantic pair passes at 100,000 iterations with exact
+work. A July 20 remeasurement was rejected as `invalid_environment`, so no
+current ratio is published and the standard `1.10x` hard guard remains pending
+for the next admitted serial run.
 
 ```sh
 make feature-test FEATURE=apb_component
 make feature-benchmark FEATURE=apb_component
+```
+
+## Typed transaction recording
+
+The `transaction_recording` pair extends the APB workload with one typed
+observation feeding both an in-order scoreboard and an in-memory transaction
+sink. At the default 100,000 iterations, each implementation completes
+100,000 writes and matching reads and retains 200,000 records containing the
+same stream name, transaction type, sequence, begin/end times, completion
+disposition, and formatted JSON payload.
+
+The semantic pair passes with exact counts and checksum. The July 20, 2026
+timing attempt was rejected as `invalid_environment` because normalized host
+load exceeded the `0.30` limit, so no ratio is published from that run. The
+standard `1.10x` hard guard remains active for the next admitted serial run.
+
+```sh
+make feature-test FEATURE=transaction_recording
+make feature-benchmark FEATURE=transaction_recording
 ```
 
 ## Sparse memory prediction

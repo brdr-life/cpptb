@@ -72,19 +72,19 @@ Task<void> component_apb_test(Dut dut, TestContext& test) {
 
     const auto bus = make_apb_bus(dut);
     Master master{bus, ApbConfig{.sample_delay = 1_ps}};
-    ApbMonitor monitor{bus, 1_ps};
+    ApbMonitor monitor{test, bus, 1_ps};
     ApbProtocolChecker checker{test, bus, 1_ps};
     AnalysisPort<Transaction> expected;
-    AnalysisPort<Transaction> observed;
     InOrderScoreboard<Transaction> scoreboard{test, "APB transaction"};
 
     auto expected_connection = expected.connect(scoreboard.expected());
-    auto actual_connection = observed.connect(scoreboard.actual());
-    auto coverage_connection = observed.connect(coverage_subscriber);
+    auto actual_connection = monitor.observed().connect(scoreboard.actual());
+    auto coverage_connection =
+        monitor.observed().connect(coverage_subscriber);
     test.spawn_detached(checker.run_forever());
 
     co_await Join{register_sequence(master, test, expected),
-                  monitor.run(observed, kRegisterTransactions * 2u)};
+                  monitor.run(kRegisterTransactions * 2u)};
 
     scoreboard.finalize();
     test.expect_eq("APB protocol violations", checker.violations(),

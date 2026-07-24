@@ -56,6 +56,12 @@ struct CoverageSubscriber {
     void write(const Transaction& transaction) {
         coverage.sample(transaction);
     }
+
+    void write(const TransactionObservation<Transaction>& observation) {
+        if (observation.disposition == TransactionDisposition::Completed) {
+            write(observation.value);
+        }
+    }
 };
 
 Task<void> reset_dut(Dut dut) {
@@ -132,10 +138,9 @@ Task<void> component_apb_test(Dut dut, TestContext& test) {
 
     const auto bus = make_apb_bus(dut);
     Master master{bus, ApbConfig{.sample_delay = 1_ps}};
-    ApbMonitor monitor{bus, 1_ps};
+    ApbMonitor monitor{test, bus, 1_ps};
     ApbProtocolChecker checker{test, bus, 1_ps};
     AnalysisPort<Transaction> expected;
-    AnalysisPort<Transaction> observed;
     InOrderScoreboard<Transaction> scoreboard{test, "APB transaction"};
     Covergroup<Transaction> coverage{"apb_transactions"};
     auto& operation = coverage.coverpoint("operation", &Transaction::operation);
@@ -148,12 +153,13 @@ Task<void> component_apb_test(Dut dut, TestContext& test) {
     CoverageSubscriber coverage_subscriber{coverage};
 
     auto expected_connection = expected.connect(scoreboard.expected());
-    auto actual_connection = observed.connect(scoreboard.actual());
-    auto coverage_connection = observed.connect(coverage_subscriber);
+    auto actual_connection = monitor.observed().connect(scoreboard.actual());
+    auto coverage_connection =
+        monitor.observed().connect(coverage_subscriber);
     test.spawn_detached(checker.run_forever());
 
     co_await Join{register_sequence(master, test, &expected),
-                  monitor.run(observed, kObservedTransactions)};
+                  monitor.run(kObservedTransactions)};
 
     scoreboard.finalize();
     const auto snapshot = coverage.snapshot();
@@ -176,8 +182,7 @@ Task<void> memory_model_apb_test(Dut dut, TestContext& test) {
 
     const auto bus = make_apb_bus(dut);
     Master master{bus, ApbConfig{.sample_delay = 1_ps}};
-    ApbMonitor monitor{bus, 1_ps};
-    AnalysisPort<Transaction> observed;
+    ApbMonitor monitor{test, bus, 1_ps};
 
     ApbMemoryPolicy policy;
     SparseMemory memory{policy};
@@ -199,10 +204,10 @@ Task<void> memory_model_apb_test(Dut dut, TestContext& test) {
 
     auto predictor = make_memory_predictor<Transaction>(
         test, memory, "APB memory-model transaction");
-    auto prediction_connection = observed.connect(predictor);
+    auto prediction_connection = monitor.observed().connect(predictor);
 
     co_await Join{register_sequence(master, test),
-                  monitor.run(observed, kObservedTransactions)};
+                  monitor.run(kObservedTransactions)};
 
     test.expect_eq("memory-model reads", predictor.reads(),
                    uint64_t{kRegisterTransactions + 2u});

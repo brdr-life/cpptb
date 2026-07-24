@@ -123,6 +123,7 @@ examples/fifo-scoreboard
 examples/component-fifo
 examples/multiclock
 examples/apb-regfile
+examples/apb-trace
 examples/ipxact-regfile
 examples/watchdog-timeout
 examples/fault-injection
@@ -156,6 +157,7 @@ _VERIFICATION_COMPONENTS_TOCTREE = """
 :maxdepth: 2
 
 verification-components/memory-model
+verification-components/transaction-recording
 memory-register-models
 verification-components/register-generation
 verification-components/register-sequences

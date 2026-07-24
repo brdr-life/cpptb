@@ -52,6 +52,7 @@ layers the environment needs:
 
 | Guide | Use it for |
 |---|---|
+| [Transaction recording](verification-components/transaction-recording.md) | Record monitor-derived typed transactions to memory or JSON Lines |
 | [Sparse expected memory](verification-components/memory-model.md) | Images, expected byte storage, byte enables, permissions, and passive prediction |
 | [Register abstraction layer](memory-register-models.md) | Typed registers and fields, desired/mirrored state, frontdoor/backdoor access, and side effects |
 | [Generate register models](verification-components/register-generation.md) | SystemRDL, IP-XACT, or native RgGen input, build dependencies, naming, and limitations |
@@ -279,7 +280,7 @@ const auto bus = ApbBus{
 
 ApbMaster master{bus, ApbConfig{.sample_delay = 1_ps,
                                 .max_wait_cycles = 32}};
-ApbMonitor monitor{bus, 1_ps};
+ApbMonitor monitor{test, bus, 1_ps};
 ApbProtocolChecker checker{test, bus, 1_ps};
 ```
 
@@ -298,12 +299,32 @@ coroutines explicitly drive setup, drive access, wait on `PREADY`, sample the
 response, and return the bus to idle. It does not start a clock, reset the
 DUT, spawn itself, or add an unrequested sampling delay.
 
-`ApbMonitor` never drives a signal. It publishes completed reads and writes as
-`MemoryTransaction` values, including byte enables, response status, and wait
-cycles. `ApbProtocolChecker` independently reports malformed setup/access
+`ApbMonitor` never drives a signal. Its `observed()` analysis port publishes
+completed reads and writes as timed `TransactionObservation<MemoryTransaction>`
+values, including byte enables, response status, and wait cycles. Scoreboards,
+predictors, and register coverage accept completed observations directly.
+`ApbProtocolChecker` independently reports malformed setup/access
 transitions, a nonzero read `PSTRB`, and control changes while waiting for
 `PREADY`. `PWDATA` stability is checked only for writes because it is not a
 read control signal.
+
+Connect a recorder when a persistent or in-memory transaction timeline is
+useful. The monitor performs protocol decoding once and fans the same typed
+observation out to every consumer:
+
+```cpp
+TransactionRecorder recorder;
+InMemoryTransactionSink trace;
+auto trace_sink = recorder.connect(trace);
+auto& stream = recorder.stream<Transaction>("apb0.observed");
+
+auto checking = monitor.observed().connect(scoreboard.actual());
+auto recording = monitor.observed().connect(stream);
+co_await monitor.run(expected_transfer_count);
+```
+
+See [Transaction recording](verification-components/transaction-recording.md)
+and the runnable [APB trace example](examples/apb-trace.md).
 
 ## Prediction and checking
 

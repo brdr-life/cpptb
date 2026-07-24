@@ -18,6 +18,7 @@
 #include "cpptb/test_api.hpp"
 #include "cpptb/packed_bits.hpp"
 #include "cpptb_vc/memory_mapped.hpp"
+#include "cpptb_vc/transaction_recording.hpp"
 
 namespace cpptb::vc {
 
@@ -4934,6 +4935,15 @@ class RegisterPredictor {
 
     template <std::integral Address, std::unsigned_integral Data,
               std::unsigned_integral ByteEnable>
+    void write(const TransactionObservation<
+               MemoryTransaction<Address, Data, ByteEnable>>& observation) {
+        if (observation.disposition == TransactionDisposition::Completed) {
+            write(observation.value);
+        }
+    }
+
+    template <std::integral Address, std::unsigned_integral Data,
+              std::unsigned_integral ByteEnable>
     void write(const MemoryTransaction<Address, Data, ByteEnable>& transaction) {
         if (!transaction_okay(transaction.status)) return;
         const auto address = normalized_address(transaction.address);
@@ -5106,6 +5116,15 @@ class WideRegisterPredictor {
     }
 
    public:
+
+    template <std::integral Address, std::unsigned_integral Data,
+              std::unsigned_integral ByteEnable>
+    void write(const TransactionObservation<
+               MemoryTransaction<Address, Data, ByteEnable>>& observation) {
+        if (observation.disposition == TransactionDisposition::Completed) {
+            write(observation.value);
+        }
+    }
 
     template <std::integral Address, std::unsigned_integral Data,
               std::unsigned_integral ByteEnable>

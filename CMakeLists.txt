@@ -80,6 +80,13 @@ if(BUILD_TESTING)
     target_link_libraries(cpptb_vc_components_test PRIVATE cpptb::vc)
     add_test(NAME cpptb_vc.components COMMAND cpptb_vc_components_test)
 
+    add_executable(cpptb_vc_transaction_recording_test
+                   tests/unit/transaction_recording_test.cpp)
+    target_link_libraries(cpptb_vc_transaction_recording_test
+                          PRIVATE cpptb::vc)
+    add_test(NAME cpptb_vc.transaction_recording
+             COMMAND cpptb_vc_transaction_recording_test)
+
     if(CPPTB_WITH_Z3)
         add_executable(cpptb_z3_random_test
                        tests/unit/z3_random_backend_test.cpp)

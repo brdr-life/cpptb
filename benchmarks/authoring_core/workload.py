@@ -48,6 +48,7 @@ KERNELS = (
     "constraint_extensions",
     "coverage_sampling",
     "apb_component",
+    "transaction_recording",
     "memory_model",
     "memory_model_direct",
     "register_prediction_validity",
@@ -465,6 +466,15 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             apb_component=2 * iterations,
         )
 
+    if kernel == "transaction_recording":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=2 * iterations,
+            checks=5 * iterations + 9,
+            analysis_write=4 * iterations,
+            analysis_delivery=6 * iterations,
+        )
+
     if kernel == "memory_model":
         return ExpectedCounts(
             iterations=iterations,
@@ -872,7 +882,12 @@ def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
                 (~stimulus(iteration * 2 + 1)) & 0xFF,
             )
         )
-    elif kernel in ("apb_component", "memory_model", "memory_model_direct"):
+    elif kernel in (
+        "apb_component",
+        "transaction_recording",
+        "memory_model",
+        "memory_model_direct",
+    ):
         responses = (stimulus(iteration) for iteration in range(iterations))
     else:
         responses = (response(iteration) for iteration in range(iterations))

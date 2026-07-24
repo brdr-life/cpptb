@@ -21,6 +21,7 @@ class Category(str, Enum):
 class AdapterKind(str, Enum):
     AUTHORING_CORE = "authoring_core"
     DPI_APB_REGFILE = "dpi_apb_regfile"
+    DPI_APB_TRACE = "dpi_apb_trace"
     DPI_COMPONENT_FIFO = "dpi_component_fifo"
     DPI_COUNTER = "dpi_counter"
     DPI_FAULT_INJECTION = "dpi_fault_injection"
@@ -125,6 +126,7 @@ _AUTHORING_TEMPLATE_IDS = {
     "constraint_extensions": 38,
     "coverage_sampling": 39,
     "apb_component": 40,
+    "transaction_recording": 58,
     "process_pipeline": 41,
     "memory_model": 42,
     "memory_model_direct": 43,
@@ -298,6 +300,10 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring(
         "apb_component",
         "APB verification components",
+    ),
+    _authoring(
+        "transaction_recording",
+        "Typed transaction recording",
     ),
     _authoring(
         "memory_model",
@@ -518,6 +524,34 @@ BENCHMARKS: tuple[Benchmark, ...] = (
             commands=(
                 ("make", "cpp-dpi-apb-regfile-run"),
                 ("make", "cpp-dpi-apb-regfile-sv-run"),
+            ),
+        ),
+        default_iterations=1,
+        gate_policy=GatePolicy.EQUIVALENCE_ONLY,
+    ),
+    Benchmark(
+        name="dpi_apb_trace",
+        label="DPI APB transaction trace",
+        category=Category.INTEGRATION,
+        adapter_kind=AdapterKind.DPI_APB_TRACE,
+        build_targets=(
+            "cpp-dpi-apb-trace-build",
+            "cpp-dpi-apb-trace-sv-build",
+        ),
+        binaries=(
+            Binary(
+                "cpp_dpi",
+                "build/cpptb/apb_trace/obj/Vdpi_apb_trace",
+            ),
+            Binary(
+                "pure_sv",
+                "build/cpptb/apb_trace/systemverilog_obj/Vapb_trace_sv_tb",
+            ),
+        ),
+        runner=Runner(
+            commands=(
+                ("make", "cpp-dpi-apb-trace-run"),
+                ("make", "cpp-dpi-apb-trace-sv-run"),
             ),
         ),
         default_iterations=1,

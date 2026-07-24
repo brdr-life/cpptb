@@ -20,6 +20,7 @@ CPPTB_Z3_RANDOM_TEST := $(CPPTB_BUILD_DIR)/z3_random_backend_test
 CPPTB_COVERAGE_TEST := $(CPPTB_BUILD_DIR)/coverage_test
 CPPTB_TEST_API_TEST := $(CPPTB_BUILD_DIR)/test_api_test
 CPPTB_COMPONENTS_TEST := $(CPPTB_BUILD_DIR)/components_test
+CPPTB_TRANSACTION_RECORDING_TEST := $(CPPTB_BUILD_DIR)/transaction_recording_test
 CPPTB_MEMORY_MODEL_TEST := $(CPPTB_BUILD_DIR)/memory_model_test
 CPPTB_REGISTER_MODEL_TEST := $(CPPTB_BUILD_DIR)/register_model_test
 CPPTB_REGISTER_SEQUENCES_TEST := $(CPPTB_BUILD_DIR)/register_sequences_test
@@ -66,7 +67,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor process_pipeline analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component memory_model memory_model_direct register_prediction_validity register_backdoor register_hierarchy register_split register_wide register_enum register_memory register_sequences register_coverage register_maps register_user_effects structured_logging structured_log_history mixed_logging
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor process_pipeline analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component transaction_recording memory_model memory_model_direct register_prediction_validity register_backdoor register_hierarchy register_split register_wide register_enum register_memory register_sequences register_coverage register_maps register_user_effects structured_logging structured_log_history mixed_logging
 AUTHORING_CORE_KERNEL ?= control
 AUTHORING_CORE_OPT_FAST ?= -O3
 AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
@@ -317,6 +318,7 @@ $(eval $(call CPPTB_EXAMPLE_template,component-fifo,COMPONENT_FIFO,component_fif
 $(eval $(call CPPTB_EXAMPLE_template,apb-regfile,APB_REGFILE,apb_regfile,apb_regfile,dpi_apb_regfile,apb_regfile_sv_tb,component_apb_test))
 CPPTB_EXAMPLE_PHONY_TARGETS += cpp-dpi-apb-regfile-suite-test
 CPPTB_EXAMPLE_TEST_TARGETS += cpp-dpi-apb-regfile-suite-test
+$(eval $(call CPPTB_EXAMPLE_template,apb-trace,APB_TRACE,apb_trace,apb_trace,dpi_apb_trace,apb_trace_sv_tb,transaction_recording_test))
 $(eval $(call CPPTB_EXAMPLE_template,ipxact-regfile,IPXACT_REGFILE,ipxact_regfile,ipxact_regfile,dpi_ipxact_regfile,ipxact_regfile_sv_tb,ipxact_register_model_test))
 CPPTB_IPXACT_REGFILE_MODEL := $(CPPTB_IPXACT_REGFILE_GENERATED_DIR)/ipxact_regs.hpp
 CPPTB_IPXACT_REGFILE_MODEL_TEST := $(CPPTB_IPXACT_REGFILE_BUILD_DIR)/model_contract
@@ -356,7 +358,7 @@ cpp-dpi-mixed-logging-output-test: cpp-dpi-mixed-logging-build
 	python3 examples/mixed_logging/check_output.py \
 		$(CPPTB_MIXED_LOGGING_OBJ_DIR)/Vdpi_mixed_logging
 
-.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -379,7 +381,7 @@ all: test
 test: unit-test python-test codegen-test conformance-test examples-test ground-truth-test registry-check
 
 unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test \
-	cpptb-components-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test \
+	cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test \
 	cpptb-hierarchy-test
 
 python-test:
@@ -589,6 +591,16 @@ $(CPPTB_COMPONENTS_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/components_test.cpp
 
 cpptb-components-test: $(CPPTB_COMPONENTS_TEST)
 	$(CPPTB_COMPONENTS_TEST)
+
+$(CPPTB_TRANSACTION_RECORDING_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/transaction_recording_test.cpp
+	mkdir -p $(CPPTB_BUILD_DIR)
+	$(CXX) -std=c++20 -Iinclude -I. \
+		-I$(VERILATOR_ROOT)/include \
+		-I$(VERILATOR_ROOT)/include/vltstd \
+		tests/unit/transaction_recording_test.cpp -o $@
+
+cpptb-transaction-recording-test: $(CPPTB_TRANSACTION_RECORDING_TEST)
+	$(CPPTB_TRANSACTION_RECORDING_TEST)
 
 $(CPPTB_MEMORY_MODEL_TEST): $(CPPTB_PUBLIC_HEADERS) tests/unit/memory_model_test.cpp
 	mkdir -p $(CPPTB_BUILD_DIR)
@@ -970,6 +982,7 @@ $(eval $(call AUTHORING_CORE_DPI_template,constrained_packet,37))
 $(eval $(call AUTHORING_CORE_DPI_template,constraint_extensions,38))
 $(eval $(call AUTHORING_CORE_DPI_template,coverage_sampling,39))
 $(eval $(call AUTHORING_CORE_DPI_template,apb_component,40))
+$(eval $(call AUTHORING_CORE_DPI_template,transaction_recording,58))
 $(eval $(call AUTHORING_CORE_DPI_template,process_pipeline,41))
 $(eval $(call AUTHORING_CORE_DPI_template,memory_model,42))
 $(eval $(call AUTHORING_CORE_DPI_template,memory_model_direct,43))

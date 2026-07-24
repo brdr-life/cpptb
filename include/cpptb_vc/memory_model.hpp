@@ -21,6 +21,7 @@
 
 #include "cpptb/test_api.hpp"
 #include "cpptb_vc/memory_mapped.hpp"
+#include "cpptb_vc/transaction_recording.hpp"
 
 namespace cpptb::vc {
 
@@ -486,6 +487,14 @@ class MemoryPredictor {
         }
         if (!(observed == expected)) ++mismatches_;
         test_.expect_eq(label_, observed, expected);
+    }
+
+    template <typename Observation>
+        requires TransactionObservationFor<Observation, Transaction>
+    void write(const Observation& observation) {
+        if (observation.disposition == TransactionDisposition::Completed) {
+            write(observation.value);
+        }
     }
 
     uint64_t reads() const noexcept { return reads_; }

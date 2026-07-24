@@ -599,6 +599,82 @@ int main() {
         cpptb::TestResult result;
         cpptb::TestContext test{scheduler, result};
         uint32_t clock_value = 0;
+        uint32_t select_value = 0;
+        uint32_t enable_value = 0;
+        uint32_t write_value = 0;
+        uint32_t address_value = 0;
+        uint32_t write_data_value = 0;
+        uint32_t read_data_value = 0;
+        uint32_t ready_value = 1;
+        uint32_t error_value = 0;
+        uint32_t strobe_value = 0;
+        FakeSignal clock{{nullptr, 240, "monitor_pclk"}, &clock_value};
+        FakeSignal select{{nullptr, 241, "monitor_psel"}, &select_value};
+        FakeSignal enable{{nullptr, 242, "monitor_penable"}, &enable_value};
+        FakeSignal write{{nullptr, 243, "monitor_pwrite"}, &write_value};
+        FakeSignal address{{nullptr, 244, "monitor_paddr"}, &address_value};
+        FakeSignal write_data{{nullptr, 245, "monitor_pwdata"},
+                              &write_data_value};
+        FakeSignal read_data{{nullptr, 246, "monitor_prdata"},
+                             &read_data_value};
+        FakeSignal ready{{nullptr, 247, "monitor_pready"}, &ready_value};
+        FakeSignal error{{nullptr, 248, "monitor_pslverr"}, &error_value};
+        FakePackedSignal<4> strobe{{nullptr, 249, "monitor_pstrb"},
+                                   &strobe_value};
+        auto bus = cpptb::vc::ApbBus{clock, select, enable, write, address,
+                                     write_data, read_data, ready, error,
+                                     strobe};
+        cpptb::vc::ApbMonitor monitor{test, bus};
+        using Observation = typename decltype(monitor)::observation_type;
+        std::vector<Observation> observations;
+        VectorSubscriber<Observation> subscriber{observations};
+        auto connection = monitor.observed().connect(subscriber);
+        scheduler.spawn_detached(monitor.run(1));
+
+        select_value = 1;
+        write_value = 1;
+        address_value = 0x10;
+        write_data_value = 0xaaaa'aaaa;
+        strobe_value = 0xf;
+        scheduler.notify_edge(clock.signal.id,
+                              cpptb::coro::EdgeKind::Rising);
+        select_value = 0;
+        scheduler.notify_edge(clock.signal.id,
+                              cpptb::coro::EdgeKind::Rising);
+
+        select_value = 1;
+        enable_value = 0;
+        address_value = 0x18;
+        write_data_value = 0xbbbb'bbbb;
+        scheduler.notify_edge(clock.signal.id,
+                              cpptb::coro::EdgeKind::Rising);
+        address_value = 0x24;
+        write_data_value = 0x1234'5678;
+        scheduler.notify_edge(clock.signal.id,
+                              cpptb::coro::EdgeKind::Rising);
+        enable_value = 1;
+        ready_value = 0;
+        scheduler.notify_edge(clock.signal.id,
+                              cpptb::coro::EdgeKind::Rising);
+        ready_value = 1;
+        scheduler.notify_edge(clock.signal.id,
+                              cpptb::coro::EdgeKind::Rising);
+
+        passed &= expect(
+            "APB monitor resynchronizes after an abandoned setup",
+            observations.size() == 1 &&
+                observations[0].value.address == 0x24 &&
+                observations[0].value.data == 0x1234'5678 &&
+                observations[0].value.wait_cycles == 1 &&
+                observations[0].disposition ==
+                    cpptb::vc::TransactionDisposition::Completed);
+    }
+
+    {
+        cpptb::coro::Testbench scheduler;
+        cpptb::TestResult result;
+        cpptb::TestContext test{scheduler, result};
+        uint32_t clock_value = 0;
         uint32_t select_value = 1;
         uint32_t enable_value = 0;
         uint32_t write_value = 0;
