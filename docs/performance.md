@@ -22,6 +22,27 @@ Shared CI is used for semantic and equivalence checks only. Reference
 performance reports belong in `benchmarks/baselines/`; raw journals and
 machine-specific command captures are local artifacts.
 
+## Build policy for measured binaries
+
+Every measured binary in every suite is compiled at `CPPTB_BENCH_OPT_FAST`,
+which defaults to `-O3`. This covers both halves of each comparison: Verilator's
+generated model through `-MAKEFLAGS OPT_FAST`, and the C++ testbench through
+`-CFLAGS`. Both are needed. Verilator applies `OPT_FAST` only to the files it
+generates, and adds no optimization flag of its own to testbench sources given
+on the command line, so a testbench is otherwise compiled unoptimized while the
+pure-SystemVerilog model it is compared against is not.
+
+Override `CPPTB_BENCH_OPT_FAST` to sweep every suite, or one suite's own
+`*_OPT_FAST` variable to change a single suite:
+
+```sh
+make feature-benchmark FEATURE=event CPPTB_BENCH_OPT_FAST=-O2
+```
+
+Baselines recorded before this policy measured an unoptimized C++ side against
+an optimized model, so their ratios overstate C++ DPI cost and are not
+comparable with later runs.
+
 Historical scheduler experiments and their accepted or rejected rationale are
 recorded in `benchmarks/authoring_core/OPTIMIZATION_NOTES.md` in the source
 repository.

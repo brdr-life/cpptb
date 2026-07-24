@@ -36,6 +36,7 @@ DOCS_BUILD_DIR := $(BUILD_DIR)/docs
 SPHINX_DOCS_DIR := $(DOCS_BUILD_DIR)/sphinx
 ZENSICAL_DOCS_DIR := $(DOCS_BUILD_DIR)/zensical
 PERIPHERAL_SUITE_BUILD_DIR := $(BUILD_DIR)/benchmarks/peripheral_suite
+PERIPHERAL_SUITE_OPT_FAST ?= $(CPPTB_BENCH_OPT_FAST)
 PERIPHERAL_SUITE_VPI_OBJ_DIR := $(PERIPHERAL_SUITE_BUILD_DIR)/cpp_vpi_obj
 PERIPHERAL_SUITE_SV_OBJ_DIR := $(PERIPHERAL_SUITE_BUILD_DIR)/pure_sv_obj
 PERIPHERAL_SUITE_DPI_OBJ_DIR := $(PERIPHERAL_SUITE_BUILD_DIR)/cpp_dpi_obj
@@ -69,7 +70,13 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
 AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor process_pipeline analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component transaction_recording memory_model memory_model_direct register_prediction_validity register_backdoor register_hierarchy register_split register_wide register_enum register_memory register_sequences register_coverage register_maps register_user_effects structured_logging structured_log_history mixed_logging
 AUTHORING_CORE_KERNEL ?= control
-AUTHORING_CORE_OPT_FAST ?= -O3
+# Every measured benchmark binary is compiled the same way. Verilator applies
+# -Os by default to its generated model and no optimization at all to testbench
+# sources, which penalises the coroutine-heavy C++ DPI side against its
+# pure-SystemVerilog twin and distorts the ratio the guard checks. Override
+# CPPTB_BENCH_OPT_FAST to sweep all suites, or one suite's variable for one.
+CPPTB_BENCH_OPT_FAST ?= -O3
+AUTHORING_CORE_OPT_FAST ?= $(CPPTB_BENCH_OPT_FAST)
 AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
 AUTHORING_CORE_EXTRA_CFLAGS ?=
 AUTHORING_CORE_EXTRA_LDFLAGS ?=
@@ -82,6 +89,7 @@ FRAMEWORK_COMPARISON_VPI_HOST := $(FRAMEWORK_COMPARISON_DIR)/testbenches/cpp_vpi
 FRAMEWORK_COMPARISON_COCOTB_RUNNER := $(FRAMEWORK_COMPARISON_DIR)/testbenches/cocotb/run_cocotb.py
 HEAVY_SUITE_DIR := $(FRAMEWORK_COMPARISON_DIR)/heavy_suite
 HEAVY_SUITE_BUILD_DIR := $(FRAMEWORK_COMPARISON_BUILD_DIR)/heavy_suite
+HEAVY_SUITE_OPT_FAST ?= $(CPPTB_BENCH_OPT_FAST)
 HEAVY_SUITE_RTL := $(HEAVY_SUITE_DIR)/rtl/heavy_benchmark_dut.sv
 HEAVY_SUITE_DPI_MANIFEST := $(HEAVY_SUITE_DIR)/testbenches/cpp_dpi/heavy_benchmark.dpi.json
 HEAVY_SUITE_DPI_CODEGEN_STAMP := $(HEAVY_SUITE_BUILD_DIR)/cpp_dpi.codegen.stamp
@@ -102,6 +110,7 @@ HEAVY_SUITE_VPI_BINARY := $(HEAVY_SUITE_BUILD_DIR)/cpp_vpi_obj/Vheavy_benchmark_
 HEAVY_SUITE_COCOTB_RUNNER := $(HEAVY_SUITE_DIR)/testbenches/cocotb/run_cocotb.py
 OPEN_CORES_DIR := $(FRAMEWORK_COMPARISON_DIR)/open_cores
 OPEN_CORES_BUILD_DIR := $(FRAMEWORK_COMPARISON_BUILD_DIR)/open_cores
+OPEN_CORES_OPT_FAST ?= $(CPPTB_BENCH_OPT_FAST)
 OPEN_CORES_DPI_MANIFEST := $(OPEN_CORES_DIR)/testbenches/cpp_dpi/open_cores.dpi.json
 OPEN_CORES_DPI_CODEGEN_STAMP := $(OPEN_CORES_BUILD_DIR)/cpp_dpi.codegen.stamp
 OPEN_CORES_CLOCK_CONFIG := $(OPEN_CORES_BUILD_DIR)/clocks.json
@@ -846,6 +855,7 @@ peripheral-suite-run: $(PERIPHERAL_SUITE_BUILD_DIR)/peripheral_suite_host
 $(PERIPHERAL_SUITE_SV_OBJ_DIR)/Vperipheral_suite_sv_tb: $(PERIPHERAL_SUITE_SV_RTL)
 	mkdir -p $(PERIPHERAL_SUITE_SV_OBJ_DIR)
 	verilator --binary --timing \
+		-MAKEFLAGS "OPT_FAST=$(PERIPHERAL_SUITE_OPT_FAST)" \
 		-Wno-MULTIDRIVEN -Wno-TIMESCALEMOD -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND \
 		-Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
 		-Ibenchmarks/peripheral_suite/rtl \
@@ -889,10 +899,11 @@ $(PERIPHERAL_SUITE_DPI_OBJ_DIR)/Vdpi_peripheral_suite: $(PERIPHERAL_SUITE_DPI_RT
 	mkdir -p $(PERIPHERAL_SUITE_DPI_OBJ_DIR)
 	verilator --binary --timing \
 		--no-sched-zero-delay \
+		-MAKEFLAGS "OPT_FAST=$(PERIPHERAL_SUITE_OPT_FAST)" \
 		-Wno-MULTIDRIVEN -Wno-TIMESCALEMOD -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND \
 		-Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
 		-Ibenchmarks/peripheral_suite/rtl \
-		-CFLAGS "-std=c++20 -I$(CURDIR) -I$(CURDIR)/include" \
+		-CFLAGS "-std=c++20 $(PERIPHERAL_SUITE_OPT_FAST) -I$(CURDIR) -I$(CURDIR)/include" \
 		--Mdir $(PERIPHERAL_SUITE_DPI_OBJ_DIR) \
 		--top-module dpi_peripheral_suite \
 		$(PERIPHERAL_SUITE_DPI_RTL) \
@@ -958,7 +969,7 @@ $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		-Wno-MULTIDRIVEN \
 		$(if $(filter mixed_logging,$(1)),-I$$(CURDIR)/include -DCPPTB_ENABLE_SV_LOGGING -DAUTHORING_CORE_MIXED_LOGGING) \
 		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $(if $(filter timing_phases,$(1)),-DCPPTB_VERILATED_TOP=Vdpi_authoring_core -DCPPTB_VERILATOR_DIRECT_TIMING) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
+		-CFLAGS "-std=c++20 $$(AUTHORING_CORE_OPT_FAST) -I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $(if $(filter timing_phases,$(1)),-DCPPTB_VERILATED_TOP=Vdpi_authoring_core -DCPPTB_VERILATOR_DIRECT_TIMING) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
 		$$(if $$(strip $$(AUTHORING_CORE_EXTRA_LDFLAGS)),-LDFLAGS "$$(AUTHORING_CORE_EXTRA_LDFLAGS)",) \
 		--Mdir $$(dir $$@) \
 		--top-module dpi_authoring_core \
@@ -1050,7 +1061,7 @@ $(2)/Vdpi_authoring_core: $(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		-Wno-MULTIDRIVEN \
 		-DCPPTB_SV_DPI_TIMING $(3) \
 		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=27 -DCPPTB_SV_DPI_TIMING $(4)" \
+		-CFLAGS "-std=c++20 $$(AUTHORING_CORE_OPT_FAST) -I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=27 -DCPPTB_SV_DPI_TIMING $(4)" \
 		--Mdir $(2) \
 		--top-module dpi_authoring_core \
 		$$(AUTHORING_CORE_RTL) \
@@ -1072,7 +1083,7 @@ $(AUTHORING_CORE_TIMING_VPI_DIR)/Vdpi_authoring_core: \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
 		-Wno-MULTIDRIVEN \
 		-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-std=c++20 -I$(CURDIR) -I$(CURDIR)/include -DAUTHORING_CORE_KERNEL=27 -DCPPTB_VERILATED_TOP=Vdpi_authoring_core" \
+		-CFLAGS "-std=c++20 $(AUTHORING_CORE_OPT_FAST) -I$(CURDIR) -I$(CURDIR)/include -DAUTHORING_CORE_KERNEL=27 -DCPPTB_VERILATED_TOP=Vdpi_authoring_core" \
 		--Mdir $(AUTHORING_CORE_TIMING_VPI_DIR) \
 		--top-module dpi_authoring_core \
 		$(AUTHORING_CORE_RTL) \
@@ -1164,7 +1175,7 @@ $(FRAMEWORK_COMPARISON_VPI_BINARY): $(AUTHORING_CORE_RTL) \
 	mkdir -p $(FRAMEWORK_COMPARISON_VPI_OBJ_DIR)
 	verilator --cc --exe --build --timing --vpi --public-flat-rw \
 		-Wno-PINMISSING -Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL \
-		-CFLAGS "-std=c++20 -I$(CURDIR) -I$(CURDIR)/include" \
+		-CFLAGS "-std=c++20 $(AUTHORING_CORE_OPT_FAST) -I$(CURDIR) -I$(CURDIR)/include" \
 		--Mdir $(FRAMEWORK_COMPARISON_VPI_OBJ_DIR) \
 		--top-module authoring_core_vpi_top \
 		$(AUTHORING_CORE_RTL) $(FRAMEWORK_COMPARISON_VPI_TOP) \
@@ -1231,8 +1242,8 @@ $(HEAVY_SUITE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_heavy_benchmark: \
 	mkdir -p $$(dir $$@)
 	verilator --binary --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
-		-MAKEFLAGS "OPT_FAST=-O3" \
-		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DHEAVY_WORKLOAD=$(2)" \
+		-MAKEFLAGS "OPT_FAST=$$(HEAVY_SUITE_OPT_FAST)" \
+		-CFLAGS "-std=c++20 $$(HEAVY_SUITE_OPT_FAST) -I$$(CURDIR) -I$$(CURDIR)/include -DHEAVY_WORKLOAD=$(2)" \
 		--Mdir $$(dir $$@) --top-module dpi_heavy_benchmark \
 		$$(HEAVY_SUITE_RTL) \
 		$$(HEAVY_SUITE_DIR)/testbenches/cpp_dpi/generated/dpi_heavy_benchmark.sv \
@@ -1253,7 +1264,7 @@ $(HEAVY_SUITE_SV_BINARY): $(HEAVY_SUITE_RTL) \
 	mkdir -p $(dir $@)
 	verilator --binary --timing \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
-		-MAKEFLAGS "OPT_FAST=-O3" --Mdir $(dir $@) \
+		-MAKEFLAGS "OPT_FAST=$(HEAVY_SUITE_OPT_FAST)" --Mdir $(dir $@) \
 		--top-module heavy_benchmark_sv_tb $(HEAVY_SUITE_RTL) \
 		$(HEAVY_SUITE_DIR)/testbenches/systemverilog/heavy_benchmark_sv_tb.sv
 
@@ -1266,7 +1277,7 @@ $(HEAVY_SUITE_VPI_BINARY): $(HEAVY_SUITE_RTL) \
 	mkdir -p $(dir $@)
 	verilator --cc --exe --build --timing --vpi --public-flat-rw \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL \
-		-CFLAGS "-std=c++20 -I$(CURDIR) -I$(CURDIR)/include" \
+		-CFLAGS "-std=c++20 $(HEAVY_SUITE_OPT_FAST) -I$(CURDIR) -I$(CURDIR)/include" \
 		--Mdir $(dir $@) --top-module heavy_benchmark_vpi_top \
 		$(HEAVY_SUITE_RTL) \
 		$(HEAVY_SUITE_DIR)/testbenches/cpp_vpi/heavy_benchmark_vpi_top.sv \
@@ -1336,8 +1347,8 @@ $(OPEN_CORES_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_open_cores_benchmark: \
 	verilator --binary --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
 		-Wno-UNOPTFLAT -DOPEN_CORE_WORKLOAD=$(2) \
-		-MAKEFLAGS "OPT_FAST=-O3" \
-		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DOPEN_CORE_WORKLOAD=$(2)" \
+		-MAKEFLAGS "OPT_FAST=$$(OPEN_CORES_OPT_FAST)" \
+		-CFLAGS "-std=c++20 $$(OPEN_CORES_OPT_FAST) -I$$(CURDIR) -I$$(CURDIR)/include -DOPEN_CORE_WORKLOAD=$(2)" \
 		--Mdir $$(dir $$@) --top-module dpi_open_cores_benchmark \
 		$$(OPEN_CORES_RTL) \
 		$$(OPEN_CORES_DIR)/testbenches/cpp_dpi/generated/dpi_open_cores_benchmark.sv \
@@ -1361,7 +1372,7 @@ $(OPEN_CORES_BUILD_DIR)/pure_sv_$(1)/Vopen_cores_sv_tb: \
 	verilator --binary --timing \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
 		-Wno-UNOPTFLAT -DOPEN_CORE_WORKLOAD=$(2) \
-		-MAKEFLAGS "OPT_FAST=-O3" --Mdir $$(dir $$@) \
+		-MAKEFLAGS "OPT_FAST=$$(OPEN_CORES_OPT_FAST)" --Mdir $$(dir $$@) \
 		--top-module open_cores_sv_tb $$(OPEN_CORES_RTL) \
 		$$(OPEN_CORES_DIR)/testbenches/systemverilog/open_cores_sv_tb.sv
 endef
@@ -1383,7 +1394,7 @@ $(OPEN_CORES_BUILD_DIR)/cpp_vpi_$(1)/Vopen_cores_benchmark_top: \
 	verilator --cc --exe --build --timing --vpi --public-flat-rw \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL -Wno-UNOPTFLAT \
 		-DOPEN_CORE_WORKLOAD=$(2) \
-		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DOPEN_CORE_WORKLOAD=$(2)" \
+		-CFLAGS "-std=c++20 $$(OPEN_CORES_OPT_FAST) -I$$(CURDIR) -I$$(CURDIR)/include -DOPEN_CORE_WORKLOAD=$(2)" \
 		--Mdir $$(dir $$@) --top-module open_cores_benchmark_top \
 		$$(OPEN_CORES_RTL) $$(OPEN_CORES_DIR)/rtl/open_cores_benchmark_top.sv \
 		$$(OPEN_CORES_DIR)/testbenches/cpp_vpi/open_cores_vpi_host.cpp
