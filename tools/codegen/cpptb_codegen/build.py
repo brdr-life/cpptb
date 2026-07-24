@@ -364,6 +364,10 @@ class VerilatorBackend:
 
         cflags = shlex.join(
             [
+                # Verilator adds no -std flag of its own, so the testbench would
+                # otherwise be compiled with the toolchain default. cpptb is a
+                # C++20 codebase; a later -std in cxx_flags still wins.
+                "-std=c++20",
                 *(f"-I{path}" for path in cpp_include_dirs if path != self.verilator_root / "include" / "vltstd"),
                 *spec.cxx_flags,
             ]

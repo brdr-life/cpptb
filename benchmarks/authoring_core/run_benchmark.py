@@ -561,6 +561,17 @@ def evaluate_guard(
     return stats
 
 
+def _max_rss_kb(ru_maxrss: float) -> float:
+    """Normalise ru_maxrss to kilobytes.
+
+    Linux reports kilobytes while macOS reports bytes, so raw values are not
+    comparable across platforms without this conversion.
+    """
+    if platform.system() == "Darwin":
+        return float(ru_maxrss) / 1024.0
+    return float(ru_maxrss)
+
+
 def run_command(
     command: list[str],
     *,
@@ -596,7 +607,7 @@ def run_command(
         "child_system_cpu_ms": system_cpu_ms,
         "child_cpu_ms": child_cpu_ms,
         "child_cpu_utilization": child_cpu_ms / wall_ms if wall_ms else 0.0,
-        "child_max_rss": float(usage_after.ru_maxrss),
+        "child_max_rss_kb": _max_rss_kb(usage_after.ru_maxrss),
     }
 
 

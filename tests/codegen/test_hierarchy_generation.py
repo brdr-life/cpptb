@@ -231,7 +231,7 @@ class HierarchyGenerationTests(unittest.TestCase):
                 [
                     *common_verilator_args,
                     "-CFLAGS",
-                    f"-I{REPO / 'include'} -I{generated}",
+                    f"-std=c++20 -I{REPO / 'include'} -I{generated}",
                     "--Mdir",
                     str(cpp_object_dir),
                     "--top-module",
