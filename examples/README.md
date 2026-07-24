@@ -12,6 +12,7 @@ twin with the same stimulus, checks, and primary-clock cycle count.
 | [`component_fifo`](component_fifo/) | Typed ports, analysis fan-out, buffered observation, reusable scoreboard, and ready/valid components | `make cpp-dpi-component-fifo-run` |
 | [`multiclock`](multiclock/) | Independent input clocks, a DUT output clock, producer/consumer traffic, and `First` | `make cpp-dpi-multiclock-run` |
 | [`apb_regfile`](apb_regfile/) | `cpptb_vc` APB master, monitor, checker, scoreboard, and coverage | `make cpp-dpi-apb-regfile-run` |
+| [`apb_trace`](apb_trace/) | Timed typed APB observations, analysis fan-out, and transaction recording | `make cpp-dpi-apb-trace-run` |
 | [`watchdog_timeout`](watchdog_timeout/) | Trigger/task timeouts, expected stalls, process handles, and cancellation | `make cpp-dpi-watchdog-timeout-run` |
 | [`fault_injection`](fault_injection/) | Internal `get()`/`deposit()`/`force()`/`release()` on nets, variables, and memory | `make cpp-dpi-fault-injection-run` |
 | [`rich_data`](rich_data/) | Wide values and slices, fixed point, arrays, packed structs, and enums | `make cpp-dpi-rich-data-run` |
@@ -32,6 +33,8 @@ twin with the same stimulus, checks, and primary-clock cycle count.
 - Start from `multiclock` for independent clock domains.
 - Start from `apb_regfile` when a bus-functional model should hide pin-level
   protocol phases from the test sequence.
+- Start from `apb_trace` when a passive monitor should feed checking and a
+  retained transaction timeline from the same decoded operations.
 - Start from `watchdog_timeout` when operations may hang, time out, or need
   cancellation.
 - Start from `fault_injection` for explicit internal access and fault

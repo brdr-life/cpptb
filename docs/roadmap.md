@@ -48,6 +48,7 @@ milestone blockers. The current development priority is the framework.
 | 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--next">In progress</span> | Process-aware logging and scheduler wait diagnostics are done; waveforms and distributable packages remain |
 | 8 | [Coherent clock and reset control](#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Runtime clock ownership and explicit reusable reset components |
 | 9 | [Batched execution and run-ahead experiments](#9-batched-execution-and-run-ahead-experiments) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Reduce DPI scheduler resumptions across fine-grained timing boundaries |
+| - | [No-priority backlog](#no-priority-backlog) | <span class="roadmap-status roadmap-status--planned">No priority</span> | Deferred interoperability, protocol-component, synchronization, lookup, and harness work |
 
 Select a milestone to jump to its detailed scope below.
 
@@ -166,7 +167,21 @@ protocol checker, structured transactions, runnable example, scoreboard, and
 coverage composition are implemented. The same sequence is reusable through
 the generic memory-mapped interface. The exact `apb_component` C++/pure-SV
 pair exercises the active and passive components under the standard `1.10x`
-performance guard.
+performance guard. Its current semantic run passes; the post-envelope timing
+remeasurement is pending because the July 20, 2026 run was rejected by host
+load admission.
+
+Typed transaction recording is also implemented in `cpptb_vc`. Timed
+`TransactionObservation<T>` envelopes, monitor-owned analysis output, static
+field descriptors, uniquely named recorder streams, an in-memory sink, and a
+JSON Lines sink keep protocol decoding separate from persistence. The runnable
+[APB transaction trace](examples/apb-trace.md) records and checks the same 256
+operations in C++ and pure SystemVerilog. The existing `apb_component` pair is
+the disabled-recorder overhead guard. The `transaction_recording` authoring
+pair retains 200,000 equivalent records in C++ and pure SystemVerilog and is
+the enabled-recorder `1.10x` hard gate. Its semantic run passes; the July 20,
+2026 timing attempt was rejected by the host-load admission check, so a timing
+ratio remains pending a valid serial run.
 
 The implementation lives under the separate `cpptb_vc` include tree,
 namespace, and CMake target. It depends only on public core APIs and generated
@@ -468,7 +483,8 @@ window admitted by the standard `1.10x` guard. See
 Remaining facilities needed to diagnose and distribute real regressions:
 
 - optional machine-readable export of structured log histories;
-- transaction recording with component and process provenance;
+- [transaction recording](verification-components/transaction-recording.md)
+  with component and process provenance;
 - runtime waveform start/stop and scope selection;
 - waveform-on-failure support in the test runner;
 - <strong class="roadmap-status roadmap-status--done">Done:</strong> a
@@ -537,6 +553,26 @@ without regressing existing workloads beyond the repository's `1.10x` policy.
 Small register-handle and coroutine-wrapper changes are not priority
 experiments because controlled decomposition shows they cannot close the
 current gap.
+
+## No-priority backlog
+
+**Status:** <span class="roadmap-status roadmap-status--planned">No priority</span>
+
+The following ideas are intentionally deferred and are not scheduled after the
+numbered milestones:
+
+- UCIS functional-coverage interchange;
+- additional protocol components such as AXI-Lite, UART, SPI, and richer
+  streaming components;
+- `Barrier`, unless a concrete multi-process example needs semantics that
+  cannot be expressed clearly with `Join`, `Event`, or `Semaphore`;
+- dynamic string-based hierarchy lookup; and
+- reference-harness enhancements including JUnit conversion, tag filtering,
+  waveform-on-failure reruns, and reproduction-command presentation.
+
+These items may be promoted only when a concrete project supplies the use case,
+semantics, runnable example, test coverage, and performance peer needed to
+justify prioritizing them.
 
 ## Deliberate non-goals
 

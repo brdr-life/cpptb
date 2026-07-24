@@ -457,11 +457,40 @@ class ContractTests(unittest.TestCase):
             BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
         ).read_text(encoding="utf-8")
         self.assertIn("ApbMaster master{bus}", cpp)
-        self.assertIn("ApbMonitor monitor{bus}", cpp)
+        self.assertIn("ApbMonitor monitor{test, bus}", cpp)
         self.assertIn("ApbProtocolChecker checker{test, bus}", cpp)
         self.assertIn("task automatic run_apb_monitor", sv)
         self.assertIn("task automatic run_apb_checker", sv)
         self.assertIn('"apb_component": run_apb_component();', sv)
+
+    def test_transaction_recording_has_exact_cpp_and_sv_twins(self):
+        counts = workload.expected_counts("transaction_recording", 5)
+        self.assertEqual(counts.transactions, 10)
+        self.assertEqual(counts.checks, 34)
+        self.assertEqual(counts.analysis_write, 20)
+        self.assertEqual(counts.analysis_delivery, 30)
+        self.assertEqual(
+            [
+                field
+                for field in workload.FEATURE_FIELDS
+                if getattr(counts, field) != 0
+            ],
+            ["analysis_write", "analysis_delivery"],
+        )
+
+        cpp = (BENCH_DIR / "testbenches/cpp_dpi/testbench.cpp").read_text(
+            encoding="utf-8"
+        )
+        sv = (
+            BENCH_DIR / "testbenches/systemverilog/authoring_core_sv_tb.sv"
+        ).read_text(encoding="utf-8")
+        self.assertIn("InMemoryTransactionSink trace", cpp)
+        self.assertIn("MeasuredAnalysisSubscriber measured_stream", cpp)
+        self.assertIn("recorder.connect(measured_trace)", cpp)
+        self.assertIn("task automatic record_apb_transaction", sv)
+        self.assertIn("analysis_write_count++", sv)
+        self.assertNotIn("apb_transaction_t transaction_trace[$]", sv)
+        self.assertIn('"transaction_recording": run_transaction_recording();', sv)
 
     def test_memory_model_has_exact_cpp_and_sv_twins(self):
         counts = workload.expected_counts("memory_model", 5)

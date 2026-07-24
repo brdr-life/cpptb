@@ -533,14 +533,13 @@ engine, debug port, or testbench component accesses the bus:
 ```cpp
 using Transaction = typename decltype(apb)::transaction_type;
 
-AnalysisPort<Transaction> observed;
-ApbMonitor monitor{bus};
+ApbMonitor monitor{test, bus};
 RegisterPredictor predictor{test, regs.register_handles()};
 regs.set_auto_predict(false);
-auto prediction_connection = observed.connect(predictor);
+auto prediction_connection = monitor.observed().connect(predictor);
 
 co_await Join{
-    monitor.run(observed, expected_transfer_count),
+    monitor.run(expected_transfer_count),
     processor_sequence(dut),
 };
 
@@ -578,9 +577,7 @@ fields, and register-backed memories:
 ```cpp
 RegisterAccessCoverage accesses{regs.descriptor(), peripheral_base,
                                 "peripheral_access"};
-AnalysisPort<Transaction> observed;
-auto access_connection = observed.connect(accesses);
-// Pass `observed` to the passive bus monitor's run task.
+auto access_connection = monitor.observed().connect(accesses);
 
 // Raw hierarchy operations are invisible on the bus, so sample them where
 // the test intentionally performs them.

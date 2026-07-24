@@ -12,6 +12,7 @@
 
 #include "cpptb/test_api.hpp"
 #include "cpptb_vc/ports.hpp"
+#include "cpptb_vc/transaction_recording.hpp"
 
 namespace cpptb::vc {
 
@@ -33,6 +34,15 @@ class InOrderScoreboard {
                 owner_->write_expected(value);
             } else {
                 owner_->write_actual(value);
+            }
+        }
+
+        template <typename Observation>
+            requires TransactionObservationFor<Observation, T>
+        void write(const Observation& observation) {
+            if (observation.disposition ==
+                TransactionDisposition::Completed) {
+                write(observation.value);
             }
         }
 
@@ -129,6 +139,15 @@ class KeyedScoreboard {
                 owner_->write_expected(value);
             } else {
                 owner_->write_actual(value);
+            }
+        }
+
+        template <typename Observation>
+            requires TransactionObservationFor<Observation, T>
+        void write(const Observation& observation) {
+            if (observation.disposition ==
+                TransactionDisposition::Completed) {
+                write(observation.value);
             }
         }
 
@@ -238,6 +257,14 @@ class ReferenceModelAdapter {
 
     void write(const Input& value) {
         predicted.write(std::invoke(model_, value));
+    }
+
+    template <typename Observation>
+        requires TransactionObservationFor<Observation, Input>
+    void write(const Observation& observation) {
+        if (observation.disposition == TransactionDisposition::Completed) {
+            write(observation.value);
+        }
     }
 
     AnalysisPort<Output> predicted;

@@ -1193,11 +1193,16 @@ bool exercise_register_predictor(cpptb::TestContext test,
         test,
         std::span<cpptb::vc::RegisterHandle<FakeMaster>* const>{handles}};
 
-    predictor.write(Transaction{
-        .operation = cpptb::vc::MemoryOperation::Write,
-        .address = 0x1020,
-        .data = 0x1234'5678,
-        .byte_enable = 0x1,
+    using NarrowAddressTransaction =
+        cpptb::vc::MemoryTransaction<uint16_t, uint32_t, uint8_t>;
+    predictor.write(cpptb::vc::TransactionObservation<
+                    NarrowAddressTransaction>{
+        .value = NarrowAddressTransaction{
+            .operation = cpptb::vc::MemoryOperation::Write,
+            .address = 0x1020,
+            .data = 0x1234'5678,
+            .byte_enable = 0x1,
+        },
     });
     passed &= expect("predictor applies enabled write bytes only",
                      command.mirrored() == 0x00aa'ff78 &&
@@ -1313,11 +1318,16 @@ bool exercise_wide_register_predictor(cpptb::TestContext test,
         std::span<cpptb::vc::WideRegisterHandle<128, FakeMaster>* const>{
             handles}};
 
-    predictor.write(Transaction{
-        .operation = cpptb::vc::MemoryOperation::Write,
-        .address = 0x1080,
-        .data = 0x1122'3344,
-        .byte_enable = 0xf,
+    using NarrowAddressTransaction =
+        cpptb::vc::MemoryTransaction<uint16_t, uint32_t, uint8_t>;
+    predictor.write(cpptb::vc::TransactionObservation<
+                    NarrowAddressTransaction>{
+        .value = NarrowAddressTransaction{
+            .operation = cpptb::vc::MemoryOperation::Write,
+            .address = 0x1080,
+            .data = 0x1122'3344,
+            .byte_enable = 0xf,
+        },
     });
     predictor.write(Transaction{
         .operation = cpptb::vc::MemoryOperation::Write,

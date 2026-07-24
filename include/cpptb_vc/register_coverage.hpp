@@ -137,6 +137,15 @@ class RegisterAccessCoverage {
         ++unmapped_;
     }
 
+    template <std::integral Address, std::unsigned_integral Data,
+              std::unsigned_integral ByteEnable>
+    void write(const TransactionObservation<
+               MemoryTransaction<Address, Data, ByteEnable>>& observation) {
+        if (observation.disposition == TransactionDisposition::Completed) {
+            write(observation.value);
+        }
+    }
+
     void sample_register(const RegisterDescriptor& descriptor,
                          MemoryOperation operation,
                          AccessPath path = AccessPath::Backdoor) {
