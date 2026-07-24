@@ -138,10 +138,18 @@ module authoring_core_sv_tb;
   } apb_transaction_t;
   apb_transaction_t apb_expected[$];
   apb_transaction_t apb_actual[$];
+  string transaction_trace_stream[$];
+  string transaction_trace_type[$];
+  longint unsigned transaction_trace_sequence[$];
+  time transaction_trace_begin[$];
+  time transaction_trace_end[$];
+  int unsigned transaction_trace_disposition[$];
+  string transaction_trace_json[$];
   longint unsigned apb_compared;
   longint unsigned apb_checker_violations;
   bit apb_done;
   bit memory_model_mode;
+  bit transaction_recording_mode;
   byte unsigned memory_model_bytes [longint unsigned];
   longint unsigned memory_model_reads;
   longint unsigned memory_model_writes;
@@ -1061,6 +1069,29 @@ module authoring_core_sv_tb;
     end
   endtask
 
+  task automatic record_apb_transaction(
+      input apb_transaction_t transaction,
+      input time begin_time,
+      input time end_time
+  );
+    string operation;
+    string status;
+    operation = transaction.write ? "write" : "read";
+    status = transaction.error ? "slave_error" : "okay";
+    analysis_write_count++;
+    analysis_delivery_count++;
+    transaction_trace_stream.push_back("apb0.observed");
+    transaction_trace_type.push_back("memory_transaction");
+    transaction_trace_sequence.push_back(transaction_trace_sequence.size());
+    transaction_trace_begin.push_back(begin_time);
+    transaction_trace_end.push_back(end_time);
+    transaction_trace_disposition.push_back(0);
+    transaction_trace_json.push_back($sformatf(
+        "{\"operation\":\"%s\",\"address\":%0d,\"data\":%0d,\"byte_enable\":%0d,\"status\":\"%s\",\"wait_cycles\":%0d}",
+        operation, transaction.address, transaction.data,
+        transaction.strobe, status, transaction.wait_cycles));
+  endtask
+
   task automatic apb_write(input logic [7:0] address,
                            input logic [31:0] data,
                            input logic [3:0] strobe);
@@ -1086,7 +1117,7 @@ module authoring_core_sv_tb;
                              wait_cycles});
     transactions++;
     if (memory_model_mode) memory_model_count++;
-    else apb_component_count++;
+    else if (!transaction_recording_mode) apb_component_count++;
     @(negedge clk);
     apb_psel_i = 1'b0;
     apb_penable_i = 1'b0;
@@ -1117,7 +1148,7 @@ module authoring_core_sv_tb;
                              wait_cycles});
     transactions++;
     if (memory_model_mode) memory_model_count++;
-    else apb_component_count++;
+    else if (!transaction_recording_mode) apb_component_count++;
     @(negedge clk);
     apb_psel_i = 1'b0;
     apb_penable_i = 1'b0;
@@ -1128,6 +1159,8 @@ module authoring_core_sv_tb;
     int unsigned completed;
     int unsigned wait_cycles;
     bit active;
+    time started;
+    apb_transaction_t transaction;
     completed = 0;
     wait_cycles = 0;
     active = 1'b0;
@@ -1138,14 +1171,22 @@ module authoring_core_sv_tb;
         wait_cycles = 0;
       end else if (!apb_penable_i) begin
         active = 1'b1;
+        started = $time;
         wait_cycles = 0;
       end else if (!apb_pready_o) begin
         if (active) wait_cycles++;
       end else begin
-        apb_publish_actual('{apb_pwrite_i, apb_paddr_i,
-                            apb_pwrite_i ? apb_pwdata_i : apb_prdata_o,
-                            apb_pwrite_i ? apb_pstrb_i : 4'hf,
-                            apb_pslverr_o, wait_cycles});
+        transaction = '{apb_pwrite_i, apb_paddr_i,
+                        apb_pwrite_i ? apb_pwdata_i : apb_prdata_o,
+                        apb_pwrite_i ? apb_pstrb_i : 4'hf,
+                        apb_pslverr_o, wait_cycles};
+        if (transaction_recording_mode) begin
+          analysis_write_count++;
+          analysis_delivery_count += 2;
+        end
+        apb_publish_actual(transaction);
+        if (transaction_recording_mode)
+          record_apb_transaction(transaction, started, $time);
         active = 1'b0;
         wait_cycles = 0;
         completed++;
@@ -1232,6 +1273,33 @@ module authoring_core_sv_tb;
     check32(apb_actual.size(), 0, "APB actual pending");
     check32(apb_compared, iterations * 2, "APB scoreboard comparisons");
     check32(apb_checker_violations, 0, "APB protocol violations");
+  endtask
+
+  task automatic run_transaction_recording();
+    transaction_recording_mode = 1'b1;
+    fork
+      run_apb_sequence();
+      run_apb_monitor();
+      run_apb_checker();
+    join
+    check32(apb_expected.size(), 0, "recorded APB expected pending");
+    check32(apb_actual.size(), 0, "recorded APB actual pending");
+    check32(apb_compared, iterations * 2,
+            "recorded APB scoreboard comparisons");
+    check32(apb_checker_violations, 0,
+            "recorded APB protocol violations");
+    check32(transaction_trace_sequence.size(), iterations * 2,
+            "recorded APB transaction count");
+    check32(transaction_trace_sequence[0], 0,
+            "recorded APB first sequence");
+    check32(transaction_trace_sequence[iterations * 2 - 1],
+            iterations * 2 - 1, "recorded APB last sequence");
+    check32(transaction_trace_end[0] > transaction_trace_begin[0], 1,
+            "recorded APB interval");
+    check32(transaction_trace_json[0].substr(0, 19) ==
+                "{\"operation\":\"write\"",
+            1,
+            "recorded APB typed payload");
   endtask
 
   task automatic run_memory_model();
@@ -2609,10 +2677,18 @@ module authoring_core_sv_tb;
     analysis_expected = {};
     apb_expected = {};
     apb_actual = {};
+    transaction_trace_stream = {};
+    transaction_trace_type = {};
+    transaction_trace_sequence = {};
+    transaction_trace_begin = {};
+    transaction_trace_end = {};
+    transaction_trace_disposition = {};
+    transaction_trace_json = {};
     apb_compared = 0;
     apb_checker_violations = 0;
     apb_done = 1'b0;
     memory_model_mode = 1'b0;
+    transaction_recording_mode = 1'b0;
     memory_model_bytes.delete();
     memory_model_reads = 0;
     memory_model_writes = 0;
@@ -2703,6 +2779,7 @@ module authoring_core_sv_tb;
       "constraint_extensions": run_constraint_extensions();
       "coverage_sampling": run_coverage_sampling();
       "apb_component": run_apb_component();
+      "transaction_recording": run_transaction_recording();
       "memory_model": run_memory_model();
       "memory_model_direct": run_memory_model_direct();
       "register_prediction_validity": run_register_prediction_validity();
@@ -2723,6 +2800,7 @@ module authoring_core_sv_tb;
     endcase
 
     if (kernel != "timing_phases" && kernel != "apb_component" &&
+        kernel != "transaction_recording" &&
         kernel != "memory_model" && kernel != "memory_model_direct" &&
         kernel != "register_prediction_validity" &&
         kernel != "register_backdoor" &&

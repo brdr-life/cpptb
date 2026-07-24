@@ -1288,7 +1288,8 @@ Task<void> run_timing_phases(Context context) {
 template <MemoryMappedMaster Master>
 Task<void> run_apb_sequence(
     Context context, Master& master,
-    AnalysisPort<typename Master::transaction_type>& expected, Event& done) {
+    AnalysisPort<typename Master::transaction_type>& expected, Event& done,
+    bool count_component = true) {
     using Transaction = typename Master::transaction_type;
     using ByteEnable = typename Master::byte_enable_type;
     const auto all_bytes = Master::all_bytes();
@@ -1306,7 +1307,7 @@ Task<void> run_apb_sequence(
         expected.write(Transaction{MemoryOperation::Write, address, value,
                                    all_bytes, MemoryStatus::Okay, 0});
         ++context.result.transactions;
-        ++context.result.features.apb_component;
+        if (count_component) ++context.result.features.apb_component;
 
         const auto read = co_await master.read(address);
         check(context, "APB read data", read.data, value);
@@ -1315,7 +1316,7 @@ Task<void> run_apb_sequence(
         expected.write(Transaction{MemoryOperation::Read, address, value,
                                    all_bytes, MemoryStatus::Okay, 0});
         ++context.result.transactions;
-        ++context.result.features.apb_component;
+        if (count_component) ++context.result.features.apb_component;
         context.result.checksum =
             (context.result.checksum ^ read.data) * 0x0100'0193u;
     }
@@ -1345,23 +1346,116 @@ Task<void> run_apb_component(Context context) {
     using Transaction = typename decltype(master)::transaction_type;
     TestContext test{context.scheduler, context.result};
     AnalysisPort<Transaction> expected;
-    AnalysisPort<Transaction> observed;
     InOrderScoreboard<Transaction> scoreboard{test, "APB transaction"};
-    ApbMonitor monitor{bus};
+    ApbMonitor monitor{test, bus};
     ApbProtocolChecker checker{test, bus};
     Event done;
     auto expected_connection = expected.connect(scoreboard.expected());
-    auto actual_connection = observed.connect(scoreboard.actual());
+    auto actual_connection = monitor.observed().connect(scoreboard.actual());
 
     co_await Join{
         run_apb_sequence(context, master, expected, done),
-        monitor.run(observed, static_cast<std::size_t>(context.iterations) * 2u),
+        monitor.run(static_cast<std::size_t>(context.iterations) * 2u),
         checker.run_until([&done] { return done.is_set(); })};
 
     scoreboard.finalize();
     check64(context, "APB scoreboard comparisons", scoreboard.compared(),
             static_cast<uint64_t>(context.iterations) * 2u);
     check64(context, "APB protocol violations", checker.violations(), 0);
+    report(context);
+}
+
+template <typename Subscriber>
+class MeasuredAnalysisSubscriber {
+   public:
+    MeasuredAnalysisSubscriber(Subscriber& subscriber, uint64_t* publications,
+                               uint64_t& deliveries)
+        : subscriber_(std::addressof(subscriber)),
+          publications_(publications),
+          deliveries_(std::addressof(deliveries)) {}
+
+    template <typename Value>
+    void write(const Value& value) {
+        if (publications_) ++*publications_;
+        ++*deliveries_;
+        subscriber_->write(value);
+    }
+
+   private:
+    Subscriber* subscriber_;
+    uint64_t* publications_;
+    uint64_t* deliveries_;
+};
+
+Task<void> run_transaction_recording(Context context) {
+    context.dut.rst_n.set(0);
+    context.dut.apb_psel_i.set(0);
+    context.dut.apb_penable_i.set(0);
+    context.dut.apb_pwrite_i.set(0);
+    context.dut.apb_paddr_i.set(0);
+    context.dut.apb_pwdata_i.set(0);
+    context.dut.apb_pstrb_i.set(0);
+    for (uint32_t cycle = 0; cycle < 4; ++cycle) {
+        co_await RisingEdge{context.dut.clk};
+    }
+    context.dut.rst_n.set(1);
+
+    const auto bus = ApbBus{
+        context.dut.clk,           context.dut.apb_psel_i,
+        context.dut.apb_penable_i, context.dut.apb_pwrite_i,
+        context.dut.apb_paddr_i,   context.dut.apb_pwdata_i,
+        context.dut.apb_prdata_o,  context.dut.apb_pready_o,
+        context.dut.apb_pslverr_o, context.dut.apb_pstrb_i};
+    ApbMaster master{bus};
+    using Transaction = typename decltype(master)::transaction_type;
+    TestContext test{context.scheduler, context.result};
+    AnalysisPort<Transaction> expected;
+    InOrderScoreboard<Transaction> scoreboard{test, "recorded APB transaction"};
+    ApbMonitor monitor{test, bus};
+    ApbProtocolChecker checker{test, bus};
+    TransactionRecorder recorder;
+    InMemoryTransactionSink trace;
+    auto& stream = recorder.stream<Transaction>("apb0.observed");
+    Event done;
+    auto expected_connection = expected.connect(scoreboard.expected());
+    auto& writes = context.result.features.analysis_write;
+    auto& deliveries = context.result.features.analysis_delivery;
+    MeasuredAnalysisSubscriber measured_scoreboard{
+        scoreboard.actual(), nullptr, deliveries};
+    MeasuredAnalysisSubscriber measured_stream{stream, &writes, deliveries};
+    MeasuredAnalysisSubscriber measured_trace{trace, &writes, deliveries};
+    auto sink_connection = recorder.connect(measured_trace);
+    auto actual_connection = monitor.observed().connect(measured_scoreboard);
+    auto recording_connection = monitor.observed().connect(measured_stream);
+
+    co_await Join{
+        run_apb_sequence(context, master, expected, done, false),
+        monitor.run(static_cast<std::size_t>(context.iterations) * 2u),
+        checker.run_until([&done] { return done.is_set(); })};
+
+    scoreboard.finalize();
+    const auto& records = trace.records();
+    const auto* first = records.empty() ? nullptr : &records.front();
+    const auto* last = records.empty() ? nullptr : &records.back();
+    check64(context, "recorded APB scoreboard comparisons",
+            scoreboard.compared(),
+            static_cast<uint64_t>(context.iterations) * 2u);
+    check64(context, "recorded APB protocol violations", checker.violations(),
+            0);
+    check64(context, "recorded APB transaction count", records.size(),
+            static_cast<uint64_t>(context.iterations) * 2u);
+    check64(context, "recorded APB first sequence",
+            first ? first->sequence : std::numeric_limits<uint64_t>::max(), 0);
+    check64(context, "recorded APB last sequence",
+            last ? last->sequence : std::numeric_limits<uint64_t>::max(),
+            static_cast<uint64_t>(context.iterations) * 2u - 1u);
+    check(context, "recorded APB interval",
+          first && first->end_time > first->begin_time,
+          true);
+    check(context, "recorded APB typed payload",
+          first && first->value_json.find("\"operation\":\"write\"") !=
+                       std::string::npos,
+          true);
     report(context);
 }
 
@@ -1417,8 +1511,7 @@ Task<void> run_memory_model(Context context) {
     ApbMaster master{bus};
     using Transaction = typename decltype(master)::transaction_type;
     TestContext test{context.scheduler, context.result};
-    AnalysisPort<Transaction> observed;
-    ApbMonitor monitor{bus};
+    ApbMonitor monitor{test, bus};
     ApbProtocolChecker checker{test, bus};
     SparseMemory memory;
     memory.add_region(MemoryRegionConfig{
@@ -1426,11 +1519,11 @@ Task<void> run_memory_model(Context context) {
     auto predictor = make_memory_predictor<Transaction>(
         test, memory, "memory-model APB transaction");
     Event done;
-    auto prediction_connection = observed.connect(predictor);
+    auto prediction_connection = monitor.observed().connect(predictor);
 
     co_await Join{
         run_memory_model_sequence(context, master, done),
-        monitor.run(observed, static_cast<std::size_t>(context.iterations) * 2u),
+        monitor.run(static_cast<std::size_t>(context.iterations) * 2u),
         checker.run_until([&done] { return done.is_set(); })};
 
     check64(context, "memory-model reads", predictor.reads(),
@@ -3107,6 +3200,9 @@ void register_benchmark(coro::Testbench& scheduler, AuthoringCoreDut dut,
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_APB_COMPONENT
     scheduler.spawn_detached(
         run_apb_component(Context{scheduler, dut, iterations, result}));
+#elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TRANSACTION_RECORDING
+    scheduler.spawn_detached(
+        run_transaction_recording(Context{scheduler, dut, iterations, result}));
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEMORY_MODEL
     scheduler.spawn_detached(
         run_memory_model(Context{scheduler, dut, iterations, result}));

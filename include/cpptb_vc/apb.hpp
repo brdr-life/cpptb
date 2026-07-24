@@ -13,6 +13,7 @@
 #include "cpptb/test_api.hpp"
 #include "cpptb_vc/memory_mapped.hpp"
 #include "cpptb_vc/ports.hpp"
+#include "cpptb_vc/transaction_recording.hpp"
 
 namespace cpptb::vc {
 
@@ -113,6 +114,26 @@ class LockGuard {
 };
 
 }  // namespace apb_detail
+
+template <typename Bus>
+struct ApbTransactionType;
+
+template <typename ClockSignal, typename SelectSignal, typename EnableSignal,
+          typename WriteSignal, typename AddressSignal,
+          typename WriteDataSignal, typename ReadDataSignal,
+          typename ReadySignal, typename ErrorSignal, typename StrobeSignal>
+struct ApbTransactionType<
+    ApbBus<ClockSignal, SelectSignal, EnableSignal, WriteSignal, AddressSignal,
+           WriteDataSignal, ReadDataSignal, ReadySignal, ErrorSignal,
+           StrobeSignal>> {
+    using type = MemoryTransaction<
+        typename AddressSignal::value_type,
+        typename WriteDataSignal::value_type,
+        typename apb_detail::ByteEnableType<StrobeSignal>::type>;
+};
+
+template <typename Bus>
+using ApbTransaction = typename ApbTransactionType<Bus>::type;
 
 template <typename ClockSignal, typename SelectSignal, typename EnableSignal,
           typename WriteSignal, typename AddressSignal,
@@ -268,7 +289,11 @@ template <typename ClockSignal, typename SelectSignal, typename EnableSignal,
           typename ReadySignal, typename ErrorSignal, typename StrobeSignal>
 class ApbMonitor<ApbBus<ClockSignal, SelectSignal, EnableSignal, WriteSignal,
                         AddressSignal, WriteDataSignal, ReadDataSignal,
-                        ReadySignal, ErrorSignal, StrobeSignal>> {
+                        ReadySignal, ErrorSignal, StrobeSignal>>
+    : public TransactionMonitor<ApbTransaction<ApbBus<
+          ClockSignal, SelectSignal, EnableSignal, WriteSignal, AddressSignal,
+          WriteDataSignal, ReadDataSignal, ReadySignal, ErrorSignal,
+          StrobeSignal>>> {
    public:
     using bus_type =
         ApbBus<ClockSignal, SelectSignal, EnableSignal, WriteSignal,
@@ -278,64 +303,67 @@ class ApbMonitor<ApbBus<ClockSignal, SelectSignal, EnableSignal, WriteSignal,
     using data_type = typename WriteDataSignal::value_type;
     using byte_enable_type =
         typename apb_detail::ByteEnableType<StrobeSignal>::type;
-    using transaction_type =
-        MemoryTransaction<address_type, data_type, byte_enable_type>;
+    using transaction_type = ApbTransaction<bus_type>;
+    using Base = TransactionMonitor<transaction_type>;
+    using observation_type = typename Base::observation_type;
 
-    explicit ApbMonitor(bus_type bus, coro::SimTime sample_delay = {})
-        : bus_(std::move(bus)), sample_delay_(sample_delay) {}
+    explicit ApbMonitor(TestContext test, bus_type bus,
+                        coro::SimTime sample_delay = {})
+        : Base(std::move(test), sample_delay), bus_(std::move(bus)) {}
 
-    coro::Task<void> run(AnalysisPort<transaction_type>& observed,
-                         std::size_t transactions) {
-        std::size_t completed = 0;
-        while (completed < transactions) {
-            if (co_await sample(observed)) ++completed;
-        }
+    coro::Task<void> run(std::size_t transactions) {
+        while (transactions-- != 0) co_await observe_one();
     }
 
-    coro::Task<void> run_forever(AnalysisPort<transaction_type>& observed) {
-        while (true) static_cast<void>(co_await sample(observed));
+    coro::Task<void> run_forever() {
+        while (true) co_await observe_one();
     }
 
    private:
-    coro::Task<bool> sample(AnalysisPort<transaction_type>& observed) {
-        co_await coro::RisingEdge{static_cast<coro::Signal>(bus_.clock)};
-        if (sample_delay_.in_femtoseconds() != 0) {
-            co_await coro::Delay{sample_delay_};
-        }
+    coro::Task<void> observe_one() {
+        while (true) {
+            co_await this->sample_until(bus_.clock, [&] {
+                return bus_.select.get() != 0 && bus_.enable.get() == 0;
+            });
 
-        const bool selected = bus_.select.get() != 0;
-        const bool enabled = bus_.enable.get() != 0;
-        if (!selected) {
-            active_ = false;
-            wait_cycles_ = 0;
-            co_return false;
-        }
-        if (!enabled) {
-            active_ = true;
-            wait_cycles_ = 0;
-            co_return false;
-        }
-        if (bus_.ready.get() == 0) {
-            if (active_) ++wait_cycles_;
-            co_return false;
-        }
+            coro::SimTime started{};
+            bool write = false;
+            transaction_type transaction{};
+            const auto capture_setup = [&] {
+                started = this->now();
+                write = bus_.write.get() != 0;
+                transaction = transaction_type{
+                    .operation = write ? MemoryOperation::Write
+                                       : MemoryOperation::Read,
+                    .address = bus_.address.get(),
+                    .data = write ? bus_.write_data.get() : data_type{},
+                    .byte_enable = write
+                                       ? strobe()
+                                       : apb_detail::all_bytes<StrobeSignal>(),
+                };
+            };
+            capture_setup();
 
-        const bool write = bus_.write.get() != 0;
-        observed.write(transaction_type{
-            .operation = write ? MemoryOperation::Write
-                               : MemoryOperation::Read,
-            .address = bus_.address.get(),
-            .data = write ? bus_.write_data.get() : bus_.read_data.get(),
-            .byte_enable =
-                write ? strobe()
-                      : apb_detail::all_bytes<StrobeSignal>(),
-            .status = bus_.error.get() == 0 ? MemoryStatus::Okay
-                                            : MemoryStatus::SlaveError,
-            .wait_cycles = wait_cycles_,
-        });
-        active_ = false;
-        wait_cycles_ = 0;
-        co_return true;
+            while (true) {
+                co_await this->sample(bus_.clock);
+                if (bus_.select.get() == 0) break;
+                if (bus_.enable.get() == 0) {
+                    capture_setup();
+                    continue;
+                }
+                if (bus_.ready.get() == 0) {
+                    ++transaction.wait_cycles;
+                    continue;
+                }
+
+                if (!write) transaction.data = bus_.read_data.get();
+                transaction.status = bus_.error.get() == 0
+                                         ? MemoryStatus::Okay
+                                         : MemoryStatus::SlaveError;
+                this->publish(started, std::move(transaction));
+                co_return;
+            }
+        }
     }
 
     byte_enable_type strobe() const {
@@ -347,13 +375,10 @@ class ApbMonitor<ApbBus<ClockSignal, SelectSignal, EnableSignal, WriteSignal,
     }
 
     bus_type bus_;
-    coro::SimTime sample_delay_;
-    uint32_t wait_cycles_ = 0;
-    bool active_ = false;
 };
 
 template <typename... Signals>
-ApbMonitor(ApbBus<Signals...>, coro::SimTime = {})
+ApbMonitor(TestContext, ApbBus<Signals...>, coro::SimTime = {})
     -> ApbMonitor<ApbBus<Signals...>>;
 
 template <typename Bus>

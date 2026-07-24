@@ -9,3 +9,4 @@
 #include "cpptb_vc/register_sequences.hpp"
 #include "cpptb_vc/scoreboards.hpp"
 #include "cpptb_vc/stream.hpp"
+#include "cpptb_vc/transaction_recording.hpp"

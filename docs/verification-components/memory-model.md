@@ -86,10 +86,10 @@ memory.add_region({.name = "ram", .base = 0, .size = 64 * 1024});
 
 auto predictor = make_memory_predictor<Transaction>(
     test, memory, "APB memory transaction");
-auto prediction_connection = observed.connect(predictor);
+auto prediction_connection = monitor.observed().connect(predictor);
 
 co_await Join{sequence(master),
-              monitor.run(observed, expected_transaction_count)};
+              monitor.run(expected_transaction_count)};
 
 test.expect_eq("memory mismatches", predictor.mismatches(), uint64_t{0});
 ```
