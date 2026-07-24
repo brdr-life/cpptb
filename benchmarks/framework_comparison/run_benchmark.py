@@ -40,7 +40,7 @@ VPI_BINARY = (
     / "Vauthoring_core_vpi_top"
 )
 COCOTB_RUNNER = BENCH_DIR / "testbenches" / "cocotb" / "run_cocotb.py"
-COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "/opt/homebrew/bin/python3.12")
+COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "3.12")
 PERIPHERAL_RUNNER = REPO / "benchmarks" / "peripheral_suite" / "run_benchmark.py"
 PERIPHERAL_RESULT = REPO / "benchmarks" / "peripheral_suite" / "results" / "latest.json"
 MAX_CPP_DPI_OVER_PURE_SV = 1.10
@@ -197,8 +197,14 @@ def run_sample(
 
 
 def build_authoring_backends(workloads: tuple[str, ...]):
+    # Make matches targets by name, so these must be spelled relative to REPO
+    # exactly as the Makefile declares them; an absolute path is a different
+    # target name and yields "No rule to make target".
     targets = [
-        str(AUTHORING_BUILD / f"cpp_dpi_{workload}" / "Vdpi_authoring_core")
+        str(
+            (AUTHORING_BUILD / f"cpp_dpi_{workload}" / "Vdpi_authoring_core")
+            .relative_to(REPO)
+        )
         for workload in workloads
     ]
     targets.extend(

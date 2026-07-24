@@ -401,7 +401,7 @@ static_assert(!HasSet<decltype(std::declval<Dut>().wide_gpio)>);
                 [
                     *common,
                     "-CFLAGS",
-                    f"-I{REPO / 'include'} -I{generated}",
+                    f"-std=c++20 -I{REPO / 'include'} -I{generated}",
                     "--Mdir",
                     str(cpp_obj),
                     "--top-module",

@@ -61,7 +61,10 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf bison flex help2man libz3-dev pkg-config
+          # No libz3-dev: the packaged Z3 predates the 4.15.5 the adapter
+          # needs. `make z3-toolchain` supplies a portable one below.
+          sudo apt-get install -y autoconf bison flex libfl-dev help2man \
+            zlib1g-dev pkg-config
           git clone --depth 1 --branch "v${VERILATOR_VERSION}" \
             https://github.com/verilator/verilator.git build/verilator-source
           cd build/verilator-source
@@ -72,16 +75,20 @@ jobs:
 
       - name: Install Verilator (macOS)
         if: runner.os == 'macOS'
-        run: brew install verilator z3
-
-      - name: Report tool versions
-        run: |
-          verilator --version
-          cmake --version
-          uv --version
+        run: brew install verilator
 
       - name: Sync Python tools
         run: uv sync --frozen
+
+      - name: Install portable Z3
+        run: |
+          # Same wheel on both runners, so the optional adapter is exercised
+          # identically instead of depending on what each platform packages.
+          make z3-toolchain
+          echo "PKG_CONFIG_PATH=$PWD/build/pkgconfig:$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
+
+      - name: Check toolchain
+        run: make doctor
 
       - name: Verify wheel contents
         run: |

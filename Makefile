@@ -131,7 +131,22 @@ OPEN_CORES_WORKLOADS := picorv32_firmware secworks_aes128 ethernet_fcs64
 OPEN_CORES_COCOTB_RUNNER := $(OPEN_CORES_DIR)/testbenches/cocotb/run_cocotb.py
 OPEN_CORES_COCOTB_WORKLOAD ?= picorv32_firmware
 OPEN_CORES_COCOTB_ITERS ?= 100
-COCOTB_BENCH_PYTHON ?= /opt/homebrew/bin/python3.12
+COCOTB_BENCH_PYTHON ?= 3.12
+# z3::get_full_version(), used by include/cpptb/z3_random_backend.hpp, first
+# shipped in Z3 4.15.5. Keep in sync with tools/check_environment.py.
+CPPTB_MIN_Z3_VERSION := 4.15.5
+# `make z3-toolchain` writes a z3.pc for the portable z3-solver wheel here.
+# Prepending is a no-op until that file exists, and it deliberately outranks a
+# distribution Z3, which is usually older than CPPTB_MIN_Z3_VERSION.
+CPPTB_Z3_DIR := $(abspath $(BUILD_DIR)/z3)
+CPPTB_Z3_PKGCONFIG_DIR := $(abspath $(BUILD_DIR)/pkgconfig)
+# Pinned so CI and developers resolve the same solver. 4.15.5 first exposes
+# z3::get_full_version(), but 4.15.5-4.15.7 published no Linux wheels, and
+# 4.15.8/4.16.0 ship macosx_15_0 wheels only, so they cannot install on macOS 13
+# or 14. 5.0.0.0 is back to a macosx_13_0 floor and keeps the same manylinux
+# coverage, which makes it the widest-reaching pin rather than merely the newest.
+CPPTB_Z3_WHEEL_SPEC := z3-solver==5.0.0.0
+export PKG_CONFIG_PATH := $(CPPTB_Z3_PKGCONFIG_DIR):$(PKG_CONFIG_PATH)
 FEATURE ?=
 FEATURE_REGRESSION_RUNNER := python3 benchmarks/run_regression.py
 UV_CACHE_DIR ?= $(BUILD_DIR)/uv-cache
@@ -198,8 +213,12 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
 SDKROOT := $(shell xcrun --show-sdk-path)
 VERILATOR_PLATFORM_CXXFLAGS := -I$(SDKROOT)/usr/include/c++/v1
+CPPTB_SHLIB_EXT := dylib
+CPPTB_SHLIB_FLAG := -dynamiclib
 else
 VERILATOR_PLATFORM_CXXFLAGS :=
+CPPTB_SHLIB_EXT := so
+CPPTB_SHLIB_FLAG := -shared
 endif
 ifeq ($(origin CXX),default)
 CXX := c++
@@ -358,11 +377,13 @@ cpp-dpi-mixed-logging-output-test: cpp-dpi-mixed-logging-build
 	python3 examples/mixed_logging/check_output.py \
 		$(CPPTB_MIXED_LOGGING_OBJ_DIR)/Vdpi_mixed_logging
 
-.PHONY: help all test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all doctor z3-toolchain test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
 		'cpptb development targets:' \
+		'  make doctor                  Check the local toolchain before building' \
+		'  make z3-toolchain            Install a portable Z3 for the optional adapter' \
 		'  make test                    Run all unit, codegen, conformance, and example tests' \
 		'  make feature-list            List semantic/performance benchmark features' \
 		'  make feature-test FEATURE=…  Run one semantic comparison' \
@@ -378,6 +399,21 @@ help:
 
 all: test
 
+# Deliberately uses bare python3 and no uv: this must work on a fresh checkout
+# before any dependency has been installed.
+doctor:
+	@python3 tools/check_environment.py
+
+# One portable way to get a new enough Z3 on both macOS and Linux, for hosts
+# whose packaged Z3 predates $(CPPTB_MIN_Z3_VERSION). The wheel goes into its
+# own directory, not the project virtualenv: `uv sync --frozen` prunes anything
+# outside the lockfile, which would leave linked binaries with a dangling rpath.
+z3-toolchain:
+	UV_CACHE_DIR=$(UV_CACHE_DIR) uv pip install --target $(CPPTB_Z3_DIR) \
+		'$(CPPTB_Z3_WHEEL_SPEC)'
+	python3 tools/z3_pkgconfig.py --site-dir $(CPPTB_Z3_DIR) \
+		--output-dir $(CPPTB_Z3_PKGCONFIG_DIR)
+
 test: unit-test python-test codegen-test conformance-test examples-test ground-truth-test registry-check
 
 unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test \
@@ -385,6 +421,7 @@ unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb
 	cpptb-hierarchy-test
 
 python-test:
+	$(CODEGEN_PYTHON) -m unittest discover -s tests/tools
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/tests
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/authoring_core/tests
 	$(CODEGEN_PYTHON) -m unittest discover -s benchmarks/framework_comparison/tests
@@ -441,8 +478,8 @@ $(OBJ_DIR)/Vcounter.mk: experiments/verilator_c_api/counter.sv
 $(OBJ_DIR)/Vcounter__ALL.a: $(OBJ_DIR)/Vcounter.mk
 	$(MAKE) -C $(OBJ_DIR) -f Vcounter.mk Vcounter__ALL.a CXXFLAGS="$(VERILATOR_PLATFORM_CXXFLAGS)"
 
-$(BUILD_DIR)/libcounter.dylib: experiments/verilator_c_api/counter_c_api.cpp $(OBJ_DIR)/Vcounter__ALL.a
-	$(CXX) -dynamiclib -std=c++17 \
+$(BUILD_DIR)/libcounter.$(CPPTB_SHLIB_EXT): experiments/verilator_c_api/counter_c_api.cpp $(OBJ_DIR)/Vcounter__ALL.a
+	$(CXX) $(CPPTB_SHLIB_FLAG) -std=c++17 \
 		-I$(OBJ_DIR) \
 		-I$(VERILATOR_ROOT)/include \
 		-I$(VERILATOR_ROOT)/include/vltstd \
@@ -453,7 +490,7 @@ $(BUILD_DIR)/libcounter.dylib: experiments/verilator_c_api/counter_c_api.cpp $(O
 		$(VERILATOR_ROOT)/include/verilated_threads.cpp \
 		-o $@
 
-$(BUILD_DIR)/counter_driver: experiments/verilator_c_api/counter_driver.mojo $(BUILD_DIR)/libcounter.dylib
+$(BUILD_DIR)/counter_driver: experiments/verilator_c_api/counter_driver.mojo $(BUILD_DIR)/libcounter.$(CPPTB_SHLIB_EXT)
 	mojo build $< -o $@
 
 run: all
@@ -466,11 +503,11 @@ $(MOJOTB_OBJ_DIR)/Vvpi_counter.mk: experiments/mojo_vpi/examples/vpi_counter.sv
 $(MOJOTB_OBJ_DIR)/Vvpi_counter__ALL.a: $(MOJOTB_OBJ_DIR)/Vvpi_counter.mk
 	$(MAKE) -C $(MOJOTB_OBJ_DIR) -f Vvpi_counter.mk Vvpi_counter__ALL.a CXXFLAGS="$(VERILATOR_PLATFORM_CXXFLAGS)"
 
-$(MOJOTB_BUILD_DIR)/libcounter_test.dylib: experiments/mojo_vpi/tests/counter_test.mojo experiments/mojo_vpi/runtime.mojo experiments/mojo_vpi/__init__.mojo
+$(MOJOTB_BUILD_DIR)/libcounter_test.$(CPPTB_SHLIB_EXT): experiments/mojo_vpi/tests/counter_test.mojo experiments/mojo_vpi/runtime.mojo experiments/mojo_vpi/__init__.mojo
 	mkdir -p $(MOJOTB_BUILD_DIR)
 	mojo build $< -I . --emit shared-lib -o $@
 
-$(MOJOTB_BUILD_DIR)/vpi_counter_host: experiments/mojo_vpi/verilator_vpi_host.cpp $(MOJOTB_OBJ_DIR)/Vvpi_counter__ALL.a $(MOJOTB_BUILD_DIR)/libcounter_test.dylib
+$(MOJOTB_BUILD_DIR)/vpi_counter_host: experiments/mojo_vpi/verilator_vpi_host.cpp $(MOJOTB_OBJ_DIR)/Vvpi_counter__ALL.a $(MOJOTB_BUILD_DIR)/libcounter_test.$(CPPTB_SHLIB_EXT)
 	$(CXX) -std=c++17 \
 		-I$(MOJOTB_OBJ_DIR) \
 		-I$(VERILATOR_ROOT)/include \
@@ -484,7 +521,7 @@ $(MOJOTB_BUILD_DIR)/vpi_counter_host: experiments/mojo_vpi/verilator_vpi_host.cp
 		-o $@
 
 vpi-run: $(MOJOTB_BUILD_DIR)/vpi_counter_host
-	./$(MOJOTB_BUILD_DIR)/vpi_counter_host $(MOJOTB_BUILD_DIR)/libcounter_test.dylib
+	./$(MOJOTB_BUILD_DIR)/vpi_counter_host $(MOJOTB_BUILD_DIR)/libcounter_test.$(CPPTB_SHLIB_EXT)
 
 $(CPPTB_OBJ_DIR)/Vvpi_counter.mk: experiments/cpp_vpi/counter/vpi_counter.sv
 	mkdir -p $(CPPTB_OBJ_DIR)
@@ -555,8 +592,10 @@ $(CPPTB_Z3_RANDOM_TEST): include/cpptb/z3_random_backend.hpp \
 		tests/unit/z3_random_backend_test.cpp $$(pkg-config --libs z3) -o $@
 
 cpptb-z3-random-test:
-	@if pkg-config --exists z3; then \
+	@if pkg-config --atleast-version=$(CPPTB_MIN_Z3_VERSION) z3; then \
 		$(MAKE) $(CPPTB_Z3_RANDOM_TEST) && $(CPPTB_Z3_RANDOM_TEST); \
+	elif pkg-config --exists z3; then \
+		echo "Z3 $$(pkg-config --modversion z3) is older than $(CPPTB_MIN_Z3_VERSION); skipping optional backend test"; \
 	else \
 		echo "Z3 not installed; skipping optional backend test"; \
 	fi
@@ -853,7 +892,7 @@ $(PERIPHERAL_SUITE_DPI_OBJ_DIR)/Vdpi_peripheral_suite: $(PERIPHERAL_SUITE_DPI_RT
 		-Wno-MULTIDRIVEN -Wno-TIMESCALEMOD -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND \
 		-Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
 		-Ibenchmarks/peripheral_suite/rtl \
-		-CFLAGS "-I$(CURDIR) -I$(CURDIR)/include" \
+		-CFLAGS "-std=c++20 -I$(CURDIR) -I$(CURDIR)/include" \
 		--Mdir $(PERIPHERAL_SUITE_DPI_OBJ_DIR) \
 		--top-module dpi_peripheral_suite \
 		$(PERIPHERAL_SUITE_DPI_RTL) \
@@ -919,7 +958,7 @@ $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		-Wno-MULTIDRIVEN \
 		$(if $(filter mixed_logging,$(1)),-I$$(CURDIR)/include -DCPPTB_ENABLE_SV_LOGGING -DAUTHORING_CORE_MIXED_LOGGING) \
 		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $(if $(filter timing_phases,$(1)),-DCPPTB_VERILATED_TOP=Vdpi_authoring_core -DCPPTB_VERILATOR_DIRECT_TIMING) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
+		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $(if $(filter timing_phases,$(1)),-DCPPTB_VERILATED_TOP=Vdpi_authoring_core -DCPPTB_VERILATOR_DIRECT_TIMING) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
 		$$(if $$(strip $$(AUTHORING_CORE_EXTRA_LDFLAGS)),-LDFLAGS "$$(AUTHORING_CORE_EXTRA_LDFLAGS)",) \
 		--Mdir $$(dir $$@) \
 		--top-module dpi_authoring_core \
@@ -1011,7 +1050,7 @@ $(2)/Vdpi_authoring_core: $(AUTHORING_CORE_RTL) $(AUTHORING_CORE_CPP) \
 		-Wno-MULTIDRIVEN \
 		-DCPPTB_SV_DPI_TIMING $(3) \
 		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=27 -DCPPTB_SV_DPI_TIMING $(4)" \
+		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=27 -DCPPTB_SV_DPI_TIMING $(4)" \
 		--Mdir $(2) \
 		--top-module dpi_authoring_core \
 		$$(AUTHORING_CORE_RTL) \
@@ -1033,7 +1072,7 @@ $(AUTHORING_CORE_TIMING_VPI_DIR)/Vdpi_authoring_core: \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
 		-Wno-MULTIDRIVEN \
 		-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-I$(CURDIR) -I$(CURDIR)/include -DAUTHORING_CORE_KERNEL=27 -DCPPTB_VERILATED_TOP=Vdpi_authoring_core" \
+		-CFLAGS "-std=c++20 -I$(CURDIR) -I$(CURDIR)/include -DAUTHORING_CORE_KERNEL=27 -DCPPTB_VERILATED_TOP=Vdpi_authoring_core" \
 		--Mdir $(AUTHORING_CORE_TIMING_VPI_DIR) \
 		--top-module dpi_authoring_core \
 		$(AUTHORING_CORE_RTL) \
@@ -1146,8 +1185,12 @@ framework-comparison-cocotb-build:
 framework-comparison-build: framework-comparison-vpi-build \
 		framework-comparison-cocotb-build authoring-core-sv-build
 
+# No --skip-build: the runner's build_authoring_backends() resolves the
+# cpp_dpi_<workload> kernels for its own AUTHORING_WORKLOADS list, which
+# framework-comparison-build does not cover. Hardcoding that list here would
+# drift from benchmarks/framework_comparison/workload.py.
 framework-comparison-benchmark: framework-comparison-build
-	python3 $(FRAMEWORK_COMPARISON_DIR)/run_benchmark.py --skip-build
+	python3 $(FRAMEWORK_COMPARISON_DIR)/run_benchmark.py
 
 .PHONY: framework-comparison-heavy-codegen framework-comparison-heavy-codegen-check \
 	framework-comparison-heavy-dpi-build framework-comparison-heavy-sv-build \
@@ -1189,7 +1232,7 @@ $(HEAVY_SUITE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_heavy_benchmark: \
 	verilator --binary --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
 		-MAKEFLAGS "OPT_FAST=-O3" \
-		-CFLAGS "-I$$(CURDIR) -I$$(CURDIR)/include -DHEAVY_WORKLOAD=$(2)" \
+		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DHEAVY_WORKLOAD=$(2)" \
 		--Mdir $$(dir $$@) --top-module dpi_heavy_benchmark \
 		$$(HEAVY_SUITE_RTL) \
 		$$(HEAVY_SUITE_DIR)/testbenches/cpp_dpi/generated/dpi_heavy_benchmark.sv \
@@ -1294,7 +1337,7 @@ $(OPEN_CORES_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_open_cores_benchmark: \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-UNUSEDSIGNAL \
 		-Wno-UNOPTFLAT -DOPEN_CORE_WORKLOAD=$(2) \
 		-MAKEFLAGS "OPT_FAST=-O3" \
-		-CFLAGS "-I$$(CURDIR) -I$$(CURDIR)/include -DOPEN_CORE_WORKLOAD=$(2)" \
+		-CFLAGS "-std=c++20 -I$$(CURDIR) -I$$(CURDIR)/include -DOPEN_CORE_WORKLOAD=$(2)" \
 		--Mdir $$(dir $$@) --top-module dpi_open_cores_benchmark \
 		$$(OPEN_CORES_RTL) \
 		$$(OPEN_CORES_DIR)/testbenches/cpp_dpi/generated/dpi_open_cores_benchmark.sv \

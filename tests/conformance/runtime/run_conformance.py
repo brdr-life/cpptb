@@ -83,7 +83,7 @@ def build_verilator(manifest: dict[str, Any], timing_backend: str) -> Path:
                 compile_args.append(argument)
         cpp_sources.append(str(REPO / "src" / "verilator_timing_main.cpp"))
     top_class = f"V{manifest['top_module']}"
-    cflags = f"-I{REPO} -I{REPO / 'include'}"
+    cflags = f"-std=c++20 -I{REPO} -I{REPO / 'include'}"
     sv_defines: list[str] = []
     if timing_bridge:
         cflags += f" -DCPPTB_VERILATED_TOP={top_class}"
