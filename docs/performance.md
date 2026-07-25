@@ -29,13 +29,18 @@ Every measured binary in every suite and every mode is compiled at
 pure SystemVerilog, C++ DPI, C++ VPI, and cocotb, whose runners read the same
 variable from the environment because cocotb drives Verilator itself.
 
-Each mode needs the setting applied twice. Verilator applies `OPT_FAST` only to
-the files it generates, and adds no optimization flag of its own to testbench
-sources given on the command line. A mode that receives only `-MAKEFLAGS
-OPT_FAST` therefore runs an unoptimized testbench against an optimized model,
-and a mode that receives neither is slower still. Because the guard compares
-modes against each other, optimizing one and not another does not merely add
-noise: it changes the reported result.
+`-MAKEFLAGS OPT_FAST` is what carries the setting for anything Verilator
+compiles, including the testbench sources passed on its command line. The
+`-CFLAGS` copy alongside it is deliberate redundancy rather than a second
+requirement: it keeps the intent visible at the point the testbench is named,
+and does not depend on Verilator continuing to apply `OPT_FAST` to sources it
+did not generate. Binaries linked outside Verilator, such as the peripheral
+suite's C++ VPI host, are compiled by the Makefile directly and are the case
+where an explicit flag is genuinely required.
+
+A mode that receives no setting at all falls back to Verilator's `-Os`. Because
+the guard compares modes against each other, optimizing one and not another
+does not merely add noise: it changes the reported result.
 
 Override `CPPTB_BENCH_OPT_FAST` to sweep every suite, or one suite's own
 `*_OPT_FAST` variable to change a single suite:

@@ -13,9 +13,10 @@ include_dirs = ["../../../build/benchmarks/regmodel_ground_truth/secworks_aes/ge
 directory = "../../../build/benchmarks/regmodel_ground_truth/secworks_aes"
 name = "secworks_aes_regmodel"
 target = "secworks_aes_regmodel"
+# Matches the -O3 the oracle and pure-SystemVerilog testbenches in this
+# directory's Makefile are built with, so the comparison is like for like.
+optimization = "-O3"
 verilator_args = [
-  "-MAKEFLAGS",
-  "OPT_FAST=-O3",
   "--no-sched-zero-delay",
   "-Wno-TIMESCALEMOD",
   "-Wno-WIDTH",
