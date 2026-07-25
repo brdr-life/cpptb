@@ -94,6 +94,63 @@ class GenerateTests(unittest.TestCase):
                 z3_pkgconfig.generate(root / "pkgconfig", root / "empty")
 
 
+class MacOsRelocationTests(unittest.TestCase):
+    """The dylib install name decides whether an rpath is consulted at all."""
+
+    def test_is_a_no_op_away_from_macos(self):
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(z3_pkgconfig.platform, "system",
+                                   return_value="Linux"):
+                self.assertIsNone(z3_pkgconfig.relocate_for_macos(Path(tmp)))
+
+    def test_rewrites_a_bare_install_name(self):
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lib_dir = Path(tmp)
+            (lib_dir / "libz3.dylib").write_bytes(b"")
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+                return mock.Mock(returncode=0, stdout="")
+
+            with mock.patch.object(z3_pkgconfig.platform, "system",
+                                   return_value="Darwin"), \
+                 mock.patch.object(z3_pkgconfig, "_install_name",
+                                   return_value="libz3.dylib"), \
+                 mock.patch.object(z3_pkgconfig.shutil, "which",
+                                   return_value="/usr/bin/tool"), \
+                 mock.patch.object(z3_pkgconfig.subprocess, "run", fake_run):
+                result = z3_pkgconfig.relocate_for_macos(lib_dir)
+
+            self.assertEqual(result, "@rpath/libz3.dylib")
+            self.assertIn("install_name_tool", calls[0][0])
+            self.assertEqual(calls[0][1:3], ["-id", "@rpath/libz3.dylib"])
+            # Editing load commands invalidates the signature on arm64.
+            self.assertTrue(any("codesign" in c[0] for c in calls))
+
+    def test_leaves_an_already_relocated_dylib_alone(self):
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            lib_dir = Path(tmp)
+            (lib_dir / "libz3.dylib").write_bytes(b"")
+            with mock.patch.object(z3_pkgconfig.platform, "system",
+                                   return_value="Darwin"), \
+                 mock.patch.object(z3_pkgconfig, "_install_name",
+                                   return_value="@rpath/libz3.dylib"), \
+                 mock.patch.object(z3_pkgconfig.subprocess, "run") as run:
+                result = z3_pkgconfig.relocate_for_macos(lib_dir)
+            self.assertEqual(result, "@rpath/libz3.dylib")
+            run.assert_not_called()
+
+
 @unittest.skipIf(shutil.which("pkg-config") is None, "pkg-config not installed")
 class PkgConfigIntegrationTests(unittest.TestCase):
     def test_pkg_config_accepts_the_file_and_the_version_gate(self):
