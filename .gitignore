@@ -16,6 +16,9 @@ experiments/uvm_comparison/results/*.log
 benchmarks/uvm-sim-compare/deps/
 benchmarks/uvm-sim-compare/work/
 benchmarks/uvm-sim-compare/results/*.log
+experiments/open_core_ports/deps/
+experiments/open_core_ports/work/
+experiments/open_core_ports/results/*.log
 benchmarks/authoring_core/results/
 benchmarks/peripheral_suite/results/
 benchmarks/framework_comparison/**/results/

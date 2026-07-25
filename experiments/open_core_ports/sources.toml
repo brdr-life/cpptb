@@ -1,0 +1,31 @@
+# Upstream projects fetched by fetch.py.
+#
+# Every entry pins an exact commit. Nothing here is vendored into the
+# repository: fetch.py clones into deps/, which is gitignored, so the tree
+# stays small and provenance stays exact. Small RTL subsets that a benchmark
+# elaborates directly belong in benchmarks/framework_comparison/open_cores
+# instead, following the vendoring precedent there.
+#
+# Adding a project means adding a table here and, if its licence requires
+# attribution for anything that ends up committed, a note in
+# THIRD_PARTY_NOTICES.md. Fetched-only sources need no notice because they are
+# never redistributed from this repository.
+
+[ibex]
+repo = "https://github.com/lowRISC/ibex.git"
+# [rtl] Only count Zcmp expanded instructions as one instruction, 2026-03-19
+commit = "8ed87e07e3331561bce93af1568d9b376948e701"
+license = "Apache-2.0"
+purpose = """
+Simple System is a Verilator simulation of the Ibex core with memory and a
+handful of peripherals, driven by a hand-written C++ harness. That harness is
+what a cpptb port replaces, which makes the comparison like-for-like rather
+than a change of methodology.
+"""
+# Paths a port is expected to use. Recorded for review, not enforced.
+paths = [
+  "examples/simple_system",
+  "examples/sw/simple_system",
+  "rtl",
+  "vendor/lowrisc_ip",
+]
