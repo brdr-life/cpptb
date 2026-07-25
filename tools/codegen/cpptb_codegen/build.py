@@ -383,7 +383,10 @@ class VerilatorBackend:
             *(f"-I{path}" for path in spec.include_dirs),
             "-DCPPTB_ENABLE_SV_LOGGING",
             *(f"-D{value}" for value in spec.defines),
-            *(f"-G{name}={value}" for name, value in spec.parameters),
+            # Parameters are not passed with -G. The generated wrapper is the
+            # top module, and it already declares them as localparams and binds
+            # them on the DUT instance, so -G would name parameters the top does
+            # not have and Verilator rejects the build.
             "-CFLAGS",
             cflags,
             "--Mdir",
