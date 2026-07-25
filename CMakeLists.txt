@@ -30,7 +30,10 @@ set(CPPTB_INSTALL_TARGETS cpptb cpptb_vc)
 set(CPPTB_CONFIG_WITH_Z3 0)
 if(CPPTB_WITH_Z3)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(CPPTB_Z3 REQUIRED IMPORTED_TARGET z3)
+    # z3::get_full_version(), used by cpptb/z3_random_backend.hpp, first shipped
+    # in Z3 4.15.5. Keep in sync with tools/check_environment.py and the
+    # CPPTB_MIN_Z3_VERSION in the Makefile.
+    pkg_check_modules(CPPTB_Z3 REQUIRED IMPORTED_TARGET "z3 >= 4.15.5")
     add_library(cpptb_z3 INTERFACE)
     add_library(cpptb::z3 ALIAS cpptb_z3)
     set_target_properties(cpptb_z3 PROPERTIES EXPORT_NAME z3)

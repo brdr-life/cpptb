@@ -202,8 +202,23 @@ include_dirs = ["verification/include"]
 [build]
 directory = "build"
 simulator = "verilator"
-cxx_flags = ["-O2"]
+optimization = "-O2"
+cxx_flags = ["-Wall"]
 ```
+
+`optimization` governs both halves of the build: the C++ testbench and the model
+Verilator generates. Verilator optimizes neither by default, so this defaults to
+`-O2` rather than leaving a coroutine-heavy testbench unoptimized. Lower it for
+a debug build, which makes breakpoints and stack traces behave:
+
+```toml
+[build]
+optimization = "-O0"
+cxx_flags = ["-g"]
+```
+
+Changing it re-fingerprints the build, so the next `cpptb build` recompiles
+instead of reusing objects from the previous setting.
 
 Four-state Verilator work is guarded separately from raw simulator arguments:
 

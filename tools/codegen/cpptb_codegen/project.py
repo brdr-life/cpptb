@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import glob
 import hashlib
 import json
@@ -33,6 +34,11 @@ class ProjectSpec:
     parameters: tuple[tuple[str, str | int], ...] = ()
     testbench_include_dirs: tuple[Path, ...] = ()
     cxx_flags: tuple[str, ...] = ()
+    # Applies to both halves of the build: the C++ testbench and the model
+    # Verilator generates. cpptb is a C++20 coroutine framework, and Verilator
+    # optimizes neither by default, so an unset value would compile the
+    # testbench unoptimized. Set "-O0" in cpptb.toml for a debug build.
+    optimization: str = "-O2"
     verilator_args: tuple[str, ...] = ()
     experimental_four_state: bool = False
     simulator: str = "verilator"
@@ -95,6 +101,34 @@ def _table(config: dict[str, Any], name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ProjectError(f"cpptb.toml [{name}] must be a table")
     return value
+
+
+def _optimization(value: Any, label: str, default: str) -> str:
+    """Validate build.optimization, which reaches both compilers as a flag."""
+    if value is None:
+        return default
+    if not isinstance(value, str) or not re.fullmatch(r"-O[0-3sgz]", value):
+        raise ProjectError(
+            f"{label} must be a compiler optimization flag such as "
+            '"-O2" or "-O0"'
+        )
+    return value
+
+
+def _reject_optimization_in_verilator_args(values: Sequence[str]) -> None:
+    """Keep one setting in charge of optimization.
+
+    build.optimization already emits -MAKEFLAGS OPT_FAST, so a second one here
+    would leave whichever Verilator happens to apply last in charge, and the
+    two can disagree.
+    """
+    for value in values:
+        if "OPT_FAST" in value:
+            raise ProjectError(
+                "build.verilator_args must not set OPT_FAST; use "
+                "build.optimization, which applies to the testbench and the "
+                "generated model together"
+            )
 
 
 def _string_list(value: Any, label: str) -> list[str]:
@@ -431,6 +465,7 @@ def resolve_project(
     verilator_args = tuple(
         _string_list(build.get("verilator_args"), "build.verilator_args")
     )
+    _reject_optimization_in_verilator_args(verilator_args)
     if any(
         argument
         in {"--fourstate", "-fourstate", "--no-fourstate", "-no-fourstate"}
@@ -464,6 +499,10 @@ def resolve_project(
         parameters=parameter_values,
         testbench_include_dirs=testbench_include_dirs,
         cxx_flags=tuple(_string_list(build.get("cxx_flags"), "build.cxx_flags")),
+        optimization=_optimization(
+            build.get("optimization"), "build.optimization",
+            ProjectSpec.optimization,
+        ),
         verilator_args=verilator_args,
         experimental_four_state=selected_four_state,
         simulator=selected_simulator,

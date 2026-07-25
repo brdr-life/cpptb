@@ -16,7 +16,7 @@ RESULT_DIR = EXPERIMENT_DIR / "results"
 BUILD_DIR = REPO / "build" / "experiments" / "cocotb_cpp_comparison"
 CPP_BINARY = BUILD_DIR / "apb_event_bench_host"
 COCOTB_RUNNER = EXPERIMENT_DIR / "run_cocotb.py"
-COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "/opt/homebrew/bin/python3.12")
+COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "3.12")
 
 RESULT_RE = re.compile(r"(?P<name>[A-Z_]+_BENCH_RESULT)\s+(?P<fields>.*)")
 

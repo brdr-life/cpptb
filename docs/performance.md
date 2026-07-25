@@ -22,6 +22,37 @@ Shared CI is used for semantic and equivalence checks only. Reference
 performance reports belong in `benchmarks/baselines/`; raw journals and
 machine-specific command captures are local artifacts.
 
+## Build policy for measured binaries
+
+Every measured binary in every suite and every mode is compiled at
+`CPPTB_BENCH_OPT_FAST`, which defaults to `-O3`. That means all four modes:
+pure SystemVerilog, C++ DPI, C++ VPI, and cocotb, whose runners read the same
+variable from the environment because cocotb drives Verilator itself.
+
+`-MAKEFLAGS OPT_FAST` is what carries the setting for anything Verilator
+compiles, including the testbench sources passed on its command line. The
+`-CFLAGS` copy alongside it is deliberate redundancy rather than a second
+requirement: it keeps the intent visible at the point the testbench is named,
+and does not depend on Verilator continuing to apply `OPT_FAST` to sources it
+did not generate. Binaries linked outside Verilator, such as the peripheral
+suite's C++ VPI host, are compiled by the Makefile directly and are the case
+where an explicit flag is genuinely required.
+
+A mode that receives no setting at all falls back to Verilator's `-Os`. Because
+the guard compares modes against each other, optimizing one and not another
+does not merely add noise: it changes the reported result.
+
+Override `CPPTB_BENCH_OPT_FAST` to sweep every suite, or one suite's own
+`*_OPT_FAST` variable to change a single suite:
+
+```sh
+make feature-benchmark FEATURE=event CPPTB_BENCH_OPT_FAST=-O2
+```
+
+Baselines recorded before this policy measured an unoptimized C++ side against
+an optimized model, so their ratios overstate C++ DPI cost and are not
+comparable with later runs.
+
 Historical scheduler experiments and their accepted or rejected rationale are
 recorded in `benchmarks/authoring_core/OPTIMIZATION_NOTES.md` in the source
 repository.

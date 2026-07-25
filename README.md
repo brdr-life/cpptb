@@ -71,10 +71,50 @@ for the detailed contracts.
 
 ## Requirements
 
-- A C++20 compiler.
-- Verilator 5.026 or newer.
+`make doctor` checks every requirement below against the local toolchain and
+reports what is missing or too old, with the fix for the current platform:
+
+```sh
+make doctor
+```
+
+- A C++20 compiler. Verilator adds no `-std` flag of its own, so cpptb passes
+  `-std=c++20` explicitly wherever it drives a Verilator build.
+- Verilator 5.046 or newer. The example and conformance builds pass
+  `--no-sched-zero-delay`, which Verilator added in 5.046; older releases fail
+  with `%Error: Invalid option: --no-sched-zero-delay`.
 - Python 3.11 or newer and [uv](https://docs.astral.sh/uv/).
 - CMake 3.20 or newer for installation and unit-test integration.
+- Optional: Z3 4.15.5 or newer for the `cpptb::z3` constraint backend
+  (`-DCPPTB_WITH_Z3=ON`). Earlier releases lack `z3::get_full_version()`. The
+  adapter is off by default, and its tests skip when Z3 is absent or too old.
+
+`make z3-toolchain` is the portable way to satisfy the optional Z3 requirement
+on both macOS and Linux, and is what CI uses. It installs a pinned `z3-solver`
+wheel, which ships `z3++.h` and the shared library for both platforms on arm64
+and x86_64, then writes a `z3.pc` so the existing pkg-config detection finds it:
+
+```sh
+make z3-toolchain
+export PKG_CONFIG_PATH="$PWD/build/pkgconfig:$PKG_CONFIG_PATH"   # for CMake
+```
+
+`make` targets pick the generated `z3.pc` up automatically; the export is only
+needed when invoking CMake directly. The wheel is installed under `build/z3/`
+rather than the project virtual environment because `uv sync` prunes anything
+outside the lockfile, which would break already-linked binaries.
+
+Linux and macOS are both supported. On Debian/Ubuntu, Verilator must be built
+from source because the packaged release is older than 5.046; `libfl-dev`
+supplies the `FlexLexer.h` header that is easy to miss:
+
+```sh
+sudo apt-get install -y autoconf bison flex libfl-dev help2man \
+    zlib1g-dev pkg-config
+```
+
+The packaged `libz3-dev` is currently older than 4.15.5, so the optional Z3
+adapter needs Z3 built from source on those distributions.
 
 Mojo is only needed for the historical experiments under `experiments/`.
 

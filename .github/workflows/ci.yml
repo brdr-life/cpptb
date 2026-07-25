@@ -1,8 +1,17 @@
 name: CI
 
 on:
+  # Branches are covered by pull_request; without this filter every push to a
+  # branch with an open pull request ran the whole matrix twice.
   push:
+    branches: [main]
   pull_request:
+
+# A newer commit supersedes an older one, so let the older run go rather than
+# queueing behind it for a runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -35,6 +44,60 @@ jobs:
       - name: Build both documentation variants
         run: make docs-check
 
+      # Uploaded whether or not deployment is configured, so the rendered docs
+      # are always retrievable by anyone with repository access.
+      - name: Upload Sphinx documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-sphinx
+          path: build/docs/sphinx
+          retention-days: 30
+
+  deploy-docs:
+    name: Deploy documentation
+    needs: docs
+    runs-on: ubuntu-24.04
+    # Runs on pull requests as well, so the artifact hand-off and the credential
+    # guard are exercised before they matter. Publishing itself is restricted to
+    # the default branch by the deploy step below; on a pull request github.ref
+    # is refs/pull/N/merge, which that condition rejects.
+
+    steps:
+      - name: Download Sphinx documentation
+        uses: actions/download-artifact@v4
+        with:
+          name: docs-sphinx
+          path: site
+
+      # secrets are not available to job-level `if`, so the guard lives here.
+      # Without credentials the job succeeds and explains itself rather than
+      # failing every run until Cloudflare is configured.
+      - name: Check for Cloudflare credentials
+        id: credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Cloudflare credentials are not set; skipping deployment. See docs/documentation-hosting.md. The rendered documentation is attached to the Documentation job as the docs-sphinx artifact."
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        if: >-
+          steps.credentials.outputs.configured == 'true' &&
+          github.ref == 'refs/heads/main'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy site
+            --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'cpptb-docs' }}
+            --branch=main
+
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -57,31 +120,61 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install Verilator (Ubuntu)
+      # Verilator publishes no prebuilt binaries, so it is built from source
+      # once and cached. The key covers the version, so a bump rebuilds and
+      # anything else restores in seconds.
+      - name: Restore Verilator (Ubuntu)
+        if: runner.os == 'Linux'
+        id: verilator-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/verilator
+          key: verilator-${{ runner.os }}-${{ env.VERILATOR_VERSION }}
+
+      - name: Install Verilator build and runtime packages (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf bison flex help2man libz3-dev pkg-config
+          # Installed on cache hits too: pkg-config and zlib are needed to
+          # build against Verilator, not only to build Verilator itself.
+          # No libz3-dev: the packaged Z3 predates the 4.15.5 the adapter
+          # needs. `make z3-toolchain` supplies a portable one below.
+          sudo apt-get install -y autoconf bison flex libfl-dev help2man \
+            zlib1g-dev pkg-config
+
+      - name: Build Verilator (Ubuntu)
+        if: runner.os == 'Linux' && steps.verilator-cache.outputs.cache-hit != 'true'
+        run: |
           git clone --depth 1 --branch "v${VERILATOR_VERSION}" \
             https://github.com/verilator/verilator.git build/verilator-source
           cd build/verilator-source
           autoconf
-          ./configure
-          make -j2
-          sudo make install
+          # A user-writable prefix keeps the cache self-contained and avoids
+          # needing sudo to install.
+          ./configure --prefix="$HOME/.local/verilator"
+          make -j"$(nproc)"
+          make install
+
+      - name: Put Verilator on PATH (Ubuntu)
+        if: runner.os == 'Linux'
+        run: echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
 
       - name: Install Verilator (macOS)
         if: runner.os == 'macOS'
-        run: brew install verilator z3
-
-      - name: Report tool versions
-        run: |
-          verilator --version
-          cmake --version
-          uv --version
+        run: brew install verilator
 
       - name: Sync Python tools
         run: uv sync --frozen
+
+      - name: Install portable Z3
+        run: |
+          # Same wheel on both runners, so the optional adapter is exercised
+          # identically instead of depending on what each platform packages.
+          make z3-toolchain
+          echo "PKG_CONFIG_PATH=$PWD/build/pkgconfig:$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
+
+      - name: Check toolchain
+        run: make doctor
 
       - name: Verify wheel contents
         run: |

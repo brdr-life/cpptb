@@ -574,6 +574,13 @@ These items may be promoted only when a concrete project supplies the use case,
 semantics, runnable example, test coverage, and performance peer needed to
 justify prioritizing them.
 
+## Candidate directions
+
+Analysis of capabilities the framework lacks, and of the open-source
+verification corpus needed to judge it against real alternatives, is recorded
+in [future directions](future-directions.md). Nothing there is scheduled: those
+items still have to clear the promotion bar described above.
+
 ## Deliberate non-goals
 
 cpptb should not copy the complete UVM architecture. In particular, a factory,

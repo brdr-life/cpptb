@@ -5,6 +5,16 @@ import os
 import sys
 from pathlib import Path
 
+def _opt_fast() -> str:
+    """Match the optimization the other three modes are built with.
+
+    cocotb drives Verilator itself, so without this its model would be built
+    at Verilator's default while pure SystemVerilog and the C++ modes are
+    built at CPPTB_BENCH_OPT_FAST, biasing the comparison in cpptb's favour.
+    """
+    return os.environ.get("CPPTB_BENCH_OPT_FAST", "-O3")
+
+
 try:
     from cocotb.runner import get_runner
 except ModuleNotFoundError:
@@ -55,6 +65,8 @@ def main(argv=None):
         hdl_toplevel="authoring_core_cocotb_top",
         build_dir=str(BUILD_DIR),
         build_args=[
+            "-MAKEFLAGS",
+            f"OPT_FAST={_opt_fast()}",
             "--timing",
             "--public-flat-rw",
             "-Wno-PINMISSING",

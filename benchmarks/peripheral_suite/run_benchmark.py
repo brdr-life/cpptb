@@ -49,7 +49,7 @@ CPP_DPI_BINARY = (
     / "Vdpi_peripheral_suite"
 )
 COCOTB_RUNNER = BENCH_DIR / "testbenches" / "cocotb" / "run_cocotb.py"
-COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "/opt/homebrew/bin/python3.12")
+COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "3.12")
 UV_CACHE_DIR = REPO / "build" / "uv-cache"
 
 RESULT_RE = re.compile(r"(?P<name>[A-Z_]+_RESULT)\s+(?P<fields>.*)")

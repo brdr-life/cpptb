@@ -160,6 +160,9 @@ def _fingerprint(
             str(path) for path in spec.testbench_include_dirs
         ],
         "cxx_flags": list(spec.cxx_flags),
+        # Part of the fingerprint so changing it in cpptb.toml rebuilds rather
+        # than silently reusing objects compiled at the previous setting.
+        "optimization": spec.optimization,
         "verilator_args": list(spec.verilator_args),
         "experimental_four_state": spec.experimental_four_state,
         "verilator_version": verilator_version,
@@ -364,6 +367,12 @@ class VerilatorBackend:
 
         cflags = shlex.join(
             [
+                # Verilator adds neither a -std nor an optimization flag of its
+                # own to testbench sources, so both would fall back to the
+                # toolchain default: C++17 and no optimization. Placing them
+                # first lets an explicit flag in cxx_flags still win.
+                "-std=c++20",
+                spec.optimization,
                 *(f"-I{path}" for path in cpp_include_dirs if path != self.verilator_root / "include" / "vltstd"),
                 *spec.cxx_flags,
             ]
@@ -373,6 +382,11 @@ class VerilatorBackend:
             "--binary",
             "--timing",
             "--no-sched-zero-delay",
+            # OPT_FAST reaches only the model Verilator generates; the cflags
+            # above cover the testbench. Both are needed for one setting to
+            # actually govern the whole build.
+            "-MAKEFLAGS",
+            f"OPT_FAST={spec.optimization}",
             "-Wno-TIMESCALEMOD",
             "-Wno-WIDTH",
             "-Wno-UNUSEDSIGNAL",
