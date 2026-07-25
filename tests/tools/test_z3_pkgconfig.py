@@ -71,7 +71,23 @@ class LibraryDetectionTests(unittest.TestCase):
                 z3_pkgconfig.library_name(Path(tmp))
 
 
-class GenerateTests(unittest.TestCase):
+class _StubRelocationMixin:
+    """Stub Mach-O relocation out of the rendering tests.
+
+    _fake_wheel writes a zero-byte stub, which install_name_tool cannot
+    process; relocation has dedicated cases in MacOsRelocationTests.
+    """
+
+    def setUp(self):
+        from unittest import mock
+        patcher = mock.patch.object(
+            z3_pkgconfig, "relocate_for_macos", return_value=None
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class GenerateTests(_StubRelocationMixin, unittest.TestCase):
     def test_generates_from_a_target_directory(self):
         import tempfile
 
@@ -152,7 +168,7 @@ class MacOsRelocationTests(unittest.TestCase):
 
 
 @unittest.skipIf(shutil.which("pkg-config") is None, "pkg-config not installed")
-class PkgConfigIntegrationTests(unittest.TestCase):
+class PkgConfigIntegrationTests(_StubRelocationMixin, unittest.TestCase):
     def test_pkg_config_accepts_the_file_and_the_version_gate(self):
         import tempfile
 
