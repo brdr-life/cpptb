@@ -214,9 +214,12 @@ class ContractTests(unittest.TestCase):
         self.assertIn(
             "AUTHORING_CORE_OPT_FAST ?= $(CPPTB_BENCH_OPT_FAST)", makefile
         )
+        # Four: the pure-SV testbench, force-direct, the direct-timing build,
+        # and the C++ VPI binary, which is a measured mode and so must be built
+        # like the modes it is compared against.
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)"'),
-            3,
+            4,
         )
         self.assertEqual(
             makefile.count('-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)"'),
