@@ -109,6 +109,7 @@ performance
 :caption: Project
 
 roadmap
+future-directions
 documentation-hosting
 ```
 """
