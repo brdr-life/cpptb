@@ -1,0 +1,7 @@
+deps/ibex/dv/verilator/pcount/cpp
+deps/ibex/examples/simple_system
+deps/ibex/vendor/lowrisc_ip/dv/sv/dv_utils
+deps/ibex/vendor/lowrisc_ip/dv/verilator/cpp
+deps/ibex/vendor/lowrisc_ip/dv/verilator/simutil_verilator/cpp
+deps/ibex/vendor/lowrisc_ip/ip/prim/dv/prim_secded
+deps/ibex/vendor/lowrisc_ip/ip/prim/rtl

@@ -893,6 +893,56 @@ class PackedCppRegistry:
         self._by_signature: dict[tuple, PackedCppType] = {}
         self._signatures_by_name: dict[str, tuple] = {}
 
+    def _unique_name(
+        self,
+        parts: list[str],
+        context: tuple[str, ...],
+        signature: tuple,
+    ) -> str:
+        """Pick a C++ name for a packed type, qualifying it if it collides.
+
+        A declared name is only unique within its own scope, so ordinary RTL
+        can define two unrelated types that share one. ibex_multdiv_fast.sv
+        declares a different mult_fsm_e in each of two generate blocks. Both
+        would otherwise be MultFsmE, and neither is wrong.
+
+        Qualification walks outwards through the declaring scope so the chosen
+        name still says where the type came from, and only falls back to a
+        counter when even the full scope is ambiguous. A type whose name does
+        not collide is unaffected, so existing generated names do not move.
+        """
+        taken = self._signatures_by_name
+
+        def free(candidate: str) -> bool:
+            previous = taken.get(candidate)
+            return previous is None or previous == signature
+
+        base_name = cpp_identifier(parts[-1], pascal=True)
+        if free(base_name):
+            return base_name
+
+        for depth in range(2, len(parts) + 1):
+            candidate = cpp_identifier("_".join(parts[-depth:]), pascal=True)
+            if free(candidate):
+                return candidate
+
+        # The declaring scope did not separate them; fall back to where the
+        # type was reached from, then to a counter.
+        if context:
+            candidate = cpp_identifier(
+                "_".join((*context, parts[-1])), pascal=True
+            )
+            if free(candidate):
+                return candidate
+
+        for index in range(2, 1000):
+            candidate = f"{base_name}{index}"
+            if free(candidate):
+                return candidate
+        raise CodegenError(
+            f"cannot find a unique C++ name for packed type {base_name!r}"
+        )
+
     def register(self, data_type: PackedType, context: tuple[str, ...]) -> None:
         if isinstance(data_type, PackedIntegralType):
             return
@@ -911,15 +961,10 @@ class PackedCppRegistry:
             return
         declared_name = data_type.declared_name
         if declared_name:
-            source_name = re.split(r"::|\.", declared_name)[-1]
+            parts = re.split(r"::|\.", declared_name)
         else:
-            source_name = "_".join(context)
-        base_name = cpp_identifier(source_name, pascal=True)
-        previous = self._signatures_by_name.get(base_name)
-        if previous is not None and previous != signature:
-            raise CodegenError(
-                f"packed types map to incompatible C++ name {base_name!r}"
-            )
+            parts = list(context)
+        base_name = self._unique_name(parts, context, signature)
         entry = PackedCppType(data_type, base_name)
         self._signatures_by_name[base_name] = signature
         self._by_signature[signature] = entry
