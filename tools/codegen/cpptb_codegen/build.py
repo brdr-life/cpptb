@@ -164,6 +164,7 @@ def _fingerprint(
         # than silently reusing objects compiled at the previous setting.
         "optimization": spec.optimization,
         "verilator_args": list(spec.verilator_args),
+        "timeout_cycles": spec.timeout_cycles,
         "experimental_four_state": spec.experimental_four_state,
         "verilator_version": verilator_version,
         "cxx_version": cxx_version,
@@ -306,6 +307,7 @@ class VerilatorBackend:
             "include_dirs": list(spec.include_dirs),
             "defines": list(spec.defines),
             "parameters": spec.parameter_map,
+            "timeout_cycles": spec.timeout_cycles,
         }
         if not rebuild and _state_matches(state_path, fingerprint, spec.binary):
             if compare_frontend is None:

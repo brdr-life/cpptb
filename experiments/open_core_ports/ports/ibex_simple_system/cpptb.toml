@@ -189,6 +189,11 @@ PMPGranularity = "0"
 PMPNumRegions = "4"
 MHPMCounterNum = "0"
 MHPMCounterWidth = "40"
+# The firmware. This reaches prim_util_memload's $readmemh through
+# ibex_simple_system's SRAMInitFile, so the program is loaded during
+# elaboration and no ELF reader is needed at run time. Verilator wants a
+# string parameter quoted, hence the embedded quotes.
+SRAMInitFile = '"firmware/coremark.vmem"'
 
 [testbench]
 sources = ["testbench.cpp"]
@@ -224,3 +229,8 @@ verilator_args = [
   "../../deps/ibex/lint/verilator_waiver.vlt",
   "../../deps/ibex/lint/verilator_waiver.vlt",
 ]
+
+[run]
+# CoreMark runs about 4.1 million cycles. The default watchdog is 1 million,
+# which stops a real software workload a quarter of the way through.
+timeout_cycles = 20000000
