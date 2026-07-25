@@ -40,6 +40,10 @@ class ProjectSpec:
     # testbench unoptimized. Set "-O0" in cpptb.toml for a debug build.
     optimization: str = "-O2"
     verilator_args: tuple[str, ...] = ()
+    # Simulation cycles after which the runtime declares a watchdog timeout.
+    # Long software workloads need far more than the default: Ibex running
+    # CoreMark takes about 4.1 million.
+    timeout_cycles: int = 1_000_000
     experimental_four_state: bool = False
     simulator: str = "verilator"
 
@@ -129,6 +133,15 @@ def _reject_optimization_in_verilator_args(values: Sequence[str]) -> None:
                 "build.optimization, which applies to the testbench and the "
                 "generated model together"
             )
+
+
+def _timeout_cycles(value: Any, label: str, default: int) -> int:
+    """Validate the watchdog cycle budget."""
+    if value is None:
+        return default
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ProjectError(f"{label} must be a positive integer")
+    return value
 
 
 def _string_list(value: Any, label: str) -> list[str]:
@@ -504,6 +517,11 @@ def resolve_project(
             ProjectSpec.optimization,
         ),
         verilator_args=verilator_args,
+        timeout_cycles=_timeout_cycles(
+            _table(config, "run").get("timeout_cycles"),
+            "run.timeout_cycles",
+            ProjectSpec.timeout_cycles,
+        ),
         experimental_four_state=selected_four_state,
         simulator=selected_simulator,
     )

@@ -156,6 +156,7 @@ def source_manifest(
     include_dirs: list[Path] | None = None,
     defines: list[str] | None = None,
     parameters: dict[str, str | int] | None = None,
+    timeout_cycles: int | None = None,
 ) -> dict[str, Any]:
     if not sources:
         raise CodegenError("source-driven generation requires at least one source")
@@ -206,7 +207,7 @@ def source_manifest(
             "iteration_plusarg": None,
             "default_iterations": 1,
             "timeprecision": "1ps",
-            "timeout_cycles": 1_000_000,
+            "timeout_cycles": timeout_cycles or 1_000_000,
         },
         "outputs": {
             "cpp_dut": str((output_dir / f"{stem}_dut.hpp").resolve()),
@@ -5297,7 +5298,15 @@ def render_sv(
         f"  timeprecision {timeprecision};",
         "",
     ]
-    lines.extend(f"  localparam int {name} = {value};" for name, value in parameters.items())
+    # A string parameter must not be declared int: the literal would be coerced
+    # to a number, which for a memory init path silently loads nothing. Emit
+    # those untyped, matching how designs usually declare them.
+    lines.extend(
+        f"  localparam {name} = {value};"
+        if str(value).lstrip().startswith('"')
+        else f"  localparam int {name} = {value};"
+        for name, value in parameters.items()
+    )
     if parameters:
         lines.append("")
     lines.extend(
@@ -6669,6 +6678,7 @@ def generate_sources(
     include_dirs: list[Path] | None = None,
     defines: list[str] | None = None,
     parameters: dict[str, str | int] | None = None,
+    timeout_cycles: int | None = None,
 ) -> list[Path]:
     base_dir = (base_dir or Path.cwd()).resolve()
     resolved_sources = [
@@ -6750,6 +6760,7 @@ def generate_sources(
         include_dirs=resolved_include_dirs,
         defines=defines,
         parameters=parameters,
+        timeout_cycles=timeout_cycles,
     )
     if access_config is not None:
         resolved_access_config = (

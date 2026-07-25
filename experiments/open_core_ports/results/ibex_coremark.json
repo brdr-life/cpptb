@@ -1,0 +1,128 @@
+{
+  "runs": 5,
+  "samples": [
+    {
+      "mode": "upstream",
+      "wall_ms": 4511.108214996057,
+      "sim_cycles": 4136197,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "cpptb",
+      "wall_ms": 5181.75082700327,
+      "sim_cycles": 4136198,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "cpptb",
+      "wall_ms": 5250.1344900083495,
+      "sim_cycles": 4136198,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "upstream",
+      "wall_ms": 4704.305540988571,
+      "sim_cycles": 4136197,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "upstream",
+      "wall_ms": 4471.590538989403,
+      "sim_cycles": 4136197,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "cpptb",
+      "wall_ms": 5388.642279998749,
+      "sim_cycles": 4136198,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "cpptb",
+      "wall_ms": 5351.675247002277,
+      "sim_cycles": 4136198,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "upstream",
+      "wall_ms": 4748.088658001507,
+      "sim_cycles": 4136197,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "upstream",
+      "wall_ms": 4571.4236380008515,
+      "sim_cycles": 4136197,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    },
+    {
+      "mode": "cpptb",
+      "wall_ms": 5210.451976003242,
+      "sim_cycles": 4136198,
+      "returncode": 0,
+      "validated": true,
+      "ticks": 4063528,
+      "iterations": 10,
+      "score": "1.230458",
+      "problems": []
+    }
+  ],
+  "modes": {
+    "upstream": {
+      "median_wall_ms": 4571.4236380008515,
+      "min_wall_ms": 4471.590538989403,
+      "max_wall_ms": 4748.088658001507
+    },
+    "cpptb": {
+      "median_wall_ms": 5250.1344900083495,
+      "min_wall_ms": 5181.75082700327,
+      "max_wall_ms": 5388.642279998749
+    }
+  },
+  "ratio_cpptb_over_upstream": 1.148468159101594
+}
