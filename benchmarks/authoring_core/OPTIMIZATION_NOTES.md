@@ -986,3 +986,55 @@ for framework-specific comparison, and using timed bus workloads for the
 repository-wide `1.10x` goal. A formal paired rerun was rejected before sampling
 because normalized one-minute load was `0.934` against the `0.300` admission
 limit. The direct timings remain diagnostic and the hard guard is unchanged.
+
+## Isolated experiment provenance (2026-07-25)
+
+The six experiments in *Isolated scheduler experiments (2026-07-12)* were each
+developed on their own branch. Those branches were removed once the accepted
+work had landed, so this section records what each contained, what became of
+it, and where the surviving implementation lives, which the branch names alone
+no longer answer.
+
+Each entry was verified against `main` by locating the implementation, not by
+trusting the earlier write-up.
+
+| Experiment | Branch (tip) | Standalone result | Where it lives in `main` |
+| --- | --- | --- | --- |
+| Static edge sources | `exp/static-clock-bookkeeping` (`6da371b`) | guard passed `1.092x` | `static_edge_source` in `include/cpptb/coro_runtime.hpp` |
+| Clock-agnostic timer owner | `exp/generic-timer-dispatch` (`a4f4e69`) | `1.067x` | `next_timer_deadline`, `timer_generation`, `discard_stale_timers`, `cpptb_dpi_next_timer_deadline` |
+| Opt-in on-demand transport | `exp/ondemand-bulk-transport` (`c01f2fa`) | `0.913x` array_wide, `0.978x` 137-bit echo | `on_demand` paths in `tools/codegen/` |
+| Static generated signal bindings | `exp/static-signal-binding` (`8384af6`) | `0.991x` array_multidim, `0.948x` signal_edge | `dpi_static_binding` |
+| Single-edge park path | `exp/single-edge-fastpath` (`c97e589`) | `0.992x` A/B, standalone guard crossed at `1.105x` | `single_edge_park_counts_` and `single_edge_park_count()` |
+| One scheduler boundary per DPI step | `exp/single-step-boundary` (`ad7199c`) | rejected | not present, deliberately |
+
+### Why the rejected experiment stays rejected
+
+The single-boundary change drained timer and edge notifications together
+instead of separately. That is what made it faster, and it is also what broke
+the equal-time contract: a coroutine resumed by a timer could no longer arm an
+edge wait in time to observe an edge arriving from the same DPI step. The cost
+is a silently different scheduling semantic rather than a failing test, so
+anyone reaching for this again should expect to redesign the contract, not
+merely re-measure. It touched `coro_runtime.hpp`, `dpi_runtime.hpp`, and added
+scheduler-boundary counters behind `CPPTB_SCHEDULER_BOUNDARY_DIAGNOSTICS`.
+
+### Two integration lessons worth keeping
+
+Two of the accepted experiments could not be merged as written. Static signal
+bindings needed a transport-aware rewrite so on-demand signals could not be
+mistaken for packed-array offsets, and the single-edge park path failed its own
+standalone guard at `1.105x` and was admissible only because the combined stack
+passed. A standalone measurement is therefore evidence that an idea is worth
+integrating, not evidence that its implementation is.
+
+The integrated stack measured `0.940x` against the checkpoint C++ binary and
+`1.039x` against the exact pure-SystemVerilog twin; adding tuned on-demand
+transport moved those to `0.936x` and `1.046x`.
+
+### On reviving any of this
+
+The branches predate the repository reorganisation: they carry paths such as
+`cpptb/coro_runtime.hpp` and `cpptb/codegen/`, where `main` now has
+`include/cpptb/` and `tools/codegen/`. They also sat 41 commits behind. Between
+that and the two rewrites above, reimplementing from the reasoning recorded here
+is likely cheaper than rebasing the original commits.
