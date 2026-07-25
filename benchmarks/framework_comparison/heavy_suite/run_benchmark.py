@@ -34,7 +34,7 @@ RESULT_DIR = SUITE_DIR / "results"
 SV_BINARY = BUILD_DIR / "pure_sv_obj" / "Vheavy_benchmark_sv_tb"
 VPI_BINARY = BUILD_DIR / "cpp_vpi_obj" / "Vheavy_benchmark_vpi_top"
 COCOTB_RUNNER = SUITE_DIR / "testbenches" / "cocotb" / "run_cocotb.py"
-COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "/opt/homebrew/bin/python3.12")
+COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "3.12")
 RESULT_RE = re.compile(r"HEAVY_BENCH_RESULT\s+(?P<fields>.*)")
 MAX_CPP_DPI_OVER_PURE_SV = 1.10
 

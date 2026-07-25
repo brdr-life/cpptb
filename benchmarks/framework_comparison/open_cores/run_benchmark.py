@@ -32,7 +32,7 @@ SUITE_DIR = Path(__file__).resolve().parent
 BUILD_DIR = REPO / "build" / "benchmarks" / "framework_comparison" / "open_cores"
 RESULT_DIR = SUITE_DIR / "results"
 COCOTB_RUNNER = SUITE_DIR / "testbenches" / "cocotb" / "run_cocotb.py"
-COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "/opt/homebrew/bin/python3.12")
+COCOTB_PYTHON = os.environ.get("COCOTB_BENCH_PYTHON", "3.12")
 RESULT_RE = re.compile(r"OPEN_CORE_BENCH_RESULT\s+(?P<fields>.*)")
 MAX_CPP_DPI_OVER_PURE_SV = 1.10
 
