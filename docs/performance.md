@@ -24,13 +24,18 @@ machine-specific command captures are local artifacts.
 
 ## Build policy for measured binaries
 
-Every measured binary in every suite is compiled at `CPPTB_BENCH_OPT_FAST`,
-which defaults to `-O3`. This covers both halves of each comparison: Verilator's
-generated model through `-MAKEFLAGS OPT_FAST`, and the C++ testbench through
-`-CFLAGS`. Both are needed. Verilator applies `OPT_FAST` only to the files it
-generates, and adds no optimization flag of its own to testbench sources given
-on the command line, so a testbench is otherwise compiled unoptimized while the
-pure-SystemVerilog model it is compared against is not.
+Every measured binary in every suite and every mode is compiled at
+`CPPTB_BENCH_OPT_FAST`, which defaults to `-O3`. That means all four modes:
+pure SystemVerilog, C++ DPI, C++ VPI, and cocotb, whose runners read the same
+variable from the environment because cocotb drives Verilator itself.
+
+Each mode needs the setting applied twice. Verilator applies `OPT_FAST` only to
+the files it generates, and adds no optimization flag of its own to testbench
+sources given on the command line. A mode that receives only `-MAKEFLAGS
+OPT_FAST` therefore runs an unoptimized testbench against an optimized model,
+and a mode that receives neither is slower still. Because the guard compares
+modes against each other, optimizing one and not another does not merely add
+noise: it changes the reported result.
 
 Override `CPPTB_BENCH_OPT_FAST` to sweep every suite, or one suite's own
 `*_OPT_FAST` variable to change a single suite:

@@ -41,6 +41,83 @@ class SharedDefaultTests(unittest.TestCase):
                 )
 
 
+MEASURED_TOP_MODULES = {
+    # pure SystemVerilog
+    "peripheral_suite_sv_tb", "authoring_core_sv_tb", "force_direct_sv_tb",
+    "heavy_benchmark_sv_tb", "open_cores_sv_tb",
+    # C++ DPI
+    "dpi_peripheral_suite", "dpi_authoring_core", "dpi_heavy_benchmark",
+    "dpi_open_cores_benchmark",
+    # C++ VPI
+    "vpi_peripheral_suite", "authoring_core_vpi_top", "heavy_benchmark_vpi_top",
+    "open_cores_benchmark_top",
+}
+
+COCOTB_RUNNERS = [
+    "benchmarks/framework_comparison/testbenches/cocotb/run_cocotb.py",
+    "benchmarks/framework_comparison/heavy_suite/testbenches/cocotb/run_cocotb.py",
+    "benchmarks/framework_comparison/open_cores/testbenches/cocotb/run_cocotb.py",
+    "benchmarks/peripheral_suite/testbenches/cocotb/run_cocotb.py",
+]
+
+
+def _verilator_invocations():
+    """Yield (line, text) for each verilator command, joining continuations."""
+    lines = MAKEFILE.split("\n")
+    index = 0
+    while index < len(lines):
+        if re.match(r"\s*verilator ", lines[index]):
+            start, buffer = index, []
+            while index < len(lines):
+                buffer.append(lines[index])
+                if not lines[index].rstrip().endswith("\\"):
+                    break
+                index += 1
+            yield start + 1, "\n".join(buffer)
+        index += 1
+
+
+class MeasuredBinaryTests(unittest.TestCase):
+    """Every mode of a comparison must be built with the same optimization.
+
+    The guard compares modes against each other, so optimizing one mode and not
+    another silently changes the result it reports.
+    """
+
+    def test_every_measured_model_is_optimized(self):
+        seen = set()
+        for line, text in _verilator_invocations():
+            match = re.search(r"--top-module (\S+)", text)
+            if not match:
+                continue
+            top = match.group(1).replace("$$(", "$(")
+            if top not in MEASURED_TOP_MODULES:
+                continue
+            seen.add(top)
+            with self.subTest(top=top, line=line):
+                self.assertIn(
+                    "OPT_FAST=", text,
+                    f"{top} at Makefile:{line} builds its model without "
+                    "OPT_FAST, so it is measured against optimized modes",
+                )
+        missing = MEASURED_TOP_MODULES - seen
+        self.assertEqual(missing, set(), f"measured targets not found: {missing}")
+
+    def test_cocotb_models_match_the_other_modes(self):
+        for runner in COCOTB_RUNNERS:
+            with self.subTest(runner=runner):
+                source = (REPO / runner).read_text(encoding="utf-8")
+                self.assertIn(
+                    'f"OPT_FAST={_opt_fast()}"', source,
+                    "cocotb drives Verilator itself; without OPT_FAST its model "
+                    "is built less optimized than the modes it is compared to",
+                )
+                self.assertIn("CPPTB_BENCH_OPT_FAST", source)
+
+    def test_shared_default_is_exported_for_the_cocotb_runners(self):
+        self.assertIn("export CPPTB_BENCH_OPT_FAST", MAKEFILE)
+
+
 class FlagCoverageTests(unittest.TestCase):
     def test_no_measured_build_hardcodes_an_optimization_level(self):
         # A literal level cannot be swept and drifts from the other suites.
