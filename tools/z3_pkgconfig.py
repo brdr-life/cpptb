@@ -20,11 +20,18 @@ already-linked binaries and break them at run time with a dangling rpath.
 
 The emitted ``Libs`` carries an rpath so binaries find the wheel's library at
 run time without the caller exporting LD_LIBRARY_PATH or DYLD_LIBRARY_PATH.
+On macOS that is not sufficient by itself: the wheel's dylib carries a bare
+install name, and dyld consults LC_RPATH only for dependencies recorded as
+``@rpath/...``, so the install name is rewritten here before anything links
+against it.
 """
 
 from __future__ import annotations
 
 import argparse
+import subprocess
+import shutil
+import platform
 import importlib.util
 import sys
 from importlib import metadata
@@ -82,6 +89,58 @@ def library_name(lib_dir: Path) -> str:
     raise Z3WheelError(f"no libz3 shared library under {lib_dir}")
 
 
+def _install_name(library: Path) -> str | None:
+    completed = subprocess.run(
+        ["otool", "-D", str(library)],
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    lines = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
+    # otool -D prints the path header, then the install name.
+    return lines[-1] if len(lines) > 1 else None
+
+
+def relocate_for_macos(lib_dir: Path) -> str | None:
+    """Give the wheel's dylib an @rpath install name.
+
+    The wheel ships libz3.dylib with a bare install name. dyld only consults
+    LC_RPATH for dependencies recorded as @rpath/..., so a linker rpath alone
+    leaves binaries failing at start with "Library not loaded: libz3.dylib".
+    ELF has no equivalent problem, which is why Linux works either way.
+    """
+    if platform.system() != "Darwin":
+        return None
+    library = lib_dir / "libz3.dylib"
+    if not library.exists():
+        candidates = sorted(lib_dir.glob("libz3*.dylib"))
+        if not candidates:
+            raise Z3WheelError(f"no libz3 dylib under {lib_dir}")
+        library = candidates[0]
+
+    current = _install_name(library)
+    if current and current.startswith("@rpath/"):
+        return current
+
+    target = f"@rpath/{library.name}"
+    if shutil.which("install_name_tool") is None:
+        raise Z3WheelError(
+            "install_name_tool is required to make the z3-solver wheel "
+            "loadable; install the Xcode command line tools"
+        )
+    subprocess.run(
+        ["install_name_tool", "-id", target, str(library)], check=True
+    )
+    # Editing the load commands invalidates any existing signature, which
+    # arm64 refuses to load. Ad-hoc re-signing restores it; ignore absence.
+    if shutil.which("codesign") is not None:
+        subprocess.run(
+            ["codesign", "--force", "--sign", "-", str(library)],
+            check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    return target
+
+
 def render(prefix: Path, version: str, lib: str) -> str:
     return (
         f"prefix={prefix}\n"
@@ -105,6 +164,7 @@ def generate(output_dir: Path, site_dir: Path | None = None) -> Path:
     if not (include_dir / "z3++.h").is_file():
         raise Z3WheelError(f"{include_dir} has no z3++.h")
     lib = library_name(lib_dir)
+    relocate_for_macos(lib_dir)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / "z3.pc"
