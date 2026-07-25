@@ -6,6 +6,7 @@ rpath, or binaries link fine and then fail at run time.
 """
 
 import importlib.util
+import os
 import shutil
 import subprocess
 import sys
@@ -176,7 +177,11 @@ class PkgConfigIntegrationTests(_StubRelocationMixin, unittest.TestCase):
             root = Path(tmp)
             site = _fake_wheel(root / "site", version="5.0.0.0", library="libz3.so")
             target = z3_pkgconfig.generate(root / "pkgconfig", site)
-            env = {"PKG_CONFIG_PATH": str(target.parent), "PATH": "/usr/bin:/bin"}
+            # Inherit PATH: pkg-config lives in Homebrew's prefix on macOS,
+            # not /usr/bin. PKG_CONFIG_PATH is searched before the system
+            # directories, so the stub still wins over any installed z3.
+            env = dict(os.environ)
+            env["PKG_CONFIG_PATH"] = str(target.parent)
 
             version = subprocess.run(
                 ["pkg-config", "--modversion", "z3"],
@@ -197,7 +202,11 @@ class PkgConfigIntegrationTests(_StubRelocationMixin, unittest.TestCase):
             root = Path(tmp)
             site = _fake_wheel(root / "site", version="4.8.12.0", library="libz3.so")
             target = z3_pkgconfig.generate(root / "pkgconfig", site)
-            env = {"PKG_CONFIG_PATH": str(target.parent), "PATH": "/usr/bin:/bin"}
+            # Inherit PATH: pkg-config lives in Homebrew's prefix on macOS,
+            # not /usr/bin. PKG_CONFIG_PATH is searched before the system
+            # directories, so the stub still wins over any installed z3.
+            env = dict(os.environ)
+            env["PKG_CONFIG_PATH"] = str(target.parent)
 
             gate = subprocess.run(
                 ["pkg-config", "--atleast-version=4.15.5", "z3"], env=env
