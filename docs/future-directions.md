@@ -97,16 +97,25 @@ once did. Verified directly against the pinned version:
   `make z3-toolchain` incidentally satisfies it;
 - covergroups with `coverpoint` and `bins` compile and sample.
 
-Verilator's own contributor documentation nevertheless describes its current
-focus as "completing Universal Verification Methodology (UVM, IEEE 1800.2-2017)
-support", so UVM is in progress rather than available.
+Verilator's own contributor documentation describes its current focus as
+"completing Universal Verification Methodology (UVM, IEEE 1800.2-2017)
+support", so UVM is in progress rather than finished.
 
-The consequence for comparisons is specific. A UVM environment cannot be used
-as a **performance** peer on Verilator today, because it cannot be relied on to
-run there at all. It remains a legitimate **ergonomics** peer: port its
-structure and compare the code. For performance the runnable peers on Verilator
-are plain SystemVerilog and cocotb, which the four-mode harness already
-supports.
+`experiments/uvm_comparison/` already measured what that means in practice, on
+this same Verilator against Accellera UVM 1800.2-2017-1.0. UVM does run: one
+test passed three times out of three. The others did not. One segfaulted on a
+run, and both random tests executed while reporting scoreboard errors, so four
+tests produced two clean results between them.
+
+The consequence for comparisons follows from that record rather than from an
+assumption. UVM is not yet a dependable **performance** peer on Verilator,
+because the tests that exercise randomization are the ones that fail, and a
+comparison is worthless if the baseline is not producing correct results. It is
+a legitimate **ergonomics** peer today: port its structure and compare the
+code. For performance the dependable peers on Verilator remain plain
+SystemVerilog and cocotb, which the four-mode harness already supports. This is
+worth re-testing periodically, since it turns on Verilator maturing rather than
+on anything in this repository.
 
 A useful side effect of Verilator's constraint support: pure-SystemVerilog
 twins can now use constrained-random classes rather than procedural stimulus,
