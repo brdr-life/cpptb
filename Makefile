@@ -76,6 +76,9 @@ AUTHORING_CORE_KERNEL ?= control
 # pure-SystemVerilog twin and distorts the ratio the guard checks. Override
 # CPPTB_BENCH_OPT_FAST to sweep all suites, or one suite's variable for one.
 CPPTB_BENCH_OPT_FAST ?= -O3
+# Exported so the cocotb runners, which drive Verilator themselves, build their
+# model with the same optimization as the other three modes.
+export CPPTB_BENCH_OPT_FAST
 AUTHORING_CORE_OPT_FAST ?= $(CPPTB_BENCH_OPT_FAST)
 AUTHORING_CORE_CONVERGE_LIMIT ?= 50000000
 AUTHORING_CORE_EXTRA_CFLAGS ?=
@@ -811,6 +814,7 @@ cpptb-conformance-vpi-run:
 $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite.mk: $(PERIPHERAL_SUITE_VPI_RTL)
 	mkdir -p $(PERIPHERAL_SUITE_VPI_OBJ_DIR)
 	verilator --cc --vpi --public-flat-rw --no-timing \
+		-MAKEFLAGS "OPT_FAST=$(PERIPHERAL_SUITE_OPT_FAST)" \
 		-Wno-MULTIDRIVEN -Wno-TIMESCALEMOD -Wno-WIDTHTRUNC -Wno-WIDTHEXPAND \
 		-Ibenchmarks/peripheral_suite/rtl \
 		--Mdir $(PERIPHERAL_SUITE_VPI_OBJ_DIR) \
@@ -818,7 +822,9 @@ $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite.mk: $(PERIPHERAL_SUITE_VPI
 		$(PERIPHERAL_SUITE_VPI_RTL)
 
 $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite__ALL.a: $(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite.mk
-	$(MAKE) -C $(PERIPHERAL_SUITE_VPI_OBJ_DIR) -f Vvpi_peripheral_suite.mk Vvpi_peripheral_suite__ALL.a CXXFLAGS="$(VERILATOR_PLATFORM_CXXFLAGS)"
+	$(MAKE) -C $(PERIPHERAL_SUITE_VPI_OBJ_DIR) -f Vvpi_peripheral_suite.mk Vvpi_peripheral_suite__ALL.a \
+		OPT_FAST="$(PERIPHERAL_SUITE_OPT_FAST)" \
+		CXXFLAGS="$(PERIPHERAL_SUITE_OPT_FAST) $(VERILATOR_PLATFORM_CXXFLAGS)"
 
 $(PERIPHERAL_SUITE_BUILD_DIR)/peripheral_suite_host: include/cpptb/coro_runtime.hpp include/cpptb/packed_bits.hpp \
 		benchmarks/peripheral_suite/testbenches/cpp_vpi/framework/peripheral_suite.hpp \
@@ -831,7 +837,7 @@ $(PERIPHERAL_SUITE_BUILD_DIR)/peripheral_suite_host: include/cpptb/coro_runtime.
 		benchmarks/peripheral_suite/testbenches/cpp_vpi/testbench.cpp \
 		$(PERIPHERAL_SUITE_VPI_OBJ_DIR)/Vvpi_peripheral_suite__ALL.a
 	mkdir -p $(PERIPHERAL_SUITE_BUILD_DIR)
-	$(CXX) -std=c++20 \
+	$(CXX) -std=c++20 $(PERIPHERAL_SUITE_OPT_FAST) \
 		-Iinclude -I. \
 		-I$(PERIPHERAL_SUITE_VPI_OBJ_DIR) \
 		-I$(VERILATOR_ROOT)/include \
@@ -1174,6 +1180,7 @@ $(FRAMEWORK_COMPARISON_VPI_BINARY): $(AUTHORING_CORE_RTL) \
 		include/cpptb/coro_runtime.hpp include/cpptb/packed_bits.hpp Makefile
 	mkdir -p $(FRAMEWORK_COMPARISON_VPI_OBJ_DIR)
 	verilator --cc --exe --build --timing --vpi --public-flat-rw \
+		-MAKEFLAGS "OPT_FAST=$(AUTHORING_CORE_OPT_FAST)" \
 		-Wno-PINMISSING -Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL \
 		-CFLAGS "-std=c++20 $(AUTHORING_CORE_OPT_FAST) -I$(CURDIR) -I$(CURDIR)/include" \
 		--Mdir $(FRAMEWORK_COMPARISON_VPI_OBJ_DIR) \
@@ -1276,6 +1283,7 @@ $(HEAVY_SUITE_VPI_BINARY): $(HEAVY_SUITE_RTL) \
 		include/cpptb/coro_runtime.hpp Makefile
 	mkdir -p $(dir $@)
 	verilator --cc --exe --build --timing --vpi --public-flat-rw \
+		-MAKEFLAGS "OPT_FAST=$(HEAVY_SUITE_OPT_FAST)" \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL \
 		-CFLAGS "-std=c++20 $(HEAVY_SUITE_OPT_FAST) -I$(CURDIR) -I$(CURDIR)/include" \
 		--Mdir $(dir $@) --top-module heavy_benchmark_vpi_top \
@@ -1392,6 +1400,7 @@ $(OPEN_CORES_BUILD_DIR)/cpp_vpi_$(1)/Vopen_cores_benchmark_top: \
 		include/cpptb/coro_runtime.hpp Makefile
 	mkdir -p $$(dir $$@)
 	verilator --cc --exe --build --timing --vpi --public-flat-rw \
+		-MAKEFLAGS "OPT_FAST=$$(OPEN_CORES_OPT_FAST)" \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL -Wno-UNOPTFLAT \
 		-DOPEN_CORE_WORKLOAD=$(2) \
 		-CFLAGS "-std=c++20 $$(OPEN_CORES_OPT_FAST) -I$$(CURDIR) -I$$(CURDIR)/include -DOPEN_CORE_WORKLOAD=$(2)" \

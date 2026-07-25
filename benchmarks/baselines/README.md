@@ -5,10 +5,15 @@ source control. Raw benchmark JSON, JSONL journals, command output, resource
 samples, and machine-specific paths are intentionally excluded.
 
 A baseline is evidence from one controlled environment, not a portable timing
-promise. Baselines below predating the build policy in
-[`docs/performance.md`](../../docs/performance.md) were measured with an
-unoptimized C++ testbench against an optimized model, so their C++ DPI ratios
-are pessimistic and cannot be compared against runs made after it. The enforced contract remains the benchmark runner's final C++ DPI to
+promise. Baselines below predate the build policy in
+[`docs/performance.md`](../../docs/performance.md) and cannot be compared
+against runs made after it. Before that policy the four modes were not built
+alike: the C++ testbench of every mode was compiled unoptimized, and the C++ VPI
+and cocotb models were built less optimized than the pure SystemVerilog and C++
+DPI models. Their C++ DPI ratios are therefore pessimistic, while their C++ VPI
+and cocotb ratios overstate those modes' cost. Re-measuring the peripheral suite
+under the current policy moved C++ VPI from `7.81x` to `1.90x` against pure
+SystemVerilog. The enforced contract remains the benchmark runner's final C++ DPI to
 pure SystemVerilog ratio of at most `1.10` for every unwaived feature. A waiver
 must remain visible in the registry and baseline, preserve the raw diagnostic,
 and enforce its own ceiling.

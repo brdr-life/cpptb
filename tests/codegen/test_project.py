@@ -70,8 +70,42 @@ experimental_four_state = true
             self.assertEqual(spec.parameter_map, {"WIDTH": 16})
             self.assertEqual(spec.build_root, (root / "out").resolve())
             self.assertEqual(spec.cxx_flags, ("-O2",))
+            self.assertEqual(spec.optimization, "-O2")
             self.assertEqual(spec.verilator_args, ("--trace",))
             self.assertTrue(spec.experimental_four_state)
+
+    def test_optimization_defaults_to_an_optimized_build(self):
+        # Verilator optimizes neither the testbench nor the model by default,
+        # so an unset value must not mean "no optimization".
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            spec = resolve_project(project=root)
+            self.assertEqual(spec.optimization, "-O2")
+
+    def test_optimization_accepts_a_debug_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\noptimization = "-O0"\n', encoding="utf-8"
+            )
+            spec = resolve_project(project=root)
+            self.assertEqual(spec.optimization, "-O0")
+
+    def test_optimization_rejects_arbitrary_flags(self):
+        for value in ("-ffast-math", "O2", "-O2 -g", "", "-Ofast"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "counter.sv").write_text("module counter; endmodule\n")
+                (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+                (root / "cpptb.toml").write_text(
+                    f'[build]\noptimization = "{value}"\n', encoding="utf-8"
+                )
+                with self.assertRaises(ProjectError):
+                    resolve_project(project=root)
 
     def test_four_state_configuration_must_use_the_guarded_option(self):
         for argument in (
