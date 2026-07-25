@@ -95,6 +95,20 @@ experimental_four_state = true
             spec = resolve_project(project=root)
             self.assertEqual(spec.optimization, "-O0")
 
+    def test_verilator_args_may_not_fight_the_optimization_setting(self):
+        # Two sources of OPT_FAST would leave whichever Verilator applies last
+        # in charge, and they can disagree.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\nverilator_args = ["-MAKEFLAGS", "OPT_FAST=-O3"]\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ProjectError, "build.optimization"):
+                resolve_project(project=root)
+
     def test_optimization_rejects_arbitrary_flags(self):
         for value in ("-ffast-math", "O2", "-O2 -g", "", "-Ofast"):
             with self.subTest(value=value), tempfile.TemporaryDirectory() as tmp:

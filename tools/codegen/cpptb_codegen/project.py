@@ -115,6 +115,22 @@ def _optimization(value: Any, label: str, default: str) -> str:
     return value
 
 
+def _reject_optimization_in_verilator_args(values: Sequence[str]) -> None:
+    """Keep one setting in charge of optimization.
+
+    build.optimization already emits -MAKEFLAGS OPT_FAST, so a second one here
+    would leave whichever Verilator happens to apply last in charge, and the
+    two can disagree.
+    """
+    for value in values:
+        if "OPT_FAST" in value:
+            raise ProjectError(
+                "build.verilator_args must not set OPT_FAST; use "
+                "build.optimization, which applies to the testbench and the "
+                "generated model together"
+            )
+
+
 def _string_list(value: Any, label: str) -> list[str]:
     if value is None:
         return []
@@ -449,6 +465,7 @@ def resolve_project(
     verilator_args = tuple(
         _string_list(build.get("verilator_args"), "build.verilator_args")
     )
+    _reject_optimization_in_verilator_args(verilator_args)
     if any(
         argument
         in {"--fourstate", "-fourstate", "--no-fourstate", "-no-fourstate"}

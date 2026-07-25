@@ -1,14 +1,13 @@
 """Every measured benchmark binary must be optimized the same way.
 
-Two independent flags decide this, and missing either silently biases the
-comparison the guard enforces:
+``-MAKEFLAGS OPT_FAST`` carries the setting for everything Verilator compiles,
+the generated model and the testbench sources named on its command line alike.
+A mode that sets none of it falls back to Verilator's ``-Os`` while the mode it
+is compared against does not, which changes the ratio the guard reports.
 
-* ``-MAKEFLAGS OPT_FAST`` reaches only the files Verilator generates.
-* ``-CFLAGS`` reaches the C++ testbench sources named on the command line,
-  which Verilator otherwise compiles with no optimization flag at all.
-
-A suite that sets the first but not the second measures an unoptimized cpptb
-against an optimized model.
+The matching ``-CFLAGS`` entry is redundancy that these tests also pin: it keeps
+the setting visible where the testbench is named and does not rely on Verilator
+continuing to apply ``OPT_FAST`` to sources it did not generate.
 """
 
 import re
