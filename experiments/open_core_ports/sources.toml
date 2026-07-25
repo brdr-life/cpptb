@@ -29,3 +29,20 @@ paths = [
   "rtl",
   "vendor/lowrisc_ip",
 ]
+
+[riscv_toolchain]
+kind = "archive"
+url = "https://github.com/lowRISC/lowrisc-toolchains/releases/download/20260224-1/lowrisc-toolchain-rv32imcb-x86_64-20260224-1.tar.xz"
+sha256 = "528facbc6cb6f02667ce7613ab21383fca42b18cca6f4914b7160636080d3569"
+platform = "Linux-x86_64"
+strip_components = 1
+license = "GPL-3.0-with-GCC-exception, and the licences of the components it bundles"
+purpose = """
+Ibex builds its example software with riscv32-unknown-elf-gcc, which nothing
+else in this repository needs. This is the prebuilt toolchain the Ibex README
+recommends, fetched only to produce firmware. rv32imcb is a superset of the
+rv32imc the examples target.
+
+It is needed once. The firmware a port runs is committed next to the port as a
+VMEM, so running a port does not require this toolchain.
+"""
