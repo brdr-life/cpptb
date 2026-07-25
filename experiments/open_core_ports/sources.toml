@@ -32,16 +32,22 @@ paths = [
 
 [riscv_toolchain]
 kind = "archive"
-url = "https://github.com/lowRISC/lowrisc-toolchains/releases/download/20260224-1/lowrisc-toolchain-rv32imcb-x86_64-20260224-1.tar.xz"
-sha256 = "528facbc6cb6f02667ce7613ab21383fca42b18cca6f4914b7160636080d3569"
+url = "https://github.com/lowRISC/lowrisc-toolchains/releases/download/20250710-1/lowrisc-toolchain-gcc-rv32imcb-x86_64-20250710-1.tar.xz"
+sha256 = "7da91ebcef42d60324d58d7b099855debac6c99172244df49d06bf4d9f461f5f"
 platform = "Linux-x86_64"
 strip_components = 1
 license = "GPL-3.0-with-GCC-exception, and the licences of the components it bundles"
 purpose = """
 Ibex builds its example software with riscv32-unknown-elf-gcc, which nothing
-else in this repository needs. This is the prebuilt toolchain the Ibex README
-recommends, fetched only to produce firmware. rv32imcb is a superset of the
-rv32imc the examples target.
+else in this repository needs. rv32imcb is a superset of the rv32imc the
+examples target.
+
+Deliberately the GCC release rather than the newer LLVM ones. lowRISC's current
+releases ship clang with no C library sysroot at all: riscv32-unknown-elf holds
+only bin and lib, so newlib's headers are absent and CoreMark fails on
+sys/types.h and then math.h. This release bundles newlib and is what Ibex's
+makefiles already expect, so CC and CROSS_COMPILE need no overriding. 20250710-1
+is the most recent release offering a GCC variant.
 
 It is needed once. The firmware a port runs is committed next to the port as a
 VMEM, so running a port does not require this toolchain.
