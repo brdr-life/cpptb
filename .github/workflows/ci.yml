@@ -1,8 +1,17 @@
 name: CI
 
 on:
+  # Branches are covered by pull_request; without this filter every push to a
+  # branch with an open pull request ran the whole matrix twice.
   push:
+    branches: [main]
   pull_request:
+
+# A newer commit supersedes an older one, so let the older run go rather than
+# queueing behind it for a runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -48,10 +57,10 @@ jobs:
     name: Deploy documentation
     needs: docs
     runs-on: ubuntu-24.04
-    # Runs on every push so the artifact hand-off and the credential guard are
-    # exercised before they matter. Publishing itself is restricted to the
-    # default branch by the deploy step below.
-    if: github.event_name == 'push'
+    # Runs on pull requests as well, so the artifact hand-off and the credential
+    # guard are exercised before they matter. Publishing itself is restricted to
+    # the default branch by the deploy step below; on a pull request github.ref
+    # is refs/pull/N/merge, which that condition rejects.
 
     steps:
       - name: Download Sphinx documentation
@@ -111,21 +120,44 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install Verilator (Ubuntu)
+      # Verilator publishes no prebuilt binaries, so it is built from source
+      # once and cached. The key covers the version, so a bump rebuilds and
+      # anything else restores in seconds.
+      - name: Restore Verilator (Ubuntu)
+        if: runner.os == 'Linux'
+        id: verilator-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/verilator
+          key: verilator-${{ runner.os }}-${{ env.VERILATOR_VERSION }}
+
+      - name: Install Verilator build and runtime packages (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
+          # Installed on cache hits too: pkg-config and zlib are needed to
+          # build against Verilator, not only to build Verilator itself.
           # No libz3-dev: the packaged Z3 predates the 4.15.5 the adapter
           # needs. `make z3-toolchain` supplies a portable one below.
           sudo apt-get install -y autoconf bison flex libfl-dev help2man \
             zlib1g-dev pkg-config
+
+      - name: Build Verilator (Ubuntu)
+        if: runner.os == 'Linux' && steps.verilator-cache.outputs.cache-hit != 'true'
+        run: |
           git clone --depth 1 --branch "v${VERILATOR_VERSION}" \
             https://github.com/verilator/verilator.git build/verilator-source
           cd build/verilator-source
           autoconf
-          ./configure
-          make -j2
-          sudo make install
+          # A user-writable prefix keeps the cache self-contained and avoids
+          # needing sudo to install.
+          ./configure --prefix="$HOME/.local/verilator"
+          make -j"$(nproc)"
+          make install
+
+      - name: Put Verilator on PATH (Ubuntu)
+        if: runner.os == 'Linux'
+        run: echo "$HOME/.local/verilator/bin" >> "$GITHUB_PATH"
 
       - name: Install Verilator (macOS)
         if: runner.os == 'macOS'
