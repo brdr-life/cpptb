@@ -12,14 +12,14 @@ memory agents serve the core, the stimulus sequences run, and the RVFI
 scoreboard co-simulates against Spike -- the last of those being the part that
 makes this a baseline rather than a demo.
 
-**No test passes yet.** All 27 UVM test classes in upstream's testlist start,
-elaborate and run; 22 of them stop at the same place, on the same instruction,
-with the same message. One shared cause, not 22 problems. `run_tests.py`
-produces the table.
+**The core executes in lockstep with Spike.** Three bugs stood between the
+build and a running test, all of them X-initialisation or solver behaviour that
+only shows up on a 2-state simulator; all three are found, reduced and fixed
+below. `core_ibex_base_test` now retires instructions with no cosim mismatch.
 
-```
-22 cosim mismatch, 4 failed, 1 no verdict
-```
+**No test completes yet**, for a different reason: throughput. The run reaches
+about 107 cycles per second, so a riscv-dv program does not finish. See
+"Still open: throughput".
 
 ## Why this matters here
 
@@ -289,7 +289,60 @@ once it ran *inside* the real sequence. The distinguishing feature -- the
 handle being a class member rather than a local -- is invisible from the
 constraint text.
 
-### Still open: the first instruction retires with no register write
+### Fixed: the asynchronous reset never fires
+
+`clk_rst_if.sv` declares its reset driver with no initialiser and then asserts
+it:
+
+```systemverilog
+logic o_rst_n;          // X on a 4-state simulator
+...
+o_rst_n <= 1'b0;        // apply_reset()
+```
+
+On a 4-state simulator that is **X -> 0**, a real falling edge, so every
+`always_ff @(posedge clk or negedge rst_ni)` in the design takes its reset
+branch. Verilator zero-initialises it, so the same assignment is **0 -> 0**.
+There is no edge, the asynchronous resets never fire, and the design keeps its
+zero-initialised state while `rst_n` sits at 0 looking perfectly asserted.
+
+The symptom is three levels from the cause. `priv_lvl_q` resets to
+`PRIV_LVL_M` (`2'b11`) and stayed at `2'b00`, so the core booted in **User
+mode**; `illegal_csr_priv = (csr_addr[9:8] > priv_lvl_q)` then makes
+`csrr t0, mhartid` an illegal CSR access, and the first instruction of every
+program trapped without writing its destination register.
+
+Starting `o_rst_n` deasserted gives `apply_reset` the 1 -> 0 edge it assumes.
+Confirmed before writing the fix by running with `+verilator+rand+reset+1` and
+`+2`, which make it start non-zero: both produce `priv_lvl_q=3`. Neither is a
+fix -- they randomise every signal in the design.
+
+```
+before:  rd=0 wdata=00000000 trap=1 pc=80000080  priv_lvl_q=0  (User)
+after:   rd=5 wdata=00000000 trap=0 pc=80000080  priv_lvl_q=3  (Machine)
+         rd=6 wdata=00000000 trap=0 pc=80000084
+```
+
+This one is arguably lowRISC's rather than Verilator's: relying on X to
+generate a reset edge is fragile, and the initialiser is the clean fix.
+
+### The core now runs in lockstep with Spike
+
+With all three fixes in, `core_ibex_base_test` executes the program and the
+cosim scoreboard is quiet: **186 instructions retired, no mismatches**, PCs
+advancing normally through the generated code.
+
+### Still open: throughput
+
+The run above took 420 seconds to reach cycle 44,816 -- about **107 cycles per
+second**, which puts a full riscv-dv program out of reach. The likely cause is
+that Verilator shells out to `z3` as a subprocess for every `randomize()`, and
+the memory response sequence randomizes once per bus access. That is a cost per
+transaction, not per cycle, so it dominates.
+
+Worth trying, in order: `zero_delays` on the response agent config to see how
+much of the cost is the `rvalid_delay` `dist`; and checking whether Verilator
+can be pointed at an in-process solver rather than a subprocess.
 
 Traced end to end with `--debug-mem`, which instruments three points: the
 instruction bus in `core_ibex_tb_top`, the monitor's clocking-block samples

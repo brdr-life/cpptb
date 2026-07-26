@@ -135,6 +135,27 @@ FCOV_SOURCES = [
 # clocking blocks, one per edge -- would diverge further from upstream's source
 # than this does.
 OVERLAYS = [
+    # clk_rst_if declares `logic o_rst_n;` with no initialiser and then
+    # apply_reset() drives it low. On a 4-state simulator that is X -> 0, a
+    # real falling edge, and every `always_ff @(posedge clk or negedge rst_ni)`
+    # in the design takes its reset branch. Verilator zero-initialises it, so
+    # the same assignment is 0 -> 0, there is no edge, the asynchronous resets
+    # never fire, and the whole design keeps its zero-initialised state while
+    # rst_n sits at 0 looking perfectly asserted.
+    #
+    # The visible symptom is three levels away: priv_lvl_q resets to
+    # PRIV_LVL_M (2'b11) but stays 2'b00, so the core boots in User mode,
+    # `csrr t0, mhartid` is an illegal CSR access by privilege, and the first
+    # instruction of every program traps.
+    #
+    # Starting it deasserted gives apply_reset the 1 -> 0 edge it assumes.
+    # `+verilator+rand+reset+2` also works, by accident, and is not
+    # deterministic.
+    (
+        LOWRISC_IP / "dv/sv/common_ifs/clk_rst_if.sv",
+        "  logic o_rst_n;\n",
+        "  logic o_rst_n = 1'b1;\n",
+    ),
     # Verilator silently drops any constraint in a `randomize() with`
     # block that dereferences a member of the *enclosing* class -- and
     # returns success. Reduced to 30 lines in
