@@ -7,6 +7,22 @@ Verilator harness.
 See [RESULTS.md](RESULTS.md) for the measurement. This file is about how the
 port is put together.
 
+## Ibex's own co-simulation tests
+
+`run_cosim_programs.py` reproduces the flow Ibex's CI runs: four programs across
+six configurations, under both harnesses, with upstream's own pass criteria from
+`ci/run-cosim-test.sh` and upstream's own feature gating.
+
+```sh
+python3 configure.py --all      # generate a project per configuration
+python3 run_cosim_programs.py --build-software --verbose
+```
+
+Each configuration needs its cpptb project built, and its upstream counterpart
+built with fusesoc using `util/ibex_config.py <config> fusesoc_opts` and
+`--build-root=build-cosim-<config>`. See
+[ibex-coverage.md](../../ibex-coverage.md).
+
 ## Three configurations
 
 The same suite, the same testbench and the same tooling, run three ways. Which

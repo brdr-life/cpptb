@@ -72,6 +72,12 @@ three, one segfaulting, and both random tests reporting scoreboard errors. Use
 UVM as an ergonomics peer, and plain SystemVerilog or cocotb when a number has
 to mean something. See [future directions](../../docs/future-directions.md).
 
+## Coverage
+
+[ibex-coverage.md](ibex-coverage.md) maps what Ibex verifies itself with against
+what runs under cpptb, consolidates what the exercise found, and lists what is
+left. Start there for review.
+
 ## Ports
 
 Both drive the same Ibex design against the same upstream harness, and measure
