@@ -236,7 +236,50 @@ does not help: it does not reach clocking-block sampled variables.
 
 This is real and it changed behaviour, but it is not the whole story.
 
-### Root-caused: a constraint Verilator silently drops
+### Fixed: a constraint Verilator silently drops
+
+**Verilator drops any constraint in a `randomize() with {}` block that
+dereferences a member of the enclosing class, and returns success.** Thirty
+lines reproduce it, kept in `shims/verilator_constraint_scope.sv`:
+
+```
+  member handle direct:   ok=1 addr=5b6f55b9  want 80000084   <-- wrong, and ok=1
+  copied to local handle: ok=1 addr=80000084  want 80000084
+  copied to local value:  ok=1 addr=80000084  want 80000084
+```
+
+Writing `this.item.addr` instead does not work around it; that fails to compile
+with `Can't find definition of scope/variable: 'item'`, which points at the
+cause -- the constraint's scope resolution never reaches the enclosing class.
+
+`ibex_mem_intf_response_seq` ties its response to the monitored request with
+`addr == item.addr`, and `item` is a member of the sequence. So every response
+went to a random address, found it uninitialised, and returned `0x0000` -- which
+is what the IMEM sequence is specified to do for uninitialised memory. The core
+was answered with `c.unimp` at its reset vector and the cosim scoreboard
+reported a mismatch on instruction one.
+
+`build_tb.py` copies everything that `with` block reads into locals first.
+After the fix the responses are correct and the core executes the program:
+
+```
+[MEMDBG I] t=215900 req.addr=80000080 item.addr=80000080 rw=0 data=f14022f3 uninit=0
+[MEMDBG I] t=233900 req.addr=80000084 item.addr=80000084 rw=0 data=82634301 uninit=0
+
+Time     Cycle  PC        Insn      Decoded instruction
+261900   29     80000080  f14022f3  csrrs x0,mhartid,x0
+```
+
+`0xf14022f3` is `csrr t0, mhartid`, the first instruction of `_start`, fetched
+and executed from the right address with the right data.
+
+A note on how this was found, because it cost several rebuilds: five reduced
+cases modelled on the constraint all worked, and the bisect only reproduced it
+once it ran *inside* the real sequence. The distinguishing feature -- the
+handle being a class member rather than a local -- is invisible from the
+constraint text.
+
+### Still open: the first instruction retires with no register write
 
 Traced end to end with `--debug-mem`, which instruments three points: the
 instruction bus in `core_ibex_tb_top`, the monitor's clocking-block samples
@@ -251,8 +294,20 @@ Everything up to the response sequence is correct.
 [MEMDBG I] t=233900 req.addr=7674a22b item.addr=80000084 rw=0 data=00000000 uninit=1
 ```
 
-Read the last line. The monitor delivered `item.addr = 0x8000_0084`, correctly.
-The response sequence then does
+The trace above shows the memory path working. What remains is one step later:
+the tracer decodes the first instruction as `csrrs x0`, and the scoreboard says
+
+```
+Cosim mismatch DUT didn't write to register x5, but a write was expected
+```
+
+`0xf14022f3` encodes `rd = x5`, so `rvfi_rd_addr` is being reported as 0 where
+Spike expects a write to x5. The instruction word, its address and its decode
+are all correct, so this is a narrower question than the one before it: why
+RVFI reports no destination register for an instruction that has one. It is the
+next thing to look at.
+
+The evidence that got here, for reference. The response sequence does
 
 ```systemverilog
 if (!req.randomize() with {

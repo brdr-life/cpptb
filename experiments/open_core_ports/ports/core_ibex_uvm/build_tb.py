@@ -135,6 +135,25 @@ FCOV_SOURCES = [
 # clocking blocks, one per edge -- would diverge further from upstream's source
 # than this does.
 OVERLAYS = [
+    # Verilator silently drops any constraint in a `randomize() with`
+    # block that dereferences a member of the *enclosing* class -- and
+    # returns success. Reduced to 30 lines in
+    # shims/verilator_constraint_scope.sv. This sequence's response is
+    # tied to the monitored request by `addr == item.addr`, where `item`
+    # is a member of the sequence, so the response went to a random
+    # address and the core was answered with c.unimp at its reset vector.
+    # Copying into locals first is what the LRM already guarantees and
+    # what Verilator gets right.
+    (
+        CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_seq_lib.sv",
+        "      bit [INTG_WIDTH-1:0] read_intg;\n      bit                  data_was_uninitialized = 1'b0;\n",
+        "      bit [INTG_WIDTH-1:0] read_intg;\n      bit                  data_was_uninitialized = 1'b0;\n      // A constraint that reads a member of the enclosing class is dropped\n      // by this simulator, silently and while reporting success, so all the\n      // with block below reads is copied into a local first.\n      ibex_mem_intf_seq_item l_item;\n      bit                    l_enable_error;\n      int unsigned           l_zero_delays;\n      int unsigned           l_vd_min, l_vd_max, l_w_med, l_w_slow;\n",
+    ),
+    (
+        CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_seq_lib.sv",
+        '      if (!req.randomize() with {\n        addr       == item.addr;\n        read_write == item.read_write;\n        data       == item.data;\n        intg       == item.intg;\n        be         == item.be;\n        if (p_sequencer.cfg.zero_delays) {\n          rvalid_delay == 0;\n        } else {\n          rvalid_delay dist {\n            p_sequencer.cfg.valid_delay_min                                                  :/ 5,\n            [p_sequencer.cfg.valid_delay_min + 1 : p_sequencer.cfg.valid_delay_max / 2 - 1]  :/ 3,\n            [p_sequencer.cfg.valid_delay_max / 2 : p_sequencer.cfg.valid_delay_max - 1]\n            :/ p_sequencer.cfg.valid_pick_medium_speed_weight,\n            p_sequencer.cfg.valid_delay_max\n            :/  p_sequencer.cfg.valid_pick_slow_speed_weight\n          };\n        }\n        error == enable_error;\n      }) begin\n',
+        '      l_item         = item;\n      l_enable_error = enable_error;\n      l_zero_delays  = p_sequencer.cfg.zero_delays;\n      l_vd_min       = p_sequencer.cfg.valid_delay_min;\n      l_vd_max       = p_sequencer.cfg.valid_delay_max;\n      l_w_med        = p_sequencer.cfg.valid_pick_medium_speed_weight;\n      l_w_slow       = p_sequencer.cfg.valid_pick_slow_speed_weight;\n      if (!req.randomize() with {\n        addr       == l_item.addr;\n        read_write == l_item.read_write;\n        data       == l_item.data;\n        intg       == l_item.intg;\n        be         == l_item.be;\n        if (l_zero_delays) {\n          rvalid_delay == 0;\n        } else {\n          rvalid_delay dist {\n            l_vd_min                             :/ 5,\n            [l_vd_min + 1 : l_vd_max / 2 - 1]    :/ 3,\n            [l_vd_max / 2 : l_vd_max - 1]        :/ l_w_med,\n            l_vd_max                             :/ l_w_slow\n          };\n        }\n        error == l_enable_error;\n      }) begin\n',
+    ),
     (
         LOWRISC_IP / "dv/sv/common_ifs/clk_rst_if.sv",
         "`ifndef VERILATOR\n"
@@ -358,7 +377,18 @@ OVERLAYS = [
 # needs and what neither the UVM log nor the tracer shows: the address the
 # agent was asked for, the data it decided to return, and whether it found the
 # address in the memory model at all.
+# Bisect of the `with` block that loses `addr == item.addr`: five randomize
+# calls on fresh items, each with a different subset of the real constraints,
+# all in one run so one rebuild answers which term breaks it.
+BISECT_ANCHOR = "      enable_error = 1'b0; // Disable after single inserted error.\n"
+BISECT_SNIPPET = '\n      begin : bisect\n        ibex_mem_intf_seq_item b1, b2, b3, b4, b5;\n        bit ok1, ok2, ok3, ok4, ok5;\n        b1 = ibex_mem_intf_seq_item::type_id::create("b1");\n        ok1 = b1.randomize() with { addr == item.addr; };\n        b2 = ibex_mem_intf_seq_item::type_id::create("b2");\n        ok2 = b2.randomize() with { addr == item.addr; read_write == item.read_write;\n                    data == item.data; intg == item.intg; be == item.be; };\n        b3 = ibex_mem_intf_seq_item::type_id::create("b3");\n        ok3 = b3.randomize() with { addr == item.addr; read_write == item.read_write;\n                    data == item.data; intg == item.intg; be == item.be; error == enable_error; };\n        b4 = ibex_mem_intf_seq_item::type_id::create("b4");\n        ok4 = b4.randomize() with { addr == item.addr;\n                    if (p_sequencer.cfg.zero_delays) { rvalid_delay == 0; }\n                    else { rvalid_delay dist {\n                        p_sequencer.cfg.valid_delay_min :/ 5,\n                        [p_sequencer.cfg.valid_delay_min + 1 : p_sequencer.cfg.valid_delay_max / 2 - 1] :/ 3,\n                        [p_sequencer.cfg.valid_delay_max / 2 : p_sequencer.cfg.valid_delay_max - 1]\n                          :/ p_sequencer.cfg.valid_pick_medium_speed_weight,\n                        p_sequencer.cfg.valid_delay_max\n                          :/ p_sequencer.cfg.valid_pick_slow_speed_weight }; } };\n        b5 = ibex_mem_intf_seq_item::type_id::create("b5");\n        ok5 = b5.randomize() with { addr == item.addr; read_write == item.read_write;\n                    data == item.data; intg == item.intg; be == item.be;\n                    if (p_sequencer.cfg.zero_delays) { rvalid_delay == 0; }\n                    else { rvalid_delay dist {\n                        p_sequencer.cfg.valid_delay_min :/ 5,\n                        [p_sequencer.cfg.valid_delay_min + 1 : p_sequencer.cfg.valid_delay_max / 2 - 1] :/ 3,\n                        [p_sequencer.cfg.valid_delay_max / 2 : p_sequencer.cfg.valid_delay_max - 1]\n                          :/ p_sequencer.cfg.valid_pick_medium_speed_weight,\n                        p_sequencer.cfg.valid_delay_max\n                          :/ p_sequencer.cfg.valid_pick_slow_speed_weight }; }\n                    error == enable_error; };\n        $display("[BISECT] item.addr=%08h | eq=%0b/%08h eq5=%0b/%08h +err=%0b/%08h +dist=%0b/%08h full=%0b/%08h",\n                 item.addr, ok1, b1.addr, ok2, b2.addr, ok3, b3.addr,\n                 ok4, b4.addr, ok5, b5.addr);\n      end\n'
+
 DEBUG_OVERLAYS = [
+    (
+        CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_seq_lib.sv",
+        BISECT_ANCHOR,
+        BISECT_ANCHOR + BISECT_SNIPPET,
+    ),
     # Print, from inside the monitor, what the clocking block samples next to
     # what the raw interface wires carry. tb_top already shows the DUT and the
     # wires agreeing, so this is the last place the address can go wrong.
