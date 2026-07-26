@@ -72,9 +72,30 @@ three, one segfaulting, and both random tests reporting scoreboard errors. Use
 UVM as an ergonomics peer, and plain SystemVerilog or cocotb when a number has
 to mean something. See [future directions](../../docs/future-directions.md).
 
+## Ports
+
+Both drive the same Ibex design against the same upstream harness, and measure
+deliberately different things. Together they separate what a simulated cycle
+costs from what a run costs.
+
+- **[`ibex_simple_system`](ports/ibex_simple_system/RESULTS.md)** — CoreMark at
+  100 iterations, one program of 40.7 million cycles. Steady-state throughput:
+  `1.140x`, cpptb over upstream.
+
+- **[`riscv_arch_tests`](ports/riscv_arch_tests/RESULTS.md)** — 96
+  architectural tests plus two cost baselines, 98 programs of about 190,000
+  cycles each. Per-run cost: `1.069x` overall, which decomposes into cpptb
+  starting a run and loading a program about 27% faster and simulating about
+  13% slower. That `1.133x` simulation figure and CoreMark's `1.140x` are
+  independent measurements of the same per-cycle cost on workloads sharing
+  nothing but the core.
+
+Both build their software with a pinned prebuilt RISC-V toolchain, so neither
+needs one installed. `ibex_simple_system` commits its firmware as a VMEM and
+does not need the toolchain to run at all.
+
 ## Planned ports
 
-- `ibex_simple_system` — Ibex Simple System, whose upstream harness is already
-  hand-written C++ against Verilator, making a cpptb port a like-for-like
-  replacement. Note that building its software needs a RISC-V cross toolchain;
-  prefer pinning a prebuilt binary so the port runs without one.
+Nothing scheduled. The two Ibex ports cover the throughput and per-run axes on
+one core; the natural next step is a second design rather than a third
+workload on this one. See [future directions](../../docs/future-directions.md).

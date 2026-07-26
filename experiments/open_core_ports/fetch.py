@@ -8,6 +8,9 @@ repository, so deps/ is disposable and the tree stays small:
   of the single commit, because ``git clone --branch`` does not accept one.
 - ``archive``: downloaded and checked against a SHA-256 digest before it is
   unpacked, so a changed or substituted asset fails rather than installing.
+  An archive that ships a separate build per platform pins each one under
+  ``[<name>.assets."System-machine"]``; this host's entry is selected and the
+  rest are ignored.
 
     python3 fetch.py --list
     python3 fetch.py ibex
@@ -44,13 +47,53 @@ def load_sources() -> dict[str, dict]:
     if not SOURCES.is_file():
         raise FetchError(f"missing {SOURCES}")
     data = tomllib.loads(SOURCES.read_text(encoding="utf-8"))
+    resolved = {}
     for name, entry in data.items():
+        entry = _select_asset(entry)
+        resolved[name] = entry
+        if UNAVAILABLE in entry:
+            continue
         kind = _kind(entry)
         required = ("repo", "commit") if kind == "git" else ("url", "sha256")
         for key in required:
             if key not in entry:
                 raise FetchError(f"[{name}] is a {kind} source missing '{key}'")
-    return data
+    return resolved
+
+
+# Set on an entry whose archive has no build for this host. Carrying the reason
+# rather than raising at load time keeps --list working everywhere, so a macOS
+# user can still see what a Linux-only source is, and the error surfaces only
+# when that source is actually asked for.
+UNAVAILABLE = "_unavailable"
+
+
+def host_platform() -> str:
+    return f"{platform.system()}-{platform.machine()}"
+
+
+def _select_asset(entry: dict) -> dict:
+    """Fold this host's entry from an ``assets`` table into the source itself.
+
+    Sources with a single build for one platform keep using ``url``/``sha256``
+    with an optional ``platform`` guard; nothing about them changes here.
+    """
+    assets = entry.get("assets")
+    if not assets:
+        return entry
+
+    chosen = dict(entry)
+    del chosen["assets"]
+    host = host_platform()
+    if host in assets:
+        chosen.update(assets[host])
+        chosen["platform"] = host
+    else:
+        chosen[UNAVAILABLE] = (
+            f"no build pinned for {host}; sources.toml has "
+            f"{', '.join(sorted(assets))}"
+        )
+    return chosen
 
 
 def _kind(entry: dict) -> str:
@@ -59,6 +102,8 @@ def _kind(entry: dict) -> str:
 
 def pin_of(entry: dict) -> str:
     """The value a fetched tree must match."""
+    if UNAVAILABLE in entry:
+        return "-"
     return entry["commit"] if _kind(entry) == "git" else entry["sha256"]
 
 
@@ -93,10 +138,12 @@ def current_pin(name: str, entry: dict) -> str | None:
 
 
 def _check_platform(name: str, entry: dict) -> None:
+    if UNAVAILABLE in entry:
+        raise FetchError(f"{name}: {entry[UNAVAILABLE]}")
     wanted = entry.get("platform")
     if not wanted:
         return
-    actual = f"{platform.system()}-{platform.machine()}"
+    actual = host_platform()
     if wanted != actual:
         raise FetchError(
             f"{name} is pinned for {wanted} but this host is {actual}; pin an "
@@ -227,9 +274,13 @@ def main(argv: list[str] | None = None) -> int:
         width = max(len(name) for name in sources)
         for name, entry in sources.items():
             pin = pin_of(entry)
-            state = current_pin(name, entry)
-            status = ("fetched" if state == pin
-                      else "stale" if state else "absent")
+            if UNAVAILABLE in entry:
+                status = "n/a"
+                state = None
+            else:
+                state = current_pin(name, entry)
+                status = ("fetched" if state == pin
+                          else "stale" if state else "absent")
             print(f"  {name:<{width}}  {_kind(entry):<7}  {pin[:12]}  "
                   f"{status:<7}  {entry.get('license', '?')}")
         return 0
