@@ -144,15 +144,56 @@ it. A single test checks about 316,000 instructions this way.
 without the reference model -- about 2.6x for checking every instruction, which
 is the price of the strongest check available here.
 
-Two caveats worth stating plainly. The binaries are not identical to the
-`small` ones: they are built with `U_SUPPORTED` off to work around a gap in
-Spike, described below, which skips some boot-time CSR setup and nothing a test
-exercises. And this establishes correctness for the instructions these tests
-execute, which is a large but finite set; it is not a proof.
+### It is upstream's harness, not a reimplementation
 
-What upstream's own cosim flow does instead is run CoreMark, so this is a
-considerably wider net than Ibex's Verilator co-simulation has been cast over
-before -- which is how it turned up the `menvcfgh` disagreement below.
+The checker, the bind target, the DPI layer and Spike itself are Ibex's,
+unmodified. Only `simple_system_cosim.cc` is replaced, because it subclasses the
+harness cpptb exists to replace, and `cosim_glue.cc` passes the same arguments
+it did: `GetIsaString()`'s `rv32imc`, `0x100080`, `0x100001`,
+`add_memory(0, 0xFFFF0000)`, and the same five parameters read off the design.
+
+That claim is checked rather than asserted, by running upstream's own
+co-simulation workload through this port. Ibex's cosim README says to build
+CoreMark with `SUPPRESS_PCOUNT_DUMP=1` because "the co-simulator system doesn't
+produce matching performance counters in spike so any read of those CSRs results
+in a mismatch and a failure". Both halves of that reproduce here:
+
+| CoreMark build | result |
+| --- | --- |
+| default | mismatch at 40.7M cycles: `Register write data mismatch to x15 DUT: 1a45786 expected: 1a4b830` |
+| `SUPPRESS_PCOUNT_DUMP=1` | **2,794,236 instructions matched, no mismatch**, CoreMark validated |
+
+Reproducing upstream's documented failure *and* their documented fix is stronger
+evidence that the port is faithful than a passing run alone would be.
+
+### Why the workaround is the same kind upstream uses
+
+The `menvcfgh` gap is not a consequence of running co-simulation differently. It
+is a consequence of running a *wider workload* through it: upstream's cosim
+flows run CoreMark and riscv-dv's generated programs, and neither writes that
+CSR, so the disagreement has never had the chance to appear.
+
+Upstream handles the same class of problem the same way -- by not exercising the
+CSR that diverges, rather than by fixing the model:
+
+- CoreMark must be built with `SUPPRESS_PCOUNT_DUMP=1`, above.
+- riscv-dv's implemented-CSR list for Ibex has `MENVCFG // (lower 32 bits)` and
+  no `MENVCFGH` entry at all, though it lists both halves of `mstatus`. Its
+  `MINSTRET` and `MINSTRETH` are commented out under:
+
+      // TODO: Bring back commented out CSRs, these are currently removed as
+      // they can cause co-sim mismatches. These must be investigated and fixed
+
+So `-DIBEX_NO_U_MODE` here is the same move at the same layer: adjust what the
+workload exercises, not the reference model. The alternative is to add the
+missing CSR to Spike, which is a few lines and would let these tests run with
+U-mode declared truthfully, at the cost of carrying a patch against a pinned
+dependency. That is worth reporting upstream either way.
+
+Two caveats. The binaries are not identical to the `small` ones -- they skip the
+boot-time `menvcfg` writes and nothing else a test exercises. And this
+establishes correctness for the instructions these tests execute, a large but
+finite set; it is not a proof.
 
 ## What this exercise found
 

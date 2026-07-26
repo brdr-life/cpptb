@@ -78,7 +78,13 @@ EXTRAS: dict[str, dict] = {
 DELTAS: dict[str, list[tuple[str, str]]] = {
     # The co-simulation build is the base configuration; what it adds is the
     # checker and Spike, which live in EXTRAS rather than here.
-    "cosim": [],
+    # What the co-simulation build adds is the checker and Spike, which live in
+    # EXTRAS rather than here. The one thing that does change is the watchdog:
+    # the base is sized for architectural tests of a few hundred thousand
+    # cycles, and this configuration must also be able to run CoreMark, which
+    # is upstream's own co-simulation workload at 40.7 million. Matching
+    # ports/ibex_simple_system lets the same program run through both.
+    "cosim": [(r"^timeout_cycles = 20000000$", "timeout_cycles = 100000000")],
     "bmfull": [
         (r'"RV32M=ibex_pkg::RV32MFast"', '"RV32M=ibex_pkg::RV32MSingleCycle"'),
         (r'"RV32B=ibex_pkg::RV32BNone"', '"RV32B=ibex_pkg::RV32BFull"'),

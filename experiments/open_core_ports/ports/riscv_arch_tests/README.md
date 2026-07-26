@@ -50,6 +50,19 @@ python3 build_tests.py --config bmfull
 python3 run_suite.py  --config bmfull
 ```
 
+To check the co-simulation port against upstream's own baseline, run their
+workload through it. `ACT_CYCLE_LIMIT` exists for this: CoreMark needs 40.7
+million cycles where an architectural test needs 190,000.
+
+```sh
+# Upstream's cosim README requires this flag; without it the run fails on a
+# performance-counter read, which is a real property of their flow, not of this
+# port. Both outcomes reproduce here.
+make -C ../../deps/ibex/examples/sw/benchmarks/coremark SUPPRESS_PCOUNT_DUMP=1
+ACT_FIRMWARE=coremark.vmem ACT_CYCLE_LIMIT=80000000 \
+  ../../work/riscv_arch_tests_cosim/cpptb/riscv_arch_tests_cosim/obj/Vdpi_riscv_arch_tests_cosim
+```
+
 For `cosim`, build Spike first. It installs under `deps/`, not `/opt`:
 
 ```sh

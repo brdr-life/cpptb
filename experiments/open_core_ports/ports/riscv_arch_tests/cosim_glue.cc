@@ -128,6 +128,19 @@ void *get_spike_cosim() { return static_cast<Cosim *>(g_cosim.get()); }
 
 }  // extern "C"
 
+// How many instructions Spike and the DUT agreed on. Upstream reports the same
+// number from SimpleSystemCosim::Finish():
+//
+//     std::cout << "Co-simulation matched " << _cosim->get_insn_cnt()
+//               << " instructions\n";
+//
+// It is the evidence that the check actually ran: a co-simulation that created
+// Spike and then never stepped it reports success just as loudly as one that
+// checked every instruction, and the two are indistinguishable without this.
+uint64_t cosim_instructions_matched() {
+    return g_cosim ? g_cosim->get_insn_cnt() : 0;
+}
+
 // Called by the testbench once the program is in RTL memory, with the same
 // bytes it deposited. Not a DPI function: it is ordinary C++ that the cpptb
 // testbench links against.
