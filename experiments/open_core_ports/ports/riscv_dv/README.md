@@ -145,10 +145,42 @@ It demonstrably works. The same program, generated with `--interrupts`:
 The interrupts are being taken, the program services them, and Spike stays in
 lockstep across a million instructions. **That is the thing E1 could not do.**
 
-What does not work yet is termination with interrupts enabled: the run reaches
-the cycle limit rather than the program's exit sequence. The next thing to check
-is what the generated interrupt handler does after servicing, since the program
-terminates normally in 274 instructions without the stimulus.
+### Why it does not terminate, and why that is not a small fix
+
+The run reaches the cycle limit rather than the program's exit sequence. The
+cause is now known and it is not a tuning problem.
+
+The core loops inside `mmode_intr_handler`, ending at its `mret` and
+immediately re-entering. The obvious explanation is the pin still being
+asserted at `mret`, and that is wrong: shortening the assertion to one cycle
+changes nothing, and the instruction count is identical at `ACT_IRQ_HOLD=1` and
+`2`. The handler cannot complete on its own.
+
+riscv-dv's external-interrupt handler expects a way to identify and clear the
+interrupt source. Ibex's own flow provides that from the UVM environment's
+interrupt agent. Simple System has no interrupt controller at all -- it ties
+`irq_external_i` to a constant -- so there is nothing for the handler to talk
+to, and it spins.
+
+So external interrupt stimulus needs more than a forced pin, in the same way
+debug stimulus needs more than a forced `debug_req_i`: both want platform
+support Simple System does not have. That is a property of the platform this
+port targets, not of cpptb, and it is the real content of E2.
+
+Two ways forward, neither a tweak:
+
+- **Use the timer interrupt.** Simple System *does* have a timer with
+  mtime/mtimecmp, and `irq_timer_i` is already driven by it rather than tied
+  off. riscv-dv's timer handler clears the interrupt by writing `mtimecmp`,
+  which needs no new device. This is the cheap experiment and should be tried
+  first.
+- **Model an interrupt controller.** Either as RTL beside the design or in the
+  testbench, answering the claim and complete accesses the handler makes. More
+  faithful to core_ibex, and considerably more work.
+
+What is established either way is that the stimulus reaches the core and the
+reference model follows it: 20 interrupts taken, over a million instructions
+matched, zero mismatches. The gap is the platform, not the mechanism.
 
 ## What is left
 
