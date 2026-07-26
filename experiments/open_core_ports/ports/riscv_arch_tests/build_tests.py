@@ -145,7 +145,11 @@ CONFIGS = {
         ibex_config="small",
         project="cpptb.toml",
         cpptb_binary=_CPPTB.format(name="riscv_arch_tests_cosim"),
-        upstream_binary=_UPSTREAM.format(build="build-cosim"),
+        # A different fusesoc core, so a different directory name: the
+        # co-simulation target is lowrisc:ibex:ibex_simple_system_cosim.
+        upstream_binary="deps/ibex/build-cosim/"
+                        "lowrisc_ibex_ibex_simple_system_cosim_0/"
+                        "sim-verilator/Vibex_simple_system",
         extensions=COMMON_EXTENSIONS,
         pmp_entries=0,
         # Spike is the reference; there is no second harness to agree with.

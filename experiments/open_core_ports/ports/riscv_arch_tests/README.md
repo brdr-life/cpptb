@@ -16,7 +16,7 @@ tests apply and what counts as passing both follow from the configuration.
 | --- | --- | ---: | --- |
 | `small` | `small` | 98 | the upstream harness |
 | `bmfull` | `maxperf-pmp-bmfull` | 193 | the upstream harness |
-| `cosim` | `small` + Spike | 98 | Spike, per instruction |
+| `cosim` | `small` + Spike | 98 | Spike, per instruction, on both sides |
 
 `bmfull` roughly doubles the applicable set: `RV32BFull` brings in Zba, Zbb, Zbc
 and Zbs, `RV32ZcaZcbZcmp` brings in Zcb, and `PMPEnable` with 16 regions brings
