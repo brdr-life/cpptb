@@ -248,9 +248,21 @@ lines reproduce it, kept in `shims/verilator_constraint_scope.sv`:
   copied to local value:  ok=1 addr=80000084  want 80000084
 ```
 
-Writing `this.item.addr` instead does not work around it; that fails to compile
-with `Can't find definition of scope/variable: 'item'`, which points at the
-cause -- the constraint's scope resolution never reaches the enclosing class.
+`local::item.addr`, the LRM's explicit qualifier for "resolve this in the scope
+that called randomize()", fails the same way:
+
+```
+  unqualified item.addr:  ok=1 addr=5b6f55b9  want 80000084
+  local::item.addr:       ok=1 addr=21766c9b  want 80000084
+```
+
+That rules out name resolution as an explanation. Even told exactly which scope
+to use, the constraint is dropped and success is returned.
+
+(`this.item.addr` does not compile, with `Can't find definition of
+scope/variable: 'item'`. That is not evidence of anything: inside an inline
+constraint `this` refers to the object being randomized, so `this.item` asks
+for a member the seq_item does not have, and the error is correct.)
 
 `ibex_mem_intf_response_seq` ties its response to the monitored request with
 `addr == item.addr`, and `item` is a member of the sequence. So every response
