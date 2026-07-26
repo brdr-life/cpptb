@@ -130,19 +130,26 @@ Consolidated from both ports. Grouped by who owns the problem.
 
 ### In upstream, reported rather than worked around silently
 
-12. **`tb_cs_registers` is vacuous on Verilator 5.050.** It reports `TEST
+12. **Upstream's CSR model does not implement MML write suppression.**
+    `ibex_cs_registers.sv` refuses a `pmpcfg` write when `MSECCFG.MML` is set,
+    `RLB` is clear and the new byte has `lock` set with `{r,w,x}` in
+    `{001,010,011,101}`. `PmpCfgRegister::RegisterWrite` masks by `lock & !RLB`
+    only. The model knows MML *relaxes* which encodings are legal
+    (`HandleReservedVals`) but not that it *blocks* these writes. Found by the
+    cpptb port from upstream's own stimulus; reportable to lowRISC.
+13. **`tb_cs_registers` is vacuous on Verilator 5.050.** It reports `TEST
     PASSED` having driven zero transactions, and never terminates without a
     cycle limit. Ibex pins v4.210 for it. Not root-caused, and not confirmed
     against 4.210.
-13. **The pinned Spike never registers `CSR_MENVCFGH`.** It registers
+14. **The pinned Spike never registers `CSR_MENVCFGH`.** It registers
     `CSR_MENVCFG` and has no entry for the high half, so on RV32 it traps where
     Ibex correctly implements it as read-only zero. A model with the low half
     and not the high half is not a coherent RV32 configuration. Worth reporting
     to `lowRISC/riscv-isa-sim`.
-14. **The suite's `Zicsr` tests cannot be built for a core with U-mode but no
+15. **The suite's `Zicsr` tests cannot be built for a core with U-mode but no
     F, no V and no `time` CSR.** They pick a scratch CSR from a fixed ladder
     and fall off the end into `#error`.
-15. **The suite's PMP tests assume a granularity of 2 or more.** They size NAPOT
+16. **The suite's PMP tests assume a granularity of 2 or more.** They size NAPOT
     padding as `(1 << (UDB_PMP_GRANULARITY - 3)) - 1`, which underflows for
     granularity 0 and reaches `.rept` as 2^64-1.
 
@@ -160,7 +167,7 @@ Ordered by cost, not by value.
 | --- | --- | --- | --- |
 | ~~A~~ | ~~Three more co-sim programs~~ | done | flow 3's workload |
 | ~~B~~ | ~~Four more configurations~~ | done | flow 3's matrix, including `opentitan` with icache, ECC, scrambling and SecureIbex |
-| C | `tb_cs_registers` | **in progress** | flow 4, and a different *shape* of testbench |
+| ~~C~~ | ~~`tb_cs_registers`~~ | done | flow 4, a different *shape* of testbench, and a model bug |
 | D | RISC-V Compliance, `ibex_riscv_compliance` | medium | flow 2, exact CI parity |
 | E | riscv-dv under UVM, `dv/uvm/core_ibex` | large | flow 5, Ibex's real verification depth |
 | F | `dv/uvm/icache` | large | flow 6, a block-level testbench |
@@ -173,10 +180,13 @@ instruction cache with ECC and scrambling plus `SecureIbex`, which is the most
 RTL any of these elaborates, and the only configuration on which the two
 security tests run at all.
 
-**C is started and not finished**, in
-[`ports/ibex_cs_registers`](ports/ibex_cs_registers/README.md). It builds, runs
-and drives 1,119 transactions against upstream's model before a mismatch that
-is not yet explained.
+**C works**, in
+[`ports/ibex_cs_registers`](ports/ibex_cs_registers/README.md). It drives 1,119
+transactions against upstream's model and then stops on a gap in that model,
+which it demonstrates rather than assumes: Ibex suppresses a PMP configuration
+write when `MSECCFG.MML` is set, `RLB` is clear and the new byte would create an
+M-mode-executable region, and the model has no such rule. All three conditions
+are shown to hold at the failing transaction.
 
 The control was built and does not settle it, for a reason worth recording on
 its own: **upstream's `tb_cs_registers` drives zero transactions and reports
