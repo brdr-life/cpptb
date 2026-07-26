@@ -591,6 +591,31 @@ providing them can be selected. A cocotb testbench translated line for line
 therefore drives a cycle early, and the documented workaround is a convention
 rather than a mechanism.
 
+Three ways to close it, in increasing order of commitment. They are not
+alternatives so much as a sequence: each is useful on its own, and each makes
+the next smaller.
+
+1. **Expose the timing backend.** A `[build] timing_backend` key threaded into
+   code generation would make `ReadOnly` and `ReadWrite` usable from a project,
+   so the cocotb driver and monitor shapes work as written. This is plumbing
+   over machinery that already exists and is already benchmarked in
+   [Performance](performance.md#timing-phase-dispatch); it unblocks documented
+   API that currently fails at run time.
+2. **Offer deferred writes.** A queued write applied at the next settle point,
+   alongside the immediate `set()`, would make a driver written the cocotb way
+   correct on any backend rather than only where phases are available. This is
+   the one that makes a translated testbench correct rather than merely
+   expressible.
+3. **Make deferred the default after an edge wait.** The most familiar and the
+   largest change. It alters what existing testbenches do and costs a scheduler
+   round trip per write, so it needs a performance peer and a migration story
+   before it could be justified. It is the only option that removes the
+   difference entirely.
+
+Doing 1 and 2 would leave the framework familiar to a cocotb author without
+changing what any existing testbench does. 3 is a separate decision and should
+be taken on its own evidence.
+
 ## Deliberate non-goals
 
 cpptb should not copy the complete UVM architecture. In particular, a factory,
