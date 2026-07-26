@@ -353,11 +353,82 @@ OVERLAYS = [
 ]
 
 
+# Opt-in instrumentation, added by --debug-mem. Prints every memory response
+# near the reset vector, which is what a run that reads zeros at 0x8000_0080
+# needs and what neither the UVM log nor the tracer shows: the address the
+# agent was asked for, the data it decided to return, and whether it found the
+# address in the memory model at all.
+DEBUG_OVERLAYS = [
+    (
+        CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_seq_lib.sv",
+        '      `uvm_info(get_full_name(), $sformatf("Response transfer:\\n%0s",'
+        ' req.sprint()), UVM_HIGH)\n'
+        '      start_item(req);\n',
+        '      if (req.addr < 32\'h8000_0100) begin\n'
+        '        $display("[MEMDBG %0s] t=%0t addr=%08h rw=%0d data=%08h uninit=%0b",\n'
+        '                 is_dmem_seq ? "D" : "I", $time, req.addr, item.read_write,\n'
+        '                 req.data, data_was_uninitialized);\n'
+        '      end\n'
+        '      `uvm_info(get_full_name(), $sformatf("Response transfer:\\n%0s",'
+        ' req.sprint()), UVM_HIGH)\n'
+        '      start_item(req);\n',
+    ),
+]
+
+
+# Every agent in this testbench starts its run_phase with
+#
+#     wait (vif.<cb>.reset === 1'b0);
+#
+# meaning "block until we are out of reset". A clocking block input has no
+# sampled value before its first clocking event, so on a 4-state simulator it
+# reads X, `=== 1'b0` is false, and the wait blocks as intended. Verilator has
+# no X: the sampled variable reads 0, the comparison is true at time 0, and
+# every driver and monitor is released while reset is still asserted.
+#
+# Reduced case, `wait` on a clocking block input against `wait` on the raw wire
+# behind it, with reset genuinely asserted until t=100:
+#
+#     0    wait on clocking-block input woke     <-- wrong
+#     100  rst deasserted
+#     100  wait on raw wire woke                 <-- right
+#
+# The damage is not a stall. The monitors are released at time 0, immediately
+# see reset asserted at the first clocking event, take their mid-test-reset
+# branch and kill their collectors -- so no address phase is ever published, no
+# response sequence ever responds, and the memory interface signals sit at
+# whatever Verilator initialised them to. The core then "executes" from a bus
+# nothing is driving, retires 0x0000 at its reset vector, and the cosim
+# scoreboard reports a mismatch on instruction one. That is the shared cause
+# behind 22 of the 27 test classes.
+#
+# The fix is to sample the clocking block once before testing it, which is what
+# a 4-state simulator effectively gets for free. Applied by regex because the
+# same line appears in seven files with three different clocking block names.
+RESET_WAIT = re.compile(
+    r"^(?P<indent>[ 	]*)wait \((?P<cb>[\w.]+)\.reset === 1'b0\);[ 	]*$",
+    re.M)
+
+RESET_WAIT_FILES = [
+    CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_monitor.sv",
+    CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_driver.sv",
+    CORE_IBEX / "common/irq_agent/irq_request_driver.sv",
+    CORE_IBEX / "common/irq_agent/irq_monitor.sv",
+    CORE_IBEX / "common/ibex_cosim_agent/ibex_rvfi_monitor.sv",
+    CORE_IBEX / "common/ibex_cosim_agent/ibex_ifetch_monitor.sv",
+    CORE_IBEX / "common/ibex_cosim_agent/ibex_ifetch_pmp_monitor.sv",
+]
+
+# What the count should be, so a file gaining or losing one is a build failure
+# rather than a silent change in how much of the testbench is fixed.
+RESET_WAIT_COUNT = 10
+
+
 class BuildError(RuntimeError):
     pass
 
 
-def apply_overlays() -> dict[str, str]:
+def apply_overlays(debug: bool = False) -> dict[str, str]:
     """Write the patched copies and return upstream path -> overlay path."""
     out = BUILD / "overlay"
     if out.is_dir():
@@ -367,7 +438,7 @@ def apply_overlays() -> dict[str, str]:
     # A file can carry more than one edit, so the text is threaded through
     # every rule that names it and written once at the end.
     patched: dict[Path, str] = {}
-    for source, old, new in OVERLAYS:
+    for source, old, new in OVERLAYS + (DEBUG_OVERLAYS if debug else []):
         if not source.is_file():
             raise BuildError(f"overlay target missing: {source}")
         text = patched.get(source, source.read_text(encoding="utf-8"))
@@ -377,6 +448,22 @@ def apply_overlays() -> dict[str, str]:
                 f"present exactly once; upstream has changed and the overlay "
                 f"in build_tb.py needs revisiting")
         patched[source] = text.replace(old, new)
+
+    total = 0
+    for source in RESET_WAIT_FILES:
+        if not source.is_file():
+            raise BuildError(f"overlay target missing: {source}")
+        text = patched.get(source, source.read_text(encoding="utf-8"))
+        text, count = RESET_WAIT.subn(
+            lambda m: (f"{m['indent']}@({m['cb']});\n"
+                       f"{m['indent']}wait ({m['cb']}.reset === 1'b0);"),
+            text)
+        patched[source] = text
+        total += count
+    if total != RESET_WAIT_COUNT:
+        raise BuildError(
+            f"expected {RESET_WAIT_COUNT} reset waits to fix, found {total}; "
+            f"upstream has changed and RESET_WAIT needs revisiting")
 
     mapping = {}
     for source, text in patched.items():
@@ -462,10 +549,10 @@ def pkg_config(packages: list[str], *flags: str) -> list[str]:
     return shlex.split(result.stdout.strip())
 
 
-def verilator_command(config: str, jobs: int, fcov: bool,
+def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
                       extra: list[str]) -> list[str]:
     parameters, defines = config_parameters(config)
-    overlay = apply_overlays()
+    overlay = apply_overlays(debug)
     sources = [overlay.get(path, path)
                for path in expand_filelist(CORE_IBEX / "ibex_dv.f")]
     if not fcov:
@@ -538,6 +625,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fcov", action="store_true",
                         help="compile the functional coverage sources; see "
                              "FCOV_SOURCES for why this does not work yet")
+    parser.add_argument("--debug-mem", action="store_true",
+                        help="print every memory response near the reset "
+                             "vector; see DEBUG_OVERLAYS")
     parser.add_argument("--show", action="store_true",
                         help="print the command without running it")
     parser.add_argument("extra", nargs="*",
@@ -547,7 +637,7 @@ def main(argv: list[str] | None = None) -> int:
     BUILD.mkdir(parents=True, exist_ok=True)
     try:
         command = verilator_command(args.config, args.jobs, args.fcov,
-                                    args.extra)
+                                    args.debug_mem, args.extra)
     except BuildError as error:
         print(f"build_tb: {error}", file=sys.stderr)
         return 1
