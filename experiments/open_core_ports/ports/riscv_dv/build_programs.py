@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import re
 import os
 import subprocess
 import sys
@@ -51,11 +52,46 @@ def toolchain(tool: str) -> Path:
     return path
 
 
+# Ibex hardwires mtvec.MODE to vectored and masks BASE to a 256-byte boundary,
+# so the generated trap handler has to land on one. riscv-dv emits `.align 2`
+# before it, and `--tvec_alignment` is only a soft constraint
+# (`vsc.soft(self.tvec_alignment == ...)` in riscv_instr_gen_config.py), so the
+# solver is free to ignore it and does: some programs come out 256-aligned by
+# luck and others do not.
+#
+# Rewriting the directive is reliable where the flag is not. It edits a
+# generated file under build/, not the fetched tree.
+TVEC_ALIGN = re.compile(r"^\.align\s+\d+\s*$\n(?=mtvec_handler:)", re.M)
+
+
+def align_trap_handler(source: Path) -> Path:
+    """Force the trap handler onto a 256-byte boundary.
+
+    Returns the path to assemble, which is a rewritten copy when the directive
+    was found. A program with no handler at all is left alone rather than
+    silently accepted, since every generated program should have one.
+    """
+    text = source.read_text(encoding="utf-8")
+    if "mtvec_handler:" not in text:
+        raise BuildError(f"{source.name}: no mtvec_handler to align")
+    patched, count = TVEC_ALIGN.subn(".align 8\n", text)
+    if count != 1:
+        raise BuildError(
+            f"{source.name}: expected one .align before mtvec_handler, "
+            f"found {count}; riscv-dv's output has changed shape")
+    out = BUILD / "aligned"
+    out.mkdir(parents=True, exist_ok=True)
+    target = out / source.name
+    target.write_text(patched, encoding="utf-8")
+    return target
+
+
 def build_one(source: Path, march: str) -> dict:
     out = BUILD / "elf"
     out.mkdir(parents=True, exist_ok=True)
     elf = out / f"{source.stem}.elf"
     vmem = out / f"{source.stem}.vmem"
+    assemble = align_trap_handler(source)
 
     command = [
         str(toolchain("gcc")),
@@ -66,7 +102,7 @@ def build_one(source: Path, march: str) -> dict:
         "-Wl,--no-warn-rwx-segments",
         f"-march={march}", "-mabi=ilp32",
         "-o", str(elf),
-        str(source),
+        str(assemble),
         str(TARGET / "vectors.S"),
     ]
     completed = subprocess.run(command, text=True, stdout=subprocess.PIPE,
