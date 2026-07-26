@@ -12,10 +12,14 @@ memory agents serve the core, the stimulus sequences run, and the RVFI
 scoreboard co-simulates against Spike -- the last of those being the part that
 makes this a baseline rather than a demo.
 
-It does not yet complete a test. Two things are open, both recorded below: the
-core fetches garbage shortly after reset even though the backdoor load is
-verified correct, and one `randomize()` in the fetch-enable sequence fails an
-unsatisfied-constraint check. Neither is a build problem.
+**No test passes yet.** All 27 UVM test classes in upstream's testlist start,
+elaborate and run; 22 of them stop at the same place, on the same instruction,
+with the same message. One shared cause, not 22 problems. `run_tests.py`
+produces the table.
+
+```
+22 cosim mismatch, 4 failed, 1 no verdict
+```
 
 ## Why this matters here
 
@@ -187,17 +191,32 @@ debug-ROM jumps become self-loops here, because pyflow's `gen_debug_rom` is
 
 ## Where it stops
 
-**The core fetches garbage a few cycles after reset.** The backdoor load itself
-is verified: with `+UVM_VERBOSITY=UVM_FULL` the test reports
-`Init mem [0x80000000] = 0x6f`, matching the first byte of the binary, and the
-ELF has `_start` at 0x8000_0080 as it should. Yet the instruction agent starts
-reporting `Read from uninitialized addr 0xf69299af` about six cycles after
-reset, and the tracer's first entry is `80000080 0000 c.unimp`. So the memory
-the test loads and the memory the instruction agent answers from appear not to
-be the same, or the fetches are already wild by then. `$fread` into a scalar
-was suspected and cleared -- it works on Verilator 5.050 in isolation.
+**The DUT reads zero at its reset vector; Spike reads the program.** Every one
+of the 22 mismatches is the same one:
 
-**One `randomize()` fails in the fetch-enable sequence.**
+```
+Cosim mismatch DUT didn't write to register x5, but a write was expected
+```
+
+x5 is `t0`, and the first instruction of `_start` is `csrr t0, mhartid`. So the
+mismatch is on instruction one: Spike executes the program, the DUT executes
+`0x0000`. The tracer agrees -- its first entry is `80000080 0000 c.unimp`.
+
+The backdoor load is not the problem. With `+UVM_VERBOSITY=UVM_FULL` the test
+reports `Init mem [0x80000000] = 0x6f`, matching the first byte of the binary,
+at time 201932; the first fetch is at 229900. The ELF has `_start` at
+0x8000_0080. `$fread` into a scalar was suspected and cleared: it works on
+Verilator 5.050 in isolation.
+
+What is left is a same-timestep race, or the memory the test loads not being the
+memory the instruction agent answers from. The most promising thread is
+`dut_if.fetch_enable`, which is what gates the core until the environment is
+ready. It is a 4-state MuBi that nothing drives before the fetch-enable
+sequence runs, so on a 4-state simulator the core cannot fetch. Verilator has
+no X, and the core is plainly fetching.
+
+**One `randomize()` fails in the fetch-enable sequence.** Independent of the
+above -- disabling that sequence does not change the mismatch.
 
 ```
 %Warning-UNSATCONSTR: core_ibex_new_seq_lib.sv:19:
@@ -228,7 +247,13 @@ solver bug in a UVM testbench is that rule being enforced.
   design's SVA is compiled out. Upstream's flows run with assertions on, and
   they are part of what those flows check. Turning them on means finding out
   how much of lowRISC's SVA Verilator 5 accepts.
-- **Completing a test.** See "Where it stops" above. Until a program runs to its
+- **Passing a test.** See "Where it stops" above. `python3 run_tests.py --list`
+  prints upstream's 57 riscv-dv entries and the 27 UVM classes they map to;
+  `run_tests.py` runs every class and tabulates where each one stops.
+- **Per-test generation.** Upstream generates a different program per testlist
+  entry, with that entry's generator options. `run_tests.py` runs every class
+  against one program, which is enough to locate a shared blocker and not
+  enough to be a regression. Until a program runs to its
   signature handshake, this is not yet the baseline `ports/riscv_dv` needs.
 - **A runner.** Once tests complete, this wants the same both-harness reporting
   the other ports here have.
