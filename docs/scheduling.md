@@ -226,25 +226,127 @@ for which backends provide them.
 
 The trigger vocabulary is deliberately the same: `RisingEdge`, `FallingEdge`,
 `ReadOnly`, `ReadWrite`, `NextTimeStep`, and drivers, monitors and scoreboards
-compose the same way. Two differences matter when porting a testbench.
+compose the same way. One difference changes how a driver must be written, and
+translating a testbench line for line will produce a driver that acts a cycle
+early.
 
-**Writes are immediate, not deferred.** In cocotb, `sig.value = x` is queued and
-applied at the next `ReadWrite` point, so writing straight after
-`await RisingEdge(clk)` cannot affect that edge; it behaves like a non-blocking
-assignment. `set()` here applies at once. That is why the section above matters
-and why a cocotb driver translated line for line drives a cycle early.
+#### Writes are immediate, not deferred
 
-**Phase waits depend on the timing backend.** cocotb always has `ReadOnly` and
-`ReadWrite` available. Here they are provided by the timing backend, and a
-backend that does not support them reports:
+In cocotb, assigning to a signal queues the write and applies it at the next
+`ReadWrite` point. Writing straight after `await RisingEdge(clk)` therefore
+cannot affect the edge just awaited; it behaves like a non-blocking assignment.
+
+```python
+# cocotb: safe. The write is queued, so this edge is already over for it.
+async def driver(dut):
+    while True:
+        await RisingEdge(dut.clk)
+        dut.wdata.value = next_word()      # lands for the *next* edge
+        dut.wvalid.value = 1
+```
+
+`set()` here applies at once, and `co_await RisingEdge{}` resumes before the
+design has evaluated that edge, so the same shape drives into the edge being
+awaited:
+
+```cpp
+// cpptb: wrong. The value is in place in time for this edge.
+Task<void> driver(Dut dut) {
+    while (true) {
+        co_await RisingEdge{dut.clk};
+        dut.wdata.set(next_word());        // lands for *this* edge
+        dut.wvalid.set(1);
+    }
+}
+```
+
+```cpp
+// cpptb: right. Drive off the edge, half a cycle before the next one.
+Task<void> driver(Dut dut) {
+    while (true) {
+        co_await FallingEdge{dut.clk};
+        dut.wdata.set(next_word());
+        dut.wvalid.set(1);
+    }
+}
+```
+
+The symptom when this is wrong is a register or memory read-back returning the
+value just written rather than the previous one, which reads as a design bug
+rather than a testbench one.
+
+#### Monitors
+
+Sampling needs no change of shape, and the reason differs from cocotb's.
+cocotb reads after `await ReadOnly()` because a read taken directly on an edge
+trigger is not guaranteed to see settled values. `co_await RisingEdge{}` here
+resumes before the design evaluates the edge, so it deterministically yields
+the values a signal held during the cycle just ending, which is what
+`always_ff @(posedge clk)` samples.
+
+```python
+# cocotb
+async def monitor(dut, queue):
+    while True:
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if dut.valid.value:
+            queue.append(dut.data.value)
+```
+
+```cpp
+// cpptb
+Task<void> monitor(Dut dut, Queue<uint32_t>& queue) {
+    while (true) {
+        co_await RisingEdge{dut.clk};
+        if (dut.valid.get()) co_await queue.put(dut.data.get());
+    }
+}
+```
+
+#### A driver and monitor together
+
+Sampling on the rising edge and driving on the falling one lets both live in
+one loop without racing each other:
+
+```cpp
+Task<void> agent(Dut dut, RegisterModel& model) {
+    while (true) {
+        co_await RisingEdge{dut.clk};
+        if (dut.access.get()) model.check(dut.addr.get(), dut.rdata.get());
+
+        co_await FallingEdge{dut.clk};
+        const auto next = stimulus.next();
+        dut.addr.set(next.addr);
+        dut.wdata.set(next.wdata);
+        dut.access.set(next.valid);
+    }
+}
+```
+
+#### Translating a cocotb testbench
+
+| cocotb | here |
+|---|---|
+| `await RisingEdge(clk)` then assign | `co_await FallingEdge{clk}` then `set()` |
+| `await RisingEdge(clk)`, `await ReadOnly()`, then read | `co_await RisingEdge{clk}` then `get()` |
+| `await ReadWrite()` before driving | `co_await FallingEdge{clk}`, or `co_await ReadWrite{}` where the backend provides it |
+| `await Timer(10, "ns")` | `co_await Delay{10_ns}` |
+| `cocotb.start_soon(...)` | `test.spawn(...)`, or `Join{...}` when the parent must wait |
+
+#### Phase waits depend on the timing backend
+
+cocotb always has `ReadOnly` and `ReadWrite`. Here they are provided by the
+timing backend, and one that does not support them reports
 
 ```
 ReadWrite, ReadOnly, and NextTimeStep require the standard simulator timing
 bridge; enable VPI timing support in the simulator build (Verilator: --vpi)
 ```
 
-at run time rather than failing the build. The edge-phase convention above works
-on every backend, which is why the examples use it.
+at run time rather than failing the build. The edge-phase convention above needs
+no backend support, which is why the examples use it. See
+[Timing backend support](#timing-backend-support).
 
 ### Bound producer pressure and shared resources
 
