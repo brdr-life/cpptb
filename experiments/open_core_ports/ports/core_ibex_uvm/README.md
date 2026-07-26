@@ -208,12 +208,54 @@ at time 201932; the first fetch is at 229900. The ELF has `_start` at
 0x8000_0080. `$fread` into a scalar was suspected and cleared: it works on
 Verilator 5.050 in isolation.
 
-What is left is a same-timestep race, or the memory the test loads not being the
-memory the instruction agent answers from. The most promising thread is
-`dut_if.fetch_enable`, which is what gates the core until the environment is
-ready. It is a 4-state MuBi that nothing drives before the fetch-enable
-sequence runs, so on a 4-state simulator the core cannot fetch. Verilator has
-no X, and the core is plainly fetching.
+### One X-dependence found and fixed
+
+Every agent starts its `run_phase` with
+
+```systemverilog
+wait (vif.<cb>.reset === 1'b0);
+```
+
+meaning "block until we are out of reset". A clocking block input has no
+sampled value before its first clocking event, so a 4-state simulator reads X,
+`=== 1'b0` is false, and the wait blocks as intended. **Verilator has no X**:
+the sampled variable reads 0, the comparison is true at time 0, and every
+driver and monitor is released while reset is still asserted. Reduced case,
+with reset genuinely asserted until t=100:
+
+```
+0    wait on clocking-block input woke     <-- wrong
+100  rst deasserted
+100  wait on raw wire woke                 <-- right
+```
+
+Ten sites across seven files. `build_tb.py` fixes them by regex -- sample the
+clocking block once before testing it, which is what a 4-state simulator gets
+for free -- and fails the build if the count changes. `+verilator+rand+reset+1`
+does not help: it does not reach clocking-block sampled variables.
+
+This is real and it changed behaviour, but it is not the whole story.
+
+### Still open: the agent never answers the reset-vector fetch
+
+With `--debug-mem`, `build_tb.py` prints every memory response near the reset
+vector: the address asked for, the data returned, and whether the memory model
+had it. Over a whole run there is exactly one response, and it is for a wild
+address:
+
+```
+[MEMDBG I] t=233900 addr=7674a22b rw=0 data=00000000 uninit=1
+```
+
+Nothing ever answers `0x8000_0080`, yet the core retires `c.unimp` from it and
+then runs off into nonsense. So the core is getting a response from something
+that is not the response agent. Two candidates were tested and cleared with
+reduced cases: driving a wire vector from a clocking block output works, and an
+unwritten clocking block output does not corrupt a wire the DUT drives.
+
+The next thing to look at is the request/grant handshake itself -- whether the
+monitor ever sees `request && grant`, since a monitor that never publishes an
+address phase is consistent with everything above.
 
 **One `randomize()` fails in the fetch-enable sequence.** Independent of the
 above -- disabling that sequence does not change the mismatch.
