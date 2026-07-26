@@ -10,29 +10,57 @@ spirit as
 Two areas are covered: capabilities the framework lacks, and the verification
 corpus needed to judge whether it is actually better than the alternatives.
 
-## Make the timing backend selectable
+## Align the scheduling semantics with cocotb
 
-`ReadWrite`, `ReadOnly` and `NextTimeStep` are part of the documented scheduling
-API, and [Performance](performance.md) benchmarks four backends that provide
-them, two of which pass the timing conformance suite. None of them can be
-selected from a project: `cpptb build` emits one backend, there is no
-`cpptb.toml` setting or CLI flag, and passing the defines through
+cocotb is the framework most people arriving here have used, and the trigger
+vocabulary already matches it deliberately: `RisingEdge`, `FallingEdge`,
+`ReadOnly`, `ReadWrite`, `NextTimeStep`, with drivers, monitors and scoreboards
+composing the same way. Two things then behave differently, and both are
+invisible until a test produces a wrong answer.
+
+**Writes apply immediately rather than being deferred.** In cocotb an assignment
+is queued and applied at the next `ReadWrite` point, so writing straight after
+`await RisingEdge(clk)` cannot affect the edge just awaited. Here `set()` applies
+at once and `co_await RisingEdge{}` resumes before the design evaluates the
+edge, so the same shape drives into that edge and the transaction commits a
+cycle early. The symptom is a read-back returning the value just written, which
+reads as a design bug.
+
+**Phase waits are not always available.** `ReadWrite`, `ReadOnly` and
+`NextTimeStep` are documented API, and [Performance](performance.md) benchmarks
+four backends providing them, two of which pass the timing conformance suite.
+None can be selected from a project: `cpptb build` emits one backend, there is
+no `cpptb.toml` key or CLI flag, and passing the defines through
 `build.verilator_args` fails because the supporting SystemVerilog is emitted at
-code-generation time.
+code-generation time. So a testbench using those waits builds cleanly and fails
+at run time with a message telling the author to rebuild the simulator, which a
+project cannot act on.
 
-So a testbench that uses those waits builds cleanly and then fails at run time
-with a message telling the author to rebuild the simulator, which a project
-cannot act on. Authors coming from cocotb reach for exactly that shape first,
-since it is the idiom there.
+Three ways to close the gap, roughly in increasing order of commitment:
 
-The work is plumbing rather than semantics. A `[build] timing_backend` key
-threaded into code generation would expose what already exists and is already
-measured. Until then the edge-phase convention documented in
-[Scheduling](scheduling.md#sample-on-the-edge-drive-off-it) is the portable
-answer, and the examples use it.
+1. **Expose the timing backend.** A `[build] timing_backend` key threaded into
+   code generation would make `ReadOnly` and `ReadWrite` usable, so the cocotb
+   driver and monitor shapes work as written. This is plumbing over machinery
+   that already exists and is already measured.
+2. **Offer deferred writes.** A queued write applied at the next settle point,
+   alongside the immediate `set()`, would make a driver written the cocotb way
+   correct on any backend rather than only where phases are available.
+3. **Make deferred the default after an edge wait.** The most familiar, and the
+   largest change: it alters what existing testbenches do and costs a scheduler
+   round trip per write, so it would need the performance peer to justify it.
 
-Found while porting Ibex's `dv/cs_registers` testbench, where the cocotb-shaped
-driver was the first thing tried; see
+The first is cheap and unblocks the documented API. The second is what actually
+makes a translated cocotb testbench correct. The third is the only one that
+removes the difference entirely, and is the one that needs the most evidence.
+
+Until then the portable answer is the edge-phase convention documented in
+[Scheduling](scheduling.md#sample-on-the-edge-drive-off-it): sample on the
+rising edge, drive on the falling one. cpptb's own FIFO example already uses it.
+
+This has a concrete use case, a runnable example and a performance peer, so it
+clears the promotion bar in [Roadmap](roadmap.md#no-priority-backlog) if it is
+wanted. Found while porting Ibex's `dv/cs_registers` testbench, where the
+cocotb-shaped driver was the first thing tried; see
 `experiments/open_core_ports/ports/ibex_cs_registers`.
 
 ## Framework capabilities

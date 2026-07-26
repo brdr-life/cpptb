@@ -581,6 +581,16 @@ verification corpus needed to judge it against real alternatives, is recorded
 in [future directions](future-directions.md). Nothing there is scheduled: those
 items still have to clear the promotion bar described above.
 
+One item there already has the use case, runnable example and performance peer
+that bar asks for, so it is named here rather than left to be found:
+[aligning the scheduling semantics with cocotb](future-directions.md#align-the-scheduling-semantics-with-cocotb).
+The trigger vocabulary matches cocotb deliberately, but writes apply
+immediately where cocotb defers them, and `ReadWrite`, `ReadOnly` and
+`NextTimeStep` cannot be used from a project because no timing backend
+providing them can be selected. A cocotb testbench translated line for line
+therefore drives a cycle early, and the documented workaround is a convention
+rather than a mechanism.
+
 ## Deliberate non-goals
 
 cpptb should not copy the complete UVM architecture. In particular, a factory,
