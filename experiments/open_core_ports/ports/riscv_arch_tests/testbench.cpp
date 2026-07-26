@@ -41,6 +41,14 @@
 #include "cpptb/cpptb.hpp"
 #include "dut.hpp"
 
+#ifdef CPPTB_COSIM
+// Declared here rather than in a header because this is the whole of the
+// interface, and cosim_glue.cc is linked only into the co-simulation build. See
+// that file for why Spike cannot be seeded when it is constructed.
+void cosim_seed_memory(std::uint32_t base_addr, const std::uint8_t* data,
+                       std::size_t size);
+#endif
+
 namespace cpptb::ports::act {
 namespace {
 
@@ -189,6 +197,28 @@ Task<void> arch_test(Dut dut, TestContext& test) {
         dut.u_ram.u_ram.mem[static_cast<std::int32_t>(word.index)]
             .deposit(word.value);
     }
+
+#ifdef CPPTB_COSIM
+    // Spike has to start from the same bytes the core will fetch. The image is
+    // handed over rather than read back through the backdoor: a backdoor read
+    // would be seeded from the same writes, so it would agree even if those
+    // writes were wrong, and the co-simulation would then compare two
+    // identically wrong memories and report nothing. Reading it from the file
+    // keeps the check independent.
+    if (!image.empty()) {
+        const uint32_t first = image.front().index;
+        const uint32_t last = image.back().index;
+        std::vector<std::uint8_t> bytes((last - first + 1) * 4, 0);
+        for (const Word& word : image) {
+            const size_t at = static_cast<size_t>(word.index - first) * 4;
+            bytes[at + 0] = static_cast<std::uint8_t>(word.value);
+            bytes[at + 1] = static_cast<std::uint8_t>(word.value >> 8);
+            bytes[at + 2] = static_cast<std::uint8_t>(word.value >> 16);
+            bytes[at + 3] = static_cast<std::uint8_t>(word.value >> 24);
+        }
+        cosim_seed_memory(kRamBase + first * 4, bytes.data(), bytes.size());
+    }
+#endif
 
     dut.IO_RST_N.set(1);
 

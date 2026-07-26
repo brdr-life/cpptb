@@ -25,18 +25,60 @@
 #define UDB_MXLEN 32
 
 // U-mode is implemented (MISA bit 20 is hardwired to 1).
-#define U_SUPPORTED
+//
+// The co-simulation configuration turns this off, and not because Ibex lacks
+// U-mode. The suite reads U_SUPPORTED as "menvcfg exists" -- see rvtest_setup.h,
+// "menvcfg only exists if U-mode is supported" -- and has the boot code write
+// menvcfg and, on RV32, menvcfgh. Ibex implements both as read-only zero, which
+// is a legal WARL choice, and accepts the writes:
+//
+//     // menvcfg: machine environment configuration, all zeros for Ibex
+//     CSR_MENVCFG, CSR_MENVCFGH: csr_rdata_int = '0;
+//
+// The Spike on lowRISC's ibex_cosim branch never registers CSR_MENVCFGH at all
+// -- riscv/processor.cc adds CSR_MENVCFG to csrmap and has no entry for the
+// high half -- so it raises an illegal instruction where Ibex does not, and
+// every test dies in common boot code before reaching anything it tests. The
+// reference model is the one behind the specification here, not the DUT.
+//
+// Nothing in the applicable set for that configuration declares U as a required
+// extension, so the cost is only that this setup is skipped. It is a limitation
+// of co-simulating against this Spike, and it is why the plain and
+// co-simulation runs are reported separately rather than as one number.
+#ifndef IBEX_NO_U_MODE
+#  define U_SUPPORTED
+#endif
 
 // Zifencei: Ibex implements fence.i as a pipeline flush.
 #define ZIFENCEI_SUPPORTED
 
-// PMPEnable=0 in the small configuration, so there are no PMP entries and the
-// PMP tests do not apply. check_defines.h reads the misspelled name as well as
-// the correct one; both are defined so neither spelling picks up a stray zero
-// from an undefined macro.
-#define UDB_NUM_PMP_ENTRIES 0
-#define UDB_NUM_PMP_ENTIRES 0
-#define UDB_NUM_USABLE_PMP_ENTRIES 0
+// PMP depends on which Ibex configuration is being built, so build_tests.py
+// passes it in: 0 for `small` (PMPEnable=0) and 16 for `bmfull`
+// (PMPEnable=1, PMPNumRegions=16). The default matches `small` so the header is
+// still correct if compiled by hand.
+//
+// check_defines.h reads the misspelled name as well as the correct one, and
+// both must be defined: an undefined macro is zero in `#if`, so leaving the
+// misspelled one out would silently disable the check that reads it.
+#ifndef IBEX_PMP_ENTRIES
+#  define IBEX_PMP_ENTRIES 0
+#endif
+
+#define UDB_NUM_PMP_ENTRIES IBEX_PMP_ENTRIES
+#define UDB_NUM_PMP_ENTIRES IBEX_PMP_ENTRIES
+// Ibex reserves none of its regions, so every implemented entry is usable. The
+// suite refuses to run with fewer than 8, which is why `bmfull` uses the
+// 16-region configuration rather than the 4-region default.
+#define UDB_NUM_USABLE_PMP_ENTRIES IBEX_PMP_ENTRIES
+
+#if IBEX_PMP_ENTRIES > 0
+// rtl/ibex_pmp.sv implements all three addressing modes -- PMP_MODE_TOR,
+// PMP_MODE_NA4 and PMP_MODE_NAPOT -- and PMPGranularity=0 places no lower bound
+// on region size, so NA4 is genuinely available.
+#  define UDB_PMP_TOR_SUPPORTED
+#  define UDB_PMP_NAPOT_SUPPORTED
+#  define UDB_PMP_GRANULARITY 0
+#endif
 
 // rtl/ibex_cs_registers.sv hardwires mtvec.MODE to 2'b01 and requires BASE to
 // be 256-byte aligned:

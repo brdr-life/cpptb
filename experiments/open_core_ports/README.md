@@ -82,17 +82,34 @@ costs from what a run costs.
   100 iterations, one program of 40.7 million cycles. Steady-state throughput:
   `1.140x`, cpptb over upstream.
 
-- **[`riscv_arch_tests`](ports/riscv_arch_tests/RESULTS.md)** — 96
-  architectural tests plus two cost baselines, 98 programs of about 190,000
-  cycles each. Per-run cost: `1.069x` overall, which decomposes into cpptb
-  starting a run and loading a program about 27% faster and simulating about
-  13% slower. That `1.133x` simulation figure and CoreMark's `1.140x` are
-  independent measurements of the same per-cycle cost on workloads sharing
-  nothing but the core.
+- **[`riscv_arch_tests`](ports/riscv_arch_tests/RESULTS.md)** — the RISC-V
+  architectural test suite, run in three configurations against two Ibex
+  builds. Per-run cost rather than throughput: many short programs, where
+  process start, memory load and reset dominate.
 
-Both build their software with a pinned prebuilt RISC-V toolchain, so neither
-needs one installed. `ibex_simple_system` commits its firmware as a VMEM and
-does not need the toolchain to run at all.
+  | | Ibex config | tests | passed | result |
+  | --- | --- | ---: | ---: | --- |
+  | `small` | `small` | 98 | 98 | `1.086x` |
+  | `bmfull` | `maxperf-pmp-bmfull` | 193 | 177 | `0.997x` |
+  | `cosim` | `small` + Spike | 98 | 98 | every instruction checked |
+
+  No test in any configuration had the two harnesses disagree. The 16 that did
+  not pass are PMP tests both harnesses agree about, which says something about
+  the core or the tests and nothing about the port.
+
+  cpptb starts a run about 29% faster and simulates 3-10% slower, so the two
+  meet on the larger design.
+
+  `bmfull` is a materially different core — PMP, a writeback stage, bitmanip —
+  elaborated from identical RTL, so it exercises cpptb's code generation and
+  not only the tests. `cosim` binds in Ibex's own co-simulation checker and
+  runs Spike in lockstep, which answers the question the other two cannot: they
+  show the harnesses agree, this shows the core is right.
+
+Both ports build their software with a pinned prebuilt RISC-V toolchain, so
+neither needs one installed. `ibex_simple_system` commits its firmware as a
+VMEM and does not need the toolchain to run at all. Co-simulation additionally
+needs Spike, which `build_spike.py` builds into `deps/` rather than `/opt`.
 
 ## Planned ports
 
