@@ -5,10 +5,10 @@
   "passed": 98,
   "shared_failures": 0,
   "timed": 98,
-  "upstream_total_ms": 0.0,
-  "cpptb_total_ms": 59045.24157816195,
-  "ratio_cpptb_over_upstream": null,
-  "suite_wall_s": 59.090294700989034,
+  "upstream_total_ms": 60657.51506117522,
+  "cpptb_total_ms": 60007.375710934866,
+  "ratio_cpptb_over_upstream": 0.98928180045647,
+  "suite_wall_s": 120.73813549100305,
   "results": [
     {
       "name": "I-add-00",
@@ -17,13 +17,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 654.0949619957246,
+        "wall_ms": 635.3979730047286,
         "returncode": 0,
         "sig": "3791e9f8",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "3791e9f8",
         "cycles": 191541,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 630.7144410093315,
+        "returncode": 0,
+        "sig": "3791e9f8",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191540,
         "mismatch": null
       }
     },
@@ -34,13 +45,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 626.7596950056031,
+        "wall_ms": 627.5459610042162,
         "returncode": 0,
         "sig": "7a8cb811",
         "words": "00003c18",
         "result": "PASS",
         "backdoor": "7a8cb811",
         "cycles": 189822,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 646.0971650085412,
+        "returncode": 0,
+        "sig": "7a8cb811",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 189821,
         "mismatch": null
       }
     },
@@ -51,13 +73,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 611.899651994463,
+        "wall_ms": 632.5949110032525,
         "returncode": 0,
         "sig": "9087b9dc",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "9087b9dc",
         "cycles": 191549,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 654.026686999714,
+        "returncode": 0,
+        "sig": "9087b9dc",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191548,
         "mismatch": null
       }
     },
@@ -68,13 +101,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 665.0994739902671,
+        "wall_ms": 641.8288949935231,
         "returncode": 0,
         "sig": "8dd5a755",
         "words": "00003c18",
         "result": "PASS",
         "backdoor": "8dd5a755",
         "cycles": 189814,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 612.0421969972085,
+        "returncode": 0,
+        "sig": "8dd5a755",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 189813,
         "mismatch": null
       }
     },
@@ -85,13 +129,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 588.7909270240925,
+        "wall_ms": 585.5194500181824,
         "returncode": 0,
         "sig": "89bd2a2e",
         "words": "00003ae4",
         "result": "PASS",
         "backdoor": "89bd2a2e",
         "cycles": 182855,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 623.4311489970423,
+        "returncode": 0,
+        "sig": "89bd2a2e",
+        "words": "00003ae4",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182854,
         "mismatch": null
       }
     },
@@ -102,13 +157,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 630.1253270066809,
+        "wall_ms": 601.7213840095792,
         "returncode": 0,
         "sig": "8dfc4045",
         "words": "00003c44",
         "result": "PASS",
         "backdoor": "8dfc4045",
         "cycles": 191895,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 601.7291850002948,
+        "returncode": 0,
+        "sig": "8dfc4045",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191894,
         "mismatch": null
       }
     },
@@ -119,13 +185,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 645.5612700083293,
+        "wall_ms": 597.5814629928209,
         "returncode": 0,
         "sig": "fc92a97f",
         "words": "00003c44",
         "result": "PASS",
         "backdoor": "fc92a97f",
         "cycles": 192267,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 617.3098090221174,
+        "returncode": 0,
+        "sig": "fc92a97f",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192266,
         "mismatch": null
       }
     },
@@ -136,13 +213,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 639.8286779876798,
+        "wall_ms": 643.3970650250558,
         "returncode": 0,
         "sig": "3638776b",
         "words": "00003c44",
         "result": "PASS",
         "backdoor": "3638776b",
         "cycles": 192276,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 632.8576410014648,
+        "returncode": 0,
+        "sig": "3638776b",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192275,
         "mismatch": null
       }
     },
@@ -153,13 +241,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 635.236406000331,
+        "wall_ms": 627.1036310063209,
         "returncode": 0,
         "sig": "017afa08",
         "words": "00003c44",
         "result": "PASS",
         "backdoor": "017afa08",
         "cycles": 192183,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 651.0703460080549,
+        "returncode": 0,
+        "sig": "017afa08",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192182,
         "mismatch": null
       }
     },
@@ -170,13 +269,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 643.6553090170491,
+        "wall_ms": 660.1949179894291,
         "returncode": 0,
         "sig": "9d7e6120",
         "words": "00003c44",
         "result": "PASS",
         "backdoor": "9d7e6120",
         "cycles": 192194,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 645.9509750129655,
+        "returncode": 0,
+        "sig": "9d7e6120",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192193,
         "mismatch": null
       }
     },
@@ -187,13 +297,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 603.0330799985677,
+        "wall_ms": 630.6332619860768,
         "returncode": 0,
         "sig": "20b21559",
         "words": "00003c44",
         "result": "PASS",
         "backdoor": "20b21559",
         "cycles": 192551,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 638.4427230223082,
+        "returncode": 0,
+        "sig": "20b21559",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192550,
         "mismatch": null
       }
     },
@@ -204,13 +325,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 570.0320820033085,
+        "wall_ms": 607.2501960152294,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181719,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 620.8988889993634,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181718,
         "mismatch": null
       }
     },
@@ -221,13 +353,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 636.8662180029787,
+        "wall_ms": 629.4357209990267,
         "returncode": 0,
         "sig": "53b7d085",
         "words": "00003b18",
         "result": "PASS",
         "backdoor": "53b7d085",
         "cycles": 199492,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 649.0683960146271,
+        "returncode": 0,
+        "sig": "53b7d085",
+        "words": "00003b18",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 199491,
         "mismatch": null
       }
     },
@@ -238,13 +381,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 637.521646975074,
+        "wall_ms": 612.3382469813805,
         "returncode": 0,
         "sig": "db62c4b4",
         "words": "00003b98",
         "result": "PASS",
         "backdoor": "db62c4b4",
         "cycles": 188511,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 613.0153670092113,
+        "returncode": 0,
+        "sig": "db62c4b4",
+        "words": "00003b98",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 188510,
         "mismatch": null
       }
     },
@@ -255,13 +409,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 622.8232840076089,
+        "wall_ms": 589.9517820216715,
         "returncode": 0,
         "sig": "55b673b4",
         "words": "00003b28",
         "result": "PASS",
         "backdoor": "55b673b4",
         "cycles": 184651,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 605.5110449960921,
+        "returncode": 0,
+        "sig": "55b673b4",
+        "words": "00003b28",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 184650,
         "mismatch": null
       }
     },
@@ -272,13 +437,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 618.0406229977962,
+        "wall_ms": 605.8999550004955,
         "returncode": 0,
         "sig": "d3bcbbdf",
         "words": "00003b28",
         "result": "PASS",
         "backdoor": "d3bcbbdf",
         "cycles": 184660,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 593.9746230142191,
+        "returncode": 0,
+        "sig": "d3bcbbdf",
+        "words": "00003b28",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 184659,
         "mismatch": null
       }
     },
@@ -289,13 +465,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 584.1927950095851,
+        "wall_ms": 582.9608899948653,
         "returncode": 0,
         "sig": "7f7d66b9",
         "words": "00003b24",
         "result": "PASS",
         "backdoor": "7f7d66b9",
         "cycles": 184491,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 651.078355993377,
+        "returncode": 0,
+        "sig": "7f7d66b9",
+        "words": "00003b24",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 184490,
         "mismatch": null
       }
     },
@@ -306,13 +493,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 598.3358590165153,
+        "wall_ms": 600.3683639864903,
         "returncode": 0,
         "sig": "5d8319a8",
         "words": "00003b24",
         "result": "PASS",
         "backdoor": "5d8319a8",
         "cycles": 184500,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 578.0551790085156,
+        "returncode": 0,
+        "sig": "5d8319a8",
+        "words": "00003b24",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 184499,
         "mismatch": null
       }
     },
@@ -323,13 +521,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 609.2497200006619,
+        "wall_ms": 578.8489579863381,
         "returncode": 0,
         "sig": "67457331",
         "words": "00003ae4",
         "result": "PASS",
         "backdoor": "67457331",
         "cycles": 182829,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 609.3824769777711,
+        "returncode": 0,
+        "sig": "67457331",
+        "words": "00003ae4",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182828,
         "mismatch": null
       }
     },
@@ -340,13 +549,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 608.4380109969061,
+        "wall_ms": 592.4041320104152,
         "returncode": 0,
         "sig": "a12407b7",
         "words": "00003b20",
         "result": "PASS",
         "backdoor": "a12407b7",
         "cycles": 184387,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 618.7844889936969,
+        "returncode": 0,
+        "sig": "a12407b7",
+        "words": "00003b20",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 184386,
         "mismatch": null
       }
     },
@@ -357,13 +577,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 599.1168589971494,
+        "wall_ms": 590.0718699849676,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181685,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 622.208929999033,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181684,
         "mismatch": null
       }
     },
@@ -374,13 +605,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 638.4636180009693,
+        "wall_ms": 631.2325919861905,
         "returncode": 0,
         "sig": "90ce6b0b",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "90ce6b0b",
         "cycles": 191532,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 616.5418669988867,
+        "returncode": 0,
+        "sig": "90ce6b0b",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191531,
         "mismatch": null
       }
     },
@@ -391,13 +633,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 614.9694119812921,
+        "wall_ms": 642.0696139975917,
         "returncode": 0,
         "sig": "df9cd657",
         "words": "00003c18",
         "result": "PASS",
         "backdoor": "df9cd657",
         "cycles": 189805,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 644.3283040134702,
+        "returncode": 0,
+        "sig": "df9cd657",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 189804,
         "mismatch": null
       }
     },
@@ -408,13 +661,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 601.6911699844059,
+        "wall_ms": 603.9118540065829,
         "returncode": 0,
         "sig": "f612bbb3",
         "words": "00003b90",
         "result": "PASS",
         "backdoor": "f612bbb3",
         "cycles": 186001,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 601.9616249832325,
+        "returncode": 0,
+        "sig": "f612bbb3",
+        "words": "00003b90",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186000,
         "mismatch": null
       }
     },
@@ -425,13 +689,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 580.6967740063556,
+        "wall_ms": 610.7494159950875,
         "returncode": 0,
         "sig": "8a2b9cea",
         "words": "00003b7c",
         "result": "PASS",
         "backdoor": "8a2b9cea",
         "cycles": 185709,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 598.5647630004678,
+        "returncode": 0,
+        "sig": "8a2b9cea",
+        "words": "00003b7c",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185708,
         "mismatch": null
       }
     },
@@ -442,13 +717,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 600.7500990235712,
+        "wall_ms": 597.8825829806738,
         "returncode": 0,
         "sig": "d30dab5d",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "d30dab5d",
         "cycles": 191541,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 660.9953589795623,
+        "returncode": 0,
+        "sig": "d30dab5d",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191540,
         "mismatch": null
       }
     },
@@ -459,13 +745,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 644.0715800272301,
+        "wall_ms": 627.193010004703,
         "returncode": 0,
         "sig": "576bea20",
         "words": "00003b70",
         "result": "PASS",
         "backdoor": "576bea20",
         "cycles": 186118,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 623.4605690115131,
+        "returncode": 0,
+        "sig": "576bea20",
+        "words": "00003b70",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186117,
         "mismatch": null
       }
     },
@@ -476,13 +773,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 696.6922309948131,
+        "wall_ms": 600.2063839987386,
         "returncode": 0,
         "sig": "7a89227f",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "7a89227f",
         "cycles": 191541,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 623.2573600136675,
+        "returncode": 0,
+        "sig": "7a89227f",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191540,
         "mismatch": null
       }
     },
@@ -493,13 +801,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 643.649187986739,
+        "wall_ms": 619.7479979891796,
         "returncode": 0,
         "sig": "f5816790",
         "words": "00003c18",
         "result": "PASS",
         "backdoor": "f5816790",
         "cycles": 189814,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 636.091883003246,
+        "returncode": 0,
+        "sig": "f5816790",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 189813,
         "mismatch": null
       }
     },
@@ -510,13 +829,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 606.0097209992819,
+        "wall_ms": 612.1073469985276,
         "returncode": 0,
         "sig": "e070f948",
         "words": "00003c18",
         "result": "PASS",
         "backdoor": "e070f948",
         "cycles": 189823,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 643.0397840158548,
+        "returncode": 0,
+        "sig": "e070f948",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 189822,
         "mismatch": null
       }
     },
@@ -527,13 +857,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 620.2975029882509,
+        "wall_ms": 607.4181860021781,
         "returncode": 0,
         "sig": "736379e1",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "736379e1",
         "cycles": 191558,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 656.4672880049329,
+        "returncode": 0,
+        "sig": "736379e1",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191557,
         "mismatch": null
       }
     },
@@ -544,13 +885,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 597.183688019868,
+        "wall_ms": 638.2759929983877,
         "returncode": 0,
         "sig": "34de8f37",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "34de8f37",
         "cycles": 191541,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 624.446510017151,
+        "returncode": 0,
+        "sig": "34de8f37",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191540,
         "mismatch": null
       }
     },
@@ -561,13 +913,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 590.0790269952267,
+        "wall_ms": 624.9392700265162,
         "returncode": 0,
         "sig": "f3c947b3",
         "words": "00003b70",
         "result": "PASS",
         "backdoor": "f3c947b3",
         "cycles": 186126,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 607.6421659963671,
+        "returncode": 0,
+        "sig": "f3c947b3",
+        "words": "00003b70",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186125,
         "mismatch": null
       }
     },
@@ -578,13 +941,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 602.7767389896326,
+        "wall_ms": 647.3604060010985,
         "returncode": 0,
         "sig": "3e5bf187",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "3e5bf187",
         "cycles": 191541,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 631.9760610058438,
+        "returncode": 0,
+        "sig": "3e5bf187",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191540,
         "mismatch": null
       }
     },
@@ -595,13 +969,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 627.2554550087079,
+        "wall_ms": 578.9164600137156,
         "returncode": 0,
         "sig": "65b785b7",
         "words": "00003b70",
         "result": "PASS",
         "backdoor": "65b785b7",
         "cycles": 186126,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 622.258799005067,
+        "returncode": 0,
+        "sig": "65b785b7",
+        "words": "00003b70",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186125,
         "mismatch": null
       }
     },
@@ -612,13 +997,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 606.5641910245176,
+        "wall_ms": 649.9109250144102,
         "returncode": 0,
         "sig": "60e9c96b",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "60e9c96b",
         "cycles": 191541,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 628.774999990128,
+        "returncode": 0,
+        "sig": "60e9c96b",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191540,
         "mismatch": null
       }
     },
@@ -629,13 +1025,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 591.7724859900773,
+        "wall_ms": 578.3948279859032,
         "returncode": 0,
         "sig": "36455863",
         "words": "00003b70",
         "result": "PASS",
         "backdoor": "36455863",
         "cycles": 185543,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 632.9829710011836,
+        "returncode": 0,
+        "sig": "36455863",
+        "words": "00003b70",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185542,
         "mismatch": null
       }
     },
@@ -646,13 +1053,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 645.790948998183,
+        "wall_ms": 605.9766449907329,
         "returncode": 0,
         "sig": "832e07bf",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "832e07bf",
         "cycles": 191541,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 622.8449899936095,
+        "returncode": 0,
+        "sig": "832e07bf",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 191540,
         "mismatch": null
       }
     },
@@ -663,13 +1081,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 621.1531830194872,
+        "wall_ms": 658.1257879734039,
         "returncode": 0,
         "sig": "35e0bd90",
         "words": "00003c18",
         "result": "PASS",
         "backdoor": "35e0bd90",
         "cycles": 189822,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 620.327618002193,
+        "returncode": 0,
+        "sig": "35e0bd90",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 189821,
         "mismatch": null
       }
     },
@@ -680,13 +1109,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 624.1868739889469,
+        "wall_ms": 633.4487709973473,
         "returncode": 0,
         "sig": "a2c39a15",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "a2c39a15",
         "cycles": 204996,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 646.3098350213841,
+        "returncode": 0,
+        "sig": "a2c39a15",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 204995,
         "mismatch": null
       }
     },
@@ -697,13 +1137,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 633.8740859937388,
+        "wall_ms": 697.7875769953243,
         "returncode": 0,
         "sig": "243e5776",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "243e5776",
         "cycles": 204962,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 648.1249460193794,
+        "returncode": 0,
+        "sig": "243e5776",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 204961,
         "mismatch": null
       }
     },
@@ -714,13 +1165,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 601.7191490100231,
+        "wall_ms": 623.3545189897995,
         "returncode": 0,
         "sig": "46a0b2e6",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "46a0b2e6",
         "cycles": 192333,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 616.0479669924825,
+        "returncode": 0,
+        "sig": "46a0b2e6",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192332,
         "mismatch": null
       }
     },
@@ -731,13 +1193,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 622.3899440083187,
+        "wall_ms": 603.2381640106905,
         "returncode": 0,
         "sig": "4e146605",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "4e146605",
         "cycles": 192734,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 642.0963740092702,
+        "returncode": 0,
+        "sig": "4e146605",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192733,
         "mismatch": null
       }
     },
@@ -748,13 +1221,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 617.1507319959346,
+        "wall_ms": 624.8802510090172,
         "returncode": 0,
         "sig": "00d8e86b",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "00d8e86b",
         "cycles": 192752,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 678.0248319846578,
+        "returncode": 0,
+        "sig": "00d8e86b",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192751,
         "mismatch": null
       }
     },
@@ -765,13 +1249,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 607.4763409851585,
+        "wall_ms": 596.2783120048698,
         "returncode": 0,
         "sig": "811137f4",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "811137f4",
         "cycles": 192743,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 644.522454997059,
+        "returncode": 0,
+        "sig": "811137f4",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192742,
         "mismatch": null
       }
     },
@@ -782,13 +1277,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 651.8022709933575,
+        "wall_ms": 675.9875419957098,
         "returncode": 0,
         "sig": "21caeb21",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "21caeb21",
         "cycles": 205058,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 629.4025910028722,
+        "returncode": 0,
+        "sig": "21caeb21",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 205057,
         "mismatch": null
       }
     },
@@ -799,13 +1305,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 612.4776120122988,
+        "wall_ms": 647.4573650048114,
         "returncode": 0,
         "sig": "d20e100f",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "d20e100f",
         "cycles": 204989,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 639.1837429837324,
+        "returncode": 0,
+        "sig": "d20e100f",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 204988,
         "mismatch": null
       }
     },
@@ -816,13 +1333,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 596.1832980101462,
+        "wall_ms": 579.5827499823645,
         "returncode": 0,
         "sig": "e3b6245d",
         "words": "00003ab0",
         "result": "PASS",
         "backdoor": "e3b6245d",
         "cycles": 182022,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 592.6126719859894,
+        "returncode": 0,
+        "sig": "e3b6245d",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182021,
         "mismatch": null
       }
     },
@@ -833,13 +1361,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 623.8539740152191,
+        "wall_ms": 640.6072929967195,
         "returncode": 0,
         "sig": "be088da9",
         "words": "00003ab0",
         "result": "PASS",
         "backdoor": "be088da9",
         "cycles": 182031,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 603.4053839975968,
+        "returncode": 0,
+        "sig": "be088da9",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182030,
         "mismatch": null
       }
     },
@@ -850,13 +1389,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 602.4955490138382,
+        "wall_ms": 581.4105000172276,
         "returncode": 0,
         "sig": "a43dab54",
         "words": "00003ab0",
         "result": "PASS",
         "backdoor": "a43dab54",
         "cycles": 182026,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 590.2182619902305,
+        "returncode": 0,
+        "sig": "a43dab54",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182025,
         "mismatch": null
       }
     },
@@ -867,13 +1417,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 609.7050310054328,
+        "wall_ms": 596.338942006696,
         "returncode": 0,
         "sig": "42fac6ff",
         "words": "00003acc",
         "result": "PASS",
         "backdoor": "42fac6ff",
         "cycles": 182803,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 581.0066889971495,
+        "returncode": 0,
+        "sig": "42fac6ff",
+        "words": "00003acc",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182802,
         "mismatch": null
       }
     },
@@ -884,13 +1445,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 564.6816299995407,
+        "wall_ms": 595.4005329986103,
         "returncode": 0,
         "sig": "c8719ca3",
         "words": "00003acc",
         "result": "PASS",
         "backdoor": "c8719ca3",
         "cycles": 182807,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 612.614787009079,
+        "returncode": 0,
+        "sig": "c8719ca3",
+        "words": "00003acc",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182806,
         "mismatch": null
       }
     },
@@ -901,13 +1473,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 589.6823560178746,
+        "wall_ms": 612.3755069856998,
         "returncode": 0,
         "sig": "a43dab54",
         "words": "00003ab0",
         "result": "PASS",
         "backdoor": "a43dab54",
         "cycles": 182076,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 594.228331989143,
+        "returncode": 0,
+        "sig": "a43dab54",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182075,
         "mismatch": null
       }
     },
@@ -918,13 +1501,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 565.011360013159,
+        "wall_ms": 627.6005209947471,
         "returncode": 0,
         "sig": "a43dab54",
         "words": "00003ab0",
         "result": "PASS",
         "backdoor": "a43dab54",
         "cycles": 182106,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 585.305899992818,
+        "returncode": 0,
+        "sig": "a43dab54",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182105,
         "mismatch": null
       }
     },
@@ -935,13 +1529,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 567.6191609818488,
+        "wall_ms": 592.8902919986285,
         "returncode": 0,
         "sig": "c8719ca3",
         "words": "00003acc",
         "result": "PASS",
         "backdoor": "c8719ca3",
         "cycles": 182870,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 596.9551030138973,
+        "returncode": 0,
+        "sig": "c8719ca3",
+        "words": "00003acc",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182869,
         "mismatch": null
       }
     },
@@ -952,13 +1557,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 588.8221249915659,
+        "wall_ms": 613.4871969989035,
         "returncode": 0,
         "sig": "c8719ca3",
         "words": "00003acc",
         "result": "PASS",
         "backdoor": "c8719ca3",
         "cycles": 183035,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 625.1365389907733,
+        "returncode": 0,
+        "sig": "c8719ca3",
+        "words": "00003acc",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 183034,
         "mismatch": null
       }
     },
@@ -969,13 +1585,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 618.9787320035975,
+        "wall_ms": 759.3846320232842,
         "returncode": 0,
         "sig": "10b81baa",
         "words": "00003bcc",
         "result": "PASS",
         "backdoor": "10b81baa",
         "cycles": 189201,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 598.4743339940906,
+        "returncode": 0,
+        "sig": "10b81baa",
+        "words": "00003bcc",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 189200,
         "mismatch": null
       }
     },
@@ -986,13 +1613,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 587.6833849761169,
+        "wall_ms": 694.8091170052066,
         "returncode": 0,
         "sig": "b33dfecb",
         "words": "00003b84",
         "result": "PASS",
         "backdoor": "b33dfecb",
         "cycles": 186666,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 633.7979119853117,
+        "returncode": 0,
+        "sig": "b33dfecb",
+        "words": "00003b84",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186665,
         "mismatch": null
       }
     },
@@ -1003,13 +1641,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 580.9102540079039,
+        "wall_ms": 715.6335619802121,
         "returncode": 0,
         "sig": "0f5e71b1",
         "words": "00003ae8",
         "result": "PASS",
         "backdoor": "0f5e71b1",
         "cycles": 183228,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 739.5226370135788,
+        "returncode": 0,
+        "sig": "0f5e71b1",
+        "words": "00003ae8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 183227,
         "mismatch": null
       }
     },
@@ -1020,13 +1669,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 614.7267020132858,
+        "wall_ms": 677.5576119835023,
         "returncode": 0,
         "sig": "0934ffeb",
         "words": "00003bb0",
         "result": "PASS",
         "backdoor": "0934ffeb",
         "cycles": 187828,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 774.0483859961387,
+        "returncode": 0,
+        "sig": "0934ffeb",
+        "words": "00003bb0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 187827,
         "mismatch": null
       }
     },
@@ -1037,13 +1697,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 582.3249550012406,
+        "wall_ms": 701.2107879854739,
         "returncode": 0,
         "sig": "59cd01df",
         "words": "00003b68",
         "result": "PASS",
         "backdoor": "59cd01df",
         "cycles": 186617,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 694.4675360282417,
+        "returncode": 0,
+        "sig": "59cd01df",
+        "words": "00003b68",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186616,
         "mismatch": null
       }
     },
@@ -1054,13 +1725,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 597.5059079937637,
+        "wall_ms": 732.5838749820832,
         "returncode": 0,
         "sig": "828e34d4",
         "words": "00003b58",
         "result": "PASS",
         "backdoor": "828e34d4",
         "cycles": 185602,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 715.7656810013577,
+        "returncode": 0,
+        "sig": "828e34d4",
+        "words": "00003b58",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185601,
         "mismatch": null
       }
     },
@@ -1071,13 +1753,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 616.4993529964704,
+        "wall_ms": 682.2738629998639,
         "returncode": 0,
         "sig": "3865fdf7",
         "words": "00003abc",
         "result": "PASS",
         "backdoor": "3865fdf7",
         "cycles": 182283,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 757.8840509813745,
+        "returncode": 0,
+        "sig": "3865fdf7",
+        "words": "00003abc",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182282,
         "mismatch": null
       }
     },
@@ -1088,13 +1781,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 604.2967179964762,
+        "wall_ms": 735.2898859826382,
         "returncode": 0,
         "sig": "1e29fa60",
         "words": "00003abc",
         "result": "PASS",
         "backdoor": "1e29fa60",
         "cycles": 182309,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 664.3014790024608,
+        "returncode": 0,
+        "sig": "1e29fa60",
+        "words": "00003abc",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182308,
         "mismatch": null
       }
     },
@@ -1105,13 +1809,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 625.7482540095225,
+        "wall_ms": 678.0952420085669,
         "returncode": 0,
         "sig": "f636996b",
         "words": "00003ad0",
         "result": "PASS",
         "backdoor": "f636996b",
         "cycles": 185886,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 674.9047109915409,
+        "returncode": 0,
+        "sig": "f636996b",
+        "words": "00003ad0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185885,
         "mismatch": null
       }
     },
@@ -1122,13 +1837,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 645.5937690043356,
+        "wall_ms": 822.5968870101497,
         "returncode": 0,
         "sig": "6e5dc652",
         "words": "00003ad0",
         "result": "PASS",
         "backdoor": "6e5dc652",
         "cycles": 185904,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 638.9324229967315,
+        "returncode": 0,
+        "sig": "6e5dc652",
+        "words": "00003ad0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185903,
         "mismatch": null
       }
     },
@@ -1139,13 +1865,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 605.8389200188685,
+        "wall_ms": 691.137065005023,
         "returncode": 0,
         "sig": "cb26f665",
         "words": "00003af0",
         "result": "PASS",
         "backdoor": "cb26f665",
         "cycles": 183694,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 674.0214320016094,
+        "returncode": 0,
+        "sig": "cb26f665",
+        "words": "00003af0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 183693,
         "mismatch": null
       }
     },
@@ -1156,13 +1893,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 670.2393240120728,
+        "wall_ms": 680.5936919990927,
         "returncode": 0,
         "sig": "b11c8956",
         "words": "00003ad0",
         "result": "PASS",
         "backdoor": "b11c8956",
         "cycles": 183251,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 717.6320209982805,
+        "returncode": 0,
+        "sig": "b11c8956",
+        "words": "00003ad0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 183250,
         "mismatch": null
       }
     },
@@ -1173,13 +1921,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 613.1761519936845,
+        "wall_ms": 594.8447920090985,
         "returncode": 0,
         "sig": "16edc3b0",
         "words": "00003b14",
         "result": "PASS",
         "backdoor": "16edc3b0",
         "cycles": 184174,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 719.6106429910287,
+        "returncode": 0,
+        "sig": "16edc3b0",
+        "words": "00003b14",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 184173,
         "mismatch": null
       }
     },
@@ -1190,13 +1949,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 601.3265580113512,
+        "wall_ms": 596.9556630006991,
         "returncode": 0,
         "sig": "1dd4096e",
         "words": "00003b10",
         "result": "PASS",
         "backdoor": "1dd4096e",
         "cycles": 184112,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 584.2486500041559,
+        "returncode": 0,
+        "sig": "1dd4096e",
+        "words": "00003b10",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 184111,
         "mismatch": null
       }
     },
@@ -1207,13 +1977,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 612.9366099776234,
+        "wall_ms": 592.1681309991982,
         "returncode": 0,
         "sig": "33b1e630",
         "words": "00003ae0",
         "result": "PASS",
         "backdoor": "33b1e630",
         "cycles": 182971,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 601.0540350107476,
+        "returncode": 0,
+        "sig": "33b1e630",
+        "words": "00003ae0",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 182970,
         "mismatch": null
       }
     },
@@ -1224,13 +2005,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 635.9424769761972,
+        "wall_ms": 591.2372810125817,
         "returncode": 0,
         "sig": "2a419580",
         "words": "00003b08",
         "result": "PASS",
         "backdoor": "2a419580",
         "cycles": 183997,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 605.4238649958279,
+        "returncode": 0,
+        "sig": "2a419580",
+        "words": "00003b08",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 183996,
         "mismatch": null
       }
     },
@@ -1241,13 +2033,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 649.3391090189107,
+        "wall_ms": 596.0326720087323,
         "returncode": 0,
         "sig": "56892db1",
         "words": "00003b30",
         "result": "PASS",
         "backdoor": "56892db1",
         "cycles": 185217,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 616.0615179978777,
+        "returncode": 0,
+        "sig": "56892db1",
+        "words": "00003b30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185216,
         "mismatch": null
       }
     },
@@ -1258,13 +2061,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 607.831500004977,
+        "wall_ms": 566.3707659987267,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181785,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 592.8339720121585,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181784,
         "mismatch": null
       }
     },
@@ -1275,13 +2089,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 619.1443620191421,
+        "wall_ms": 589.2815520055592,
         "returncode": 0,
         "sig": "12e500dd",
         "words": "00003b68",
         "result": "PASS",
         "backdoor": "12e500dd",
         "cycles": 186608,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 661.3810879935045,
+        "returncode": 0,
+        "sig": "12e500dd",
+        "words": "00003b68",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186607,
         "mismatch": null
       }
     },
@@ -1292,13 +2117,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 622.4253030086402,
+        "wall_ms": 597.6304630166851,
         "returncode": 0,
         "sig": "88184bf5",
         "words": "00003b78",
         "result": "PASS",
         "backdoor": "88184bf5",
         "cycles": 186480,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 649.2431939987,
+        "returncode": 0,
+        "sig": "88184bf5",
+        "words": "00003b78",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186479,
         "mismatch": null
       }
     },
@@ -1309,13 +2145,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 620.1648929854855,
+        "wall_ms": 615.3484479873441,
         "returncode": 0,
         "sig": "c0fdfe43",
         "words": "00003b60",
         "result": "PASS",
         "backdoor": "c0fdfe43",
         "cycles": 185768,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 616.9678580190521,
+        "returncode": 0,
+        "sig": "c0fdfe43",
+        "words": "00003b60",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185767,
         "mismatch": null
       }
     },
@@ -1326,13 +2173,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 639.0170569939073,
+        "wall_ms": 591.1190310143866,
         "returncode": 0,
         "sig": "19a284f8",
         "words": "00003b60",
         "result": "PASS",
         "backdoor": "19a284f8",
         "cycles": 185768,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 634.0996609942522,
+        "returncode": 0,
+        "sig": "19a284f8",
+        "words": "00003b60",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185767,
         "mismatch": null
       }
     },
@@ -1343,13 +2201,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 616.0443120170385,
+        "wall_ms": 607.3947650147602,
         "returncode": 0,
         "sig": "f823c5ae",
         "words": "00003b68",
         "result": "PASS",
         "backdoor": "f823c5ae",
         "cycles": 186617,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 648.8717850006651,
+        "returncode": 0,
+        "sig": "f823c5ae",
+        "words": "00003b68",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186616,
         "mismatch": null
       }
     },
@@ -1360,13 +2229,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 596.9779879960697,
+        "wall_ms": 631.3924809801392,
         "returncode": 0,
         "sig": "7f744dc9",
         "words": "00003b20",
         "result": "PASS",
         "backdoor": "7f744dc9",
         "cycles": 184059,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 605.4321150004398,
+        "returncode": 0,
+        "sig": "7f744dc9",
+        "words": "00003b20",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 184058,
         "mismatch": null
       }
     },
@@ -1377,13 +2257,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 626.4117939863354,
+        "wall_ms": 614.5567070052493,
         "returncode": 0,
         "sig": "d5186523",
         "words": "00003b80",
         "result": "PASS",
         "backdoor": "d5186523",
         "cycles": 185741,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 659.8962770076469,
+        "returncode": 0,
+        "sig": "d5186523",
+        "words": "00003b80",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 185740,
         "mismatch": null
       }
     },
@@ -1394,13 +2285,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 627.0536440133583,
+        "wall_ms": 606.5115639939904,
         "returncode": 0,
         "sig": "5582acc4",
         "words": "00003b68",
         "result": "PASS",
         "backdoor": "5582acc4",
         "cycles": 186617,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 596.4840739907231,
+        "returncode": 0,
+        "sig": "5582acc4",
+        "words": "00003b68",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 186616,
         "mismatch": null
       }
     },
@@ -1411,13 +2313,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 604.970438987948,
+        "wall_ms": 617.1533279994037,
         "returncode": 0,
         "sig": "43f00be3",
         "words": "00003aac",
         "result": "PASS",
         "backdoor": "43f00be3",
         "cycles": 181948,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 608.507965982426,
+        "returncode": 0,
+        "sig": "43f00be3",
+        "words": "00003aac",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181947,
         "mismatch": null
       }
     },
@@ -1428,13 +2341,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 603.0946490063798,
+        "wall_ms": 587.3865109751932,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181793,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 604.7705450037029,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181792,
         "mismatch": null
       }
     },
@@ -1445,13 +2369,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 588.8461959839333,
+        "wall_ms": 573.4733970020898,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181784,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 648.762095021084,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181783,
         "mismatch": null
       }
     },
@@ -1462,13 +2397,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 626.0767540079542,
+        "wall_ms": 566.8707249860745,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181802,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 585.7171200041194,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181801,
         "mismatch": null
       }
     },
@@ -1479,13 +2425,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 592.4258560116868,
+        "wall_ms": 592.3742410086561,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181784,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 609.8742760077585,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181783,
         "mismatch": null
       }
     },
@@ -1496,13 +2453,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 632.7184050169308,
+        "wall_ms": 610.3809449996334,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181841,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 597.0356830221135,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181840,
         "mismatch": null
       }
     },
@@ -1513,13 +2481,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 605.1379890122917,
+        "wall_ms": 603.6922440107446,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181832,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 606.674134003697,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181831,
         "mismatch": null
       }
     },
@@ -1530,13 +2509,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 576.356243022019,
+        "wall_ms": 634.7149820066988,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181850,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 625.5319390038494,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181849,
         "mismatch": null
       }
     },
@@ -1547,13 +2537,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 565.0412700197194,
+        "wall_ms": 571.8947669956833,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181832,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 587.9337610094808,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181831,
         "mismatch": null
       }
     },
@@ -1564,13 +2565,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 615.3869509871583,
+        "wall_ms": 572.5097259855829,
         "returncode": 0,
         "sig": "cfec07b3",
         "words": "00003aa8",
         "result": "PASS",
         "backdoor": "cfec07b3",
         "cycles": 181793,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 581.6547400027048,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 181792,
         "mismatch": null
       }
     },
@@ -1581,13 +2593,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 619.169123005122,
+        "wall_ms": 618.1179489940405,
         "returncode": 0,
         "sig": "46a0b2e6",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "46a0b2e6",
         "cycles": 192369,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 605.9875540086068,
+        "returncode": 0,
+        "sig": "46a0b2e6",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192368,
         "mismatch": null
       }
     },
@@ -1598,13 +2621,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 611.5557999874,
+        "wall_ms": 610.4929659923073,
         "returncode": 0,
         "sig": "4e146605",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "4e146605",
         "cycles": 192770,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 609.4302859855816,
+        "returncode": 0,
+        "sig": "4e146605",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192769,
         "mismatch": null
       }
     },
@@ -1615,13 +2649,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 639.0004470013082,
+        "wall_ms": 640.2769520063885,
         "returncode": 0,
         "sig": "00d8e86b",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "00d8e86b",
         "cycles": 192788,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 615.2407769986894,
+        "returncode": 0,
+        "sig": "00d8e86b",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192787,
         "mismatch": null
       }
     },
@@ -1632,13 +2677,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 656.1007099808194,
+        "wall_ms": 665.0475490023382,
         "returncode": 0,
         "sig": "811137f4",
         "words": "00003c30",
         "result": "PASS",
         "backdoor": "811137f4",
         "cycles": 192779,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 661.8151080037933,
+        "returncode": 0,
+        "sig": "811137f4",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 192778,
         "mismatch": null
       }
     },
@@ -1649,13 +2705,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 22.848575987154618,
+        "wall_ms": 10.87980400188826,
         "returncode": 0,
         "sig": "811c9dc5",
         "words": "00000000",
         "result": "PASS",
         "backdoor": "811c9dc5",
         "cycles": 494,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 61.66339400806464,
+        "returncode": 0,
+        "sig": "811c9dc5",
+        "words": "00000000",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 493,
         "mismatch": null
       }
     },
@@ -1666,13 +2733,24 @@
       "shared": [],
       "cpptb": {
         "mode": "cpptb",
-        "wall_ms": 10.673751996364444,
+        "wall_ms": 20.504724991042167,
         "returncode": 0,
         "sig": "811c9dc5",
         "words": "00000000",
         "result": "PASS",
         "backdoor": "811c9dc5",
         "cycles": 494,
+        "mismatch": null
+      },
+      "upstream": {
+        "mode": "upstream",
+        "wall_ms": 34.744948003208265,
+        "returncode": 0,
+        "sig": "811c9dc5",
+        "words": "00000000",
+        "result": "PASS",
+        "backdoor": null,
+        "cycles": 493,
         "mismatch": null
       }
     }

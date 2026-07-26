@@ -128,28 +128,6 @@ def run_once(mode: str, test: dict, workdir: Path, binaries: dict) -> dict:
     return sample
 
 
-def check_spike(cpptb: dict) -> list[str]:
-    """What must hold when the reference is Spike rather than a second harness.
-
-    There is nothing to compare signatures against here, and nothing needs to
-    be: the checker has already compared every retired instruction and every
-    data memory access against Spike as the program ran, and stops the
-    simulation the moment they disagree. So the test passes if the program
-    reached its own end and no mismatch was reported.
-    """
-    problems = []
-    if cpptb["mismatch"]:
-        problems.append(f"co-simulation mismatch: {cpptb['mismatch']}")
-    if cpptb["result"] != "PASS":
-        problems.append(f"reported {cpptb['result'] or 'nothing'}")
-    if cpptb["backdoor"] is not None and cpptb["sig"] is not None:
-        if cpptb["backdoor"] != cpptb["sig"]:
-            problems.append(
-                f"backdoor read {cpptb['backdoor']} but the program "
-                f"reported {cpptb['sig']}")
-    return problems
-
-
 def outcome(sample: dict) -> str:
     """One word for how a run ended, comparable across the two harnesses.
 
@@ -165,7 +143,8 @@ def outcome(sample: dict) -> str:
     return sample["result"]
 
 
-def check(test: dict, upstream: dict, cpptb: dict) -> tuple[list[str], list[str]]:
+def check(test: dict, upstream: dict, cpptb: dict,
+          *, spike: bool = False) -> tuple[list[str], list[str]]:
     """Split what went wrong into two kinds, which mean different things.
 
     A *disagreement* is the two harnesses reporting different things about the
@@ -179,6 +158,20 @@ def check(test: dict, upstream: dict, cpptb: dict) -> tuple[list[str], list[str]
     that were failing anyway.
     """
     disagreements, shared = [], []
+
+    # Under co-simulation both harnesses carry their own Spike, so a mismatch
+    # must appear on both or neither. One side reporting a divergence the other
+    # does not is the strongest possible evidence of a port defect, because the
+    # reference model is identical and only the framework driving it differs.
+    if spike:
+        if bool(upstream["mismatch"]) != bool(cpptb["mismatch"]):
+            disagreements.append(
+                f"only one harness saw a co-simulation mismatch: "
+                f"upstream {upstream['mismatch'] or 'none'} / "
+                f"cpptb {cpptb['mismatch'] or 'none'}")
+        elif upstream["mismatch"]:
+            shared.append(f"both saw a co-simulation mismatch: "
+                          f"{cpptb['mismatch']}")
 
     up_outcome, cp_outcome = outcome(upstream), outcome(cpptb)
     if up_outcome != cp_outcome:
@@ -231,8 +224,6 @@ def main(argv: list[str] | None = None) -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     binaries = {"upstream": ROOT / manifest["upstream_binary"],
                 "cpptb": ROOT / manifest["cpptb_binary"]}
-    if manifest.get("reference") == "spike":
-        binaries.pop("upstream")  # nothing to compare against; Spike is inline
     for name, binary in binaries.items():
         if not binary.is_file():
             print(f"run_suite: {name} binary missing: {binary}", file=sys.stderr)
@@ -259,8 +250,6 @@ def main(argv: list[str] | None = None) -> int:
         order = (("upstream", "cpptb") if index % 2 == 0
                  else ("cpptb", "upstream"))
         samples = {}
-        if manifest.get("reference") == "spike":
-            order = ("cpptb",)
         for mode in order:
             try:
                 samples[mode] = run_once(mode, test, dirs[mode], binaries)
@@ -270,11 +259,8 @@ def main(argv: list[str] | None = None) -> int:
                                  "result": "TIMEOUT", "backdoor": None,
                                  "cycles": None, "mismatch": None}
 
-        if manifest.get("reference") == "spike":
-            problems, shared = check_spike(samples["cpptb"]), []
-        else:
-            problems, shared = check(test, samples["upstream"],
-                                     samples["cpptb"])
+        problems, shared = check(test, samples["upstream"], samples["cpptb"],
+                                 spike=manifest.get("reference") == "spike")
         record = {"name": test["name"], "group": test["group"],
                   "problems": problems, "shared": shared,
                   "cpptb": samples["cpptb"],
@@ -306,21 +292,10 @@ def main(argv: list[str] | None = None) -> int:
     timed = [r for r in results if not (r["problems"] or r["shared"])]
     cp_total = sum(r["cpptb"]["wall_ms"] for r in timed)
     cp_each = [r["cpptb"]["wall_ms"] for r in timed]
-    up_total = 0.0 if spike else sum(r["upstream"]["wall_ms"] for r in timed)
+    up_total = sum(r["upstream"]["wall_ms"] for r in timed)
 
-    if spike:
-        print(f"\n{'group':<16} {'tests':>5} {'cpptb+spike':>13}")
-        for group, records in sorted(by_group.items()):
-            ok = [r for r in records if r in timed]
-            cp = sum(r["cpptb"]["wall_ms"] for r in ok)
-            print(f"{group:<16} {len(records):>5} {cp:>12.0f}ms")
-        print(f"\n{'total':<16} {len(timed):>5} {cp_total:>12.0f}ms")
-        if cp_each:
-            print(f"median per test   {statistics.median(cp_each):.1f} ms")
-        print(f"suite wall        {suite_wall:.1f} s "
-              f"(every instruction checked against Spike)")
-    else:
-        print(f"\n{'group':<16} {'tests':>5} {'upstream':>10} {'cpptb':>10} {'ratio':>7}")
+    print(f"\n{'group':<16} {'tests':>5} {'upstream':>10} {'cpptb':>10} {'ratio':>7}")
+    if True:
         for group, records in sorted(by_group.items()):
             ok = [r for r in records if r in timed]
             up = sum(r["upstream"]["wall_ms"] for r in ok)
@@ -334,7 +309,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"median per test   upstream "
                   f"{statistics.median(up_each):.1f} ms   "
                   f"cpptb {statistics.median(cp_each):.1f} ms")
-        print(f"suite wall        {suite_wall:.1f} s (both harnesses, serial)")
+        print(f"suite wall        {suite_wall:.1f} s (both harnesses, serial)"
+              + ("  [every instruction checked against Spike, on both sides]"
+                 if spike else ""))
     print(f"\n{passed}/{len(results)} tests passed")
     if shared_failures:
         # Both harnesses said the same thing, so this is about the core or the
@@ -352,10 +329,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{len(failed)} disagreed between the harnesses; that is a port "
               f"defect and the comparison is not valid until they do not",
               file=sys.stderr)
-    elif spike:
-        checked = sum(1 for r in results if r["cpptb"]["result"] == "PASS")
-        print(f"every test: {checked} programs ran to completion with Spike in "
-              "lockstep and no instruction or memory access disagreed")
+    elif not shared_failures and spike:
+        print("every test: both harnesses ran Spike in lockstep, neither saw a "
+              "single instruction or memory access disagree, and the two "
+              "produced the same signature")
     elif not shared_failures:
         print("every test: both harnesses produced the same signature, and "
               "cpptb's backdoor read agreed with what the program reported")

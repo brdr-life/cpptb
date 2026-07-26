@@ -91,9 +91,11 @@ costs from what a run costs.
   | --- | --- | ---: | ---: | --- |
   | `small` | `small` | 98 | 98 | `1.086x` |
   | `bmfull` | `maxperf-pmp-bmfull` | 193 | 177 | `0.997x` |
-  | `cosim` | `small` + Spike | 98 | 98 | every instruction checked |
+  | `cosim` | `small` + Spike | 98 | 98 | `0.989x`, every instruction checked |
 
-  No test in any configuration had the two harnesses disagree. The 16 that did
+  Every configuration runs both harnesses on every test, co-simulation
+  included, so any error has to appear on both sides or it is reported as a
+  port defect. None did. The 16 that did
   not pass are PMP tests both harnesses agree about, which says something about
   the core or the tests and nothing about the port.
 

@@ -42,7 +42,7 @@ Three configurations, each a run of the whole applicable suite.
 | --- | --- | ---: | ---: | ---: |
 | `small` | `small` | 98 | 98 | `1.086x` |
 | `bmfull` | `maxperf-pmp-bmfull` | 193 | 177 | `0.997x` |
-| `cosim` | `small` + Spike | 98 | 98 | reference model, not a comparison |
+| `cosim` | `small` + Spike, both sides | 98 | 98 | `0.989x` |
 
 **No test in any configuration had the two harnesses disagree.** That is the
 result the port is judged on, and it is separate from whether a test passed:
@@ -140,9 +140,36 @@ from `dv/verilator/simple_system_cosim`, unmodified, so Spike runs in lockstep
 and every retired instruction and every data memory access is compared against
 it. A single test checks about 316,000 instructions this way.
 
-**98 of 98 passed**, at `614 ms` median against `234 ms` for the same tests
-without the reference model -- about 2.6x for checking every instruction, which
-is the price of the strongest check available here.
+**98 of 98 passed on both harnesses**, at `612 ms` median for cpptb and
+`623 ms` for upstream, against `234 ms` for the same tests without a reference
+model. Checking every instruction costs about 2.6x, and costs both sides the
+same: `0.989x` cpptb over upstream.
+
+### Both harnesses run Spike, and are compared
+
+Co-simulation is a property of the build, not of the comparison, so upstream's
+own `lowrisc:ibex:ibex_simple_system_cosim` target is built too and every test
+runs under both. Each side carries its own Spike; only the framework driving it
+differs. `run_suite.py` therefore requires that a co-simulation mismatch appear
+on **both sides or neither** -- one harness seeing a divergence the other does
+not would be the strongest possible evidence of a defect in the port, because
+the reference model is identical.
+
+That is checked against a real failure rather than assumed. Rebuilding the tests
+without the `menvcfgh` workaround makes both harnesses fail, with the same
+message and the same addresses:
+
+    both saw a co-simulation mismatch:
+      Synchronous trap was expected at ISS PC: 104900
+      but the DUT didn't report one at PC 129200:  I-add-00
+    both saw a co-simulation mismatch:
+      Synchronous trap was expected at ISS PC: 103900
+      but the DUT didn't report one at PC 129200:  I-addi-00
+
+So the `menvcfgh` divergence is upstream's flow, reproduced, and not something
+this port introduces. The same holds for the 16 PMP failures under `bmfull` and
+for every other non-passing test recorded here: an error that does not appear on
+both sides is reported as a port defect, not as a result.
 
 ### It is upstream's harness, not a reimplementation
 
