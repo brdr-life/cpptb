@@ -76,6 +76,13 @@ cycle to find.
    non-blocking assignments. cpptb has no NBA to reach for, so driving moves to
    the falling edge, where it is stable well before the edge that commits it.
 
+   The cocotb-shaped alternative -- sample after `co_await ReadOnly{}`, drive
+   after `co_await ReadWrite{}` -- was tried first and fails at run time,
+   because no timing backend providing those phases can be selected from a
+   project. This is now written up in
+   [Scheduling](../../../../docs/scheduling.md#sample-on-the-edge-drive-off-it)
+   and on the roadmap.
+
 3. **The monitor needs upstream's gate.** `monitor_tick` in `reg_dpi.cc` only
    captures when `(csr_access && (csr_op_en || illegal_csr)) || !rst_n`. Without
    it, every idle cycle is captured as a read of CSR 0 and the model expects an

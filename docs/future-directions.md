@@ -10,6 +10,31 @@ spirit as
 Two areas are covered: capabilities the framework lacks, and the verification
 corpus needed to judge whether it is actually better than the alternatives.
 
+## Make the timing backend selectable
+
+`ReadWrite`, `ReadOnly` and `NextTimeStep` are part of the documented scheduling
+API, and [Performance](performance.md) benchmarks four backends that provide
+them, two of which pass the timing conformance suite. None of them can be
+selected from a project: `cpptb build` emits one backend, there is no
+`cpptb.toml` setting or CLI flag, and passing the defines through
+`build.verilator_args` fails because the supporting SystemVerilog is emitted at
+code-generation time.
+
+So a testbench that uses those waits builds cleanly and then fails at run time
+with a message telling the author to rebuild the simulator, which a project
+cannot act on. Authors coming from cocotb reach for exactly that shape first,
+since it is the idiom there.
+
+The work is plumbing rather than semantics. A `[build] timing_backend` key
+threaded into code generation would expose what already exists and is already
+measured. Until then the edge-phase convention documented in
+[Scheduling](scheduling.md#sample-on-the-edge-drive-off-it) is the portable
+answer, and the examples use it.
+
+Found while porting Ibex's `dv/cs_registers` testbench, where the cocotb-shaped
+driver was the first thing tried; see
+`experiments/open_core_ports/ports/ibex_cs_registers`.
+
 ## Framework capabilities
 
 ### Temporal assertions
