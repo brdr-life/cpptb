@@ -130,15 +130,19 @@ Consolidated from both ports. Grouped by who owns the problem.
 
 ### In upstream, reported rather than worked around silently
 
-12. **The pinned Spike never registers `CSR_MENVCFGH`.** It registers
+12. **`tb_cs_registers` is vacuous on Verilator 5.050.** It reports `TEST
+    PASSED` having driven zero transactions, and never terminates without a
+    cycle limit. Ibex pins v4.210 for it. Not root-caused, and not confirmed
+    against 4.210.
+13. **The pinned Spike never registers `CSR_MENVCFGH`.** It registers
     `CSR_MENVCFG` and has no entry for the high half, so on RV32 it traps where
     Ibex correctly implements it as read-only zero. A model with the low half
     and not the high half is not a coherent RV32 configuration. Worth reporting
     to `lowRISC/riscv-isa-sim`.
-13. **The suite's `Zicsr` tests cannot be built for a core with U-mode but no
+14. **The suite's `Zicsr` tests cannot be built for a core with U-mode but no
     F, no V and no `time` CSR.** They pick a scratch CSR from a fixed ladder
     and fall off the end into `#error`.
-14. **The suite's PMP tests assume a granularity of 2 or more.** They size NAPOT
+15. **The suite's PMP tests assume a granularity of 2 or more.** They size NAPOT
     padding as `(1 << (UDB_PMP_GRANULARITY - 3)) - 1`, which underflows for
     granularity 0 and reaches `.rept` as 2^64-1.
 
@@ -172,10 +176,19 @@ security tests run at all.
 **C is started and not finished**, in
 [`ports/ibex_cs_registers`](ports/ibex_cs_registers/README.md). It builds, runs
 and drives 1,119 transactions against upstream's model before a mismatch that
-is probably a divergence between that model and Ibex's RTL over PMP lock bits
-and `mseccfg` -- but that is not established, because upstream's own testbench
-has not been built as a control. Three testbench bugs and one cpptb finding on
-the way there are written up in its README.
+is not yet explained.
+
+The control was built and does not settle it, for a reason worth recording on
+its own: **upstream's `tb_cs_registers` drives zero transactions and reports
+`TEST PASSED` on Verilator 5.050.** Its driver object is constructed but
+`driver_tick`'s lookup never finds it, so nothing is ever driven, and without a
+cycle limit the simulation never terminates. Ibex pins `VERILATOR_VERSION=v4.210`
+in `ci/vars.env`; every port here runs on 5.050. A testbench that silently
+checks nothing and reports success is a worse failure than one that crashes,
+and the cpptb port drives 1,119 real transactions where the original drives
+none.
+
+Three testbench bugs and one cpptb finding on the way there are in its README.
 
 **It is the most interesting of these for the framework.** Every port so far is "load a
 program, run it, check the result". `tb_cs_registers` drives transactions

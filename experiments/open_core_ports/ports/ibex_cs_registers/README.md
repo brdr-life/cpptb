@@ -5,9 +5,11 @@ A port of Ibex's `dv/cs_registers` testbench: random CSR transactions driven at
 should have done.
 
 **Status: not finished.** It builds, runs, and drives 1,119 transactions before
-hitting a mismatch that is probably a divergence between upstream's model and
-Ibex's RTL rather than a defect in this port -- but that is not established,
-because upstream's own testbench has not been built as a control. See below.
+hitting a mismatch that is not yet explained.
+
+The control has been built, and it does not settle the question, for a reason
+worth knowing on its own: **upstream's `tb_cs_registers` drives zero
+transactions and reports `TEST PASSED` on Verilator 5.050.** See below.
 
 ## Why this one is different
 
@@ -84,6 +86,44 @@ before Verilator has run at all. The co-simulation port does not hit this only
 because its calls into extra C++ are behind `#ifdef CPPTB_COSIM`, which the
 discovery build does not define.
 
+## The control does not work on this Verilator
+
+Built from upstream's own core file with the command Ibex's CI uses:
+
+    fusesoc --cores-root=. run --target=sim --tool=verilator \
+      lowrisc:ibex:tb_cs_registers
+
+The `build_so` pre-build hook ran and `reg_dpi.so` linked, so the build is as
+upstream intends. Running it:
+
+    Simulation timeout of 500000 cycles reached, shutting down simulation.
+    [Reg driver] drove: 0 register transactions
+
+    //-------------//
+    // TEST PASSED //
+    //-------------//
+
+Half a million cycles, **zero transactions, and a pass**. Without `-c` it never
+terminates, because it never reaches the 10,000 transactions that would ask it
+to stop; it ran for twenty minutes at full CPU before being killed.
+
+The driver object exists -- its `OnFinal` printed that line, so `env_initial`
+ran and built the environment -- but `driver_tick`'s lookup in `reg_dpi.cc`
+never finds it, so `OnClock` is never called. The root cause is not established
+here; what is established is the outcome.
+
+Ibex pins `VERILATOR_VERSION=v4.210` in `ci/vars.env`. This repository uses
+5.050, which every other port here runs on unchanged. So the most likely
+explanation is that this testbench has not been exercised on Verilator 5, and
+something about how it registers its DPI interfaces across the `reg_dpi.so`
+boundary no longer works. That has not been confirmed against 4.210.
+
+Two things follow. The obvious one: there is no usable control at this Verilator
+version, so the mismatch below stays unexplained. The less obvious one is worth
+more -- **a testbench that silently checks nothing and reports success is a
+worse failure than one that crashes**, and this port drives 1,119 real
+transactions where the original drives none.
+
 ## What is left
 
 The run stops at transaction 1,119 on a `CSR Set` to `PMPCfg0`:
@@ -91,17 +131,20 @@ The run stops at transaction 1,119 on a `CSR Set` to `PMPCfg0`:
     Write data: a392b5f3   Read data: 9f978f   Expected rdata: 9a9f978f
 
 The observed value is the expected one with the top byte missing -- region 3's
-config, whose lock bit is set. The model handles PMP locking, in
-`PmpCfgRegister::GetLockMask`, but bypasses it when `mseccfg.RLB` is set, and
-Ibex treats `mseccfg` as an illegal CSR. So the model can be told to ignore a
-lock that the RTL still enforces.
+config, whose lock bit is set. So the RTL is refusing to change a locked entry
+and the model is allowing it, or they disagree about what was locked when.
 
-That is a plausible divergence between upstream's model and Ibex, reached
-because this port's random stream differs from upstream's -- upstream's driver
-runs during reset and consumes draws this one does not, so the two explore
-different sequences from the same seed.
+An earlier version of this file guessed that the model bypasses the lock when
+`mseccfg.RLB` is set while Ibex treats `mseccfg` as illegal. That is wrong:
+`ibex_cs_registers.sv` implements `mseccfg` whenever `PMPEnable` is set, which
+it is here, and the model has an `MSeccfgRegister` for it. Both sides have the
+register. Where they part company is not yet known.
 
-**It is not established.** Confirming it needs upstream's `tb_cs_registers`
-built and run as a control, which is the discipline every other port here
-follows and which this one has not had yet. Until then the mismatch could
-equally be a fourth thing this port has wrong.
+This port's random stream also differs from upstream's -- upstream's driver runs
+during reset and consumes draws this one does not -- so it reaches sequences
+upstream's would not, from the same seed.
+
+So the mismatch is still open, and could equally be a fourth thing this port has
+wrong. Settling it needs either Verilator 4.210 to make the control work, or
+reading the PMP lock semantics on both sides carefully enough to decide by
+construction.
