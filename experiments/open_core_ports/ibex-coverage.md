@@ -4,7 +4,8 @@ A review document for the Ibex porting exercise. It answers three questions:
 what does Ibex actually verify itself with, how much of that runs under cpptb,
 and what would it take to close the rest.
 
-Measurements live in each port's `RESULTS.md`; this is the map.
+Measurements live in each port's `RESULTS.md`; this is the map. Things found
+and not fixed are in [open issues](open-issues.md).
 
 ## What Ibex verifies itself with
 
@@ -191,7 +192,8 @@ Ordered by cost, not by value.
 | ~~B~~ | ~~Four more configurations~~ | done | flow 3's matrix, including `opentitan` with icache, ECC, scrambling and SecureIbex |
 | ~~C~~ | ~~`tb_cs_registers`~~ | done | flow 4, a different *shape* of testbench, and a model bug |
 | D | RISC-V Compliance, `ibex_riscv_compliance` | medium | flow 2, exact CI parity |
-| E | riscv-dv under UVM, `dv/uvm/core_ibex` | large | flow 5, Ibex's real verification depth |
+| E1 | riscv-dv `pyflow` generation into the existing co-simulation harness | medium | flow 5's stimulus, no UVM |
+| E2 | the `dv/uvm/core_ibex` UVM environment | large | the rest of flow 5 |
 | F | `dv/uvm/icache` | large | flow 6, a block-level testbench |
 | G | `dv/formal` | — | not a simulation flow; out of scope for cpptb |
 
@@ -232,9 +234,42 @@ README.
 **D is largely redundant.** It is the archived predecessor of the suite already
 ported; its value is CI parity, not new signal.
 
-**E is its own project.** It needs UVM, which `experiments/uvm_comparison`
-found unreliable on Verilator, and it is where the CSR exclusions above come
-from.
+**E splits in two, and the first half is much cheaper than it looks.**
+
+The value of flow 5 is random programs checked against a reference model. Two
+separable pieces deliver that, and only the second needs UVM.
+
+**E1: riscv-dv generation, no UVM.** riscv-dv is vendored at
+`vendor/google_riscv-dv` and ships `pyflow`, a pure-Python generator with a
+`pyvsc` constraint solver. `run.py` takes `--simulator pyflow` and needs no
+SystemVerilog simulator at all. Generated programs would then run through the
+co-simulation harness that already exists: both harnesses, Spike in lockstep,
+every instruction and data memory access compared. That is
+`ports/riscv_arch_tests` machinery with a different program source, so most of
+the work is generation, linking against the Simple System memory map, and
+extending `run_cosim_programs.py` to take a generated corpus.
+
+The limitation to state up front: Ibex's `riscv_dv_extension` is SystemVerilog
+(`ibex_asm_program_gen.sv`, `ibex_directed_instr_lib.sv`,
+`riscv_core_setting.tpl.sv`), so pyflow does not pick it up. E1 would run
+generic RV32IMC riscv-dv programs, not Ibex-tuned ones. The core settings can be
+reproduced in pyflow's configuration; the directed instruction library cannot,
+without reimplementing it.
+
+**E2: the UVM environment itself.** `dv/uvm/core_ibex` drives interrupts and
+debug requests, scoreboards against RVFI, and collects functional coverage.
+Porting that is the real flow 5.
+
+On whether UVM is viable, the local matrix in `experiments/uvm_comparison` was
+run on **Verilator 5.050**, the same version used here, so it is current rather
+than stale. It found that UVM builds and executes: `data1_test` passes 3/3 and
+`data0_test` 2/3, while `random_test` and `many_random_test` execute but report
+scoreboard errors 0/3. So a lot of a UVM testbench does work now, and what does
+not is the constrained-random part, which is exactly what riscv-dv leans on.
+
+That is the argument for doing E1 first. It gets random stimulus checked against
+Spike without depending on the part that currently fails, and it establishes the
+corpus that E2 would later drive differently.
 
 ## Reproducing
 
