@@ -102,6 +102,9 @@ class Config:
     # 'harness' compares the two harnesses against each other;
     # 'spike' checks every instruction against a reference model.
     reference: str = "harness"
+    # Whether this project binds in Ibex's co-simulation checker and links
+    # Spike. configure.py reads it; the suite runner reads `reference`.
+    cosim: bool = False
     # Extra -D flags for every test compiled for this configuration.
     defines: tuple[str, ...] = ()
     # Test-level params the suite declares beyond extensions. Ibex handles
@@ -135,29 +138,60 @@ CONFIGS = {
         extensions=COMMON_EXTENSIONS | {"Zba", "Zbb", "Zbc", "Zbs", "Zcb"},
         pmp_entries=16,
     ),
-    # The `small` core again, but elaborated with Ibex's co-simulation checker
-    # bound in, so Spike runs in lockstep and every retired instruction and data
-    # memory access is compared against it. Same tests, a different and much
-    # stronger question: not "do the two harnesses agree" but "is the core
-    # right". Needs Spike, which fetch.py and build_spike.py provide.
-    "cosim": Config(
-        name="cosim",
-        ibex_config="small",
-        project="cpptb.toml",
-        cpptb_binary=_CPPTB.format(name="riscv_arch_tests_cosim"),
-        # A different fusesoc core, so a different directory name: the
-        # co-simulation target is lowrisc:ibex:ibex_simple_system_cosim.
-        upstream_binary="deps/ibex/build-cosim/"
-                        "lowrisc_ibex_ibex_simple_system_cosim_0/"
-                        "sim-verilator/Vibex_simple_system",
-        extensions=COMMON_EXTENSIONS,
-        pmp_entries=0,
-        # Spike is the reference; there is no second harness to agree with.
-        reference="spike",
-        # See target/rvtest_config.h: this Spike has no menvcfgh.
-        defines=("-DIBEX_NO_U_MODE",),
-    ),
 }
+
+
+def _cosim(ibex_config: str, extensions: frozenset[str], pmp_entries: int) -> Config:
+    """A co-simulation project for one of Ibex's own configurations.
+
+    Ibex's CI runs its Verilator co-simulation across six configurations. These
+    are those six. They bind in Ibex's checker unmodified, so Spike runs in
+    lockstep and every retired instruction and data memory access is compared,
+    and both harnesses are built so a divergence has to appear on both sides or
+    it is a defect in this port.
+    """
+    name = f"cosim-{ibex_config}"
+    target = f"riscv_arch_tests_{name.replace('-', '_')}"
+    return Config(
+        name=name,
+        ibex_config=ibex_config,
+        project=f"{target}/cpptb.toml",
+        cpptb_binary=_CPPTB.format(name=target),
+        upstream_binary=f"deps/ibex/build-cosim-{ibex_config}/"
+                        f"lowrisc_ibex_ibex_simple_system_cosim_0/"
+                        f"sim-verilator/Vibex_simple_system",
+        extensions=extensions,
+        pmp_entries=pmp_entries,
+        reference="spike",
+        cosim=True,
+        # See target/rvtest_config.h: the pinned Spike has no menvcfgh.
+        defines=("-DIBEX_NO_U_MODE",),
+    )
+
+
+# The six configurations Ibex's CI covers. Extensions and PMP entries follow
+# from each one's parameters; ibex_configs.yaml is the source for both, read
+# through util/ibex_config.py at generation time.
+_BITMANIP = {"Zba", "Zbb", "Zbc", "Zbs"}
+CONFIGS.update({
+    c.name: c for c in (
+        # RV32BNone, PMPEnable=0.
+        _cosim("small", COMMON_EXTENSIONS, 0),
+        # RV32BOTEarlGrey covers the ratified subset; Zcb via RV32ZcaZcbZcmp;
+        # 16 PMP regions; also an icache with ECC and scrambling, and
+        # SecureIbex, which is the most RTL any of these elaborates.
+        _cosim("opentitan", COMMON_EXTENSIONS | _BITMANIP | {"Zcb"}, 16),
+        # RV32BNone, so no bitmanip; PMPEnable=0.
+        _cosim("maxperf", COMMON_EXTENSIONS | {"Zcb"}, 0),
+        # RV32BBalanced is Zba and Zbb and Zbs, but not Zbc.
+        _cosim("maxperf-pmp-bmbalanced",
+               COMMON_EXTENSIONS | {"Zba", "Zbb", "Zbs", "Zcb"}, 16),
+        _cosim("maxperf-pmp-bmfull", COMMON_EXTENSIONS | _BITMANIP | {"Zcb"}, 16),
+        # RV32BNone; the branch predictor is what differs.
+        _cosim("experimental-branch-predictor", COMMON_EXTENSIONS | {"Zcb"}, 0),
+    )
+})
+
 DEFAULT_CONFIG = "small"
 
 # Tests whose declared extensions Ibex implements but which still cannot be
