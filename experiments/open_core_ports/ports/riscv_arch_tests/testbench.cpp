@@ -47,6 +47,7 @@
 // that file for why Spike cannot be seeded when it is constructed.
 void cosim_seed_memory(std::uint32_t base_addr, const std::uint8_t* data,
                        std::size_t size);
+std::uint64_t cosim_instructions_matched();
 #endif
 
 namespace cpptb::ports::act {
@@ -64,7 +65,7 @@ constexpr auto kClockPeriod = 10_ns;
 // hundred thousand. This is far above that, so it catches a program that never
 // halts while still failing fast, and sits below the watchdog in cpptb.toml so
 // this reports first and can say which test hung.
-constexpr uint64_t kCycleLimit = 10'000'000;
+constexpr uint64_t kDefaultCycleLimit = 10'000'000;
 
 // examples/simple_system/rtl/ibex_simple_system.sv: boot_addr_i is 0x00100000
 // and the RAM holds 1024*1024/4 words.
@@ -161,6 +162,13 @@ bool ram_index(uint32_t address, uint32_t& index) {
 // unconditional access apiece.
 Task<void> arch_test(Dut dut, TestContext& test) {
     const std::string name = env("ACT_NAME", "riscv-arch-test");
+    // Overridable so this testbench can also run upstream's own co-simulation
+    // workload, CoreMark, which needs 40.7 million cycles rather than the
+    // 190,000 an architectural test does.
+    const std::string limit_text = env("ACT_CYCLE_LIMIT");
+    const uint64_t cycle_limit = limit_text.empty()
+        ? kDefaultCycleLimit
+        : std::stoull(limit_text, nullptr, 0);
     const std::string firmware = env("ACT_FIRMWARE");
 
     std::string error;
@@ -236,7 +244,7 @@ Task<void> arch_test(Dut dut, TestContext& test) {
     // than being cut off mid-await when the simulator stops.
     uint64_t cycles = 0;
     bool finished = false;
-    while (cycles < kCycleLimit) {
+    while (cycles < cycle_limit) {
         co_await RisingEdge{dut.IO_CLK};
         ++cycles;
         if (dut.u_simulator_ctrl.sim_finish.get() != 0) {
@@ -246,7 +254,7 @@ Task<void> arch_test(Dut dut, TestContext& test) {
     }
 
     test.expect("program signalled completion", finished);
-    test.expect("completed within the cycle limit", cycles < kCycleLimit);
+    test.expect("completed within the cycle limit", cycles < cycle_limit);
 
     // Read the signature back out and digest it the same way the program did.
     const std::string begin_text = env("ACT_SIG_BEGIN");
@@ -274,6 +282,14 @@ Task<void> arch_test(Dut dut, TestContext& test) {
                         digest.words());
         }
     }
+
+#ifdef CPPTB_COSIM
+    const std::uint64_t matched = cosim_instructions_matched();
+    test.expect("the co-simulation actually stepped the reference model",
+                matched > 0);
+    std::printf("cpptb: co-simulation matched %llu instructions\n",
+                static_cast<unsigned long long>(matched));
+#endif
 
     std::printf("cpptb: %s ran %llu cycles\n", name.c_str(),
                 static_cast<unsigned long long>(cycles));
