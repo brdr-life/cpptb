@@ -30,6 +30,26 @@ paths = [
   "vendor/lowrisc_ip",
 ]
 
+[uvm_core]
+repo = "https://github.com/accellera-official/uvm-core.git"
+# HEAD of main, 2026-07-26
+commit = "78c06547a2a0a29b3dc9dcafae62b75b2ff61544"
+license = "Apache-2.0"
+purpose = """
+Accellera's UVM reference implementation, needed to build Ibex's real
+verification environment in dv/uvm/core_ibex.
+
+Ibex's own flow selects UVM through the vendor simulator (`-ntb_opts uvm-1.2`
+for VCS, `-uvmhome CDNS-1.2` for Xcelium), so no UVM source is checked out by
+its scripts. Verilator has no bundled UVM, so the library has to be compiled
+from source alongside the testbench.
+
+uvm-core main rather than the 1.2 release because it is the version Verilator's
+own UVM support is developed against. Ibex's DV code is written for 1.2, but
+the APIs it uses are present in 1800.2-2020.
+"""
+paths = ["src"]
+
 [riscv_arch_test]
 repo = "https://github.com/riscv-non-isa/riscv-arch-test.git"
 # HEAD of main, 2026-07-26
