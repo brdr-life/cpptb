@@ -52,6 +52,13 @@ PACKAGES = {
     "libelf on Ubuntu is built against lz4": ["liblz4-dev"],
     "the lz4 shared library": ["liblz4-1"],
     "libelf is built against zlib": ["zlib1g-dev"],
+    # Verilator does not solve constraints itself: it shells out to an SMT
+    # solver, `z3 --in` by default. Without one, every randomize() in a UVM
+    # testbench fails, and the failure reads as a testbench problem --
+    # "Randomization failed!" from `DV_CHECK_RANDOMIZE_FATAL -- with the
+    # explanation only in a warning at the top of the run.
+    "Verilator's constraint solver shells out to it": ["z3"],
+    "the z3 shared library": ["libz3-4"],
 }
 
 

@@ -6,17 +6,16 @@ scoreboard against Spike, and around 57 test classes. Upstream's
 `yaml/rtl_simulation.yaml` names six simulators -- VCS, Questa, DSim, Riviera,
 qrun, Xcelium -- and Verilator is not one of them.
 
-**Status: the testbench builds and runs on Verilator 5.050.** UVM elaborates,
-the factory resolves a test by name, the report server prints, and the base test
-reaches its own argument checks.
+**Status: the testbench builds, elaborates and runs the whole environment on
+Verilator 5.050.** UVM comes up, the factory resolves a test by name, both
+memory agents serve the core, the stimulus sequences run, and the RVFI
+scoreboard co-simulates against Spike -- the last of those being the part that
+makes this a baseline rather than a demo.
 
-```
-UVM_INFO @ 0: reporter [RNTST] Running test core_ibex_base_test...
-UVM_FATAL core_ibex_base_test.sv(110) @ 0: uvm_test_top [uvm_test_top]
-  Please specify test binary by +bin=binary_name
-```
-
-That fatal is the testbench working: it is the check for a missing `+bin`.
+It does not yet complete a test. Two things are open, both recorded below: the
+core fetches garbage shortly after reset even though the backdoor load is
+verified correct, and one `randomize()` in the fetch-enable sequence fails an
+unsatisfied-constraint check. Neither is a build problem.
 
 ## Why this matters here
 
@@ -31,6 +30,18 @@ words. This is that missing baseline.
 ```sh
 python3 ../../fetch.py uvm_core     # Accellera's UVM, pinned in sources.toml
 python3 build_tb.py --config small
+```
+
+An SMT solver is required at run time, not build time. Verilator does not solve
+constraints itself: it shells out to `z3 --in`. Without one, every
+`randomize()` in the testbench fails and the failure reads as a testbench
+problem -- `Randomization failed!` from `` `DV_CHECK_RANDOMIZE_FATAL `` -- with
+the real explanation only in a warning at the top of the run.
+`local_deps.py` now installs z3 alongside the other packages:
+
+```sh
+python3 ../../local_deps.py
+eval "$(python3 ../../local_deps.py --env)"
 ```
 
 `--jobs` defaults to half the cores. The C++ compile of UVM plus the design
@@ -135,6 +146,79 @@ upstream file has not changed. An overlay then silently has no effect and the
 same error repeats, which reads exactly like the fix not working. The build
 passes `--no-skip-identical`.
 
+## Running
+
+```sh
+python3 build_programs.py --count 2 --instructions 300
+cd build && ./obj/core_ibex_tb \
+  +UVM_TESTNAME=core_ibex_base_test \
+  +bin=elf/gen_0.bin \
+  +signature_addr=8ffffffc \
+  +timeout_in_cycles=4000000
+```
+
+`+bin` is a **flat binary**, not an ELF: `core_ibex_base_test` loads it byte by
+byte with `$fread` from `` `BOOT_ADDR `` and hands the same file to the cosim
+agent. Passing an ELF leaves memory at zero and the run dies a long way
+downstream, with the core executing `0x00000000` and the double-fault detector
+hitting its threshold.
+
+`build_programs.py` generates with the same pyflow the `ports/riscv_dv` port
+uses and links with riscv-dv's own `scripts/link.ld`, which already targets
+0x8000_0000. It needs four patches to the generator, applied to a copy under
+`build/pygen` by the same exact-text discipline as the SystemVerilog overlays.
+
+Three are genuine bugs on pyflow's signature-handshake path, which is what
+core_ibex uses to talk to the program and which evidently nobody has run:
+
+| Bug | Effect |
+| --- | --- |
+| `test_result_t.TEST_RESULT` -- that member is on `signature_type_t` | `AttributeError`, generation aborts |
+| `instr.extend(("a string"))` is not a tuple | the program comes out one letter per line |
+| `instr_stream.append(instr)` where every other producer extends | a line reading `['li x22, 0x8ffffffc', ...]` |
+
+The fourth is not a bug but the piece of Ibex's own riscv-dv customisation a
+program cannot run without: `ibex_asm_program_gen.sv` overrides
+`gen_program_header` to align `_start` to 0x80, because Ibex takes its reset
+vector at `boot_addr + 0x80`. pyflow reads none of Ibex's SystemVerilog
+extension, so `_start` lands at 0x8000_0000 and the core fetches zeros. Its two
+debug-ROM jumps become self-loops here, because pyflow's `gen_debug_rom` is
+`# TODO / pass` and the rv32imc target sets `support_debug_mode = 0`.
+
+## Where it stops
+
+**The core fetches garbage a few cycles after reset.** The backdoor load itself
+is verified: with `+UVM_VERBOSITY=UVM_FULL` the test reports
+`Init mem [0x80000000] = 0x6f`, matching the first byte of the binary, and the
+ELF has `_start` at 0x8000_0080 as it should. Yet the instruction agent starts
+reporting `Read from uninitialized addr 0xf69299af` about six cycles after
+reset, and the tracer's first entry is `80000080 0000 c.unimp`. So the memory
+the test loads and the memory the instruction agent answers from appear not to
+be the same, or the fetches are already wild by then. `$fread` into a scalar
+was suspected and cleared -- it works on Verilator 5.050 in isolation.
+
+**One `randomize()` fails in the fetch-enable sequence.**
+
+```
+%Warning-UNSATCONSTR: core_ibex_new_seq_lib.sv:19:
+  Unsatisfied constraint: 'zero_delays dist {1 :/ zero_delay_pct,'
+UVM_FATAL core_ibex_new_seq_lib.sv(97): Check failed
+  (this.randomize(stimulus_delay_cycles)) Randomization failed!
+```
+
+The first iteration of the sequence succeeds and the second fails. Verilator
+blames the `dist` constraint on `zero_delays`, which is a state variable in that
+call holding 0 -- a value the distribution allows, so it should be satisfiable.
+A reduced case with the same shape does not reproduce it, so this is not yet
+root-caused. `+disable_fetch_enable_seq=1` gets past it and is what the runs
+above use.
+
+Worth knowing while reading those: Verilator is right, and stricter than the
+commercial simulators, about `randomize(x)` keeping every other constraint
+active over state variables. A reduced case confirmed that a state variable
+outside its constraint's range makes the call fail. Some of what looks like a
+solver bug in a UVM testbench is that rule being enforced.
+
 ## What is not done
 
 - **Functional coverage.** `--fcov` exists but Verilator 5.050 dies with an
@@ -144,15 +228,18 @@ passes `--no-skip-identical`.
   design's SVA is compiled out. Upstream's flows run with assertions on, and
   they are part of what those flows check. Turning them on means finding out
   how much of lowRISC's SVA Verilator 5 accepts.
-- **Running a test.** The testbench needs a program linked for core_ibex's map
-  at `0x8000_0000`, not Simple System's `0x0010_0000`, so the programs in
-  `ports/riscv_dv/build` cannot be used as they are. That is the next step, and
-  it is what turns this from "builds and starts" into a usable baseline.
+- **Completing a test.** See "Where it stops" above. Until a program runs to its
+  signature handshake, this is not yet the baseline `ports/riscv_dv` needs.
+- **A runner.** Once tests complete, this wants the same both-harness reporting
+  the other ports here have.
 
 ## Bugs worth reporting
 
-Three Verilator internal errors, each with a small reproducer available from the
-overlays: the covergroup transition bins over enum items, `int'()` on a wide
+In riscv-dv's pyflow, the three signature-handshake bugs in the table above.
+They are one-line fixes and the path is plainly untested.
+
+In Verilator, three internal errors, each with a small reproducer available from
+the overlays: the covergroup transition bins over enum items, `int'()` on a wide
 value used as a queue index, and `event e = null`. The `VlForceVec` virtual
 interface restriction and the `ref`-argument reading of 13.2.2 are limitations
 rather than crashes, but both are worth raising.
