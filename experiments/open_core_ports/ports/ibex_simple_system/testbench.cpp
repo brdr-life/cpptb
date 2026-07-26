@@ -32,10 +32,11 @@ using namespace coro;
 // the baseline measurement.
 constexpr auto kClockPeriod = 10_ns;
 
-// CoreMark retires about 2.75M instructions across roughly 4.14M cycles. This
-// cap turns a hang into a failure rather than a CI timeout and sits well clear
-// of a healthy run.
-constexpr uint64_t kCycleLimit = 20'000'000;
+// CoreMark at 100 iterations runs about 40.7M cycles. This cap turns a hang
+// into a failure rather than a CI timeout, and sits above a healthy run while
+// staying below the runtime watchdog in cpptb.toml so this check reports first
+// and says something more specific than "watchdog expired".
+constexpr uint64_t kCycleLimit = 80'000'000;
 
 // ibex_pkg::PRIV_LVL_M
 constexpr uint32_t kPrivLevelMachine = 3;

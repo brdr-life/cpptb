@@ -8,11 +8,15 @@ Reproduce with `python3 compare.py --runs 5`.
 
 ## The workload
 
-CoreMark, 10 iterations, about 4.14 million cycles and 2.75 million retired
-instructions per run. It validates its own result, so a run that computed the
-wrong answer is detectable rather than merely fast. Every run on both sides is
-checked for that evidence, and a mismatch invalidates the comparison instead of
-being reported as a speedup.
+CoreMark, 100 iterations, about 40.7 million cycles per run and roughly 46
+seconds of upstream simulation. It validates its own result, so a run that
+computed the wrong answer is detectable rather than merely fast. Every run on
+both sides is checked for that evidence, and a mismatch invalidates the
+comparison instead of being reported as a speedup.
+
+The iteration count is a compile-time constant. The upstream default of 10
+finishes in about 4.5 seconds, which is too short to measure against process
+startup and host noise, so the committed firmware is built at 100.
 
 ## Result
 
@@ -21,16 +25,21 @@ semantic check.
 
 | | median wall | cycles | CoreMark |
 | --- | ---: | ---: | --- |
-| upstream harness | `4571 ms` | 4136197 | validated, `1.230458` |
-| cpptb port | `5250 ms` | 4136198 | validated, `1.230458` |
+| upstream harness | `45751 ms` | 40711813 | validated, `1.230382` |
+| cpptb port | `52148 ms` | 40711814 | validated, `1.230382` |
 
-**`1.148x`**, cpptb over upstream. Both produce `Total ticks: 4063528`,
-10 iterations, and the same score. The one-cycle difference in the reported
-cycle count is where each side starts counting, not a difference in the run.
+**`1.140x`**, cpptb over upstream. Both produce `Total ticks: 40637770`, 100
+iterations, and the same score. The one-cycle difference in the reported cycle
+count is where each side starts counting, not a difference in the run.
 
-This is one host and one workload. It is a real measurement of a real workload,
-not a claim about the framework in general, and it has not been repeated on
-other hardware.
+The same comparison at 10 iterations, a tenth of the work, measured `1.148x`
+(`4571 ms` against `5250 ms`). That the ratio barely moves across a tenfold
+change in workload says the difference is per-cycle cost rather than a fixed
+overhead paid at startup, which a short workload alone could not distinguish.
+
+Individual runs spread by about 13% on this host, so the medians are worth more
+than any single run. This is one host and one workload: a real measurement, not
+a claim about the framework in general, and not repeated on other hardware.
 
 ## What the number does and does not include
 

@@ -41,7 +41,7 @@ TRACER_OFF = "+ibex_tracer_enable=0"
 
 # What CoreMark says about its own run. Comparing these stops a wrong-but-fast
 # result from looking like a win.
-EXPECTED = {"ticks": 4063528, "iterations": 10, "score": "1.230458"}
+EXPECTED = {"ticks": 40637770, "iterations": 100, "score": "1.230382"}
 
 
 def parse_log(log: Path) -> dict:
