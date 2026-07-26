@@ -54,6 +54,31 @@ paths = [
   "riscv-test-suite/env",
 ]
 
+[spike_cosim]
+repo = "https://github.com/lowRISC/riscv-isa-sim.git"
+# Tip of the ibex_cosim branch, 2026-07-26
+commit = "aadf648d742de54f0a50eec01ceffd13ed12a1d1"
+license = "BSD-3-Clause"
+purpose = """
+Spike, on lowRISC's ibex_cosim branch, used as the reference model for
+instruction-by-instruction co-simulation.
+
+The riscv_arch_tests port establishes that two harnesses drive Ibex
+identically. It does not establish that Ibex is correct, because nothing in it
+knows what the right answer is. This does: Spike runs in lockstep and every
+retired instruction and every data memory access is compared.
+
+Upstream's own flow is dv/verilator/simple_system_cosim in the Ibex checkout.
+It needs the ibex_cosim branch rather than upstream Spike because that branch
+adds the cosim API those files call.
+
+Must be configured with --enable-commitlog (the checker reads the commit log to
+learn what Spike did) and --enable-misaligned (Ibex handles misaligned accesses
+in hardware, so the reference has to as well, or every misaligned access is a
+mismatch). build_spike.py does that and installs into deps/spike_cosim/install,
+not a system prefix.
+"""
+
 [riscv_gcc15]
 kind = "archive"
 strip_components = 1

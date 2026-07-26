@@ -2,86 +2,101 @@
 
 The second port, and a deliberately different measurement from the first.
 `ports/ibex_simple_system` runs one 40.7-million-cycle program and reports
-steady-state throughput. This runs 98 programs of about 190,000 cycles each,
-where what dominates is the cost of a run rather than the cost of a cycle.
+steady-state throughput. This runs many programs of a few hundred thousand
+cycles each, where what dominates is the cost of a run rather than of a cycle.
+
+It runs in three configurations against two Ibex builds, and one of them
+answers a different question entirely: with Spike bound in as a reference
+model, per-instruction correctness rather than agreement between harnesses.
 
 Both sides drive the same Ibex RTL at the same pinned commit, from the same
 test binaries, under the same Verilator 5.050. What differs is the framework.
 
-Reproduce with `python3 build_tests.py && python3 run_suite.py`.
+Reproduce with `python3 build_tests.py && python3 run_suite.py`; see
+[README.md](README.md) for the other two configurations.
 
 ## The workload
 
-96 architectural tests from riscv-non-isa/riscv-arch-test, plus two baseline
+Architectural tests from riscv-non-isa/riscv-arch-test, plus two baseline
 programs described below. Each test is generated assembly that exercises one
 instruction across hundreds of operand cases and writes every result to a
 signature region in memory.
 
-Which of the suite's 641 rv32i tests apply is decided by each test's own
-`REQUIRED_EXTENSIONS` header against what the Ibex small configuration
-implements, so the selection is derived rather than maintained by hand.
-`build_tests.py --list` prints the 545 that do not apply and why.
+Which tests apply is decided by each test's own `REQUIRED_EXTENSIONS` header
+and `params` block against what the configuration implements, so the selection
+is derived rather than maintained by hand: 98 for `small`, 193 for `bmfull`.
+`build_tests.py --list` prints those that do not apply and why.
+
+`bmfull` roughly doubles the set. `RV32BFull` brings in Zba, Zbb, Zbc and Zbs;
+`RV32ZcaZcbZcmp` brings in Zcb; `PMPEnable` with 16 regions brings in
+`tests/priv/pmp`, which is most of the increase. It is also a materially
+different core -- PMP checkers, a writeback stage, a branch-target ALU, a
+single-cycle multiplier -- elaborated from identical RTL, so it exercises
+cpptb's code generation rather than only running more programs.
 
 ## Result
 
-| | tests | upstream | cpptb | |
-| --- | ---: | ---: | ---: | --- |
-| I | 39 | `8627 ms` | `9244 ms` | `1.071x` |
-| Zca | 26 | `5649 ms` | `5977 ms` | `1.058x` |
-| M | 8 | `1808 ms` | `2017 ms` | `1.115x` |
-| Misalign | 5 | `1030 ms` | `1128 ms` | `1.096x` |
-| MisalignZca | 4 | `858 ms` | `885 ms` | `1.031x` |
-| Zihintntl | 4 | `871 ms` | `944 ms` | `1.083x` |
-| ZihintntlZca | 4 | `848 ms` | `924 ms` | `1.090x` |
-| Zmmul | 4 | `918 ms` | `988 ms` | `1.076x` |
-| Zifencei | 1 | `217 ms` | `212 ms` | `0.974x` |
-| Zihintpause | 1 | `222 ms` | `220 ms` | `0.990x` |
-| **total** | **98** | **`21088 ms`** | **`22552 ms`** | **`1.069x`** |
+Three configurations, each a run of the whole applicable suite.
 
-98 of 98 passed. Passing means more than not crashing: the two harnesses
-produced byte-identical signature digests over identical word counts, and
-cpptb's independent read of the same memory through the backdoor agreed with
-what the program itself computed. A disagreement invalidates the comparison
-rather than being reported as a difference in speed.
+| | Ibex config | tests | passed | cpptb / upstream |
+| --- | --- | ---: | ---: | ---: |
+| `small` | `small` | 98 | 98 | `1.086x` |
+| `bmfull` | `maxperf-pmp-bmfull` | 193 | 177 | `0.997x` |
+| `cosim` | `small` + Spike | 98 | 98 | reference model, not a comparison |
+
+**No test in any configuration had the two harnesses disagree.** That is the
+result the port is judged on, and it is separate from whether a test passed:
+passing means both harnesses produced byte-identical signature digests over
+identical word counts, and cpptb's independent read of the same memory through
+the backdoor agreed with what the program itself computed.
+
+The 16 that did not pass are all PMP tests, and both harnesses say the same
+thing about every one of them: 12 never complete, 3 take an early trap, 1
+reports a failure. That is a statement about the core or about the tests, not
+about the port, and `run_suite.py` reports the two categories separately so a
+port that faithfully reproduces a core's behaviour cannot be made to look
+broken by it. Whether Ibex or the tests are at fault is not established here.
 
 ## Where the time goes
 
-`1.069x` here against `1.140x` for CoreMark is the interesting part, because a
-framework with more per-run overhead would look *worse* on short programs, not
-better. Two baseline programs in the suite measure that directly instead of
-inferring it.
+`1.086x` on the small core and `0.997x` on the larger one is the interesting
+part, and the direction is not obvious: cpptb reaches parity on the design that
+is *more* expensive to simulate. Repeat runs of the whole suite move the total
+by one or two percent -- `1.100x` and `1.086x` on two runs of `small` -- so the
+third digit is not meaningful and the gap between the two configurations is.
 
-`null` halts immediately, so its wall time is what a run costs before any
-simulation happens. `null-loaded` is the same program padded to the size of a
-real test image, so the difference between them is the cost of getting the
-program into memory. Medians of seven runs:
+Two baseline programs in the suite separate the fixed cost of a run from the
+cost of simulating. `null` halts immediately; `null-loaded` is the same program
+padded to the size of a real test image. Medians of fifteen runs, because at
+this scale individual runs vary by a factor of two:
 
 | | upstream | cpptb | |
 | --- | ---: | ---: | --- |
-| process start, model construction, reset | `14.9 ms` | `10.9 ms` | `0.73x` |
-| loading a 165kB image | `7.9 ms` | `5.8 ms` | `0.73x` |
-| simulating a typical test | `195.2 ms` | `221.2 ms` | **`1.133x`** |
+| `small`, start a run | `15.3 ms` | `10.9 ms` | `0.71x` |
+| `bmfull`, start a run | `16.1 ms` | `11.5 ms` | `0.71x` |
+| `small`, simulate a test | `198.0 ms` | `218.2 ms` | **`1.102x`** |
+| `bmfull`, simulate a test | `360.9 ms` | `370.7 ms` | **`1.027x`** |
 
-cpptb starts a run about 27% faster and loads a program about 27% faster. It
-simulates about 13% slower. The suite total is the sum of those working against
-each other, which is why it lands below the CoreMark ratio.
+cpptb starts a run about 29% faster, consistently, on both cores. It simulates
+between 3% and 12% slower depending on the design. The suite total is those two
+working against each other: on `bmfull` a test takes nearly twice as long to
+simulate, so the fixed-cost advantage covers more of a smaller relative penalty
+and the totals meet.
 
-The load result is worth stating plainly because it is the opposite of what the
-CoreMark port assumed. There, cpptb loading a VMEM at elaboration was recorded
-as a difference that "favours neither". Measured, writing 41,000 words through
-the memory backdoor is faster than parsing an ELF through libelf and pushing it
-across the `simutil_memload` DPI export.
+The per-cycle penalty falling from `1.102x` to `1.027x` on a bigger core is
+what one would expect if cpptb's overhead is roughly constant per cycle rather
+than proportional to the work: as each cycle costs more to evaluate, the same
+overhead is a smaller share of it. Two designs is not enough to call that a
+trend, but it is consistent with the CoreMark port's `1.140x`, which was
+measured on the small core over 40.7 million cycles of a completely different
+workload.
 
-The simulation figure is the cross-check. `1.133x` on 190,000 cycles of
-hand-written assembly and `1.140x` on 40.7 million cycles of compiled C are two
-independent measurements of the same per-cycle cost, on workloads that share
-nothing but the core. That agreement is stronger evidence for "cpptb costs about
-13% per cycle on this design" than either number alone, and it retires the
-possibility that the CoreMark figure was a startup artifact.
-
-Individual runs vary by a few percent on this host and the per-group ratios
-above range from `0.97x` to `1.12x` on samples as small as one test, so the
-total and the baselines carry the weight. One host, one design.
+**A correction.** An earlier version of this file reported that cpptb loaded a
+165kB image about 27% faster than upstream's libelf path, from a single pair of
+measurements. With fifteen samples the difference between the `null` and
+`null-loaded` baselines is 3-8 ms against a run-to-run spread of about 8 ms, so
+it is not resolvable at this timing precision and that claim was not supported.
+The fixed-cost figure above is, being four independent measurements that agree.
 
 ## Ergonomics
 
@@ -114,25 +129,37 @@ which bakes the path into the build; doing that here would mean 98 elaborations
 of a design that takes 56 seconds to elaborate. Loading at run time is not a
 workaround for that, it is the thing the backdoor is for.
 
-## What this establishes, and what it does not
+## Co-simulation
 
-Agreement between the harnesses means they drove the RTL identically: same
-reset, same memory image, same clocking, same run length. Any divergence in the
-port would move the digest.
+Agreement between two harnesses means they drove the RTL identically: same
+reset, same memory image, same clocking, same run length. It does not mean the
+core is right, because neither side knows what right is.
 
-It does not mean Ibex is architecturally correct. That question needs a
-reference model, and the suite's normal flow answers it by running each test on
-Sail to capture a golden signature and rebuilding the test with that signature
-linked in to self-check. This port deliberately does not do that: it compares
-two harnesses driving one design, and adding Sail would answer a question Ibex's
-own CI already answers.
+The `cosim` configuration does. It binds in Ibex's own co-simulation checker
+from `dv/verilator/simple_system_cosim`, unmodified, so Spike runs in lockstep
+and every retired instruction and every data memory access is compared against
+it. A single test checks about 316,000 instructions this way.
+
+**98 of 98 passed**, at `614 ms` median against `234 ms` for the same tests
+without the reference model -- about 2.6x for checking every instruction, which
+is the price of the strongest check available here.
+
+Two caveats worth stating plainly. The binaries are not identical to the
+`small` ones: they are built with `U_SUPPORTED` off to work around a gap in
+Spike, described below, which skips some boot-time CSR setup and nothing a test
+exercises. And this establishes correctness for the instructions these tests
+execute, which is a large but finite set; it is not a proof.
+
+What upstream's own cosim flow does instead is run CoreMark, so this is a
+considerably wider net than Ibex's Verilator co-simulation has been cast over
+before -- which is how it turned up the `menvcfgh` disagreement below.
 
 ## What this exercise found
 
 Nothing in cpptb this time. The four framework defects the CoreMark port
-uncovered stayed fixed, and the design elaborated and ran unchanged.
+uncovered stayed fixed, and both designs elaborated and ran unchanged.
 
-Three things in the port itself, all of which cost real debugging time:
+Three things in the first configuration, all of which cost real debugging time:
 
 1. **The discovery pass runs the testbench.** `cpptb build` compiles the
    testbench a second time with `-DCPPTB_HIERARCHY_DISCOVERY` and executes it to
@@ -163,6 +190,59 @@ Three things in the port itself, all of which cost real debugging time:
    that but requires a reference model. The port sets the header's own include
    guard, `-D_SAIL_MACROS_H`, which is not a supported switch because there is
    no supported switch.
+
+## What the second configuration and the co-simulation found
+
+Adding `maxperf-pmp-bmfull` and Spike lockstep turned up five more, none of them
+in cpptb and all of them costly to diagnose.
+
+1. **A `Cosim*` is not a `SpikeCosim*`.** `SpikeCosim` inherits from two bases,
+   `simif_t` and `Cosim`, so the `Cosim` subobject does not start at the object's
+   address. `get_spike_cosim` returns `void*`, which is exactly why the compiler
+   cannot catch handing back the unadjusted pointer. Everything compiles, links
+   and runs until the first retired instruction, at which point a call to
+   `riscv_cosim_set_mip` arrives inside `mem_t::load_store` with a null buffer
+   and segfaults. Upstream writes `static_cast<Cosim *>(...)` for this reason and
+   the cast is load-bearing.
+
+2. **`bit [31:0]` crosses DPI as a pointer, not a `uint32_t`.** Declaring
+   `create_cosim`'s arguments as `uint32_t` compiles and links cleanly, then
+   passes the low half of a pointer as the value. It surfaces from inside Spike
+   as `error: bad number of pmp regions: '1373685940' from the dtb`. `bit` alone
+   really is a scalar, so the two kinds sit side by side in the same signature.
+
+3. **Spike has no `menvcfgh`.** `riscv/processor.cc` on the ibex_cosim branch
+   registers `CSR_MENVCFG` and has no entry for the high half, so on RV32 a write
+   traps. Ibex implements both as read-only zero, which is a legal WARL choice,
+   and accepts it. The suite's boot code writes `menvcfgh` whenever U-mode is
+   supported, so every test died in common code before reaching anything it
+   tested. The reference model is the one behind the specification here, and it
+   is worth being explicit that co-simulation found a disagreement in which the
+   DUT was right. Upstream never hits it because its cosim flow runs CoreMark,
+   whose startup does not touch `menvcfg`.
+
+4. **Slang rejects implicit parameter shorthand.** Upstream's bind file writes
+   `.SecureIbex,` for `.SecureIbex(SecureIbex)`. That is standard for ports and a
+   Verilator extension for parameter overrides, so cpptb's slang front end
+   refuses it. `cosim_bind.sv` writes them out; nothing else changes.
+
+5. **PMP tests hang on the upstream harness.** Several `tests/priv/pmp` programs
+   never terminate. The cpptb testbench stops itself at its cycle limit and says
+   which test it was; the upstream harness has no cycle limit at all and runs
+   until something outside kills it, which is why `run_suite.py` imposes its own
+   timeout. Whether the tests or the core are at fault is not established here.
+
+Two smaller ones worth recording:
+
+- **cpptb rebuilds do not track sources added through `verilator_args`.**
+  Editing `cosim_glue.cc` and rebuilding is a no-op, because only
+  `[testbench] sources` and the RTL list are hashed. `--rebuild` is the
+  workaround; the symptom is a fix that appears not to work.
+- **cpptb rejects `.svh` in the source list.** Defensible, since `.svh` is
+  conventionally an include, but upstream's fusesoc core compiles
+  `cosim_dpi.svh` directly as SystemVerilog because it holds the DPI import
+  declarations. `configure.py` copies it in as `.sv` rather than patching the
+  fetched tree.
 
 And one gap in the suite's coverage for this class of core: the six `Zicsr`
 tests pick a scratch CSR from a fixed ladder — `fflags` if F, `vxsat` if V,

@@ -1,0 +1,1680 @@
+{
+  "config": "cosim",
+  "ibex_config": "small",
+  "tests": 98,
+  "passed": 98,
+  "shared_failures": 0,
+  "timed": 98,
+  "upstream_total_ms": 0.0,
+  "cpptb_total_ms": 59045.24157816195,
+  "ratio_cpptb_over_upstream": null,
+  "suite_wall_s": 59.090294700989034,
+  "results": [
+    {
+      "name": "I-add-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 654.0949619957246,
+        "returncode": 0,
+        "sig": "3791e9f8",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "3791e9f8",
+        "cycles": 191541,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-addi-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 626.7596950056031,
+        "returncode": 0,
+        "sig": "7a8cb811",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": "7a8cb811",
+        "cycles": 189822,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-and-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 611.899651994463,
+        "returncode": 0,
+        "sig": "9087b9dc",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "9087b9dc",
+        "cycles": 191549,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-andi-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 665.0994739902671,
+        "returncode": 0,
+        "sig": "8dd5a755",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": "8dd5a755",
+        "cycles": 189814,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-auipc-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 588.7909270240925,
+        "returncode": 0,
+        "sig": "89bd2a2e",
+        "words": "00003ae4",
+        "result": "PASS",
+        "backdoor": "89bd2a2e",
+        "cycles": 182855,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-beq-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 630.1253270066809,
+        "returncode": 0,
+        "sig": "8dfc4045",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": "8dfc4045",
+        "cycles": 191895,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-bge-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 645.5612700083293,
+        "returncode": 0,
+        "sig": "fc92a97f",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": "fc92a97f",
+        "cycles": 192267,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-bgeu-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 639.8286779876798,
+        "returncode": 0,
+        "sig": "3638776b",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": "3638776b",
+        "cycles": 192276,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-blt-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 635.236406000331,
+        "returncode": 0,
+        "sig": "017afa08",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": "017afa08",
+        "cycles": 192183,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-bltu-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 643.6553090170491,
+        "returncode": 0,
+        "sig": "9d7e6120",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": "9d7e6120",
+        "cycles": 192194,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-bne-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 603.0330799985677,
+        "returncode": 0,
+        "sig": "20b21559",
+        "words": "00003c44",
+        "result": "PASS",
+        "backdoor": "20b21559",
+        "cycles": 192551,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-fence-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 570.0320820033085,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181719,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-jal-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 636.8662180029787,
+        "returncode": 0,
+        "sig": "53b7d085",
+        "words": "00003b18",
+        "result": "PASS",
+        "backdoor": "53b7d085",
+        "cycles": 199492,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-jalr-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 637.521646975074,
+        "returncode": 0,
+        "sig": "db62c4b4",
+        "words": "00003b98",
+        "result": "PASS",
+        "backdoor": "db62c4b4",
+        "cycles": 188511,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-lb-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 622.8232840076089,
+        "returncode": 0,
+        "sig": "55b673b4",
+        "words": "00003b28",
+        "result": "PASS",
+        "backdoor": "55b673b4",
+        "cycles": 184651,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-lbu-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 618.0406229977962,
+        "returncode": 0,
+        "sig": "d3bcbbdf",
+        "words": "00003b28",
+        "result": "PASS",
+        "backdoor": "d3bcbbdf",
+        "cycles": 184660,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-lh-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 584.1927950095851,
+        "returncode": 0,
+        "sig": "7f7d66b9",
+        "words": "00003b24",
+        "result": "PASS",
+        "backdoor": "7f7d66b9",
+        "cycles": 184491,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-lhu-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 598.3358590165153,
+        "returncode": 0,
+        "sig": "5d8319a8",
+        "words": "00003b24",
+        "result": "PASS",
+        "backdoor": "5d8319a8",
+        "cycles": 184500,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-lui-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 609.2497200006619,
+        "returncode": 0,
+        "sig": "67457331",
+        "words": "00003ae4",
+        "result": "PASS",
+        "backdoor": "67457331",
+        "cycles": 182829,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-lw-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 608.4380109969061,
+        "returncode": 0,
+        "sig": "a12407b7",
+        "words": "00003b20",
+        "result": "PASS",
+        "backdoor": "a12407b7",
+        "cycles": 184387,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-nop-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 599.1168589971494,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181685,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-or-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 638.4636180009693,
+        "returncode": 0,
+        "sig": "90ce6b0b",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "90ce6b0b",
+        "cycles": 191532,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-ori-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 614.9694119812921,
+        "returncode": 0,
+        "sig": "df9cd657",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": "df9cd657",
+        "cycles": 189805,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-sb-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 601.6911699844059,
+        "returncode": 0,
+        "sig": "f612bbb3",
+        "words": "00003b90",
+        "result": "PASS",
+        "backdoor": "f612bbb3",
+        "cycles": 186001,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-sh-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 580.6967740063556,
+        "returncode": 0,
+        "sig": "8a2b9cea",
+        "words": "00003b7c",
+        "result": "PASS",
+        "backdoor": "8a2b9cea",
+        "cycles": 185709,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-sll-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 600.7500990235712,
+        "returncode": 0,
+        "sig": "d30dab5d",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "d30dab5d",
+        "cycles": 191541,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-slli-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 644.0715800272301,
+        "returncode": 0,
+        "sig": "576bea20",
+        "words": "00003b70",
+        "result": "PASS",
+        "backdoor": "576bea20",
+        "cycles": 186118,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-slt-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 696.6922309948131,
+        "returncode": 0,
+        "sig": "7a89227f",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "7a89227f",
+        "cycles": 191541,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-slti-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 643.649187986739,
+        "returncode": 0,
+        "sig": "f5816790",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": "f5816790",
+        "cycles": 189814,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-sltiu-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 606.0097209992819,
+        "returncode": 0,
+        "sig": "e070f948",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": "e070f948",
+        "cycles": 189823,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-sltu-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 620.2975029882509,
+        "returncode": 0,
+        "sig": "736379e1",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "736379e1",
+        "cycles": 191558,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-sra-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 597.183688019868,
+        "returncode": 0,
+        "sig": "34de8f37",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "34de8f37",
+        "cycles": 191541,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-srai-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 590.0790269952267,
+        "returncode": 0,
+        "sig": "f3c947b3",
+        "words": "00003b70",
+        "result": "PASS",
+        "backdoor": "f3c947b3",
+        "cycles": 186126,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-srl-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 602.7767389896326,
+        "returncode": 0,
+        "sig": "3e5bf187",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "3e5bf187",
+        "cycles": 191541,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-srli-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 627.2554550087079,
+        "returncode": 0,
+        "sig": "65b785b7",
+        "words": "00003b70",
+        "result": "PASS",
+        "backdoor": "65b785b7",
+        "cycles": 186126,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-sub-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 606.5641910245176,
+        "returncode": 0,
+        "sig": "60e9c96b",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "60e9c96b",
+        "cycles": 191541,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-sw-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 591.7724859900773,
+        "returncode": 0,
+        "sig": "36455863",
+        "words": "00003b70",
+        "result": "PASS",
+        "backdoor": "36455863",
+        "cycles": 185543,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-xor-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 645.790948998183,
+        "returncode": 0,
+        "sig": "832e07bf",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "832e07bf",
+        "cycles": 191541,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "I-xori-00",
+      "group": "I",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 621.1531830194872,
+        "returncode": 0,
+        "sig": "35e0bd90",
+        "words": "00003c18",
+        "result": "PASS",
+        "backdoor": "35e0bd90",
+        "cycles": 189822,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "M-div-00",
+      "group": "M",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 624.1868739889469,
+        "returncode": 0,
+        "sig": "a2c39a15",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "a2c39a15",
+        "cycles": 204996,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "M-divu-00",
+      "group": "M",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 633.8740859937388,
+        "returncode": 0,
+        "sig": "243e5776",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "243e5776",
+        "cycles": 204962,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "M-mul-00",
+      "group": "M",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 601.7191490100231,
+        "returncode": 0,
+        "sig": "46a0b2e6",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "46a0b2e6",
+        "cycles": 192333,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "M-mulh-00",
+      "group": "M",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 622.3899440083187,
+        "returncode": 0,
+        "sig": "4e146605",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "4e146605",
+        "cycles": 192734,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "M-mulhsu-00",
+      "group": "M",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 617.1507319959346,
+        "returncode": 0,
+        "sig": "00d8e86b",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "00d8e86b",
+        "cycles": 192752,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "M-mulhu-00",
+      "group": "M",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 607.4763409851585,
+        "returncode": 0,
+        "sig": "811137f4",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "811137f4",
+        "cycles": 192743,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "M-rem-00",
+      "group": "M",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 651.8022709933575,
+        "returncode": 0,
+        "sig": "21caeb21",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "21caeb21",
+        "cycles": 205058,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "M-remu-00",
+      "group": "M",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 612.4776120122988,
+        "returncode": 0,
+        "sig": "d20e100f",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "d20e100f",
+        "cycles": 204989,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Misalign-lh-00",
+      "group": "Misalign",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 596.1832980101462,
+        "returncode": 0,
+        "sig": "e3b6245d",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": "e3b6245d",
+        "cycles": 182022,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Misalign-lhu-00",
+      "group": "Misalign",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 623.8539740152191,
+        "returncode": 0,
+        "sig": "be088da9",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": "be088da9",
+        "cycles": 182031,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Misalign-lw-00",
+      "group": "Misalign",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 602.4955490138382,
+        "returncode": 0,
+        "sig": "a43dab54",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": "a43dab54",
+        "cycles": 182026,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Misalign-sh-00",
+      "group": "Misalign",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 609.7050310054328,
+        "returncode": 0,
+        "sig": "42fac6ff",
+        "words": "00003acc",
+        "result": "PASS",
+        "backdoor": "42fac6ff",
+        "cycles": 182803,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Misalign-sw-00",
+      "group": "Misalign",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 564.6816299995407,
+        "returncode": 0,
+        "sig": "c8719ca3",
+        "words": "00003acc",
+        "result": "PASS",
+        "backdoor": "c8719ca3",
+        "cycles": 182807,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "MisalignZca-c.lw-00",
+      "group": "MisalignZca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 589.6823560178746,
+        "returncode": 0,
+        "sig": "a43dab54",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": "a43dab54",
+        "cycles": 182076,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "MisalignZca-c.lwsp-00",
+      "group": "MisalignZca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 565.011360013159,
+        "returncode": 0,
+        "sig": "a43dab54",
+        "words": "00003ab0",
+        "result": "PASS",
+        "backdoor": "a43dab54",
+        "cycles": 182106,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "MisalignZca-c.sw-00",
+      "group": "MisalignZca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 567.6191609818488,
+        "returncode": 0,
+        "sig": "c8719ca3",
+        "words": "00003acc",
+        "result": "PASS",
+        "backdoor": "c8719ca3",
+        "cycles": 182870,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "MisalignZca-c.swsp-00",
+      "group": "MisalignZca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 588.8221249915659,
+        "returncode": 0,
+        "sig": "c8719ca3",
+        "words": "00003acc",
+        "result": "PASS",
+        "backdoor": "c8719ca3",
+        "cycles": 183035,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.add-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 618.9787320035975,
+        "returncode": 0,
+        "sig": "10b81baa",
+        "words": "00003bcc",
+        "result": "PASS",
+        "backdoor": "10b81baa",
+        "cycles": 189201,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.addi-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 587.6833849761169,
+        "returncode": 0,
+        "sig": "b33dfecb",
+        "words": "00003b84",
+        "result": "PASS",
+        "backdoor": "b33dfecb",
+        "cycles": 186666,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.addi16sp-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 580.9102540079039,
+        "returncode": 0,
+        "sig": "0f5e71b1",
+        "words": "00003ae8",
+        "result": "PASS",
+        "backdoor": "0f5e71b1",
+        "cycles": 183228,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.addi4spn-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 614.7267020132858,
+        "returncode": 0,
+        "sig": "0934ffeb",
+        "words": "00003bb0",
+        "result": "PASS",
+        "backdoor": "0934ffeb",
+        "cycles": 187828,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.and-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 582.3249550012406,
+        "returncode": 0,
+        "sig": "59cd01df",
+        "words": "00003b68",
+        "result": "PASS",
+        "backdoor": "59cd01df",
+        "cycles": 186617,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.andi-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 597.5059079937637,
+        "returncode": 0,
+        "sig": "828e34d4",
+        "words": "00003b58",
+        "result": "PASS",
+        "backdoor": "828e34d4",
+        "cycles": 185602,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.beqz-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 616.4993529964704,
+        "returncode": 0,
+        "sig": "3865fdf7",
+        "words": "00003abc",
+        "result": "PASS",
+        "backdoor": "3865fdf7",
+        "cycles": 182283,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.bnez-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 604.2967179964762,
+        "returncode": 0,
+        "sig": "1e29fa60",
+        "words": "00003abc",
+        "result": "PASS",
+        "backdoor": "1e29fa60",
+        "cycles": 182309,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.j-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 625.7482540095225,
+        "returncode": 0,
+        "sig": "f636996b",
+        "words": "00003ad0",
+        "result": "PASS",
+        "backdoor": "f636996b",
+        "cycles": 185886,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.jal-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 645.5937690043356,
+        "returncode": 0,
+        "sig": "6e5dc652",
+        "words": "00003ad0",
+        "result": "PASS",
+        "backdoor": "6e5dc652",
+        "cycles": 185904,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.jalr-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 605.8389200188685,
+        "returncode": 0,
+        "sig": "cb26f665",
+        "words": "00003af0",
+        "result": "PASS",
+        "backdoor": "cb26f665",
+        "cycles": 183694,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.jr-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 670.2393240120728,
+        "returncode": 0,
+        "sig": "b11c8956",
+        "words": "00003ad0",
+        "result": "PASS",
+        "backdoor": "b11c8956",
+        "cycles": 183251,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.li-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 613.1761519936845,
+        "returncode": 0,
+        "sig": "16edc3b0",
+        "words": "00003b14",
+        "result": "PASS",
+        "backdoor": "16edc3b0",
+        "cycles": 184174,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.lui-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 601.3265580113512,
+        "returncode": 0,
+        "sig": "1dd4096e",
+        "words": "00003b10",
+        "result": "PASS",
+        "backdoor": "1dd4096e",
+        "cycles": 184112,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.lw-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 612.9366099776234,
+        "returncode": 0,
+        "sig": "33b1e630",
+        "words": "00003ae0",
+        "result": "PASS",
+        "backdoor": "33b1e630",
+        "cycles": 182971,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.lwsp-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 635.9424769761972,
+        "returncode": 0,
+        "sig": "2a419580",
+        "words": "00003b08",
+        "result": "PASS",
+        "backdoor": "2a419580",
+        "cycles": 183997,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.mv-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 649.3391090189107,
+        "returncode": 0,
+        "sig": "56892db1",
+        "words": "00003b30",
+        "result": "PASS",
+        "backdoor": "56892db1",
+        "cycles": 185217,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.nop-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 607.831500004977,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181785,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.or-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 619.1443620191421,
+        "returncode": 0,
+        "sig": "12e500dd",
+        "words": "00003b68",
+        "result": "PASS",
+        "backdoor": "12e500dd",
+        "cycles": 186608,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.slli-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 622.4253030086402,
+        "returncode": 0,
+        "sig": "88184bf5",
+        "words": "00003b78",
+        "result": "PASS",
+        "backdoor": "88184bf5",
+        "cycles": 186480,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.srai-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 620.1648929854855,
+        "returncode": 0,
+        "sig": "c0fdfe43",
+        "words": "00003b60",
+        "result": "PASS",
+        "backdoor": "c0fdfe43",
+        "cycles": 185768,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.srli-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 639.0170569939073,
+        "returncode": 0,
+        "sig": "19a284f8",
+        "words": "00003b60",
+        "result": "PASS",
+        "backdoor": "19a284f8",
+        "cycles": 185768,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.sub-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 616.0443120170385,
+        "returncode": 0,
+        "sig": "f823c5ae",
+        "words": "00003b68",
+        "result": "PASS",
+        "backdoor": "f823c5ae",
+        "cycles": 186617,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.sw-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 596.9779879960697,
+        "returncode": 0,
+        "sig": "7f744dc9",
+        "words": "00003b20",
+        "result": "PASS",
+        "backdoor": "7f744dc9",
+        "cycles": 184059,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.swsp-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 626.4117939863354,
+        "returncode": 0,
+        "sig": "d5186523",
+        "words": "00003b80",
+        "result": "PASS",
+        "backdoor": "d5186523",
+        "cycles": 185741,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zca-c.xor-00",
+      "group": "Zca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 627.0536440133583,
+        "returncode": 0,
+        "sig": "5582acc4",
+        "words": "00003b68",
+        "result": "PASS",
+        "backdoor": "5582acc4",
+        "cycles": 186617,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zifencei-fence.i-00",
+      "group": "Zifencei",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 604.970438987948,
+        "returncode": 0,
+        "sig": "43f00be3",
+        "words": "00003aac",
+        "result": "PASS",
+        "backdoor": "43f00be3",
+        "cycles": 181948,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zihintntl-ntl.all-00",
+      "group": "Zihintntl",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 603.0946490063798,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181793,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zihintntl-ntl.p1-00",
+      "group": "Zihintntl",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 588.8461959839333,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181784,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zihintntl-ntl.pall-00",
+      "group": "Zihintntl",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 626.0767540079542,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181802,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zihintntl-ntl.s1-00",
+      "group": "Zihintntl",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 592.4258560116868,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181784,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "ZihintntlZca-c.ntl.all-00",
+      "group": "ZihintntlZca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 632.7184050169308,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181841,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "ZihintntlZca-c.ntl.p1-00",
+      "group": "ZihintntlZca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 605.1379890122917,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181832,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "ZihintntlZca-c.ntl.pall-00",
+      "group": "ZihintntlZca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 576.356243022019,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181850,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "ZihintntlZca-c.ntl.s1-00",
+      "group": "ZihintntlZca",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 565.0412700197194,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181832,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zihintpause-pause-00",
+      "group": "Zihintpause",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 615.3869509871583,
+        "returncode": 0,
+        "sig": "cfec07b3",
+        "words": "00003aa8",
+        "result": "PASS",
+        "backdoor": "cfec07b3",
+        "cycles": 181793,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zmmul-mul-00",
+      "group": "Zmmul",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 619.169123005122,
+        "returncode": 0,
+        "sig": "46a0b2e6",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "46a0b2e6",
+        "cycles": 192369,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zmmul-mulh-00",
+      "group": "Zmmul",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 611.5557999874,
+        "returncode": 0,
+        "sig": "4e146605",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "4e146605",
+        "cycles": 192770,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zmmul-mulhsu-00",
+      "group": "Zmmul",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 639.0004470013082,
+        "returncode": 0,
+        "sig": "00d8e86b",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "00d8e86b",
+        "cycles": 192788,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "Zmmul-mulhu-00",
+      "group": "Zmmul",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 656.1007099808194,
+        "returncode": 0,
+        "sig": "811137f4",
+        "words": "00003c30",
+        "result": "PASS",
+        "backdoor": "811137f4",
+        "cycles": 192779,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "null",
+      "group": "baseline",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 22.848575987154618,
+        "returncode": 0,
+        "sig": "811c9dc5",
+        "words": "00000000",
+        "result": "PASS",
+        "backdoor": "811c9dc5",
+        "cycles": 494,
+        "mismatch": null
+      }
+    },
+    {
+      "name": "null-loaded",
+      "group": "baseline",
+      "problems": [],
+      "shared": [],
+      "cpptb": {
+        "mode": "cpptb",
+        "wall_ms": 10.673751996364444,
+        "returncode": 0,
+        "sig": "811c9dc5",
+        "words": "00000000",
+        "result": "PASS",
+        "backdoor": "811c9dc5",
+        "cycles": 494,
+        "mismatch": null
+      }
+    }
+  ]
+}

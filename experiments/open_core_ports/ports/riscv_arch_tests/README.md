@@ -7,6 +7,29 @@ Verilator harness.
 See [RESULTS.md](RESULTS.md) for the measurement. This file is about how the
 port is put together.
 
+## Three configurations
+
+The same suite, the same testbench and the same tooling, run three ways. Which
+tests apply and what counts as passing both follow from the configuration.
+
+| | Ibex config | tests | reference |
+| --- | --- | ---: | --- |
+| `small` | `small` | 98 | the upstream harness |
+| `bmfull` | `maxperf-pmp-bmfull` | 193 | the upstream harness |
+| `cosim` | `small` + Spike | 98 | Spike, per instruction |
+
+`bmfull` roughly doubles the applicable set: `RV32BFull` brings in Zba, Zbb, Zbc
+and Zbs, `RV32ZcaZcbZcmp` brings in Zcb, and `PMPEnable` with 16 regions brings
+in `tests/priv/pmp`. It is also a materially different core — PMP checkers, a
+writeback stage, a branch-target ALU — elaborated from identical RTL, so it
+exercises cpptb's code generation rather than only running more programs.
+
+`cosim` answers a different question. In the other two, both harnesses drive the
+same RTL and agreeing only proves they drove it the same way; neither knows what
+the right answer is. Here Ibex's own co-simulation checker is bound in, Spike
+runs in lockstep, and every retired instruction and every data memory access is
+compared against it.
+
 ## Running it
 
 ```sh
@@ -16,8 +39,32 @@ uv run cpptb build --project experiments/open_core_ports/ports/riscv_arch_tests
 python3 run_suite.py                                 # ~44s, both harnesses
 ```
 
-`run_suite.py` also needs the upstream harness built, which
-`../ibex_simple_system/README.md` covers.
+For `bmfull`, generate its project first — it is not committed, because it
+differs from `cpptb.toml` in a dozen lines out of 240 and the rest is a list of
+141 sources that would drift if copied:
+
+```sh
+python3 configure.py --config bmfull
+uv run cpptb build --project experiments/open_core_ports/ports/riscv_arch_tests_bmfull
+python3 build_tests.py --config bmfull
+python3 run_suite.py  --config bmfull
+```
+
+For `cosim`, build Spike first. It installs under `deps/`, not `/opt`:
+
+```sh
+python3 ../../fetch.py spike_cosim
+python3 ../../local_deps.py        # only where `sudo apt install` is unavailable
+python3 ../../build_spike.py       # a few minutes
+python3 configure.py --config cosim
+uv run cpptb build --project experiments/open_core_ports/ports/riscv_arch_tests_cosim
+python3 build_tests.py --config cosim
+python3 run_suite.py  --config cosim
+```
+
+`run_suite.py` also needs the upstream harness built for the configuration it is
+comparing against, which `../ibex_simple_system/README.md` covers; `bmfull`
+needs a second fusesoc build with the matching parameters.
 
 Everything here is self-contained: nothing outside this directory is modified,
 `deps/` and `build/` are gitignored and reproducible, and this port is not part
