@@ -156,7 +156,7 @@ Ordered by cost, not by value.
 | --- | --- | --- | --- |
 | ~~A~~ | ~~Three more co-sim programs~~ | done | flow 3's workload |
 | ~~B~~ | ~~Four more configurations~~ | done | flow 3's matrix, including `opentitan` with icache, ECC, scrambling and SecureIbex |
-| C | `tb_cs_registers` | medium | flow 4, and a different *shape* of testbench |
+| C | `tb_cs_registers` | **in progress** | flow 4, and a different *shape* of testbench |
 | D | RISC-V Compliance, `ibex_riscv_compliance` | medium | flow 2, exact CI parity |
 | E | riscv-dv under UVM, `dv/uvm/core_ibex` | large | flow 5, Ibex's real verification depth |
 | F | `dv/uvm/icache` | large | flow 6, a block-level testbench |
@@ -169,7 +169,15 @@ instruction cache with ECC and scrambling plus `SecureIbex`, which is the most
 RTL any of these elaborates, and the only configuration on which the two
 security tests run at all.
 
-**C is now the most interesting for the framework.** Every port so far is "load a
+**C is started and not finished**, in
+[`ports/ibex_cs_registers`](ports/ibex_cs_registers/README.md). It builds, runs
+and drives 1,119 transactions against upstream's model before a mismatch that
+is probably a divergence between that model and Ibex's RTL over PMP lock bits
+and `mseccfg` -- but that is not established, because upstream's own testbench
+has not been built as a control. Three testbench bugs and one cpptb finding on
+the way there are written up in its README.
+
+**It is the most interesting of these for the framework.** Every port so far is "load a
 program, run it, check the result". `tb_cs_registers` drives transactions
 against a submodule and scores them against a C++ model -- constrained stimulus
 and transaction-level driving, an axis of cpptb none of this has touched.
