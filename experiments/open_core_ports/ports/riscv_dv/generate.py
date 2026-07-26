@@ -61,7 +61,7 @@ TVEC_ALIGNMENT = 8
 
 
 def generate(count: int, instructions: int, seed: int, target: str,
-             out: Path) -> int:
+             out: Path, interrupts: bool = False) -> int:
     entry = RISCV_DV / "pygen/pygen_src/test/riscv_instr_base_test.py"
     if not entry.is_file():
         print(f"generate: no riscv-dv at {RISCV_DV}\n"
@@ -86,6 +86,10 @@ def generate(count: int, instructions: int, seed: int, target: str,
         "--asm_file_name", "gen",
         "--seed", str(seed),
     ]
+    if interrupts:
+        # Without this the program installs no interrupt handler, so forcing an
+        # interrupt pin traps into code that cannot service it.
+        command += ["--enable_interrupt", "1"]
 
     completed = subprocess.run(
         command, cwd=out, text=True, stdout=subprocess.PIPE,
@@ -120,9 +124,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target", default="rv32imc",
                         help="riscv-dv target; Ibex's small config is rv32imc")
     parser.add_argument("--out", type=Path, default=BUILD / "programs")
+    parser.add_argument("--interrupts", action="store_true",
+                        help="generate programs with interrupt handlers, for "
+                             "the asynchronous stimulus in the testbench")
     args = parser.parse_args(argv)
     return generate(args.count, args.instructions, args.seed, args.target,
-                    args.out)
+                    args.out, args.interrupts)
 
 
 if __name__ == "__main__":

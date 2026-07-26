@@ -160,6 +160,35 @@ bool ram_index(uint32_t address, uint32_t& index) {
 // So there are no early returns here, a missing firmware is reported and the
 // run continues, and the two data-dependent loops are preceded by one
 // unconditional access apiece.
+// Asynchronous interrupt stimulus, the part of Ibex's UVM flow a self-contained
+// program cannot provide for itself. riscv-dv's riscv_irq_* tests exist to be
+// interrupted at a point the program does not choose.
+//
+// ibex_simple_system.sv ties the interrupt pins to constants --
+// `.irq_external_i (1'b0)` and the rest -- so they are forced rather than
+// driven. Forcing an input of the elaborated core is what force is for, and it
+// needs no change to the design.
+//
+// The co-simulation stays honest through it: Ibex exports the pin state on
+// rvfi_ext_pre_mip and rvfi_ext_post_mip, and the checker already forwards
+// those to Spike with riscv_cosim_set_mip, so the reference model sees the same
+// interrupt the core did. Nothing here has to tell Spike anything.
+//
+// Off unless ACT_IRQ_PERIOD is set, so every other port keeps its behaviour.
+// Bounded, because an unbounded one never lets the program finish: it keeps
+// servicing interrupts instead of reaching its exit sequence. Firing a known
+// number and then stopping is also what makes a run reproducible.
+Task<void> interrupt_stimulus(Dut dut, uint64_t period, uint64_t hold,
+                              uint64_t count, uint64_t& fired) {
+    for (uint64_t i = 0; i < count; ++i) {
+        co_await clock_cycles(dut.IO_CLK, period);
+        dut.u_top.u_ibex_top.irq_external_i.force(1);
+        co_await clock_cycles(dut.IO_CLK, hold);
+        dut.u_top.u_ibex_top.irq_external_i.release();
+        ++fired;
+    }
+}
+
 Task<void> arch_test(Dut dut, TestContext& test) {
     const std::string name = env("ACT_NAME", "riscv-arch-test");
     // Overridable so this testbench can also run upstream's own co-simulation
@@ -233,6 +262,23 @@ Task<void> arch_test(Dut dut, TestContext& test) {
     test.expect(error.empty() ? "firmware loaded" : error.c_str(),
                 error.empty());
 
+    uint64_t interrupts_fired = 0;
+    // Spawned rather than joined: it never returns, and the run ends when the
+    // program halts.
+    const std::string irq_period = env("ACT_IRQ_PERIOD");
+    if (!irq_period.empty()) {
+        const uint64_t period = std::stoull(irq_period, nullptr, 0);
+        const std::string hold_text = env("ACT_IRQ_HOLD", "5");
+        const uint64_t count =
+            std::stoull(env("ACT_IRQ_COUNT", "20"), nullptr, 0);
+        test.spawn(interrupt_stimulus(dut, period,
+                                      std::stoull(hold_text, nullptr, 0),
+                                      count, interrupts_fired));
+        std::printf("cpptb: driving irq_external_i %llu times, every %llu "
+                    "cycles\n", static_cast<unsigned long long>(count),
+                    static_cast<unsigned long long>(period));
+    }
+
     test.expect_eq("core boots in machine mode",
                    dut.u_top.u_ibex_top.u_ibex_core.cs_registers_i
                        .priv_lvl_q.get().signal_value(),
@@ -291,6 +337,10 @@ Task<void> arch_test(Dut dut, TestContext& test) {
                 static_cast<unsigned long long>(matched));
 #endif
 
+    if (interrupts_fired > 0) {
+        std::printf("cpptb: fired %llu interrupts\n",
+                    static_cast<unsigned long long>(interrupts_fired));
+    }
     std::printf("cpptb: %s ran %llu cycles\n", name.c_str(),
                 static_cast<unsigned long long>(cycles));
 }
