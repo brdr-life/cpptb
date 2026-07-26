@@ -4,12 +4,15 @@ A port of Ibex's `dv/cs_registers` testbench: random CSR transactions driven at
 `ibex_cs_registers`, each scored against a C++ model of what the registers
 should have done.
 
-**Status: not finished.** It builds, runs, and drives 1,119 transactions before
-hitting a mismatch that is not yet explained.
+**Status: the port works. It stops at transaction 1,119 on a gap in upstream's
+reference model**, which it can demonstrate rather than assume. See
+[What the port found](#what-the-port-found).
 
-The control has been built, and it does not settle the question, for a reason
-worth knowing on its own: **upstream's `tb_cs_registers` drives zero
-transactions and reports `TEST PASSED` on Verilator 5.050.** See below.
+Two things came out of building it. The control -- upstream's own
+`tb_cs_registers` -- **drives zero transactions and reports `TEST PASSED` on
+Verilator 5.050**, so it could not have found this. And the model does not
+implement Ibex's MML write suppression, so it expects a PMP configuration write
+that the RTL correctly refuses.
 
 ## Why this one is different
 
@@ -124,27 +127,55 @@ more -- **a testbench that silently checks nothing and reports success is a
 worse failure than one that crashes**, and this port drives 1,119 real
 transactions where the original drives none.
 
-## What is left
+## What the port found
 
 The run stops at transaction 1,119 on a `CSR Set` to `PMPCfg0`:
 
     Write data: a392b5f3   Read data: 9f978f   Expected rdata: 9a9f978f
 
-The observed value is the expected one with the top byte missing -- region 3's
-config, whose lock bit is set. So the RTL is refusing to change a locked entry
-and the model is allowing it, or they disagree about what was locked when.
+The observed value is the expected one with its top byte missing -- region 3's
+configuration. The model applied that byte; the RTL refused it. The RTL is
+right, and the model is missing a rule.
 
-An earlier version of this file guessed that the model bypasses the lock when
-`mseccfg.RLB` is set while Ibex treats `mseccfg` as illegal. That is wrong:
-`ibex_cs_registers.sv` implements `mseccfg` whenever `PMPEnable` is set, which
-it is here, and the model has an `MSeccfgRegister` for it. Both sides have the
-register. Where they part company is not yet known.
+Ibex suppresses a PMP configuration write outright under one condition:
 
-This port's random stream also differs from upstream's -- upstream's driver runs
-during reset and consumes draws this one does not -- so it reaches sequences
-upstream's would not, from the same seed.
+    // When MSECCFG.MML is set cannot add new regions allowing M mode execution
+    // unless MSECCFG.RLB is set
+    assign pmp_cfg_wr_suppress[i] = pmp_mseccfg_q.mml                   &
+                                    ~pmp_mseccfg_q.rlb                  &
+                                    is_mml_m_exec_cfg(pmp_cfg_wdata[i]);
 
-So the mismatch is still open, and could equally be a fourth thing this port has
-wrong. Settling it needs either Verilator 4.210 to make the control work, or
-reading the PMP lock semantics on both sides carefully enough to decide by
-construction.
+where `is_mml_m_exec_cfg` is true when the new byte has `lock` set and
+`{read, write, exec}` is one of `001`, `010`, `011`, `101`.
+
+Every part of that condition holds here:
+
+| | |
+| --- | --- |
+| `mseccfg` reads `0x00000003` throughout the run | `MML=1`, `MMWP=1`, `RLB=0` |
+| the byte the model applied is `0x9a` | `L=1`, `R=0`, `W=1`, `X=0` |
+| so `{read, write, exec}` is `010` | in the suppressed set |
+
+`mseccfg` was checked by logging every transaction to `0x747`; it reads `3` on
+all seven of them, so MML is set and RLB is clear well before transaction 1,119.
+
+Upstream's model has no equivalent. `PmpCfgRegister::RegisterWrite` masks by
+`GetLockMask()` alone, which is `lock & !RLB`. The model *is* aware that MML
+changes the rules -- `HandleReservedVals` returns early with "No reserved
+L/R/W/X values when MML Set" -- so it knows MML relaxes which encodings are
+legal, but not that MML also *blocks* writes creating M-mode-executable regions.
+The relaxation is implemented and the restriction is not, which is why the model
+accepts precisely the byte the RTL rejects.
+
+So this is a gap in upstream's reference model, reachable from its own random
+stimulus. It is worth reporting to lowRISC.
+
+Two reasons upstream would not have seen it. Its driver runs during reset and
+consumes random draws this port does not, so the two explore different sequences
+from the same seed and it may simply never reach this case. And more decisively,
+on Verilator 5.050 its testbench drives nothing at all.
+
+The port is left stopping here rather than working around it. Adding the missing
+rule to the model would let the run reach 10,000 transactions, but the model
+would then be one this port had edited, and it is only worth anything as an
+independent reference.
