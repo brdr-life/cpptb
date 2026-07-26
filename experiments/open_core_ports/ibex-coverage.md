@@ -49,15 +49,16 @@ rather than transcribe them.
 
 ## What is ported
 
-Two ports, in `ports/`. Both drive the same design as the upstream harness they
-replace, from the same sources at the same pinned commit, under the same
+Three ports, in `ports/`. Each drives the same design as the upstream harness it
+replaces, from the same sources at the same pinned commit, under the same
 Verilator.
 
 | port | workload | configurations | reference |
 | --- | --- | --- | --- |
 | [`ibex_simple_system`](ports/ibex_simple_system/RESULTS.md) | CoreMark, 40.7M cycles | `small` | the upstream harness |
 | [`riscv_arch_tests`](ports/riscv_arch_tests/RESULTS.md) | 98 / 193 architectural tests | `small`, `maxperf-pmp-bmfull` | the upstream harness, and Spike per instruction |
-| `run_cosim_programs.py` | CoreMark, `pmp_smoke`, `dit_test`, `dummy_instr_test` | all six | Spike per instruction, on both harnesses |
+| [`riscv_arch_tests/run_cosim_programs.py`](ports/riscv_arch_tests/README.md) | CoreMark, `pmp_smoke`, `dit_test`, `dummy_instr_test` | all six | Spike per instruction, on both harnesses |
+| [`ibex_cs_registers`](ports/ibex_cs_registers/README.md) | 1,119 random CSR transactions | the `tb_cs_registers` defaults | a C++ model of the CSR block |
 
 **Flow 3 is complete.** `run_cosim_programs.py` runs the same four programs
 across the same six configurations as `.github/actions/ibex-rtl-ci-steps`, with
@@ -70,8 +71,12 @@ same feature gating: `pmp_smoke` only where `PMPEnable=1`, `dit_test` and
     13 not run because the configuration lacks the feature, which is what CI does
     16,977,869 instructions checked against Spike
 
+**Flow 4 is ported** as [`ibex_cs_registers`](ports/ibex_cs_registers/README.md),
+which is the only one here that runs no program: it drives random CSR
+transactions at a submodule and scores them against upstream's C++ model.
+
 `riscv_arch_tests` additionally runs a suite upstream does not run at all.
-Flows 1, 2, 4, 5, 6 and 7 remain.
+Flows 1, 2, 5, 6 and 7 remain.
 
 ### The rule every port follows
 
@@ -92,7 +97,7 @@ That is checked against real failures rather than assumed:
 
 ## What the exercise found
 
-Consolidated from both ports. Grouped by who owns the problem.
+Consolidated from all three ports. Grouped by who owns the problem.
 
 ### In cpptb, found by the CoreMark port and since fixed
 
@@ -116,40 +121,57 @@ Consolidated from both ports. Grouped by who owns the problem.
    `--rebuild` is the workaround.
 7. **`.svh` is rejected in the source list.** Defensible, but upstream's fusesoc
    core compiles `cosim_dpi.svh` directly because it holds DPI declarations.
+8. **`co_await RisingEdge` resumes before the design evaluates the edge**, so it
+   is right for sampling and wrong for driving: `set()` is immediate, and a
+   value written there is captured by the edge just awaited. The cocotb shape a
+   new author reaches for therefore drives a cycle early. The phase waits that
+   would express this directly, `ReadOnly` and `ReadWrite`, cannot be used from
+   a project because no timing backend providing them is selectable. Written up
+   in [Scheduling](../../docs/scheduling.md#coming-from-cocotb) and on the
+   roadmap as
+   [aligning the scheduling semantics with cocotb](../../docs/future-directions.md#align-the-scheduling-semantics-with-cocotb).
 
 ### In the port, all costly to diagnose
 
-8. The upstream ELF loader places segments relative to the file's lowest
+9. The upstream ELF loader places segments relative to the file's lowest
    address, so a hole at the bottom of the image loads everything shifted.
-9. `SpikeCosim` has two base classes, so `get_spike_cosim` must `static_cast`
+10. `SpikeCosim` has two base classes, so `get_spike_cosim` must `static_cast`
    to `Cosim*`; the DPI signature returns `void*`, which is why the compiler
    cannot catch it.
-10. `bit [31:0]` crosses DPI as `const svBitVecVal*`, not `uint32_t`.
-11. slang rejects the implicit `.PARAM,` shorthand in upstream's bind file,
+11. `bit [31:0]` crosses DPI as `const svBitVecVal*`, not `uint32_t`.
+12. slang rejects the implicit `.PARAM,` shorthand in upstream's bind file,
     which is a Verilator extension.
 
-### In upstream, reported rather than worked around silently
+### In upstream
 
-12. **Upstream's CSR model does not implement MML write suppression.**
+One is filed. The other three are not, and are listed so that is visible
+rather than assumed.
+
+13. **Upstream's CSR model does not implement MML write suppression.**
     `ibex_cs_registers.sv` refuses a `pmpcfg` write when `MSECCFG.MML` is set,
     `RLB` is clear and the new byte has `lock` set with `{r,w,x}` in
     `{001,010,011,101}`. `PmpCfgRegister::RegisterWrite` masks by `lock & !RLB`
     only. The model knows MML *relaxes* which encodings are legal
     (`HandleReservedVals`) but not that it *blocks* these writes. Found by the
-    cpptb port from upstream's own stimulus; reportable to lowRISC.
-13. **`tb_cs_registers` is vacuous on Verilator 5.050.** It reports `TEST
+    `ibex_cs_registers` port from upstream's own stimulus. Independently
+    reported by someone else in
+    [lowRISC/ibex#2242](https://github.com/lowRISC/ibex/issues/2242), open since
+    January 2025 and unfixed; the code-level cause and a suggested fix are
+    [added there](https://github.com/lowRISC/ibex/issues/2242#issuecomment-5084571451).
+14. **`tb_cs_registers` is vacuous on Verilator 5.050.** It reports `TEST
     PASSED` having driven zero transactions, and never terminates without a
-    cycle limit. Ibex pins v4.210 for it. Not root-caused, and not confirmed
-    against 4.210.
-14. **The pinned Spike never registers `CSR_MENVCFGH`.** It registers
+    cycle limit. Ibex pins v4.210 for it. Not root-caused, not confirmed against
+    4.210, **not filed**. Arguably the most serious of these: a green result
+    that checked nothing.
+15. **The pinned Spike never registers `CSR_MENVCFGH`.** It registers
     `CSR_MENVCFG` and has no entry for the high half, so on RV32 it traps where
     Ibex correctly implements it as read-only zero. A model with the low half
-    and not the high half is not a coherent RV32 configuration. Worth reporting
-    to `lowRISC/riscv-isa-sim`.
-15. **The suite's `Zicsr` tests cannot be built for a core with U-mode but no
+    and not the high half is not a coherent RV32 configuration. **Not filed**;
+    belongs on `lowRISC/riscv-isa-sim` rather than `ibex`.
+16. **The suite's `Zicsr` tests cannot be built for a core with U-mode but no
     F, no V and no `time` CSR.** They pick a scratch CSR from a fixed ladder
     and fall off the end into `#error`.
-16. **The suite's PMP tests assume a granularity of 2 or more.** They size NAPOT
+17. **The suite's PMP tests assume a granularity of 2 or more.** They size NAPOT
     padding as `(1 << (UDB_PMP_GRANULARITY - 3)) - 1`, which underflows for
     granularity 0 and reaches `.rept` as 2^64-1.
 
@@ -172,6 +194,9 @@ Ordered by cost, not by value.
 | E | riscv-dv under UVM, `dv/uvm/core_ibex` | large | flow 5, Ibex's real verification depth |
 | F | `dv/uvm/icache` | large | flow 6, a block-level testbench |
 | G | `dv/formal` | — | not a simulation flow; out of scope for cpptb |
+
+Flow 1 is lint. It is not a testbench and nothing about it would exercise cpptb,
+so it is not listed above.
 
 **A and B are done.** The parameters come from `util/ibex_config.py` rather
 than a table, so a configuration added upstream needs no transcription and one
@@ -198,12 +223,11 @@ checks nothing and reports success is a worse failure than one that crashes,
 and the cpptb port drives 1,119 real transactions where the original drives
 none.
 
-Three testbench bugs and one cpptb finding on the way there are in its README.
-
-**It is the most interesting of these for the framework.** Every port so far is "load a
-program, run it, check the result". `tb_cs_registers` drives transactions
-against a submodule and scores them against a C++ model -- constrained stimulus
-and transaction-level driving, an axis of cpptb none of this has touched.
+It was the most interesting of the three for the framework, and that held up.
+Every other port is "load a program, run it, check the result"; this one drives
+transactions at a submodule and scores them against a model, which is where
+findings 8 and 5 came from. Three testbench bugs on the way there are in its
+README.
 
 **D is largely redundant.** It is the archived predecessor of the suite already
 ported; its value is CI parity, not new signal.
