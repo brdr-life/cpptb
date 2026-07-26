@@ -238,26 +238,24 @@ This is real and it changed behaviour, but it is not the whole story.
 
 ### Fixed: a constraint Verilator silently drops
 
-**Verilator drops any constraint in a `randomize() with {}` block that
-dereferences a member of the enclosing class, and returns success.** Thirty
-lines reproduce it, kept in `shims/verilator_constraint_scope.sv`:
+**Verilator silently ignores an inline constraint that references a variable
+named `item`.** `randomize()` returns 1 and the target gets a random value.
+The reproducer is `shims/verilator_constraint_item_name.sv`:
 
 ```
-  member handle direct:   ok=1 addr=5b6f55b9  want 80000084   <-- wrong, and ok=1
-  copied to local handle: ok=1 addr=80000084  want 80000084
-  copied to local value:  ok=1 addr=80000084  want 80000084
+named item : addr=21766c9b expected=80000084
+named itm  : addr=80000084 expected=80000084
 ```
+
+Two handles of the same type, the same constraint, one name apart. Renaming to
+`itm`, `req`, `rsp`, `m_item`, `member_item` or `data` all work; only `item`
+fails. It happens for a local as well as a class member, and renaming the class
+type makes no difference. With a plain scalar named `item` the generated C++
+does not even compile: `'item' was not declared in this scope`.
 
 `local::item.addr`, the LRM's explicit qualifier for "resolve this in the scope
-that called randomize()", fails the same way:
-
-```
-  unqualified item.addr:  ok=1 addr=5b6f55b9  want 80000084
-  local::item.addr:       ok=1 addr=21766c9b  want 80000084
-```
-
-That rules out name resolution as an explanation. Even told exactly which scope
-to use, the constraint is dropped and success is returned.
+that called randomize()", fails the same way, which rules out the unqualified
+name falling back to the wrong scope.
 
 (`this.item.addr` does not compile, with `Can't find definition of
 scope/variable: 'item'`. That is not evidence of anything: inside an inline
