@@ -119,6 +119,37 @@ aligned while Ibex still starts at `boot_addr + 0x80`.
 
 All three are needed together.
 
+## E2, started: asynchronous interrupt stimulus
+
+The capability E1 cannot have, because the stimulus comes from outside the
+program. `ports/riscv_arch_tests/testbench.cpp` gained a spawned coroutine that
+forces `irq_external_i`, off unless `ACT_IRQ_PERIOD` is set:
+
+```sh
+ACT_IRQ_PERIOD=150 ACT_IRQ_COUNT=20 ACT_FIRMWARE=build/elf/gen_0.vmem \
+  ../../work/riscv_arch_tests_cosim_small/.../Vdpi_riscv_arch_tests_cosim_small
+```
+
+`ibex_simple_system.sv` ties the interrupt pins to constants, so they are forced
+rather than driven. Nothing has to tell Spike about it: Ibex exports the pin
+state on `rvfi_ext_pre_mip`/`rvfi_ext_post_mip` and the checker already forwards
+those with `riscv_cosim_set_mip`.
+
+It demonstrably works. The same program, generated with `--interrupts`:
+
+| | instructions matched | mismatches |
+| --- | ---: | ---: |
+| no stimulus | 274 | 0 |
+| 20 interrupts, every 150 cycles | 1,046,965 | 0 |
+
+The interrupts are being taken, the program services them, and Spike stays in
+lockstep across a million instructions. **That is the thing E1 could not do.**
+
+What does not work yet is termination with interrupts enabled: the run reaches
+the cycle limit rather than the program's exit sequence. The next thing to check
+is what the generated interrupt handler does after servicing, since the program
+terminates normally in 274 instructions without the stimulus.
+
 ## What is left
 
 **A corpus runner.** `ports/riscv_arch_tests/run_cosim_programs.py` runs a fixed
