@@ -47,6 +47,18 @@ DEPENDENCIES = ["pyvsc", "bitstring==3.1.9", "PyYAML", "tabulate", "pandas"]
 PYTHON = "3.11"
 SUB_PROGRAMS = 0
 
+# Ibex hardwires mtvec.MODE to vectored and requires BASE to be 256-byte
+# aligned:
+#
+#     // mtvec.MODE set to vectored
+#     // mtvec.BASE must be 256-byte aligned
+#
+# The generator defaults to a 4-byte alignment, so Ibex masks the low bits of
+# whatever it writes and traps land part-way through the program rather than at
+# its handler. The symptom is a run that executes correctly for a million
+# instructions and then wanders into unwritten memory. 2**8 is 256.
+TVEC_ALIGNMENT = 8
+
 
 def generate(count: int, instructions: int, seed: int, target: str,
              out: Path) -> int:
@@ -69,6 +81,7 @@ def generate(count: int, instructions: int, seed: int, target: str,
         "--num_of_tests", str(count),
         "--instr_cnt", str(instructions),
         "--num_of_sub_program", str(SUB_PROGRAMS),
+        "--tvec_alignment", str(TVEC_ALIGNMENT),
         "--target", target,
         "--asm_file_name", "gen",
         "--seed", str(seed),
