@@ -61,8 +61,15 @@ TVEC_ALIGNMENT = 8
 
 
 def generate(count: int, instructions: int, seed: int, target: str,
-             out: Path, interrupts: bool = False) -> int:
-    entry = RISCV_DV / "pygen/pygen_src/test/riscv_instr_base_test.py"
+             out: Path, interrupts: bool = False,
+             signature_addr: str | None = None,
+             debug_section: bool = False,
+             pygen: Path | None = None) -> int:
+    # A caller may supply a patched copy of the generator; ports/core_ibex_uvm
+    # needs one because pyflow's signature-handshake path does not run as
+    # shipped. Everything else uses the fetched tree.
+    pygen = pygen or (RISCV_DV / "pygen")
+    entry = pygen / "pygen_src/test/riscv_instr_base_test.py"
     if not entry.is_file():
         print(f"generate: no riscv-dv at {RISCV_DV}\n"
               f"run: python3 {ROOT / 'fetch.py'} ibex", file=sys.stderr)
@@ -90,11 +97,24 @@ def generate(count: int, instructions: int, seed: int, target: str,
         # Without this the program installs no interrupt handler, so forcing an
         # interrupt pin traps into code that cannot service it.
         command += ["--enable_interrupt", "1"]
+    if debug_section:
+        # Ibex's own riscv_dv_extension always emits jumps to `debug_rom` and
+        # `debug_exception` at the base of the image, so the section holding
+        # those labels has to exist or the program does not link. An "empty"
+        # debug ROM is just a dret, which is what upstream generates unless a
+        # debug test asks for more.
+        command += ["--gen_debug_section", "1"]
+    if signature_addr:
+        # The handshake core_ibex's UVM testbench watches for. Simple System
+        # has nothing that reads it, so this stays off unless a caller asks:
+        # ports/core_ibex_uvm does, with the address from that Makefile.
+        command += ["--require_signature_addr", "1",
+                    "--signature_addr", signature_addr]
 
     completed = subprocess.run(
         command, cwd=out, text=True, stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, check=False,
-        env={**_environment(), "PYTHONPATH": str(RISCV_DV / "pygen")})
+        env={**_environment(), "PYTHONPATH": str(pygen)})
     if completed.returncode != 0:
         tail = "\n".join(
             line for line in completed.stdout.splitlines()
@@ -103,7 +123,10 @@ def generate(count: int, instructions: int, seed: int, target: str,
         return 1
 
     produced = sorted(out.glob("gen_*.S"))
-    print(f"generated {len(produced)} program(s) into {out.relative_to(HERE)}")
+    # A caller outside this port passes an output directory of its own, so the
+    # path is only shortened when it happens to sit under this one.
+    shown = out.relative_to(HERE) if out.is_relative_to(HERE) else out
+    print(f"generated {len(produced)} program(s) into {shown}")
     for path in produced:
         print(f"  {path.name}  {sum(1 for _ in path.open()):>6} lines")
     return 0 if produced else 1
