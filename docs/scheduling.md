@@ -324,15 +324,16 @@ Task<void> agent(Dut dut, RegisterModel& model) {
 }
 ```
 
-#### Translating a cocotb testbench
+#### What to change when translating
+
+Only the placement of reads and writes relative to the clock differs. The rest
+of a cocotb testbench carries over unchanged.
 
 | cocotb | here |
 |---|---|
 | `await RisingEdge(clk)` then assign | `co_await FallingEdge{clk}` then `set()` |
 | `await RisingEdge(clk)`, `await ReadOnly()`, then read | `co_await RisingEdge{clk}` then `get()` |
 | `await ReadWrite()` before driving | `co_await FallingEdge{clk}`, or `co_await ReadWrite{}` where the backend provides it |
-| `await Timer(10, "ns")` | `co_await Delay{10_ns}` |
-| `cocotb.start_soon(...)` | `test.spawn(...)`, or `Join{...}` when the parent must wait |
 
 #### Phase waits depend on the timing backend
 
