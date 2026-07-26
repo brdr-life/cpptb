@@ -359,14 +359,51 @@ OVERLAYS = [
 # agent was asked for, the data it decided to return, and whether it found the
 # address in the memory model at all.
 DEBUG_OVERLAYS = [
+    # Print, from inside the monitor, what the clocking block samples next to
+    # what the raw interface wires carry. tb_top already shows the DUT and the
+    # wires agreeing, so this is the last place the address can go wrong.
+    (
+        CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_monitor.sv",
+        "      trans_collected.addr                       = vif.monitor_cb.addr;\n",
+        "      $display(\"[MONDBG] t=%0t cb: addr=%08h req=%b gnt=%b |"
+        " raw: addr=%08h req=%b gnt=%b\",\n"
+        "               $time, vif.monitor_cb.addr, vif.monitor_cb.request,\n"
+        "               vif.monitor_cb.grant, vif.addr, vif.request, vif.grant);\n"
+        "      trans_collected.addr                       = vif.monitor_cb.addr;\n",
+    ),
+    # Print the instruction bus from both ends on the same cycle: what the DUT
+    # drives on its ports, and what the interface wires the agent watches
+    # actually carry. If those disagree, the port connection in tb_top is the
+    # problem; if they agree, the agent is.
+    (
+        CORE_IBEX / "tb/core_ibex_tb_top.sv",
+        "    end\n  end\nendmodule\n",
+        "    end\n  end\n\n"
+        "  int dbg_cycle = 0;\n"
+        "  always @(posedge clk) begin\n"
+        "    if (rst_n && dbg_cycle < 40) begin\n"
+        "      dbg_cycle <= dbg_cycle + 1;\n"
+        "      $display(\"[TBDBG] t=%0t fe=%h | dut req=%b addr=%08h"
+        " gnt=%b rvalid=%b rdata=%08h | vif req=%b addr=%08h"
+        " gnt=%b rvalid=%b rdata=%08h\",\n"
+        "               $time, dut_if.fetch_enable,\n"
+        "               dut.instr_req_o, dut.instr_addr_o, dut.instr_gnt_i,\n"
+        "               dut.instr_rvalid_i, dut.instr_rdata_i,\n"
+        "               instr_mem_vif.request, instr_mem_vif.addr,\n"
+        "               instr_mem_vif.grant, instr_mem_vif.rvalid,\n"
+        "               instr_mem_vif.rdata);\n"
+        "    end\n"
+        "  end\n"
+        "endmodule\n",
+    ),
     (
         CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_seq_lib.sv",
         '      `uvm_info(get_full_name(), $sformatf("Response transfer:\\n%0s",'
         ' req.sprint()), UVM_HIGH)\n'
         '      start_item(req);\n',
         '      if (req.addr < 32\'h8000_0100) begin\n'
-        '        $display("[MEMDBG %0s] t=%0t addr=%08h rw=%0d data=%08h uninit=%0b",\n'
-        '                 is_dmem_seq ? "D" : "I", $time, req.addr, item.read_write,\n'
+        '        $display("[MEMDBG %0s] t=%0t req.addr=%08h item.addr=%08h rw=%0d data=%08h uninit=%0b",\n'
+        '                 is_dmem_seq ? "D" : "I", $time, req.addr, item.addr, item.read_write,\n'
         '                 req.data, data_was_uninitialized);\n'
         '      end\n'
         '      `uvm_info(get_full_name(), $sformatf("Response transfer:\\n%0s",'

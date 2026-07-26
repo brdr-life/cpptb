@@ -236,7 +236,57 @@ does not help: it does not reach clocking-block sampled variables.
 
 This is real and it changed behaviour, but it is not the whole story.
 
-### Still open: the agent never answers the reset-vector fetch
+### Root-caused: a constraint Verilator silently drops
+
+Traced end to end with `--debug-mem`, which instruments three points: the
+instruction bus in `core_ibex_tb_top`, the monitor's clocking-block samples
+against the raw wires, and the response sequence's item.
+
+Everything up to the response sequence is correct.
+
+```
+[TBDBG]  t=215900 | dut req=1 addr=80000080 gnt=1 | vif req=1 addr=80000080 gnt=1
+[MONDBG] t=215900 cb: addr=80000080 req=1 gnt=1 | raw: addr=80000084 req=1 gnt=1
+[MONDBG] t=233900 cb: addr=80000084 req=1 gnt=1 | raw: addr=80000088 req=0 gnt=1
+[MEMDBG I] t=233900 req.addr=7674a22b item.addr=80000084 rw=0 data=00000000 uninit=1
+```
+
+Read the last line. The monitor delivered `item.addr = 0x8000_0084`, correctly.
+The response sequence then does
+
+```systemverilog
+if (!req.randomize() with {
+      addr       == item.addr;
+      read_write == item.read_write;
+      data       == item.data;
+      intg       == item.intg;
+      be         == item.be;
+      if (p_sequencer.cfg.zero_delays) { rvalid_delay == 0; }
+      else { rvalid_delay dist { ... }; }
+      error      == enable_error;
+    }) begin
+  `uvm_fatal(`gfn, "Cannot randomize response request")
+end
+```
+
+and comes out with `req.addr = 0x7674_a22b`, a random value, **having returned
+success**. The `addr == item.addr` constraint is silently not applied. Nothing
+between that call and the print touches `req.addr`.
+
+Everything downstream follows from it: the sequence reads the memory model at a
+random address, finds it uninitialised, returns `0x0000` for it as the IMEM
+sequence is meant to, and the core executes `c.unimp` at its reset vector.
+That is the one bug behind 22 of the 27 test classes.
+
+The reduction is not finished. Five candidate shapes were tried standalone and
+all behave correctly: the equality alone, plus a constant-weight `dist`, plus a
+variable-weight `dist` reading a config object, plus an enum equality, and a
+null handle dereference inside a constraint (which Verilator catches loudly, so
+`p_sequencer.cfg` is not null). So the trigger is something else in that block,
+and the next step is to bisect the `with` block itself in the live testbench
+rather than in a reduced case.
+
+### Earlier suspicion, now ruled out
 
 With `--debug-mem`, `build_tb.py` prints every memory response near the reset
 vector: the address asked for, the data returned, and whether the memory model
@@ -247,15 +297,11 @@ address:
 [MEMDBG I] t=233900 addr=7674a22b rw=0 data=00000000 uninit=1
 ```
 
-Nothing ever answers `0x8000_0080`, yet the core retires `c.unimp` from it and
-then runs off into nonsense. So the core is getting a response from something
-that is not the response agent. Two candidates were tested and cleared with
-reduced cases: driving a wire vector from a clocking block output works, and an
-unwritten clocking block output does not corrupt a wire the DUT drives.
-
-The next thing to look at is the request/grant handshake itself -- whether the
-monitor ever sees `request && grant`, since a monitor that never publishes an
-address phase is consistent with everything above.
+The instrumentation showed the agent does answer, at a random address, which is
+why nothing appeared to answer `0x8000_0080`. Two other candidates were tested
+and cleared with reduced cases: driving a wire vector from a clocking block
+output works, and an unwritten clocking block output does not corrupt a wire the
+DUT drives.
 
 **One `randomize()` fails in the fetch-enable sequence.** Independent of the
 above -- disabling that sequence does not change the mismatch.
