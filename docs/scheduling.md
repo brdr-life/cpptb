@@ -87,6 +87,22 @@ unobserved internal DUT event. Direct Verilator dispatch and standard VPI are
 the supported contract-complete choices. See [Performance](performance.md) for
 the exact backend comparison.
 
+!!! warning "The backend is not selectable from a project"
+
+    `cpptb build` emits one timing backend and there is no `cpptb.toml` setting
+    or command-line flag to choose another. That backend owns clocks and timers
+    but does not dispatch phases, so `ReadWrite`, `ReadOnly` and `NextTimeStep`
+    fail at run time in a project built this way.
+
+    Passing the backend defines through `build.verilator_args` does not work
+    either: the supporting SystemVerilog is emitted at code-generation time, so
+    the build fails with `Can't find definition of task/function:
+    'phase_settle_barrier'`.
+
+    Until a backend can be selected, use the edge-phase convention in
+    [Sample on the edge, drive off it](#sample-on-the-edge-drive-off-it), which
+    works on every backend.
+
 ## Composition
 
 Use an ordinary `co_await task()` when the next operation is sequential. The
@@ -168,6 +184,67 @@ Task<void> scoreboard(TestContext& test,
     }
 }
 ```
+
+### Sample on the edge, drive off it
+
+The example above drives reset and payload from `FallingEdge` and reads on
+`RisingEdge`. That is a convention, not an accident, and it is worth stating
+plainly because the alternative fails quietly.
+
+`co_await RisingEdge{}` resumes *before* the design evaluates that edge. Every
+signal still holds the value it had during the cycle just ending, which is what
+`always_ff @(posedge clk)` samples, so it is the correct place to observe. It is
+the wrong place to drive: `set()` takes effect immediately, so a value written
+there is picked up by the very edge being awaited, and a write lands a cycle
+earlier than intended.
+
+```cpp
+// Wrong: the value reaches the design in time for this edge.
+co_await RisingEdge{dut.clk};
+dut.wdata.set(value);
+
+// Right: sample where the design has not yet moved, drive where it cannot
+// be captured until the next edge.
+co_await RisingEdge{dut.clk};
+const uint32_t observed = dut.rdata.get();
+co_await FallingEdge{dut.clk};
+dut.wdata.set(value);
+```
+
+The failure mode is a register read-back returning the value just written
+rather than the previous one, which reads as a design bug rather than a
+testbench one. SystemVerilog testbenches avoid it by driving through
+non-blocking assignments from inside `always_ff`; there is no non-blocking
+assignment to reach for here, so the clock phase does the same job.
+
+Where the timing backend supports them, `ReadOnly` and `ReadWrite` express this
+directly and are the better choice: sample after `co_await ReadOnly{}`, drive
+after `co_await ReadWrite{}`. See [Timing backend support](#timing-backend-support)
+for which backends provide them.
+
+### Coming from cocotb
+
+The trigger vocabulary is deliberately the same: `RisingEdge`, `FallingEdge`,
+`ReadOnly`, `ReadWrite`, `NextTimeStep`, and drivers, monitors and scoreboards
+compose the same way. Two differences matter when porting a testbench.
+
+**Writes are immediate, not deferred.** In cocotb, `sig.value = x` is queued and
+applied at the next `ReadWrite` point, so writing straight after
+`await RisingEdge(clk)` cannot affect that edge; it behaves like a non-blocking
+assignment. `set()` here applies at once. That is why the section above matters
+and why a cocotb driver translated line for line drives a cycle early.
+
+**Phase waits depend on the timing backend.** cocotb always has `ReadOnly` and
+`ReadWrite` available. Here they are provided by the timing backend, and a
+backend that does not support them reports:
+
+```
+ReadWrite, ReadOnly, and NextTimeStep require the standard simulator timing
+bridge; enable VPI timing support in the simulator build (Verilator: --vpi)
+```
+
+at run time rather than failing the build. The edge-phase convention above works
+on every backend, which is why the examples use it.
 
 ### Bound producer pressure and shared resources
 
