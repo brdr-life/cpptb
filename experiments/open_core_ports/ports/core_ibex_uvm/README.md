@@ -363,38 +363,30 @@ process and the queries are cheap next to everything else. The `rand_mode`
 change is kept because it is equivalent and removes work that was pointless,
 not because it made the run faster.
 
-**The `--pin-delays` build is not solver-free, which is why it measured
-nothing.** Counting invocations directly: 20,513 `check-sat` calls in 3,000
-cycles, about 6.8 per cycle, with every rand field in the response item
-disabled. Verilator does skip the solver when a `randomize()` has nothing to
-solve -- 1,000 all-`rand_mode(0)` calls produce no solver log at all -- so the
-traffic is coming from somewhere the overlay never touched.
+Measured properly at last: instrumentation committed before building, the flag
+verified in `--help`, the overlay verified in `build/overlay`, the solver log
+counted, and the box idle.
 
-It is `ibex_mem_intf_response_driver::send_grant()`, which does its own
-`std::randomize(gnt_delay) with { dist ... }` on **every grant**, on both
-agents. That was always the larger caller; the sequence's randomize was the
-minority. Removing the sequence's and leaving the driver's is why the timings
-did not move.
+| build | `check-sat` / 3,000 cycles | wall, 20k cycles | CPU |
+| --- | ---: | ---: | ---: |
+| normal | 20,513 | ~102 s | -- |
+| `--pin-delays` (no `gnt_delay` solve) | 14,719 | 57.4 / 49.9 / 64.0 | 9.2 / 6.5 / 10.6 |
 
-CPU against wall, on the same runs:
+**Removing 28% of the solver calls cut wall time roughly in half**, and CPU is
+about 15% of wall throughout. So the solver round-trips are the dominant cost
+after all: the simulator spends most of its life blocked on a pipe to `z3`, not
+computing. `send_grant()` is a large caller but not the only one -- 14,719
+calls remain, from the response sequence's `rvalid_delay` randomize.
 
-```
-cpu=3.77+1.32  wall=97.48
-cpu=3.91+2.01  wall=93.74
-cpu=5.59+3.48  wall=100.22
-```
+The shippable fix is not `--pin-delays`, which deletes the delay variation the
+agent exists to provide. It is to keep the distribution and lose the round
+trip: precompute a pool of delays, or use `$urandom_range` where the shape
+allows, so the per-transaction cost is arithmetic rather than IPC.
 
-About 5 s of CPU for 20,000 cycles. Part of that gap is three `rustc`
-processes saturating the box, but at roughly 137,000 solver round-trips per
-20,000 cycles, and ~100 s of wall on a quiet machine earlier, the arithmetic
-works out near 0.7 ms per round-trip -- which is the right order for a pipe
-round-trip with a process wakeup at each end.
-
-So the working conclusion, stated as a hypothesis rather than a result: the
-cost is solver round-trips, and the test that confirms it is disabling
-`send_grant`'s randomize as well and re-timing on an idle machine. Every
-statement about the solver in this section has now been made and withdrawn at
-least once, so it is worth being explicit that this one is not yet confirmed.
+Every earlier claim in this section was made on a measurement that had not been
+verified to vary what it said it varied. The sequence that finally worked:
+commit the instrumentation, assert the flag exists, assert the overlay landed,
+count the solver calls, check the machine is idle, then time. In that order.
 
 What is left is the simulation itself: `--timing` coroutine scheduling across a
 UVM environment on a 270 MB model, at about 195 cycles per second. The next
