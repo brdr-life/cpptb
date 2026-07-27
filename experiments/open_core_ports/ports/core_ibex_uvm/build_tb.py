@@ -143,6 +143,38 @@ FCOV_SOURCES = [
 # clocking blocks, one per edge -- would diverge further from upstream's source
 # than this does.
 OVERLAYS = [
+    # A class-scope `dist` poisons every other randomize() on the object:
+    # this simulator emits the distribution as a hard equality against a
+    # freshly drawn sample and does not gate that on the randomize()
+    # argument list, so `randomize(stimulus_delay_cycles)` is handed
+    # `0 == 1` and goes UNSAT about half the time. Reduced case and the
+    # captured SMT in shims/verilator_dist_on_state_var.sv.
+    #
+    # Drawing the value explicitly keeps the distribution and removes the
+    # constraint. `soft` does not help, and moving the dist inline into
+    # `randomize() with {}` is worse: the weights are silently dropped.
+    # Both classes need it -- memory_error_seq extends core_base_new_seq,
+    # so its own dist breaks the inherited drive_stimulus().
+    (
+        CORE_IBEX / 'tests/core_ibex_new_seq_lib.sv',
+        '  constraint zero_delays_c {\n     zero_delays dist {1 :/ zero_delay_pct,\n                       0 :/ 100 - zero_delay_pct};\n  }\n',
+        '  // The dist that was here is drawn explicitly in drive_stimulus().\n  // A class-scope `dist` is applied by this simulator as an equality\n  // against a freshly drawn sample on every randomize() of the object,\n  // even when its variable is not in the argument list, so leaving it\n  // here makes the next randomize(stimulus_delay_cycles) fail about half\n  // the time. See shims/verilator_dist_on_state_var.sv.\n',
+    ),
+    (
+        CORE_IBEX / 'tests/core_ibex_new_seq_lib.sv',
+        '    `DV_CHECK_MEMBER_RANDOMIZE_FATAL(zero_delays)\n',
+        '    // Same distribution as the zero_delays_c constraint this replaces.\n    zero_delays = ($urandom_range(99, 0) < zero_delay_pct);\n',
+    ),
+    (
+        CORE_IBEX / 'tests/core_ibex_new_seq_lib.sv',
+        '  constraint inject_intg_err_c {\n     inject_intg_err dist {1 :/ intg_err_pct,\n                           0 :/ 100 - intg_err_pct};\n  }\n',
+        '  // Drawn explicitly in send_req(); see the note on zero_delays_c above.\n  // This one also breaks the inherited drive_stimulus(), which randomizes\n  // zero_delays and stimulus_delay_cycles with inject_intg_err as state.\n',
+    ),
+    (
+        CORE_IBEX / 'tests/core_ibex_new_seq_lib.sv',
+        '    `DV_CHECK_MEMBER_RANDOMIZE_FATAL(inject_intg_err)\n',
+        '    inject_intg_err = ($urandom_range(99, 0) < intg_err_pct);\n',
+    ),
     # The memory agents randomize a delay on every bus transaction, and each
     # constrained solve is a round trip over a pipe to z3. Measured: the
     # process spends about 85% of its wall clock blocked rather than
