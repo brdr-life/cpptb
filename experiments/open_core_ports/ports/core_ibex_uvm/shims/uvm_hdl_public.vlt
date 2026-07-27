@@ -1,17 +1,17 @@
-// Verilator control file: the DUT signals dv/uvm/core_ibex reaches through UVM's
+// Control file naming the DUT signals dv/uvm/core_ibex reaches through UVM's
 // HDL access.
 //
-// Verilator exposes a signal to VPI only when it is marked public, and accepts
-// a write only when it is public_flat_rw. Nothing is public by default, so a
+// A signal is visible to VPI only when it is marked public, and a write is
+// accepted only when it is public_flat_rw. Nothing is public by default, so a
 // path the testbench asks for by name has to be listed here or
 // vpi_handle_by_name returns null. That null surfaces in
 // shims/uvm_dpi_verilator.cc as "unable to locate hdl path (...)" and the
-// `DV_CHECK_FATAL around the call in core_ibex_test_lib.sv turns it into a
-// fatal.
+// DV_CHECK_FATAL wrapped around the call in core_ibex_test_lib.sv turns it into
+// a fatal.
 //
 // force and release are a second, separate permission: vpi_put_value with
 // vpiForceFlag or vpiReleaseFlag is rejected on a signal that is not also
-// `forceable`. Only the signals the tests actually force carry it, because
+// forceable. Only the signals the tests actually force carry it, because
 // forceable is what makes a signal a VlForceVec, and README.md records what
 // that costs elsewhere in this build.
 //
@@ -24,6 +24,10 @@
 //
 // Entries that match nothing are silently ignored, which is what happens to the
 // SecureIbex and ICache signals in configurations that do not build them.
+//
+// Two things this file cannot contain: a backtick, which starts a directive
+// even inside a comment, and a comment whose first word is the name of this
+// tool, which is read as a metacomment.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -74,9 +78,9 @@ forceable      -module "ibex_top"      -var "rf_rdata_b"
 // entries covers the main core and the shadow core.
 //
 // A force on raddr_a_i/raddr_b_i is accepted and reads back, but the register
-// file does not see it: ibex_register_file_ff reads `rf_reg[raddr_a_i]`, and
-// Verilator does not substitute the forced value inside an unpacked-array
-// index. See README.md.
+// file does not see it: ibex_register_file_ff reads rf_reg[raddr_a_i], and the
+// forced value is not substituted inside an unpacked-array index. See
+// README.md.
 
 public_flat_rw -module "ibex_register_file_ff" -var "raddr_a_i"
 public_flat_rw -module "ibex_register_file_ff" -var "raddr_b_i"
