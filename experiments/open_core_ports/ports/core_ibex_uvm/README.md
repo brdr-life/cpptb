@@ -355,6 +355,20 @@ spent re-deriving values that are already determined. Reducing the randomize
 footprint on that path is the obvious lever; `cfg.zero_delays` is not, because
 it changes the delay value rather than the number of solver calls.
 
+`rand_mode(0)` on the eight determined fields is applied and it helps, but not
+by the order of magnitude the per-field theory predicted. Same program, same
+wall clock, solver logging on both sides: **10,270 cycles before, 13,515
+after**, about +30%. Queries per solve did drop sharply -- roughly 34 to 7 --
+so the field-count theory holds for the cost of one solve, but the number of
+solves rose enough to eat most of the gain, and the run-to-run variance on this
+machine (163 to 195 cycles/s on unchanged builds) is wide enough that the +30%
+should be treated as indicative rather than measured. Correctness is unchanged:
+zero cosim mismatches.
+
+So the solver is a real cost but not the whole story, and the next measurement
+should separate simulation time from solver time rather than inferring one from
+the other.
+
 Worth trying, in order: `zero_delays` on the response agent config to see how
 much of the cost is the `rvalid_delay` `dist`; and checking whether Verilator
 can be pointed at an in-process solver rather than a subprocess.
