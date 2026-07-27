@@ -40,6 +40,14 @@ BUILD = HERE / "build"
 
 TOP = "core_ibex_tb_top"
 
+# Verilator exposes a signal to VPI only when it is marked public, and accepts a
+# write only when it is public_flat_rw. The integrity and glitch tests reach
+# into the DUT by name with uvm_hdl_read/uvm_hdl_force/uvm_hdl_release, so every
+# path they build is listed in this control file; without it vpi_handle_by_name
+# returns null and shims/uvm_dpi_verilator.cc reports "unable to locate hdl
+# path". See that file for the list and for which signals also need `forceable`.
+HDL_PUBLIC_VLT = HERE / "shims" / "uvm_hdl_public.vlt"
+
 # compile_tb.py hardcodes these alongside the config-derived parameters. The
 # debug-module addresses have to agree with Spike, which takes them from
 # DEBUG_ROM_ENTRY and DEBUG_ROM_TVEC at its own build time, so they are fixed
@@ -703,6 +711,8 @@ def pkg_config(packages: list[str], *flags: str) -> list[str]:
 def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
                       pin_delays: bool, extra: list[str]) -> list[str]:
     parameters, defines = config_parameters(config)
+    if not HDL_PUBLIC_VLT.is_file():
+        raise BuildError(f"missing Verilator control file: {HDL_PUBLIC_VLT}")
     overlay = apply_overlays(debug, pin_delays)
     sources = [overlay.get(path, path)
                for path in expand_filelist(CORE_IBEX / "ibex_dv.f")]
@@ -745,6 +755,9 @@ def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
         # `include "uvm_macros.svh"` resolves from every file that opens with it.
         f"+incdir+{UVM}",
         f"+incdir+{IBEX}/dv/cosim",
+        # The signals UVM's HDL access reaches by name. Nothing is public to VPI
+        # in Verilator unless it is named here; see HDL_PUBLIC_VLT above.
+        str(HDL_PUBLIC_VLT),
         str(UVM / "uvm_pkg.sv"),
     ]
     command += expand_filelist(CORE_IBEX / "ibex_dv_defines.f")
