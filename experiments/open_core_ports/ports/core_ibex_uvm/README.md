@@ -17,9 +17,10 @@ build and a running test, all of them X-initialisation or solver behaviour that
 only shows up on a 2-state simulator; all three are found, reduced and fixed
 below. `core_ibex_base_test` now retires instructions with no cosim mismatch.
 
-**No test completes yet**, for a different reason: throughput. The run reaches
-about 195 cycles per second, so a riscv-dv program does not finish. See
-"Still open: throughput".
+**Tests pass.** Each testlist entry now runs the program its own `gen_opts` ask
+for, and a program that reaches its end tells the testbench so. Of the first
+eight entries tried, six end on the riscv-dv signature handshake with no cosim
+mismatch; none times out. See "Per-test programs".
 
 ## Why this matters here
 
@@ -207,7 +208,15 @@ cd build && ./obj/core_ibex_tb \
   +UVM_TESTNAME=core_ibex_base_test \
   +bin=elf/gen_0.bin \
   +signature_addr=8ffffffc \
-  +timeout_in_cycles=4000000
+  +timeout_in_cycles=4000000 \
+  +disable_fetch_enable_seq=1
+```
+
+or, for the testlist rather than one program:
+
+```sh
+python3 build_programs.py --all-tests
+python3 run_tests.py +disable_fetch_enable_seq=1
 ```
 
 `+bin` is a **flat binary**, not an ELF: `core_ibex_base_test` loads it byte by
@@ -218,11 +227,13 @@ hitting its threshold.
 
 `build_programs.py` generates with the same pyflow the `ports/riscv_dv` port
 uses and links with riscv-dv's own `scripts/link.ld`, which already targets
-0x8000_0000. It needs four patches to the generator, applied to a copy under
-`build/pygen` by the same exact-text discipline as the SystemVerilog overlays.
+0x8000_0000. It patches the generator to do it, applying the patches to a copy
+under `build/pygen` by the same exact-text discipline as the SystemVerilog
+overlays. They fall into three groups, all listed with their evidence in
+`PYGEN_PATCHES`.
 
-Three are genuine bugs on pyflow's signature-handshake path, which is what
-core_ibex uses to talk to the program and which evidently nobody has run:
+Three are bugs on pyflow's signature-handshake path, which is what core_ibex
+uses to talk to the program and which evidently nobody has run:
 
 | Bug | Effect |
 | --- | --- |
@@ -230,13 +241,19 @@ core_ibex uses to talk to the program and which evidently nobody has run:
 | `instr.extend(("a string"))` is not a tuple | the program comes out one letter per line |
 | `instr_stream.append(instr)` where every other producer extends | a line reading `['li x22, 0x8ffffffc', ...]` |
 
-The fourth is not a bug but the piece of Ibex's own riscv-dv customisation a
-program cannot run without: `ibex_asm_program_gen.sv` overrides
+Two are not bugs but the pieces of Ibex's own riscv-dv customisation a program
+cannot run, or finish, without. `ibex_asm_program_gen.sv` overrides
 `gen_program_header` to align `_start` to 0x80, because Ibex takes its reset
-vector at `boot_addr + 0x80`. pyflow reads none of Ibex's SystemVerilog
-extension, so `_start` lands at 0x8000_0000 and the core fetches zeros. Its two
-debug-ROM jumps become self-loops here, because pyflow's `gen_debug_rom` is
-`# TODO / pass` and the rv32imc target sets `support_debug_mode = 0`.
+vector at `boot_addr + 0x80`; without it `_start` lands at 0x8000_0000 and the
+core fetches zeros. And it overrides `gen_test_done` to write
+`(TEST_PASS << 8) | TEST_RESULT` to `signature_addr - 0x4`, which is the single
+thing `core_ibex_base_test::wait_for_test_done` waits for. pyflow generates
+riscv-dv's stock ending instead -- `li gp, 1; ecall`, and an ecall handler that
+falls into `write_tohost` -- which is the HTIF handshake Spike and Simple
+System use and core_ibex has nothing that reads. See "Per-test programs".
+
+The rest are generator bugs that only show up once programs get longer than a
+few hundred instructions; they are in the same section.
 
 ## Where it stops
 
@@ -381,6 +398,156 @@ With all three fixes in, `core_ibex_base_test` executes the program and the
 cosim scoreboard is quiet: **2,186 instructions retired, no mismatches**, PCs
 advancing normally through the generated code. The run ends on the harness
 timeout, not on a failure.
+
+## Per-test programs
+
+Upstream generates a different program for each of the 57 testlist entries,
+with that entry's own `gen_opts`, and runs it with that entry's `sim_opts`.
+`build_programs.py --all-tests` does the same, and `run_tests.py` runs the
+result.
+
+### The reason every test timed out
+
+A sweep of all 27 UVM classes against one generic program returned 20
+`TEST TIMEOUT!!`, which looked like the programs being too long for the
+simulator. It was not. The program ran to completion every time and then spun
+here forever:
+
+```
+800003fc  auipc  x30,0x2
+80000400  sw     x3,-1020(x30)   PA:0x80002000
+80000404  c.j    800003fc
+```
+
+That is `write_tohost`, the HTIF ending riscv-dv generates by default. The
+testbench is not watching for it: `wait_for_test_done` waits for a write of
+`TEST_RESULT` to `signature_addr - 0x4`, which Ibex's `ibex_asm_program_gen.sv`
+emits at `test_done:` and pyflow does not. One missing five-instruction
+sequence, and no test in this environment can ever finish. With it, the same
+program that had been timing out ends in under a second:
+
+```
+Test done due to RISCV-DV handshake (payload=TEST_PASS)
+Co-simulation matched        190 instructions
+--- RISC-V UVM TEST PASSED ---
+```
+
+### What pyflow cannot honour
+
+pyflow is a separate implementation of riscv-dv's generator from the
+SystemVerilog one upstream runs, and it reads none of Ibex's SystemVerilog
+extension, so some `gen_opts` have no equivalent. None of them is dropped
+silently: `build_programs.py` records each one against the test it came from in
+`build/manifest.json`, and `run_tests.py` marks the tests whose program does
+not match their entry and prints the reasons under the results.
+
+| gen_opt | Why not |
+| --- | --- |
+| `pmp_*`, `mseccfg`, `enable_write_pmp_csr`, `suppress_pmp_setup` | no pyflow target sets `support_pmp` |
+| `gen_debug_section`, `num_debug_sub_program`, `set_dcsr_ebreak`, `enable_debug_single_step` | `gen_debug_rom` is `# TODO / pass`, and no pyflow target sets `support_debug_mode` |
+| `toggle_dit`, `toggle_dummy_instr`, `gen_all_csrs_by_default`, `add_csr_write` | Ibex's own extension, which is SystemVerilog |
+| `uvm_set_type_override=...` | a UVM factory override; there is no factory here |
+| `enable_zba_extension` and the other subset flags | pyflow has only `enable_b_extension` and `enable_bitmanip_groups` |
+| `directed_instr_N=ibex_*` and three of riscv-dv's own streams | not in `riscv_utils.factory`, which is a literal dict of eleven names |
+| `num_of_sub_program=N` | forced to 0; `gen_callstack` fails on current pyvsc |
+| `illegal_instr_ratio`, `hint_instr_ratio` | `riscv_illegal_instr` randomization fails on current pyvsc after a handful of instructions |
+| `no_csr_instr=0`, `no_fence=0` | pyflow generates neither CSR nor fence instructions in either case |
+
+The last row is worth reading twice, because it is not a missing feature.
+`build_basic_instruction_list` guards the CSR instructions with
+`cfg.init_privileged_mode == "MACHINE_MODE"`, an enum compared against a
+string, which is never true; and `create_instr_list` skips FENCE, FENCE_I and
+SFENCE_VMA before the categories are filled, so the SYNCH category is empty.
+Correcting the CSR comparison was tried: the CSR instructions then reach the
+solver and every program fails to generate, so it is left alone and recorded
+instead.
+
+`gen_test` is honoured where pyflow has the test. Forty entries name
+`riscv_rand_instr_test`, which pyflow does have -- with four of its seven
+directed streams commented out. Passing `--gen_test` matters for a second
+reason: `riscv_instr_base_test.py` runs its test at import, guarded by
+`cfg.argv.gen_test`, and `riscv_rand_instr_test.py` imports it, so without the
+flag both run, nested inside each other's multiprocessing pool, and the second
+one hangs.
+
+### Seven more pyflow bugs
+
+Generating at the sizes the testlist asks for -- 6,000 to 20,000 instructions
+rather than a few hundred -- turned up seven more, all patched the same way.
+Three are the same mistake: a name pushed into an instruction pool as a string
+where the pool holds `riscv_instr_name_t` members.
+
+| Bug | Effect |
+| --- | --- |
+| `basic_instr.append("WFI")`, `"EBREAK"`, `"DRET"` | `KeyError: 'WFI'` for `+no_wfi=0`, `+no_ebreak=0`, `+no_dret=0` |
+| `basic_instr.append(instr_category["SYNCH"])` appends the list as one element | same shape, for `+no_fence=0` |
+| `exclude_instr.append(C_ADDI16SP.name)` | the exclusion never matches |
+| `get_rand_instr` builds `disallowed_instr`, then picks from the unfiltered pool | the exclusion is never applied at all |
+| `randomize_avail_regs` is `pass  # TODO` | `avail_regs` can be all reserved registers, and `randomize_gpr` is unsatisfiable |
+| `gen_load_store_instr` extends one `allowed_instr` list across every address | `Error: illegal operands 'c.lwsp a5,25(sp)'` |
+| `get_load_store_instr` shallow-copies a pyvsc `randobj` template | every instance of one instruction name shares its `rs1` |
+
+The last one is the reason four of the eight entries came back with a cosim
+mismatch before it was found. The instructions are pyvsc objects, so a shallow
+copy shares the field objects with the template, and the base register of a
+load/store stream changes part-way through the stream:
+
+```
+la    s5, region_1+3568   #start riscv_load_store_rand_instr_stream_0
+...
+lhu   s3, -132 (a1)       #end riscv_load_store_rand_instr_stream_0
+```
+
+`a1` still holds the constant the init section put in it, so the program reads
+a wild address, the memory agent answers, Spike takes a load access fault, and
+the scoreboard reports a trap the DUT did not report. `get_rand_instr` two
+functions up already uses `deepcopy`, with a comment explaining why.
+
+The fourth and fifth are why generation used to fail about half the time above
+a couple of thousand instructions. pyvsc's own diagnostics named it in the end:
+
+```
+Problem Set: 2 constraints
+  if ((instr_name == 242)) { (rd == 2); }
+  (rd != reserved_rd.reserved_rd[0]);
+```
+
+242 is `C_ADDI16SP`, whose `rd` is architecturally SP, and `reserved_rd[0]` is
+SP because the load/store stream around it took SP as its base register.
+`randomize_instr` has the guard for exactly this case and excludes the four
+SP-forcing compressed instructions -- and the exclusion reaches a function that
+does not use it.
+
+### Where that leaves it
+
+Eight entries built and run so far, at the instruction counts their entries ask
+for, with `+disable_fetch_enable_seq=1`:
+
+| Entry | Outcome |
+| --- | --- |
+| `riscv_arithmetic_basic_test` | passed |
+| `riscv_ebreak_test` | passed |
+| `riscv_illegal_instr_test` | passed |
+| `riscv_rv32im_instr_test` | passed |
+| `riscv_unaligned_load_store_test` | passed |
+| `riscv_user_mode_rand_test` | passed |
+| `riscv_debug_wfi_test` | cosim mismatch: trap expected at ISS PC 80000c2a, DUT at 80000c26 reported none |
+| `riscv_multiple_interrupt_test` | failed: no write to CSR 0x300 within the test class's 10,000-cycle timeout |
+
+Neither of the two is investigated. Both are entries whose UVM class drives
+stimulus of its own -- a debug sequence and an interrupt sequence -- and whose
+program is missing the debug ROM pyflow cannot generate, so the interaction
+between the class and the program is the place to start rather than the program
+alone.
+
+Seven of the eight ran a program that differs from its entry in at least one
+recorded way, so a pass here means the class runs a riscv-dv program of roughly
+the intended shape to its handshake, not that the entry's intent was covered.
+
+Generation is not fast: an entry of a few hundred instructions takes seconds, a
+10,000-instruction one with directed streams several minutes, so `--all-tests`
+is an hour or two at four entries at a time. `--jobs` is capped at half the
+cores because each entry is a separate interpreter with the solver loaded.
 
 ### Still open: throughput
 
@@ -557,21 +724,26 @@ solver bug in a UVM testbench is that rule being enforced.
   design's SVA is compiled out. Upstream's flows run with assertions on, and
   they are part of what those flows check. Turning them on means finding out
   how much of lowRISC's SVA Verilator 5 accepts.
-- **Passing a test.** See "Where it stops" above. `python3 run_tests.py --list`
-  prints upstream's 57 riscv-dv entries and the 27 UVM classes they map to;
-  `run_tests.py` runs every class and tabulates where each one stops.
-- **Per-test generation.** Upstream generates a different program per testlist
-  entry, with that entry's generator options. `run_tests.py` runs every class
-  against one program, which is enough to locate a shared blocker and not
-  enough to be a regression. Until a program runs to its
-  signature handshake, this is not yet the baseline `ports/riscv_dv` needs.
-- **A runner.** Once tests complete, this wants the same both-harness reporting
-  the other ports here have.
+- **The whole testlist.** Eight of the 57 entries have been generated and run.
+  `python3 build_programs.py --all-tests` builds the rest, which takes about an
+  hour; `python3 run_tests.py --list` shows which entries have a program.
+- **The entries pyflow cannot serve.** The PMP, debug and bitmanip entries can
+  be generated, but with the options that define them dropped, so what they run
+  is a plain random program under a differently named test class. They also
+  want RTL parameters this build does not set (`PMPEnable`, `SecureIbex`,
+  `RV32B`); `rtl_params` is parsed out of the testlist and not yet acted on.
+  `riscv_csr_test` needs riscv-dv's `gen_csr_test.py`, which is a separate
+  generator not wired up here.
+- **A runner.** `run_tests.py` reports outcomes; it does not yet do the
+  both-harness reporting the other ports here have.
 
 ## Bugs worth reporting
 
-In riscv-dv's pyflow, the three signature-handshake bugs in the table above.
-They are one-line fixes and the path is plainly untested.
+In riscv-dv's pyflow, ten bugs: the three on the signature-handshake path and
+the seven in "Seven more pyflow bugs". All are small, several are one word, and
+between them they are the difference between pyflow generating a few hundred
+instructions and generating what the testlist asks for. Each has its evidence
+in `PYGEN_PATCHES`.
 
 In Verilator, three internal errors, each with a small reproducer available from
 the overlays: the covergroup transition bins over enum items, `int'()` on a wide
