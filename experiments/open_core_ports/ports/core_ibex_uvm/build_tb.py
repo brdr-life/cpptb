@@ -539,11 +539,33 @@ RESET_WAIT_FILES = [
 RESET_WAIT_COUNT = 10
 
 
+# Measurement only, added by --pin-delays. Two edits that between them take
+# every constrained solve off the memory-response path:
+#
+#   send_grant() randomizes gnt_delay with a dist on every grant, on both
+#   agents, and the response sequence randomizes rvalid_delay once per
+#   transaction. Forcing the zero-delay branch skips the first; rand_mode(0)
+#   plus a fixed value skips the second.
+#
+# Not a configuration to keep -- it removes the protocol-delay variation the
+# agent exists to provide -- but the difference against a normal build is how
+# much of the run time the solver costs. Verilator makes no solver call at all
+# when a randomize() has nothing left to solve, so with both applied the
+# solver log should be empty. Check that it is before reading any timing.
+MEASURE_OVERLAYS = [
+    (
+        CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_driver.sv",
+        "      if(cfg.zero_delays) begin\n",
+        "      if(1) begin  // measurement: skip the gnt_delay solve\n",
+    ),
+]
+
+
 class BuildError(RuntimeError):
     pass
 
 
-def apply_overlays(debug: bool = False) -> dict[str, str]:
+def apply_overlays(debug: bool = False, pin_delays: bool = False) -> dict[str, str]:
     """Write the patched copies and return upstream path -> overlay path."""
     out = BUILD / "overlay"
     if out.is_dir():
@@ -553,7 +575,9 @@ def apply_overlays(debug: bool = False) -> dict[str, str]:
     # A file can carry more than one edit, so the text is threaded through
     # every rule that names it and written once at the end.
     patched: dict[Path, str] = {}
-    for source, old, new in OVERLAYS + (DEBUG_OVERLAYS if debug else []):
+    rules = OVERLAYS + (DEBUG_OVERLAYS if debug else [])
+    rules += MEASURE_OVERLAYS if pin_delays else []
+    for source, old, new in rules:
         if not source.is_file():
             raise BuildError(f"overlay target missing: {source}")
         text = patched.get(source, source.read_text(encoding="utf-8"))
@@ -665,9 +689,9 @@ def pkg_config(packages: list[str], *flags: str) -> list[str]:
 
 
 def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
-                      extra: list[str]) -> list[str]:
+                      pin_delays: bool, extra: list[str]) -> list[str]:
     parameters, defines = config_parameters(config)
-    overlay = apply_overlays(debug)
+    overlay = apply_overlays(debug, pin_delays)
     sources = [overlay.get(path, path)
                for path in expand_filelist(CORE_IBEX / "ibex_dv.f")]
     if not fcov:
@@ -743,6 +767,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--debug-mem", action="store_true",
                         help="print every memory response near the reset "
                              "vector; see DEBUG_OVERLAYS")
+    parser.add_argument("--pin-delays", action="store_true",
+                        help="measurement build: no constrained solve on the "
+                             "memory-response path; see MEASURE_OVERLAYS")
     parser.add_argument("--show", action="store_true",
                         help="print the command without running it")
     parser.add_argument("extra", nargs="*",
@@ -752,7 +779,7 @@ def main(argv: list[str] | None = None) -> int:
     BUILD.mkdir(parents=True, exist_ok=True)
     try:
         command = verilator_command(args.config, args.jobs, args.fcov,
-                                    args.debug_mem, args.extra)
+                                    args.debug_mem, args.pin_delays, args.extra)
     except BuildError as error:
         print(f"build_tb: {error}", file=sys.stderr)
         return 1
