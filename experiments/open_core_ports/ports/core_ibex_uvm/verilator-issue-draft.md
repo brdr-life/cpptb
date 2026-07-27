@@ -187,8 +187,36 @@ Built and tested. Before and after, same files:
 | `item` of another class type | `Member 'tag' not found in class 'payload_t'` | `addr=5a5a5a5a` |
 | `q.find with (item > 3)` | `size=2 first=4` | `size=2 first=4` |
 
-`test_regress` with every `t_constraint*`, `t_randomize*` and
-`t_array_query_with` test: 176 passed, 0 failed.
+### Tests
+
+Two new `test_regress` tests, split because the two failure modes mask each
+other in one file:
+
+`t_randomize_with_item_name` covers the cases that go wrong at run time. On an
+unpatched build:
+
+```
+%Error: t/t_randomize_with_item_name.v:35:  got=5b6f55b9 exp=80000084
+```
+
+- member handle named `item`, dereferenced in the constraint
+- the same, not a tautology (`item.addr + 1`), which returns 0 unpatched
+- a local, rather than a member, also named `item`
+- `q.find with (item > 3)` in the same class, which must keep working
+
+`t_randomize_with_item_name_types` covers the cases that fail before you get to
+run time. On an unpatched build:
+
+```
+%Error: t/t_randomize_with_item_name_types.v:38:45: Member 'tag' not found in class 'Payload'
+```
+
+- `item` of a class type with no member of the randomized name
+- an undotted scalar named `item`, which emits C++ that does not compile
+
+Both fail on `v5.050-99-gf8fb1d6` and pass with the patch. Together with every
+`t_constraint*`, `t_randomize*`, `t_array_query_with` and `t_case_inside_with_x`
+test: **181 passed, 0 failed**.
 
 ### Why it matters
 
