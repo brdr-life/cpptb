@@ -1,0 +1,47 @@
+diff --git a/src/V3LinkDot.cpp b/src/V3LinkDot.cpp
+index 39ed3b4..4393126 100644
+--- a/src/V3LinkDot.cpp
++++ b/src/V3LinkDot.cpp
+@@ -80,6 +80,13 @@
+ 
+ VL_DEFINE_DEBUG_FUNCTIONS;
+ 
++// Name of the implicit lambda argument bound to the object being randomized inside a
++// 'randomize() with' constraint. Array-method 'with' clauses have a default iterator
++// named 'item' (IEEE 1800-2023 7.12.1), but randomize() with has no such iterator, so
++// reusing that name shadows any user variable called 'item' referenced by the
++// constraint. Must stay outside the user identifier space.
++static const char* const RANDOMIZE_WITH_OBJ_NAME = "__Vrandwith_obj";
++
+ static string extractDottedPath(AstNode* nodep, bool& hasPartSelect) {
+     if (AstParseRef* const refp = VN_CAST(nodep, ParseRef)) {
+         return refp->name();
+@@ -2195,7 +2202,8 @@ class LinkDotFindVisitor final : public VNVisitor {
+         if (const AstDot* const dotp = VN_CAST(nodep->funcrefp(), Dot))
+             funcrefp = VN_CAST(dotp->rhsp(), NodeFTaskRef);
+         UASSERT_OBJ(funcrefp, nodep, "'with' only can operate on a function/task");
+-        string name = "item";
++        string name
++            = funcrefp->name() == "randomize" ? RANDOMIZE_WITH_OBJ_NAME : "item";
+         FileLine* argFl = nodep->fileline();
+         AstArg* const argsp = funcrefp->argsp();
+         if (argsp) {
+@@ -4298,7 +4306,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
+                     }
+                     UINFO(9, indent() << "randomize-with fromSym " << foundp->nodep());
+                     AstLambdaArgRef* const lambdaRefp
+-                        = new AstLambdaArgRef{nodep->fileline(), "item", false};
++                        = new AstLambdaArgRef{nodep->fileline(), RANDOMIZE_WITH_OBJ_NAME, false};
+                     AstMemberSel* newp = new AstMemberSel{nodep->fileline(), lambdaRefp,
+                                                           VFlagChildDType{}, nodep->name()};
+                     nodep->replaceWith(newp);
+@@ -5259,7 +5267,8 @@ class LinkDotResolveVisitor final : public VNVisitor {
+                     }
+                     if (m_ds.m_dotPos != DP_NONE) m_ds.m_dotPos = DP_MEMBER;
+                     AstNode* const newp = new AstMethodCall{
+-                        nodep->fileline(), new AstLambdaArgRef{nodep->fileline(), "item", false},
++                        nodep->fileline(),
++                        new AstLambdaArgRef{nodep->fileline(), RANDOMIZE_WITH_OBJ_NAME, false},
+                         VFlagChildDType{}, nodep->name(), argsp};
+                     nodep->replaceWith(newp);
+                     VL_DO_DANGLING(pushDeletep(nodep), nodep);
