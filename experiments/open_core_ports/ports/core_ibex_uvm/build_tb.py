@@ -160,7 +160,7 @@ OVERLAYS = [
     # block is silently ignored by Verilator: the constraint is dropped
     # and randomize() still returns success. Any other name works, and
     # local versus class member makes no difference -- see
-    # shims/verilator_constraint_scope.sv. `item` is SystemVerilog's
+    # shims/verilator_constraint_item_name.sv. `item` is SystemVerilog's
     # implicit iterator argument for array-manipulation `with` clauses,
     # which is the likely collision.
     #
