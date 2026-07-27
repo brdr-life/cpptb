@@ -363,38 +363,38 @@ process and the queries are cheap next to everything else. The `rand_mode`
 change is kept because it is equivalent and removes work that was pointless,
 not because it made the run faster.
 
-**Both of those measurements were wall time, and wall time turns out to be the
-wrong metric.** Measuring CPU as well, on the `-O2` build:
+**The `--pin-delays` build is not solver-free, which is why it measured
+nothing.** Counting invocations directly: 20,513 `check-sat` calls in 3,000
+cycles, about 6.8 per cycle, with every rand field in the response item
+disabled. Verilator does skip the solver when a `randomize()` has nothing to
+solve -- 1,000 all-`rand_mode(0)` calls produce no solver log at all -- so the
+traffic is coming from somewhere the overlay never touched.
+
+It is `ibex_mem_intf_response_driver::send_grant()`, which does its own
+`std::randomize(gnt_delay) with { dist ... }` on **every grant**, on both
+agents. That was always the larger caller; the sequence's randomize was the
+minority. Removing the sequence's and leaving the driver's is why the timings
+did not move.
+
+CPU against wall, on the same runs:
 
 ```
-cpu=3.66+1.38  wall=85.25
-cpu=3.85+1.52  wall=89.31
-cpu=4.00+1.68  wall=88.36
+cpu=3.77+1.32  wall=97.48
+cpu=3.91+2.01  wall=93.74
+cpu=5.59+3.48  wall=100.22
 ```
 
-About **5.4 s of CPU for 20,000 cycles against 85-90 s of wall clock**. The
-process is blocked, not computing, for roughly 94% of the run. At full CPU that
-would be ~3,700 cycles/s rather than ~195.
+About 5 s of CPU for 20,000 cycles. Part of that gap is three `rustc`
+processes saturating the box, but at roughly 137,000 solver round-trips per
+20,000 cycles, and ~100 s of wall on a quiet machine earlier, the arithmetic
+works out near 0.7 ms per round-trip -- which is the right order for a pipe
+round-trip with a process wakeup at each end.
 
-Blocked on what is the open question, and the obvious candidate is the z3
-round-trips: one persistent process, but tens of thousands of request/response
-pairs over a pipe, each one a context switch. That also puts the `--pin-delays`
-result back in doubt -- with every field `rand_mode(0)`, `req.randomize()` may
-still make an empty call to the solver, in which case that build removed the
-constraints but not the round-trips, and measured nothing.
-
-So "the solver is not the bottleneck" is withdrawn as well; it rests on a
-comparison that may not have varied what it claimed to. The test that settles
-it is counting solver invocations in a `--pin-delays` build, which takes one
-run of `+verilator+solver+file`.
-
-Two lessons for anything measured here next: use CPU time, or a machine with no
-other load -- these numbers were taken with four `rustc` processes on the box,
-which is why the wall times scatter by 12% while the CPU times agree to 5%.
-And confirm a knob changed what you think before drawing conclusions from it.
-
-`-O2` is therefore also unresolved: it cannot help much when 94% of the time is
-spent blocked.
+So the working conclusion, stated as a hypothesis rather than a result: the
+cost is solver round-trips, and the test that confirms it is disabling
+`send_grant`'s randomize as well and re-timing on an idle machine. Every
+statement about the solver in this section has now been made and withdrawn at
+least once, so it is worth being explicit that this one is not yet confirmed.
 
 What is left is the simulation itself: `--timing` coroutine scheduling across a
 UVM environment on a 270 MB model, at about 195 cycles per second. The next
