@@ -1,16 +1,36 @@
 # Draft issue for verilator/verilator
 
-Not filed. Reproducer lives in `shims/verilator_constraint_item_name.sv`.
+Not filed. Reproducer: `shims/verilator_constraint_item_name.sv`.
 
 ---
 
-**Title:** Inline constraint is silently ignored when it references a variable named `item`
+**Title:** `randomize() with` binds the array-iterator name `item`, shadowing a user variable of that name
 
-An inline constraint that references a variable called `item` is dropped.
-`randomize()` still returns 1 and the target gets a random value. Renaming the
-variable to anything else makes the same constraint work.
+In `randomize() with {...}`, any reference to a variable named `item` resolves to
+the object being randomized instead of the user's variable. Array methods like
+`find with (item > 3)` are supposed to introduce `item` as the default iterator
+(LRM 7.12.1). `randomize() with` should not, but it does.
 
 Verilator 5.050 2026-07-01 rev v5.050, Linux x86_64, z3 4.8.12.
+
+### Where it comes from
+
+`V3LinkDot.cpp:2198`, in `visit(AstWithParse*)`:
+
+```cpp
+string name = "item";
+...
+if (funcrefp->name() != "randomize") {   // randomize() never overrides the name
+```
+
+then unconditionally at `:2232`:
+
+```cpp
+new AstLambdaArgRef{argFl, name, false}
+```
+
+So a `randomize() with` clause gets a lambda argument literally called `item`,
+which shadows anything of that name in scope.
 
 ### Reproducer
 
@@ -26,12 +46,13 @@ class seq_t;
   task run();
     payload_t r1 = new();
     payload_t r2 = new();
+    bit ok;
 
-    void'(r1.randomize() with { addr == item.addr; });
-    $display("named item : addr=%08h expected=%08h", r1.addr, item.addr);
+    ok = r1.randomize() with { addr == item.addr; };
+    $display("named item : ok=%0d addr=%08h expected=%08h", ok, r1.addr, item.addr);
 
-    void'(r2.randomize() with { addr == itm.addr; });
-    $display("named itm  : addr=%08h expected=%08h", r2.addr, itm.addr);
+    ok = r2.randomize() with { addr == itm.addr; };
+    $display("named itm  : ok=%0d addr=%08h expected=%08h", ok, r2.addr, itm.addr);
   endtask
 endclass
 
@@ -56,45 +77,98 @@ verilator --binary --timing --top top mcve.sv -o mcve --Mdir objm
 ### Actual
 
 ```
-named item : addr=21766c9b expected=80000084
-named itm  : addr=80000084 expected=80000084
+named item : ok=1 addr=21766c9b expected=80000084
+named itm  : ok=1 addr=80000084 expected=80000084
 ```
 
-The first value is random and changes between builds. No warning or error is
-printed, and `randomize()` returns 1.
+`item.addr` became `r1.addr`, so the constraint is the tautology `addr == addr`.
+It is satisfiable by any value, `randomize()` returns 1, and the field comes out
+random. The generated call shows the rewritten constraint with no operand:
+
+```cpp
+randomizer.hard("(__Vbv (= addr addr))"s, "t_1.sv", 0xaU,
+                "    void'(r1.randomize() with { addr == item.addr; });");
+```
+
+The same line for `itm` correctly formats in the runtime value of
+`__Vthis->__PVT__itm->__PVT__addr`.
 
 ### Expected
 
 Both lines should print `addr=80000084`.
 
-### Other things I tried
+### The same rebinding, made visible
 
-- `local::item.addr` behaves the same way. So it is not the unqualified name
-  falling back to the wrong scope.
-- It happens for a local variable named `item` as well as a class member.
-- Renaming to `itm`, `req`, `rsp`, `m_item`, `member_item` or `data` all work.
-  Only `item` fails.
-- Renaming the class type makes no difference. Only the variable name matters.
-- With a plain scalar named `item` instead of a class handle, the generated C++
-  does not compile:
+Break the tautology and the rebinding shows up as an unsatisfiable constraint
+rather than a wrong value:
 
-  ```
-  Vtop___024unit__03a__03aitem_t__Vclpkg__0.cpp:36:45:
-    error: 'item' was not declared in this scope; did you mean 'tm'?
-  ```
+```systemverilog
+ok = r1.randomize() with { addr == item.addr + 1; };
+```
 
-  That looks like the same problem showing up at compile time rather than
-  silently.
+```
+%Warning-UNSATCONSTR: m1.sv:12: Unsatisfied constraint:
+  'ok = r1.randomize() with { addr == item.addr + 1; };'
+m1: randomize returned 0 (addr=f256f70c, item.addr=80000084)
+```
+
+It became `addr == addr + 1`. And if the user's `item` has a member the
+randomize target does not, it fails at elaboration, naming the wrong class:
+
+```systemverilog
+class other_t;   bit [31:0] tag;  endclass
+class payload_t; rand bit [31:0] addr; endclass
+class seq_t;
+  other_t item;                                  // has tag, not addr
+  task run(); payload_t r1 = new();
+    void'(r1.randomize() with { addr == item.tag; });
+```
+
+```
+%Error: m2.sv:14:46: Member 'tag' not found in class 'payload_t'
+```
+
+A bare, undotted `item` produces C++ that does not compile:
+
+```
+error: 'item' was not declared in this scope; did you mean 'tm'?
+```
+
+### Scope
+
+| | |
+| --- | --- |
+| `obj.randomize() with {...}` | affected, class member and plain local alike |
+| `std::randomize(v) with {...}` | affected; surfaces as `Unsupported: Member call on object 'LAMBDAARGREF 'item''` |
+| `constraint` block declared in a class | not affected, no `with` clause involved |
+| `q.find with (item > 3)` and other array methods | correct, `item` is the LRM default iterator there |
+
+Case sensitive and whole token. `ITEM`, `Item`, `item1`, `my_item`, `_item`,
+`item_`, `items`, `itemx`, `xitem`, `m_item` all work. Of 39 identifiers tested,
+only lowercase `item` fails.
+
+### Workaround
+
+Alias the handle to a differently named local first:
+
+```systemverilog
+automatic payload_t alias_h = item;
+void'(b.randomize() with { addr == alias_h.addr; });
+```
+
+`this.item` does not work, but that looks like a separate problem: `this`
+inside `randomize() with` also binds to the randomize target, so `this.itm`
+gives `Can't find definition of scope/variable: 'itm'`.
 
 ### Why it matters
 
 `item` is a common name in UVM sequences and monitors. I hit this in Ibex's
 `dv/uvm/core_ibex` testbench, where a response sequence ties its response to the
-monitored request with `addr == item.addr`. The constraint was dropped, so every
+monitored request with `addr == item.addr`. That became `addr == addr`, so every
 memory response went to a random address, the memory model reported the address
 as uninitialised and returned `0x0000`, and the core executed `c.unimp` at its
 reset vector. The cosim scoreboard then flagged a mismatch on the first
 instruction. Nothing in that chain pointed back at the constraint.
 
-Silently returning success with an unconstrained value is the hard part. A
-warning or an error would have made this quick to find.
+The tautology case is the dangerous one. It returns success, emits no warning,
+and the value is plausible.

@@ -156,24 +156,27 @@ OVERLAYS = [
         "  logic o_rst_n;\n",
         "  logic o_rst_n = 1'b1;\n",
     ),
-    # Verilator silently drops any constraint in a `randomize() with`
-    # block that dereferences a member of the *enclosing* class -- and
-    # returns success. Reduced to 30 lines in
-    # shims/verilator_constraint_scope.sv. This sequence's response is
-    # tied to the monitored request by `addr == item.addr`, where `item`
-    # is a member of the sequence, so the response went to a random
-    # address and the core was answered with c.unimp at its reset vector.
-    # Copying into locals first is what the LRM already guarantees and
-    # what Verilator gets right.
+    # A variable named `item` referenced inside a `randomize() with {}`
+    # block is silently ignored by Verilator: the constraint is dropped
+    # and randomize() still returns success. Any other name works, and
+    # local versus class member makes no difference -- see
+    # shims/verilator_constraint_scope.sv. `item` is SystemVerilog's
+    # implicit iterator argument for array-manipulation `with` clauses,
+    # which is the likely collision.
+    #
+    # This sequence ties its response to the monitored request with
+    # `addr == item.addr`, so every response went to a random address and
+    # the core was answered with c.unimp at its reset vector. Aliasing
+    # the handle for the constraint block is the whole fix.
     (
         CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_seq_lib.sv",
         "      bit [INTG_WIDTH-1:0] read_intg;\n      bit                  data_was_uninitialized = 1'b0;\n",
-        "      bit [INTG_WIDTH-1:0] read_intg;\n      bit                  data_was_uninitialized = 1'b0;\n      // A constraint that reads a member of the enclosing class is dropped\n      // by this simulator, silently and while reporting success, so all the\n      // with block below reads is copied into a local first.\n      ibex_mem_intf_seq_item l_item;\n      bit                    l_enable_error;\n      int unsigned           l_zero_delays;\n      int unsigned           l_vd_min, l_vd_max, l_w_med, l_w_slow;\n",
+        "      bit [INTG_WIDTH-1:0] read_intg;\n      bit                  data_was_uninitialized = 1'b0;\n      // `item` is the implicit iterator name for `with` clauses, and this\n      // simulator lets that shadow a user variable of the same name inside\n      // randomize() with {}, silently dropping the constraint. Any other\n      // name works, so the handle is aliased for the constraint block.\n      ibex_mem_intf_seq_item l_item;\n",
     ),
     (
         CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_seq_lib.sv",
         '      if (!req.randomize() with {\n        addr       == item.addr;\n        read_write == item.read_write;\n        data       == item.data;\n        intg       == item.intg;\n        be         == item.be;\n        if (p_sequencer.cfg.zero_delays) {\n          rvalid_delay == 0;\n        } else {\n          rvalid_delay dist {\n            p_sequencer.cfg.valid_delay_min                                                  :/ 5,\n            [p_sequencer.cfg.valid_delay_min + 1 : p_sequencer.cfg.valid_delay_max / 2 - 1]  :/ 3,\n            [p_sequencer.cfg.valid_delay_max / 2 : p_sequencer.cfg.valid_delay_max - 1]\n            :/ p_sequencer.cfg.valid_pick_medium_speed_weight,\n            p_sequencer.cfg.valid_delay_max\n            :/  p_sequencer.cfg.valid_pick_slow_speed_weight\n          };\n        }\n        error == enable_error;\n      }) begin\n',
-        '      l_item         = item;\n      l_enable_error = enable_error;\n      l_zero_delays  = p_sequencer.cfg.zero_delays;\n      l_vd_min       = p_sequencer.cfg.valid_delay_min;\n      l_vd_max       = p_sequencer.cfg.valid_delay_max;\n      l_w_med        = p_sequencer.cfg.valid_pick_medium_speed_weight;\n      l_w_slow       = p_sequencer.cfg.valid_pick_slow_speed_weight;\n      if (!req.randomize() with {\n        addr       == l_item.addr;\n        read_write == l_item.read_write;\n        data       == l_item.data;\n        intg       == l_item.intg;\n        be         == l_item.be;\n        if (l_zero_delays) {\n          rvalid_delay == 0;\n        } else {\n          rvalid_delay dist {\n            l_vd_min                             :/ 5,\n            [l_vd_min + 1 : l_vd_max / 2 - 1]    :/ 3,\n            [l_vd_max / 2 : l_vd_max - 1]        :/ l_w_med,\n            l_vd_max                             :/ l_w_slow\n          };\n        }\n        error == l_enable_error;\n      }) begin\n',
+        '      l_item = item;\n      if (!req.randomize() with {\n        addr       == l_item.addr;\n        read_write == l_item.read_write;\n        data       == l_item.data;\n        intg       == l_item.intg;\n        be         == l_item.be;\n        if (p_sequencer.cfg.zero_delays) {\n          rvalid_delay == 0;\n        } else {\n          rvalid_delay dist {\n            p_sequencer.cfg.valid_delay_min                                                  :/ 5,\n            [p_sequencer.cfg.valid_delay_min + 1 : p_sequencer.cfg.valid_delay_max / 2 - 1]  :/ 3,\n            [p_sequencer.cfg.valid_delay_max / 2 : p_sequencer.cfg.valid_delay_max - 1]\n            :/ p_sequencer.cfg.valid_pick_medium_speed_weight,\n            p_sequencer.cfg.valid_delay_max\n            :/  p_sequencer.cfg.valid_pick_slow_speed_weight\n          };\n        }\n        error == enable_error;\n      }) begin\n',
     ),
     (
         LOWRISC_IP / "dv/sv/common_ifs/clk_rst_if.sv",
