@@ -141,6 +141,55 @@ VPI, which is why the build passes `--vpi`: without it
 Verilator compiles everything it is handed with `$(CXX)`, so `get_unix_timestamp`
 came out name-mangled and the link failed.
 
+That backend is only half of what UVM's HDL access needs. Verilator exposes a
+signal to VPI only when it is marked public, and accepts a write only when it is
+`public_flat_rw`; nothing is public by default. The integrity and glitch tests
+reach into the DUT by name -- 22 `uvm_hdl_read`, `uvm_hdl_force` and
+`uvm_hdl_release` calls in `core_ibex_test_lib.sv`, several with the path
+assembled at run time -- and every one of them got a null handle back.
+`shims/uvm_hdl_public.vlt` names the signals, grouped by the test class that
+uses them, and `build_tb.py` passes it to Verilator.
+
+`forceable` is a second, separate permission: `vpi_put_value` with
+`vpiForceFlag` or `vpiReleaseFlag` is refused on a signal that does not have it.
+Only the signals the tests actually force carry it, because `forceable` is what
+makes a signal a `VlForceVec` and the row above records what that costs inside
+an interface. None of these are in an interface.
+
+Two things the control file cannot contain: a backtick, which starts a directive
+even inside a `//` comment, and a comment whose first word is `verilator`, which
+is read as a metacomment. Both were in the first draft of the header and both
+stopped the build.
+
+Five test classes use this: `core_ibex_pc_intg_test`, `core_ibex_rf_intg_test`,
+`core_ibex_rf_addr_intg_test`, `core_ibex_ram_intg_test` and
+`core_ibex_icache_intg_test`. Most of what they reach for only exists when
+`SecureIbex`, `ICache` and `ICacheScramble` are set, so `--config small` resolves
+the paths that are in that configuration and `--config opentitan` resolves all of
+them. On `opentitan` all five run with no HDL lookup failure, and the force
+reaches the design: `core_ibex_ram_intg_test` glitches a RAM control signal and
+then checks the major alert unconditionally, and that check passes.
+
+### A force is not substituted inside an array index
+
+`core_ibex_rf_addr_intg_test` forces `raddr_a_i` or `raddr_b_i` on the register
+file. Verilator accepts the force and reads the forced value back, but the
+register file does not see it, because `ibex_register_file_ff` reads
+`rf_reg[raddr_a_i]` and Verilator leaves the index reading the unforced
+variable. Reduced case in `shims/verilator_force_array_index.sv`, one module,
+both uses of the same forced signal:
+
+```
+[SV] base rdata=13 plus=04
+[VPI] FORCE top.u_rf.raddr_i <- 0x7
+[SV] forced raddr_i=7: rdata=13 (expect 17) plus=08 (expect 08)
+```
+
+`plus_o = raddr_i + 1` follows the force; `rdata_o = mem[raddr_i]` does not. The
+generated C++ says the same thing: the arithmetic reads `raddr_i__VforceRd` and
+the array select reads `raddr_i`. Native SystemVerilog `force` behaves
+identically, so this is `V3Force` rather than the VPI path.
+
 ### A trap worth knowing about
 
 Verilator's skip-identical check hashes the command line and the files it read
@@ -528,7 +577,9 @@ In Verilator, three internal errors, each with a small reproducer available from
 the overlays: the covergroup transition bins over enum items, `int'()` on a wide
 value used as a queue index, and `event e = null`. The `VlForceVec` virtual
 interface restriction and the `ref`-argument reading of 13.2.2 are limitations
-rather than crashes, but both are worth raising.
+rather than crashes, but both are worth raising. So is the fourth: a forced
+signal used as an unpacked-array index is read unforced, which silently gives
+the wrong answer rather than failing, and has a two-module reproducer.
 
 On the Ibex side, `core_ibex_tb_top.sv` drives `unused_assert_connected`
 without the `` `ifdef INC_ASSERT `` that declares it, which breaks any tool
