@@ -64,15 +64,24 @@ def generate(count: int, instructions: int, seed: int, target: str,
              out: Path, interrupts: bool = False,
              signature_addr: str | None = None,
              debug_section: bool = False,
-             pygen: Path | None = None) -> int:
+             pygen: Path | None = None,
+             name: str = "gen",
+             options: list[str] | None = None,
+             gen_test: str = "riscv_instr_base_test") -> int:
     # A caller may supply a patched copy of the generator; ports/core_ibex_uvm
     # needs one because pyflow's signature-handshake path does not run as
     # shipped. Everything else uses the fetched tree.
     pygen = pygen or (RISCV_DV / "pygen")
-    entry = pygen / "pygen_src/test/riscv_instr_base_test.py"
+    # A testlist entry names the generator test it wants. `--gen_test` matters
+    # as much as the script does: riscv_instr_base_test.py runs its test at
+    # import, guarded by `if cfg.argv.gen_test == "riscv_instr_base_test"`, and
+    # riscv_rand_instr_test.py imports it. Without the flag both tests run,
+    # nested inside each other's multiprocessing pool, and the second one hangs.
+    entry = pygen / f"pygen_src/test/{gen_test}.py"
     if not entry.is_file():
-        print(f"generate: no riscv-dv at {RISCV_DV}\n"
-              f"run: python3 {ROOT / 'fetch.py'} ibex", file=sys.stderr)
+        print(f"generate: no {gen_test}.py under {pygen}\n"
+              f"if riscv-dv is missing, run: python3 {ROOT / 'fetch.py'} ibex",
+              file=sys.stderr)
         return 1
     if shutil.which("uv") is None:
         print("generate: needs uv to provision Python "
@@ -90,7 +99,8 @@ def generate(count: int, instructions: int, seed: int, target: str,
         "--num_of_sub_program", str(SUB_PROGRAMS),
         "--tvec_alignment", str(TVEC_ALIGNMENT),
         "--target", target,
-        "--asm_file_name", "gen",
+        "--asm_file_name", name,
+        "--gen_test", gen_test,
         "--seed", str(seed),
     ]
     if interrupts:
@@ -110,6 +120,11 @@ def generate(count: int, instructions: int, seed: int, target: str,
         # ports/core_ibex_uvm does, with the address from that Makefile.
         command += ["--require_signature_addr", "1",
                     "--signature_addr", signature_addr]
+    # A caller with generator options of its own -- ports/core_ibex_uvm builds
+    # these from a testlist entry's `gen_opts` -- appends them last, so that a
+    # flag it names wins over the defaults above: argparse keeps the last
+    # occurrence of a repeated option.
+    command += list(options or [])
 
     completed = subprocess.run(
         command, cwd=out, text=True, stdout=subprocess.PIPE,
@@ -122,7 +137,7 @@ def generate(count: int, instructions: int, seed: int, target: str,
         print(f"generate: pyflow failed:\n{tail}", file=sys.stderr)
         return 1
 
-    produced = sorted(out.glob("gen_*.S"))
+    produced = sorted(out.glob(f"{name}_*.S"))
     # A caller outside this port passes an output directory of its own, so the
     # path is only shortened when it happens to sit under this one.
     shown = out.relative_to(HERE) if out.is_relative_to(HERE) else out
