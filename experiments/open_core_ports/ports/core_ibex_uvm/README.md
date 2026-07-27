@@ -367,26 +367,27 @@ Measured properly at last: instrumentation committed before building, the flag
 verified in `--help`, the overlay verified in `build/overlay`, the solver log
 counted, and the box idle.
 
-| build | `check-sat` / 3,000 cycles | wall, 20k cycles | CPU |
+| memory-response path | `check-sat` / 3k cycles | wall, 20k cycles | CPU |
 | --- | ---: | ---: | ---: |
-| normal | 20,513 | ~102 s | -- |
-| `--pin-delays` (no `gnt_delay` solve) | 14,719 | 57.4 / 49.9 / 64.0 | 9.2 / 6.5 / 10.6 |
+| as upstream writes it | 20,513 | ~102 s | -- |
+| grant delay drawn directly | 14,340 | 61.6 / 58.9 / 62.4 | ~10 s |
+| both delays drawn directly | **35** | **2.61 / 2.57 / 2.58** | ~2.5 s |
 
-**Removing 28% of the solver calls cut wall time roughly in half**, and CPU is
-about 15% of wall throughout. So the solver round-trips are the dominant cost
-after all: the simulator spends most of its life blocked on a pipe to `z3`, not
-computing. `send_grant()` is a large caller but not the only one -- 14,719
-calls remain, from the response sequence's `rvalid_delay` randomize.
+**About 39x faster, and wall now equals CPU**: the simulator is finally
+compute-bound rather than blocked on a pipe. 195 cycles/s became roughly 7,700.
+Zero cosim mismatches throughout, and the delay distributions are unchanged --
+same buckets, same weights, drawn with `$urandom_range` instead of the
+constraint solver.
 
-The shippable fix is not `--pin-delays`, which deletes the delay variation the
-agent exists to provide. It is to keep the distribution and lose the round
-trip: precompute a pool of delays, or use `$urandom_range` where the shape
-allows, so the per-transaction cost is arithmetic rather than IPC.
+The lesson generalises beyond this testbench. Verilator solves constraints by
+shelling out to `z3`, and every `randomize()` is a round trip over a pipe.
+That is fine for setup-time randomisation and ruinous per transaction. A UVM
+agent that randomizes a delay on every bus access pays it thousands of times a
+run. Nothing here needed the solver: five fields were pinned by equality and
+the delays are three- and four-bucket weighted picks.
 
-Every earlier claim in this section was made on a measurement that had not been
-verified to vary what it said it varied. The sequence that finally worked:
-commit the instrumentation, assert the flag exists, assert the overlay landed,
-count the solver calls, check the machine is idle, then time. In that order.
+`--pin-delays` stays as a measurement build, but is now redundant for timing:
+the shipped path makes 35 solver calls a run, which is already the floor.
 
 What is left is the simulation itself: `--timing` coroutine scheduling across a
 UVM environment on a 270 MB model, at about 195 cycles per second. The next
