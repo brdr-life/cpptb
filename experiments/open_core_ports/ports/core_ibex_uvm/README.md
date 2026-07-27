@@ -18,7 +18,7 @@ only shows up on a 2-state simulator; all three are found, reduced and fixed
 below. `core_ibex_base_test` now retires instructions with no cosim mismatch.
 
 **No test completes yet**, for a different reason: throughput. The run reaches
-about 107 cycles per second, so a riscv-dv program does not finish. See
+about 195 cycles per second, so a riscv-dv program does not finish. See
 "Still open: throughput".
 
 ## Why this matters here
@@ -329,13 +329,15 @@ generate a reset edge is fragile, and the initialiser is the clean fix.
 ### The core now runs in lockstep with Spike
 
 With all three fixes in, `core_ibex_base_test` executes the program and the
-cosim scoreboard is quiet: **186 instructions retired, no mismatches**, PCs
-advancing normally through the generated code.
+cosim scoreboard is quiet: **2,186 instructions retired, no mismatches**, PCs
+advancing normally through the generated code. The run ends on the harness
+timeout, not on a failure.
 
 ### Still open: throughput
 
-The run above took 420 seconds to reach cycle 44,816 -- about **107 cycles per
-second**, which puts a full riscv-dv program out of reach. The likely cause is
+A clean build reaches cycle 46,808 in 240 seconds -- about **195 cycles per
+second**. Instrumented builds are far slower still; either way a full riscv-dv
+program is out of reach. The likely cause is
 that Verilator shells out to `z3` as a subprocess for every `randomize()`, and
 the memory response sequence randomizes once per bus access. That is a cost per
 transaction, not per cycle, so it dominates.
