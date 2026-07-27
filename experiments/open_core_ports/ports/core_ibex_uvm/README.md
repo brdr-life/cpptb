@@ -342,6 +342,19 @@ that Verilator shells out to `z3` as a subprocess for every `randomize()`, and
 the memory response sequence randomizes once per bus access. That is a cost per
 transaction, not per cycle, so it dominates.
 
+Measured, not guessed. `+verilator+solver+file+<path>` logs every SMT query:
+over 10,270 cycles the run makes **2,545 randomize() calls and 86,059
+`check-sat` round-trips** -- about 34 solver queries per randomize, and one
+randomize every four cycles. Verilator appears to search bit by bit to get a
+uniform solution, so the cost scales with the number of rand fields, not with
+how constrained they are.
+
+`ibex_mem_intf_seq_item` has nine rand fields and the response sequence pins
+five of them to the monitored request by equality, so most of that work is
+spent re-deriving values that are already determined. Reducing the randomize
+footprint on that path is the obvious lever; `cfg.zero_delays` is not, because
+it changes the delay value rather than the number of solver calls.
+
 Worth trying, in order: `zero_delays` on the response agent config to see how
 much of the cost is the `rvalid_delay` `dist`; and checking whether Verilator
 can be pointed at an in-process solver rather than a subprocess.
