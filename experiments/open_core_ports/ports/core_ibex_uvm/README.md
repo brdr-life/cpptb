@@ -363,6 +363,39 @@ process and the queries are cheap next to everything else. The `rand_mode`
 change is kept because it is equivalent and removes work that was pointless,
 not because it made the run faster.
 
+**Both of those measurements were wall time, and wall time turns out to be the
+wrong metric.** Measuring CPU as well, on the `-O2` build:
+
+```
+cpu=3.66+1.38  wall=85.25
+cpu=3.85+1.52  wall=89.31
+cpu=4.00+1.68  wall=88.36
+```
+
+About **5.4 s of CPU for 20,000 cycles against 85-90 s of wall clock**. The
+process is blocked, not computing, for roughly 94% of the run. At full CPU that
+would be ~3,700 cycles/s rather than ~195.
+
+Blocked on what is the open question, and the obvious candidate is the z3
+round-trips: one persistent process, but tens of thousands of request/response
+pairs over a pipe, each one a context switch. That also puts the `--pin-delays`
+result back in doubt -- with every field `rand_mode(0)`, `req.randomize()` may
+still make an empty call to the solver, in which case that build removed the
+constraints but not the round-trips, and measured nothing.
+
+So "the solver is not the bottleneck" is withdrawn as well; it rests on a
+comparison that may not have varied what it claimed to. The test that settles
+it is counting solver invocations in a `--pin-delays` build, which takes one
+run of `+verilator+solver+file`.
+
+Two lessons for anything measured here next: use CPU time, or a machine with no
+other load -- these numbers were taken with four `rustc` processes on the box,
+which is why the wall times scatter by 12% while the CPU times agree to 5%.
+And confirm a knob changed what you think before drawing conclusions from it.
+
+`-O2` is therefore also unresolved: it cannot help much when 94% of the time is
+spent blocked.
+
 What is left is the simulation itself: `--timing` coroutine scheduling across a
 UVM environment on a 270 MB model, at about 195 cycles per second. The next
 measurement is `--prof-exec` to attribute model time, and the first cheap thing
