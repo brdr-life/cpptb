@@ -342,32 +342,32 @@ that Verilator shells out to `z3` as a subprocess for every `randomize()`, and
 the memory response sequence randomizes once per bus access. That is a cost per
 transaction, not per cycle, so it dominates.
 
-Measured, not guessed. `+verilator+solver+file+<path>` logs every SMT query:
-over 10,270 cycles the run makes **2,545 randomize() calls and 86,059
-`check-sat` round-trips** -- about 34 solver queries per randomize, and one
-randomize every four cycles. Verilator appears to search bit by bit to get a
-uniform solution, so the cost scales with the number of rand fields, not with
-how constrained they are.
+Measured properly, by timing fixed work rather than counting cycles in fixed
+time. 20,000 cycles, three runs each:
 
-`ibex_mem_intf_seq_item` has nine rand fields and the response sequence pins
-five of them to the monitored request by equality, so most of that work is
-spent re-deriving values that are already determined. Reducing the randomize
-footprint on that path is the obvious lever; `cfg.zero_delays` is not, because
-it changes the delay value rather than the number of solver calls.
+| build | runs (s) | mean |
+| --- | --- | ---: |
+| normal | 102.52, 101.70, 102.23 | 102.1 |
+| `--pin-delays`, no constrained solve at all | 102.15, 98.03, 104.39 | 101.5 |
 
-`rand_mode(0)` on the eight determined fields is applied and it helps, but not
-by the order of magnitude the per-field theory predicted. Same program, same
-wall clock, solver logging on both sides: **10,270 cycles before, 13,515
-after**, about +30%. Queries per solve did drop sharply -- roughly 34 to 7 --
-so the field-count theory holds for the cost of one solve, but the number of
-solves rose enough to eat most of the gain, and the run-to-run variance on this
-machine (163 to 195 cycles/s on unchanged builds) is wide enough that the +30%
-should be treated as indicative rather than measured. Correctness is unchanged:
-zero cosim mismatches.
+**The solver is not the bottleneck.** Removing every constrained solve from the
+response path -- not reducing it, removing it -- buys about half a percent,
+inside the noise.
 
-So the solver is a real cost but not the whole story, and the next measurement
-should separate simulation time from solver time rather than inferring one from
-the other.
+That withdraws two earlier claims from this file. The "+30% from `rand_mode`"
+was a measurement artefact: it came from counting cycles reached in a fixed
+wall clock, with solver logging enabled, across different phases of the
+program. Timed as fixed work the difference disappears. And the 34-SMT-queries
+-per-randomize figure, while real, does not matter: `z3 --in` is one persistent
+process and the queries are cheap next to everything else. The `rand_mode`
+change is kept because it is equivalent and removes work that was pointless,
+not because it made the run faster.
+
+What is left is the simulation itself: `--timing` coroutine scheduling across a
+UVM environment on a 270 MB model, at about 195 cycles per second. The next
+measurement is `--prof-exec` to attribute model time, and the first cheap thing
+to try is the optimisation level -- `--binary` compiles the generated C++ at
+`-Os`.
 
 Worth trying, in order: `zero_delays` on the response agent config to see how
 much of the cost is the `rvalid_delay` `dist`; and checking whether Verilator
