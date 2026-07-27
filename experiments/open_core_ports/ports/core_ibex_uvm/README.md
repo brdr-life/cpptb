@@ -17,10 +17,22 @@ build and a running test, all of them X-initialisation or solver behaviour that
 only shows up on a 2-state simulator; all three are found, reduced and fixed
 below. `core_ibex_base_test` now retires instructions with no cosim mismatch.
 
-**Tests pass.** Each testlist entry now runs the program its own `gen_opts` ask
-for, and a program that reaches its end tells the testbench so. Of the first
-eight entries tried, six end on the riscv-dv signature handshake with no cosim
-mismatch; none times out. See "Per-test programs".
+**Tests pass, with no workarounds left.** Each testlist entry runs the program
+its own `gen_opts` ask for, and a program that reaches its end tells the
+testbench so. Of the first eight entries built, **six pass and two fail**, none
+times out, and the sweep no longer needs `+disable_fetch_enable_seq=1` -- the
+fetch-enable stimulus runs. Separately, all five integrity classes pass on
+`--config opentitan` now that the signals they probe are visible to VPI.
+
+The two failures are worth naming: `riscv_debug_wfi_test` reports a cosim
+mismatch, and `riscv_multiple_interrupt_test` fails its own check for a CSR
+write within 10,000 cycles. Both run programs pyflow cannot generate faithfully
+-- see the unsupported-option list the runner prints -- so neither is yet
+evidence about Ibex.
+
+49 of the 57 entries have no program built. About 20 of those cannot be built
+faithfully at all: their PMP, debug-ROM and bitmanip options have no pyflow
+equivalent, and the RTL parameters they need are not set by the `small` build.
 
 ## Why this matters here
 
