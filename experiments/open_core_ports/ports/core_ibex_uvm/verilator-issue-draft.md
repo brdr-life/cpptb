@@ -160,6 +160,36 @@ void'(b.randomize() with { addr == alias_h.addr; });
 inside `randomize() with` also binds to the randomize target, so `this.itm`
 gives `Can't find definition of scope/variable: 'itm'`.
 
+### Suggested fix
+
+`V3LinkDot.cpp` refers to that lambda argument by the literal string `"item"` in
+three places. Giving the randomize case a reserved name instead fixes all of the
+above and leaves array methods alone. Patch against `v5.050-99-gf8fb1d6` in
+`verilator-item-fix.patch`:
+
+```cpp
+static const char* const RANDOMIZE_WITH_OBJ_NAME = "__Vrandwith_obj";
+...
+string name
+    = funcrefp->name() == "randomize" ? RANDOMIZE_WITH_OBJ_NAME : "item";
+```
+
+plus the two `AstLambdaArgRef{..., "item", false}` constructions in the
+randomize-with resolution paths. Nothing downstream matches on the name:
+`V3Randomize.cpp` and `V3Width.cpp` dispatch on the `LambdaArgRef` node type.
+
+Built and tested. Before and after, same files:
+
+| Case | v5.050 | patched |
+| --- | --- | --- |
+| `addr == item.addr` | `addr=21766c9b` | `addr=80000084` |
+| `addr == item.addr + 1` | `UNSATCONSTR`, returns 0 | `ok=1 addr=80000085` |
+| `item` of another class type | `Member 'tag' not found in class 'payload_t'` | `addr=5a5a5a5a` |
+| `q.find with (item > 3)` | `size=2 first=4` | `size=2 first=4` |
+
+`test_regress` with every `t_constraint*`, `t_randomize*` and
+`t_array_query_with` test: 176 passed, 0 failed.
+
 ### Why it matters
 
 `item` is a common name in UVM sequences and monitors. I hit this in Ibex's
