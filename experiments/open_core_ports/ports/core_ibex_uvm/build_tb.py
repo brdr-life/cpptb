@@ -135,6 +135,18 @@ FCOV_SOURCES = [
 # clocking blocks, one per edge -- would diverge further from upstream's source
 # than this does.
 OVERLAYS = [
+    # The memory agents randomize a delay on every bus transaction, and each
+    # constrained solve is a round trip over a pipe to z3. Measured: the
+    # process spends about 85% of its wall clock blocked rather than
+    # computing, and removing this one solve roughly halved the run time.
+    #
+    # This keeps the distribution and drops the round trip: same buckets,
+    # same weights, drawn with $urandom_range.
+    (
+        CORE_IBEX / "common/ibex_mem_intf_agent/ibex_mem_intf_response_driver.sv",
+        '        if (!std::randomize(gnt_delay) with {\n          gnt_delay dist {\n            cfg.gnt_delay_min                           :/ 10,\n            [cfg.gnt_delay_min+1 : cfg.gnt_delay_max-1] :/ cfg.valid_pick_medium_speed_weight,\n            cfg.gnt_delay_max                           :/ cfg.valid_pick_slow_speed_weight\n          };\n        }) begin\n          `uvm_fatal(`gfn, $sformatf("Cannot randomize grant"))\n        end\n',
+        '        // Same three buckets and the same weights as the dist this replaces,\n        // drawn with $urandom_range instead of the constraint solver. `:/`\n        // spreads a weight uniformly across its range, which is the second\n        // branch here. See build_tb.py for why.\n        begin\n          int unsigned w_lo, w_mid, w_hi, pick;\n          w_lo  = 10;\n          w_mid = (cfg.gnt_delay_max >= cfg.gnt_delay_min + 2) ?\n                    cfg.valid_pick_medium_speed_weight : 0;\n          w_hi  = cfg.valid_pick_slow_speed_weight;\n          pick  = $urandom_range(w_lo + w_mid + w_hi - 1, 0);\n          if (pick < w_lo) begin\n            gnt_delay = cfg.gnt_delay_min;\n          end else if (pick < w_lo + w_mid) begin\n            gnt_delay = $urandom_range(cfg.gnt_delay_max - 1, cfg.gnt_delay_min + 1);\n          end else begin\n            gnt_delay = cfg.gnt_delay_max;\n          end\n        end\n',
+    ),
     # clk_rst_if declares `logic o_rst_n;` with no initialiser and then
     # apply_reset() drives it low. On a 4-state simulator that is X -> 0, a
     # real falling edge, and every `always_ff @(posedge clk or negedge rst_ni)`
