@@ -1,5 +1,5 @@
 diff --git a/src/V3LinkDot.cpp b/src/V3LinkDot.cpp
-index 39ed3b4..4393126 100644
+index 39ed3b4..50be380 100644
 --- a/src/V3LinkDot.cpp
 +++ b/src/V3LinkDot.cpp
 @@ -80,6 +80,13 @@
@@ -16,17 +16,16 @@ index 39ed3b4..4393126 100644
  static string extractDottedPath(AstNode* nodep, bool& hasPartSelect) {
      if (AstParseRef* const refp = VN_CAST(nodep, ParseRef)) {
          return refp->name();
-@@ -2195,7 +2202,8 @@ class LinkDotFindVisitor final : public VNVisitor {
+@@ -2195,7 +2202,7 @@ class LinkDotFindVisitor final : public VNVisitor {
          if (const AstDot* const dotp = VN_CAST(nodep->funcrefp(), Dot))
              funcrefp = VN_CAST(dotp->rhsp(), NodeFTaskRef);
          UASSERT_OBJ(funcrefp, nodep, "'with' only can operate on a function/task");
 -        string name = "item";
-+        string name
-+            = funcrefp->name() == "randomize" ? RANDOMIZE_WITH_OBJ_NAME : "item";
++        string name = funcrefp->name() == "randomize" ? RANDOMIZE_WITH_OBJ_NAME : "item";
          FileLine* argFl = nodep->fileline();
          AstArg* const argsp = funcrefp->argsp();
          if (argsp) {
-@@ -4298,7 +4306,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
+@@ -4298,7 +4305,7 @@ class LinkDotResolveVisitor final : public VNVisitor {
                      }
                      UINFO(9, indent() << "randomize-with fromSym " << foundp->nodep());
                      AstLambdaArgRef* const lambdaRefp
@@ -35,7 +34,7 @@ index 39ed3b4..4393126 100644
                      AstMemberSel* newp = new AstMemberSel{nodep->fileline(), lambdaRefp,
                                                            VFlagChildDType{}, nodep->name()};
                      nodep->replaceWith(newp);
-@@ -5259,7 +5267,8 @@ class LinkDotResolveVisitor final : public VNVisitor {
+@@ -5259,7 +5266,8 @@ class LinkDotResolveVisitor final : public VNVisitor {
                      }
                      if (m_ds.m_dotPos != DP_NONE) m_ds.m_dotPos = DP_MEMBER;
                      AstNode* const newp = new AstMethodCall{

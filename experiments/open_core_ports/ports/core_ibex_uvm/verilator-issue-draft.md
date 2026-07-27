@@ -2,6 +2,10 @@
 
 Not filed. Reproducer: `shims/verilator_constraint_item_name.sv`.
 
+Fix and tests are pushed to a fork and ready to open as a PR:
+`brdr-life/verilator`, branch `fix-randomize-with-item-shadowing`.
+The same diff is in `verilator-item-fix.patch`.
+
 ---
 
 **Title:** `randomize() with` binds the array-iterator name `item`, shadowing a user variable of that name
