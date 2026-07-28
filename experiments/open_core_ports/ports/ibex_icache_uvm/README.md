@@ -27,7 +27,8 @@ eval "$(python3 ../../local_deps.py --env)"   # puts z3 on PATH
 python3 run_tests.py --jobs 4
 ```
 
-A build is about four minutes at `--jobs 4` and the binary is 47 MB. An SMT
+A build from an empty `build/` is about three minutes at `--jobs 4` and the
+binary is 47 MB. An SMT
 solver is needed at run time, not build time: Verilator does not solve
 constraints itself, it pipes to `z3 --in`, and without one every `randomize()`
 in the testbench fails with the real explanation only in a warning at the top
