@@ -162,6 +162,26 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "`define DV_COMMON_CLK_CONSTRAINT(FREQ_) \\\n"
         "  FREQ_ inside {[5:100]};\n",
     ),
+    # `uvm_phase::phase_done` is null here. In UVM 1.2 the phase constructor
+    # creates the objection for every task-phase node; in Accellera's
+    # 1800.2-2020.3.1 it is created on demand by `get_objection()`, and nothing
+    # has called that by the time a component's run_phase starts. dv_base_test
+    # reaches for the member directly on its first statement and the run stops
+    # with "Null pointer dereferenced".
+    #
+    # `get_objection()` is the 1800.2 accessor and returns the same object,
+    # creating it if it is not there yet. This is the only direct use of
+    # phase_done in lowRISC's DV library.
+    #
+    # Not a Verilator defect: it is a UVM version difference, visible here
+    # because Verilator ships no UVM and this build supplies Accellera's.
+    (
+        LOWRISC_IP / "dv/sv/dv_lib/dv_base_test.sv",
+        "    phase.phase_done.set_drain_time(this, (drain_time_ns * 1ns));\n",
+        "    // phase_done is created on demand in UVM 1800.2; get_objection()\n"
+        "    // is the accessor that creates it. See build_tb.py.\n"
+        "    phase.get_objection().set_drain_time(this, (drain_time_ns * 1ns));\n",
+    ),
     # lowRISC's shared DV library excludes itself under Verilator:
     # clk_rst_if.sv wraps its UVM includes and imports in `ifndef VERILATOR, so
     # the interface compiles without `DV_CHECK_FATAL and fails at the first use
