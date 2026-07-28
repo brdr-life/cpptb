@@ -773,6 +773,112 @@ active over state variables. A reduced case confirmed that a state variable
 outside its constraint's range makes the call fail. Some of what looks like a
 solver bug in a UVM testbench is that rule being enforced.
 
+## The directed tests
+
+`directed_tests/directed_testlist.yaml` is the other testlist, and the larger
+one: **944 entries** against the riscv-dv list's 57. Nothing generates them.
+Each entry names a hand-written C or assembly source and upstream's
+`scripts/compile_test.py` turns it into a binary with two commands, which is
+what `run_directed.py` runs:
+
+```
+$RISCV_GCC <gcc_opts> -I<includes> -T<ld_script> -o test.o <test_srcs>
+$RISCV_OBJCOPY -O binary test.o test.bin
+```
+
+The working directory matters and is not stated anywhere: the `-I` paths inside
+`gcc_opts` are relative and are written against `dv/uvm/core_ibex`, while
+`ld_script`, `includes` and `test_srcs` are resolved by the schema relative to
+the testlist file. Both are honoured here.
+
+```sh
+python3 run_directed.py --config opentitan --list
+python3 run_directed.py --config opentitan --group riscv-tests
+python3 run_directed.py --config opentitan --pattern 'pmp_*' --jobs 4
+python3 run_directed.py --config opentitan          # all 944
+```
+
+They are not evenly spread. 744 of the 944 are ePMP entries, and those 744 are
+generated from three `.cc_skel` templates -- `test_pmp_csr_1` (528),
+`test_pmp_ok_1` (192) and `test_pmp_ok_share_1` (24) -- as a combinatorial
+sweep over PMP configuration bits. The other 200 are 107 riscv-arch-tests and
+93 riscv-tests.
+
+### Five things had to be fixed before any of the numbers meant anything
+
+Two are this toolchain, and would not arise on lowRISC's.
+
+- The riscv-tests and riscv-arch-tests configs name no `-march` and take the
+  toolchain default, which for lowRISC's `riscv32-unknown-elf` is `rv32imc`
+  and for `riscv-none-elf` 15.2.0 here is `rv32imac_zmmul_zaamo_zalrsc_zca` --
+  the A extension Ibex has not got. One derived from the built Ibex
+  configuration is supplied instead.
+- gcc 15 assembles no CSR or `fence.i` instruction unless Zicsr and Zifencei
+  are named, so the epmp config's `-march=rv32imc` becomes
+  `-march=rv32imc_zicsr_zifencei`. Same instruction set, newer assembler.
+- `syscalls.c` declares three `__thread` buffers; this toolchain emulates TLS,
+  libgcc's emulation calls `malloc`, and the config passes `-nostdlib`, so the
+  744 ePMP entries did not link. `shims/emutls_malloc.c` is a bump allocator
+  for exactly that.
+
+Three are upstream, and each one silently changes what a test means.
+
+- **The ePMP linker script is stale by a megabyte.** Every generated ePMP
+  source says `#define TEST_MEM_START 0x80200000` and programs its PMP entries
+  from it; `mseccfg_test.ld` places `TEST_MEM` at `0x0020_0000` and `M_MEM` at
+  `0x0010_0000`. The flat binary starts at its lowest section, so loading at
+  `BOOT_ADDR` puts `_start` at `0x8000_0080` -- right -- and `TEST_MEM` at
+  `0x8010_0000`, a megabyte below where the program's own PMP entries say it
+  is. lowRISC regenerated the C for Ibex's memory map and left the script on
+  Spike's. In a 13-entry sample the four failures were the four entries that
+  execute from or load out of `TEST_MEM`, and all four pass with the script
+  rebased. `--stock-ld` runs it as vendored.
+- **The arch tests compile their bodies away.** Every riscv-arch-test wraps its
+  body in `#ifdef TEST_CASE_1`, and the framework's own runner defines that
+  after matching the ISA string in `RVTEST_CASE`. The testlist's `gcc_opts`
+  does not. `add-01` built as the testlist asks has a 292-byte `.text.init`,
+  retires **73 instructions, none of them an add**, and passes. With
+  `-DTEST_CASE_1=True` it is 12,868 bytes and retires 3,239. All 107 entries
+  were affected. `--stock-defines` leaves them as upstream has them.
+- **No ePMP test can fail upstream.** `syscalls.c`'s `tohost_exit(code)` writes
+  `(code << 8) | CORE_STATUS` and then a constant `(TEST_PASS << 8) |
+  TEST_RESULT`. `checkTestResult` computes a verdict, passes it to `exit()`,
+  and the harness is told TEST_PASS regardless -- as is `handle_trap`, which
+  exits 1337. The code does reach memory and `TRACE_EXECUTION` records the
+  store, so `run_directed.py` reads it back out of the tracer log and reports a
+  non-zero one as a failure. Upstream has no way to fail one of these 744.
+
+### What each group's pass actually means
+
+| group | entries | what a pass is |
+| --- | ---: | --- |
+| riscv-tests | 93 | the program's own verdict: `RVTEST_PASS` or `RVTEST_FAIL` |
+| epmp-tests | 744 | the exit code recovered from the trace, plus the cosim |
+| riscv-arch-tests | 107 | the RVFI cosim against Spike, and nothing else |
+
+The arch tests signal TEST_PASS unconditionally from `RVMODEL_HALT` and leave
+the checking to a signature comparison against a reference that neither this
+flow nor upstream's performs. What does check them here is the cosim
+scoreboard, which compares every retired instruction against Spike -- a real
+check, and for `add-01` it is 3,239 instructions of one.
+
+One more thing worth knowing about the riscv-tests group: `riscv_test.h`'s
+`trap_vector` sends an ecall, and any exception it cannot handle, to
+`write_tohost`, which stores to the `tohost` symbol and spins. The testbench
+watches the signature address, not `tohost`, so a riscv-test that takes an
+unexpected trap does not fail -- it hangs until the budget runs out. `scall`,
+which ends on a deliberate ecall, is a wall-clock timeout for that reason and
+cannot be anything else in this environment.
+
+### Where the cycle budget had to go
+
+Upstream never overrides `timeout_in_cycles`, so its budget is
+`core_ibex_base_test`'s default of 100,000,000 cycles, which is hours here. At
+200,000 ten of the `pmp_mseccfg` entries reported a timeout; all ten pass at
+5,000,000, the first of them finishing at cycle 236,835. The default is now
+5,000,000 with the entry's own `timeout_s` -- 300 seconds for all three configs
+-- as the real bound.
+
 ## What is not done
 
 - **Functional coverage.** `--fcov` exists but Verilator 5.050 dies with an
