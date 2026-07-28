@@ -128,6 +128,40 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "      .ICacheTweakInfection (ICacheTweakInfection),\n",
         "      .TweakInfection       (ICacheTweakInfection),\n",
     ),
+    # `DV_COMMON_CLK_CONSTRAINT is a weighted `dist` over 5..100 MHz, and
+    # ibex_icache_env_cfg derives from the class that carries it and adds
+    #
+    #     constraint clk_freq_50_c { clk_freq_mhz == 50; }
+    #
+    # 50 is inside the distribution's support, so the pair is satisfiable.
+    # This simulator draws a sample from the distribution first and then
+    # asserts equality against that sample, so the whole solve is unsatisfiable
+    # unless the sample happened to be 50. Measured over 25 seeds of this
+    # testbench, one got past `DV_CHECK_RANDOMIZE_FATAL in dv_base_test; the
+    # other 24 died at time 0 with "Randomization failed!" and no diagnostic.
+    # Reduced case, with the rates, in shims/verilator_dist_plus_equality.sv.
+    #
+    # Replacing the distribution with its own support as an `inside` keeps
+    # every frequency the constraint allows and drops the weights. In this
+    # testbench that costs nothing at all: clk_freq_50_c determines the value,
+    # and the `foreach` arm of the same constraint iterates clk_freqs_mhz,
+    # which is empty here because the icache has no RAL model.
+    (
+        LOWRISC_IP / "dv/sv/dv_utils/dv_macros.svh",
+        "`define DV_COMMON_CLK_CONSTRAINT(FREQ_) \\\n"
+        "  FREQ_ dist { \\\n"
+        "    [5:23]  :/ 2, \\\n"
+        "    [24:25] :/ 2, \\\n"
+        "    [26:47] :/ 1, \\\n"
+        "    [48:50] :/ 2, \\\n"
+        "    [51:95] :/ 1, \\\n"
+        "    96      :/ 1, \\\n"
+        "    [97:99] :/ 1, \\\n"
+        "    100     :/ 1  \\\n"
+        "  };\n",
+        "`define DV_COMMON_CLK_CONSTRAINT(FREQ_) \\\n"
+        "  FREQ_ inside {[5:100]};\n",
+    ),
     # lowRISC's shared DV library excludes itself under Verilator:
     # clk_rst_if.sv wraps its UVM includes and imports in `ifndef VERILATOR, so
     # the interface compiles without `DV_CHECK_FATAL and fails at the first use
