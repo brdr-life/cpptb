@@ -200,15 +200,23 @@ PYGEN_PATCHES = [
     ),
     # Forty of the fifty-seven testlist entries name `riscv_rand_instr_test` as
     # their generator test, and pyflow has that test: the base program plus
-    # three directed instruction streams. It also hardcodes two settings over
-    # the top of the command line, one of which is the sub-program count that
-    # `gen_callstack` cannot survive on current pyvsc, and the other of which
-    # would make every entry's `+instr_cnt` a no-op.
+    # three directed instruction streams. It hardcodes two settings over the top
+    # of the command line, exactly as the SystemVerilog it reimplements does:
+    #
+    #     virtual function void randomize_cfg();
+    #       cfg.instr_cnt = 10000;
+    #       cfg.num_of_sub_program = 5;
+    #
+    # `cfg.instr_cnt` is left alone here, because that assignment happens after
+    # the config has read `+instr_cnt`, so upstream generates 10,000
+    # instructions for every one of those entries whatever their `gen_opts` say.
+    # Overriding it would make this port generate something upstream does not.
+    # `num_of_sub_program` has to go to 0: see SUB_PROGRAM_REASON.
     (
         "test/riscv_rand_instr_test.py",
         "        cfg.instr_cnt = 10000\n"
         "        cfg.num_of_sub_program = 5\n",
-        "        cfg.instr_cnt = cfg.argv.instr_cnt\n"
+        "        cfg.instr_cnt = 10000\n"
         "        cfg.num_of_sub_program = 0\n",
     ),
     # `randomize_avail_regs` is `pass  # TODO` in pyflow, with the constraint
@@ -420,6 +428,175 @@ PYGEN_PATCHES = [
         "            exclude_instr.append(riscv_instr_name_t.C_LWSP)\n"
         "            exclude_instr.append(riscv_instr_name_t.C_LDSP)\n",
     ),
+    # `create_instr_list` drops FENCE, FENCE_I and SFENCE_VMA from the pool
+    # unconditionally. The SystemVerilog it reimplements guards the same line
+    # with the option that exists to control it:
+    #
+    #     if (cfg.no_fence && (instr_name inside {FENCE, FENCE_I, SFENCE_VMA}))
+    #       continue;
+    #
+    # so `+no_fence=0` adds nothing to `instr_category["SYNCH"]` and the three
+    # entries that ask for fences get a program with none. The line above it is
+    # the same mistake with the polarity the other way round: the SystemVerilog
+    # reads `!cfg.enable_sfence && instr_name == SFENCE_VMA`, pyflow reads
+    # `cfg.enable_sfence and ...`, so restoring the fence guard on its own would
+    # start emitting sfence.vma. pyflow also has none of the SystemVerilog's
+    # `sfence_c`, which forces `enable_sfence == 0` when the target does not set
+    # support_sfence, so that condition is folded in here -- rv32imc has
+    # support_sfence = 0 and Ibex has no S mode.
+    (
+        "isa/riscv_instr.py",
+        "            if (cfg.enable_sfence and instr_name == riscv_instr_name_t.SFENCE_VMA):\n"
+        "                continue\n"
+        "            if instr_name in [riscv_instr_name_t.FENCE, riscv_instr_name_t.FENCE_I,\n"
+        "                              riscv_instr_name_t.SFENCE_VMA]:\n"
+        "                continue\n",
+        "            if (not (cfg.enable_sfence and rcs.support_sfence) and\n"
+        "                    instr_name == riscv_instr_name_t.SFENCE_VMA):\n"
+        "                continue\n"
+        "            if cfg.no_fence and instr_name in [riscv_instr_name_t.FENCE,\n"
+        "                                               riscv_instr_name_t.FENCE_I,\n"
+        "                                               riscv_instr_name_t.SFENCE_VMA]:\n"
+        "                continue\n",
+    ),
+    # ------------------------------------------------------------------------
+    # riscv_illegal_instr: Python's `and`, `or` and `not` are not pyvsc
+    # operators
+    # ------------------------------------------------------------------------
+    #
+    # This is one bug with five sites, and it is why `+illegal_instr_ratio` and
+    # `+hint_instr_ratio` were recorded as unsupported: every randomization of
+    # `riscv_illegal_instr` failed, in every configuration, from the first one.
+    #
+    # pyvsc builds a constraint by side effect: each expression created inside a
+    # `@vsc.constraint` body is appended to the enclosing scope, and an operator
+    # such as `&` or `|` consumes its operands and pushes the combination.
+    # Python's `and` and `or` are not operators -- they test the left operand
+    # for truthiness, which an expression object always has, and return one of
+    # the two. So `(a == 1) and (b == 2)` leaves *both* comparisons in the
+    # scope as separate conjuncts, `(a == 1) or (b == 2)` does the same where a
+    # disjunction was meant, and `not (a == 1)` produces a Python `False` while
+    # leaving `a == 1` behind as a constraint of its own.
+    #
+    # A minimal unsatisfiable core over the sixteen constraint blocks is ten of
+    # them, which is what a conjunction of mutually exclusive alternatives looks
+    # like from the solver's side. Two examples of what the file means to say
+    # and what pyvsc is given:
+    #
+    #   has_func7_c   means  (opcode==19 && func3 inside {1,5}) || opcode inside {51,59}
+    #                 gets   opcode==19 && func3==1 && func3==5 && opcode==51 && opcode==59
+    #
+    #   legal_rv32_c_slli  means  if (c_msb==0 && c_op==2 && XLEN==32)
+    #                      gets   c_msb==0; c_op==2; if (XLEN==32)
+    #
+    # The second one alone forces every compressed encoding to C.SLLI, so no
+    # compressed illegal instruction can be generated even when the solve
+    # succeeds. With all five fixed, all seven `illegal_instr_type_e` values
+    # appear in a 6,000-instruction program and 60 of 60 randomizations succeed.
+    (
+        "riscv_illegal_instr.py",
+        "        with vsc.if_then((self.opcode == 19) and (self.func3 == 1 or self.func3 == 5) or\n"
+        "                         (self.opcode == 51 or self.opcode == 59)):\n",
+        "        with vsc.if_then(((self.opcode == 19) &\n"
+        "                          ((self.func3 == 1) | (self.func3 == 5))) |\n"
+        "                         (self.opcode == 51) | (self.opcode == 59)):\n",
+    ),
+    (
+        "riscv_illegal_instr.py",
+        "        with vsc.if_then(self.opcode == 55 or self.opcode == 111 or self.opcode == 23):\n",
+        "        with vsc.if_then((self.opcode == 55) | (self.opcode == 111) |\n"
+        "                         (self.opcode == 23)):\n",
+    ),
+    (
+        "riscv_illegal_instr.py",
+        "        with vsc.if_then((self.c_msb == 0) and (self.c_op == 2) and (self.xlen == 32)):\n",
+        "        with vsc.if_then((self.c_msb == 0) & (self.c_op == 2) & (self.xlen == 32)):\n",
+    ),
+    # hint_instr_c is eight alternatives joined with `or`, so seven of them were
+    # being asserted alongside the first rather than instead of it.
+    (
+        "riscv_illegal_instr.py",
+        "            ((self.c_msb == 0) and (self.c_op == 1) and (self.instr_bin[12] +\n"
+        "                                                         self.instr_bin[6:2] == 0)) or \\\n"
+        "                ((self.c_msb == 2) and (self.c_op == 1) and "
+        "(self.instr_bin[11:7] == 0)) or \\\n"
+        "                ((self.c_msb == 4) and (self.c_op == 1) and "
+        "(self.instr_bin[12:11] == 0) and\n"
+        "                 (self.instr_bin[6:2] == 0)) or \\\n"
+        "                ((self.c_msb == 4) and (self.c_op == 2) and "
+        "(self.instr_bin[11:7] == 0) and\n"
+        "                 (self.instr_bin[6:2] != 0)) or \\\n"
+        "                ((self.c_msb == 3) and (self.c_op == 1) and "
+        "(self.instr_bin[11:7] == 0) and\n"
+        "                 (self.instr_bin[12] + self.instr_bin[6:2]) != 0) or \\\n"
+        "                ((self.c_msb == 0) and (self.c_op == 2) and "
+        "(self.instr_bin[11:7] == 0)) or \\\n"
+        "                ((self.c_msb == 0) and (self.c_op == 2) and "
+        "(self.instr_bin[11:7] != 0) and\n"
+        "                 not(self.instr_bin[12]) and (self.instr_bin[6:2] == 0)) or \\\n"
+        "                ((self.c_msb == 4) and (self.c_op == 2) and "
+        "(self.instr_bin[11:7] == 0) and\n"
+        "                 self.instr_bin[12] and (self.instr_bin[6:2] != 0))\n",
+        "            (((self.c_msb == 0) & (self.c_op == 1) &\n"
+        "              (self.instr_bin[12] + self.instr_bin[6:2] == 0)) |\n"
+        "             ((self.c_msb == 2) & (self.c_op == 1) & (self.instr_bin[11:7] == 0)) |\n"
+        "             ((self.c_msb == 4) & (self.c_op == 1) & (self.instr_bin[12:11] == 0) &\n"
+        "              (self.instr_bin[6:2] == 0)) |\n"
+        "             ((self.c_msb == 4) & (self.c_op == 2) & (self.instr_bin[11:7] == 0) &\n"
+        "              (self.instr_bin[6:2] != 0)) |\n"
+        "             ((self.c_msb == 3) & (self.c_op == 1) & (self.instr_bin[11:7] == 0) &\n"
+        "              (self.instr_bin[12] + self.instr_bin[6:2] != 0)) |\n"
+        "             ((self.c_msb == 0) & (self.c_op == 2) & (self.instr_bin[11:7] == 0)) |\n"
+        "             ((self.c_msb == 0) & (self.c_op == 2) & (self.instr_bin[11:7] != 0) &\n"
+        "              (self.instr_bin[12] == 0) & (self.instr_bin[6:2] == 0)) |\n"
+        "             ((self.c_msb == 4) & (self.c_op == 2) & (self.instr_bin[11:7] == 0) &\n"
+        "              (self.instr_bin[12] == 1) & (self.instr_bin[6:2] != 0)))\n",
+    ),
+    # The two `not` sites. `not self.instr_bin[12]` is a Python bool that goes
+    # nowhere, and leaves `instr_bin[12]` in the scope as a bare expression --
+    # which pyvsc reads as "non-zero", the opposite of what the SystemVerilog
+    # `!instr_bin[12]` asks for. Both are inside `reserved_compressed_instr_c`,
+    # whose `and` chains are conjunctions in the enclosing `if_then` and so mean
+    # what they say by accident.
+    (
+        "riscv_illegal_instr.py",
+        "                 (not self.instr_bin[12]) and (self.instr_bin[6:2] == 0))\n"
+        "            with vsc.if_then(self.reserved_c == reserved_c_instr_e.kReservedLui):\n"
+        "                ((self.c_msb == 3) and (self.c_op == 1) and\n"
+        "                 (not self.instr_bin[12]) and (self.instr_bin[6:2] == 0))\n",
+        "                 (self.instr_bin[12] == 0) and (self.instr_bin[6:2] == 0))\n"
+        "            with vsc.if_then(self.reserved_c == reserved_c_instr_e.kReservedLui):\n"
+        "                ((self.c_msb == 3) and (self.c_op == 1) and\n"
+        "                 (self.instr_bin[12] == 0) and (self.instr_bin[6:2] == 0))\n",
+    ),
+    # And the encoding those randomizations produce. The SystemVerilog formats
+    # the bits as hex digits -- `%8h` and `%4h` -- and the caller writes
+    # `.4byte 0x%s`. pyflow's `get_bin_str` returns `hex(instr_bin)` for the
+    # 32-bit case, which happens to assemble, and the bare integer for the
+    # 16-bit case, which assembles as a decimal number: `.2byte 24705` where
+    # `.2byte 0x6081` was meant. Every HINT and every compressed illegal
+    # instruction would be the wrong encoding.
+    (
+        "riscv_illegal_instr.py",
+        "        if self.compressed == 1:\n"
+        "            local_instr_bin = self.instr_bin & 0xffff\n"
+        "        else:\n"
+        "            local_instr_bin = hex(self.instr_bin)\n",
+        "        if self.compressed == 1:\n"
+        '            local_instr_bin = "{:04x}".format(int(self.instr_bin) & 0xffff)\n'
+        "        else:\n"
+        '            local_instr_bin = "{:08x}".format(int(self.instr_bin))\n',
+    ),
+    (
+        "riscv_instr_sequence.py",
+        '                insert_str = "{}.4byte {} # {}".format(pkg_ins.indent,\n',
+        '                insert_str = "{}.4byte 0x{} # {}".format(pkg_ins.indent,\n',
+    ),
+    (
+        "riscv_instr_sequence.py",
+        '                insert_str = "{}.2byte {} # {}".format(pkg_ins.indent,\n',
+        '                insert_str = "{}.2byte 0x{} # {}".format(pkg_ins.indent,\n',
+    ),
 ]
 
 
@@ -565,35 +742,49 @@ def pyflow_streams() -> set[str]:
 # riscv_instr_gen_config.py: self.max_directed_instr_stream_seq = 20.
 MAX_DIRECTED_STREAMS = 20
 
-# Two options pyflow accepts, reads, and then cannot randomize. Both go through
-# `riscv_illegal_instr`, whose constraint set pyvsc fails to solve often enough
-# that a handful of instructions is all it takes: measured here,
-# `+illegal_instr_ratio=5` and `+hint_instr_ratio=5` each end in a SolveFailure
-# at 2,000 instructions, and `+illegal_instr_ratio=25` fails at 400. There is
-# no smaller ratio worth falling back to, so they are dropped and recorded.
-# Two instruction classes pyflow does not put in a program whatever it is
-# asked. Turning either off is honoured trivially; turning one on is not, so
-# only the `=0` form is recorded.
+# Instruction classes pyflow does not put in a program whatever it is asked.
+# Turning one off is honoured trivially; turning one on is not, so only the
+# `=0` form is recorded.
 #
-#   no_fence      `create_instr_list` skips FENCE, FENCE_I and SFENCE_VMA
-#                 before the categories are filled, so instr_category["SYNCH"]
-#                 is empty and there is nothing for `+no_fence=0` to add.
-#   no_csr_instr  `build_basic_instruction_list` guards the CSR instructions
-#                 with `cfg.init_privileged_mode == "MACHINE_MODE"`, an enum
-#                 compared against a string, which is never true. Correcting
-#                 that comparison was tried: the CSR instructions then reach
-#                 the solver and every program fails to generate, so the
-#                 comparison is left as it is and this is recorded instead.
+#   no_csr_instr  Three things stand in the way, not one.
+#                 `build_basic_instruction_list` guards the CSR category with
+#                 `cfg.init_privileged_mode == "MACHINE_MODE"`, an enum
+#                 compared against a string, which is never true. Behind that,
+#                 `riscv_instr.csr_c` -- the constraint that keeps the CSR
+#                 address inside the implemented set -- is `# TODO / pass`, and
+#                 pyflow has no `riscv_csr_instr` class at all, so the address
+#                 would be an unconstrained 12-bit value; `create_csr_filter`
+#                 fills `include_reg` and `exclude_reg` with strings that
+#                 nothing reads. And `convert2asm` formats the result as
+#                 `0x{}` around the *decimal* value, so `csrrw x1, 0x800, x2`
+#                 would name CSR 0x800 where 0x320 was drawn. Honouring
+#                 `+no_csr_instr=0` means porting riscv_csr_instr.sv, not
+#                 correcting the comparison.
+#   no_ecall      pyflow has no `--no_ecall` and never puts ECALL in the pool.
+#                 It also generates riscv-dv's stock ecall handler, which jumps
+#                 to `write_tohost` and spins, rather than Ibex's override.
 NEVER_GENERATED = {
-    "no_fence": "pyflow generates no fence instructions in either case",
-    "no_csr_instr": "pyflow generates no CSR instructions in either case",
+    "no_csr_instr": "pyflow generates no CSR instructions in either case; "
+                    "riscv_instr.csr_c is `# TODO / pass` and there is no "
+                    "riscv_csr_instr class to constrain the address",
+    "no_ecall": "pyflow has no --no_ecall and never puts ECALL in the pool",
 }
 
-SOLVER_FAILS = {
-    "illegal_instr_ratio":
-        "pyflow's riscv_illegal_instr randomization fails on current pyvsc",
-    "hint_instr_ratio":
-        "same path as illegal_instr_ratio, and the same pyvsc failure",
+# Options that ask for the *absence* of something pyflow never generates. They
+# cannot be passed, and dropping them costs nothing: the program pyflow
+# produces already has the property the option asks for.
+#
+# `+suppress_pmp_setup=1` asks riscv-dv to emit a PMP configuration that allows
+# everything instead of the randomized one, and `+disable_pmp_exception_handler=1`
+# asks Ibex's extension not to install its PMP exception handler. pyflow emits
+# neither section, so both requests are already met -- a program with no PMP
+# entries configured is unrestricted in M mode, which is where these two entries
+# run.
+VACUOUS = {
+    "suppress_pmp_setup":
+        "pyflow emits no PMP setup at all, which is what this asks for",
+    "disable_pmp_exception_handler":
+        "pyflow emits no PMP exception handler, which is what this asks for",
 }
 
 # How many seeds to try before giving up on an entry. What is left of the
@@ -616,6 +807,33 @@ INERT = {
     "enable_misaligned_instr": "parsed into the config and never read",
 }
 
+# Options pyflow does read, on a code path it never takes. `check_unreachable`
+# checks that the path is still dead rather than trusting this list.
+#
+#   enable_ebreak_in_debug_rom  read in `riscv_instr_stream.randomize_instr`
+#                               under `if is_in_debug`, which only the debug
+#                               ROM sets, and `gen_debug_rom` is a stub.
+#   enable_access_invalid_csr_level  read in `riscv_instr.create_csr_filter`,
+#                               which fills `include_reg` -- a list nothing
+#                               reads -- and CSR instructions are not generated
+#                               at all. See NEVER_GENERATED["no_csr_instr"].
+UNREACHABLE = {
+    "enable_ebreak_in_debug_rom":
+        "read only inside the debug ROM, which pyflow's gen_debug_rom does not "
+        "generate",
+    "enable_access_invalid_csr_level":
+        "read only into riscv_instr.include_reg, which nothing reads, and "
+        "pyflow generates no CSR instructions",
+}
+
+# What has to still be true for UNREACHABLE to hold: the debug ROM generator is
+# still a stub, and `include_reg` is still write-only.
+UNREACHABLE_EVIDENCE = [
+    ("riscv_asm_program_gen.py",
+     "    def gen_debug_rom(self, hart):\n        # TODO\n        pass\n",
+     "gen_debug_rom is no longer a stub"),
+]
+
 
 def check_inert() -> None:
     read = set()
@@ -630,21 +848,185 @@ def check_inert() -> None:
             f"pyflow now reads {', '.join(acquired)}; INERT is out of date")
 
 
+def check_unreachable() -> None:
+    for name, text, complaint in UNREACHABLE_EVIDENCE:
+        if text not in (PYGEN_SRC / name).read_text(encoding="utf-8"):
+            raise BuildError(f"{name}: {complaint}; UNREACHABLE is out of date")
+    # `include_reg` and `exclude_reg` are assigned in create_csr_filter and read
+    # nowhere. If that changes, enable_access_invalid_csr_level has an effect
+    # again.
+    readers = [path.name for path in sorted(PYGEN_SRC.rglob("*.py"))
+               if path.name != "riscv_instr.py"
+               and "include_reg" in path.read_text(encoding="utf-8")]
+    if readers:
+        raise BuildError(f"{', '.join(readers)} now reads include_reg; "
+                         f"UNREACHABLE is out of date")
+
+
 def reason(name: str) -> str:
     """Why a `gen_opts` option cannot be passed to pyflow."""
-    if name.startswith("pmp_") or name in ("enable_write_pmp_csr", "mseccfg",
-                                           "suppress_pmp_setup",
-                                           "disable_pmp_exception_handler"):
-        return "PMP, which no pyflow target supports (support_pmp = 0)"
+    if name.startswith("pmp_") or name in ("enable_write_pmp_csr", "mseccfg"):
+        return ("PMP: no pyflow target sets support_pmp, riscv_pmp_cfg has no "
+                "Python implementation, and setup_pmp and gen_pmp_csr_write "
+                "are stubs")
     if name.startswith("enable_z"):
-        return ("a bitmanip subset; pyflow has only enable_b_extension and "
-                "enable_bitmanip_groups")
+        # `enable_bitmanip_groups` is honoured -- riscv_b_instr.is_supported
+        # reads it -- but the per-subset flags have no pyflow argument, and it
+        # makes no difference: pyflow's only B module is isa/rv32b_instr.py,
+        # which is the draft v0.93 encoding. `bfp`, `grevi`, `cmix`, `crc32.h`
+        # and `sbclr` are what comes out, and binutils 15.2 assembles none of
+        # them, so a bitmanip program does not link at all.
+        return ("a bitmanip subset flag pyflow does not have; and pyflow's only "
+                "B module is the draft v0.93 encoding, which this binutils "
+                "does not assemble")
     if name.startswith("uvm_set_type_override"):
         return "a UVM factory override, which a Python generator has no notion of"
     if name in ("toggle_dit", "toggle_dummy_instr", "gen_all_csrs_by_default",
                 "add_csr_write"):
         return "Ibex's own riscv_dv_extension, which is SystemVerilog"
     return "no pyflow equivalent"
+
+
+# Why `+num_of_sub_program=N` is forced to 0. Two independent reasons, and the
+# second is the one that matters: even with the first fixed the sub-programs
+# would never be called.
+#
+#   gen_callstack calls `self.callstack_gen.init(...)` on a local it has just
+#   named `callstack_gen`, so it dies with `'riscv_asm_program_gen' object has
+#   no attribute 'callstack_gen'`, and reads `callstack_gen.program_h` and
+#   `.program_id[i]` where the class has `program_h[i]`.
+#
+#   riscv_instr_sequence.insert_jump_instr is `pass`, with the whole body
+#   commented out above a `# TODO riscv_jump_instr class implementation`. That
+#   is the function that puts the jump into the caller. `insert_sub_program`
+#   appends the sub-program bodies after the jump to `test_done`, so what a
+#   fixed gen_callstack would produce is unreachable code, not a call stack.
+SUB_PROGRAM_REASON = (
+    "forced to 0: riscv_instr_sequence.insert_jump_instr is `pass  # TODO`, so "
+    "a generated sub-program is never called, and gen_callstack fails before "
+    "that on `self.callstack_gen`")
+
+
+# The UVM test library, read to find out which classes assert `debug_req_i`.
+TEST_LIB = (ROOT / "deps/ibex/dv/uvm/core_ibex/tests/core_ibex_test_lib.sv")
+
+# What a test class does in its own `send_stimulus` when it drives debug. The
+# first three are the helpers `core_ibex_directed_test` provides; the fourth is
+# the newer sequence object two classes start directly.
+DEBUG_STIMULUS = ("start_debug_single_seq(", "send_debug_stimulus(",
+                  "start_debug_stress_seq(", "debug_new_seq_h.start(")
+
+_DEBUG_CLASSES: set[str] | None = None
+
+
+def debug_driving_classes() -> set[str]:
+    """UVM test classes that assert `debug_req_i` without being asked to.
+
+    Derived from `core_ibex_test_lib.sv` rather than listed here, because the
+    list would be a guess and this is a fact about that file. A class counts if
+    its own body calls one of DEBUG_STIMULUS; `core_ibex_debug_intr_basic_test`
+    and `core_ibex_directed_test` only *define* those helpers, and run them when
+    the entry passes `+enable_debug_seq=1`, which is handled separately.
+    """
+    global _DEBUG_CLASSES
+    if _DEBUG_CLASSES is None:
+        if not TEST_LIB.is_file():
+            raise BuildError(f"no UVM test library at {TEST_LIB}")
+        text = TEST_LIB.read_text(encoding="utf-8")
+        starts = list(re.finditer(r"^class (\w+) extends (\w+);", text, re.M))
+        if not starts:
+            raise BuildError(f"{TEST_LIB.name}: no test classes found; the "
+                             f"library has changed shape")
+        found = set()
+        for index, match in enumerate(starts):
+            end = (starts[index + 1].start() if index + 1 < len(starts)
+                   else len(text))
+            body = text[match.start():end]
+            # The two base classes define the helpers; a subclass calling one
+            # is what drives the stimulus.
+            if match.group(1) in ("core_ibex_debug_intr_basic_test",
+                                  "core_ibex_directed_test"):
+                continue
+            if any(call in body for call in DEBUG_STIMULUS):
+                found.add(match.group(1))
+        _DEBUG_CLASSES = found
+    return _DEBUG_CLASSES
+
+
+def needs_debug_rom(entry: dict) -> bool:
+    """Whether this entry's run will send the core into the debug ROM.
+
+    Two ways it can happen, and the testlist only states one of them.
+    `+enable_debug_seq=1` in `sim_opts` makes `core_ibex_debug_intr_basic_test`
+    run its stress sequence; the rest of the debug classes start a debug
+    sequence from their own `send_stimulus` with nothing in the testlist to say
+    so. A core that takes a debug request jumps to `DEBUG_ROM_ENTRY`, and
+    pyflow's `gen_debug_rom` is a stub, so what is at that address is the
+    self-loop this build's own program header puts there: the core enters debug
+    mode and never leaves it.
+    """
+    if "+enable_debug_seq=1" in entry.get("sim_opts", "").split():
+        return True
+    return entry.get("rtl_test", "") in debug_driving_classes()
+
+
+# A dropped option that removes the thing its entry exists to exercise. The
+# result of such a run is not evidence about the entry's name, whatever the
+# testbench reports, so `run_tests.py` reports these separately from the tests
+# whose program merely differs in detail.
+#
+# The debug options are deliberately not here. `+gen_debug_section=1` costs an
+# entry nothing if nothing sends the core into debug mode -- `riscv_umode_tw_test`
+# asks for it and has no debug stimulus at all -- so what carries the verdict is
+# the synthesized `debug_rom` note, which is raised only when the run will
+# actually enter the ROM.
+DEFINING = frozenset({
+    # PMP, ePMP and the mseccfg entries: with these gone the program is a plain
+    # random program under a PMP-shaped name.
+    "mseccfg", "enable_write_pmp_csr", "debug_rom",
+    # "Inject debug/interrupt stimulus during dummy writes to xSTATUS and xIE".
+    "enable_dummy_csr_write",
+    # "generate csr accesses to invalid CSRs (at a higher priv mode)".
+    "enable_access_invalid_csr_level",
+})
+
+# The same, where it depends on the entry rather than the option. Checked
+# against the entry's own gen_opts at build time so it cannot go stale quietly.
+DEFINING_PER_TEST = {
+    # "Jump among large number of sub-programs": with num_of_sub_program forced
+    # to 0 there is nothing to jump among.
+    "riscv_rand_jump_test": ("num_of_sub_program",),
+}
+
+
+def is_defining(test: str, name: str) -> bool:
+    if name.startswith("pmp_") or name.startswith("enable_z"):
+        return True
+    if name.startswith("uvm_set_type_override"):
+        return True
+    return name in DEFINING or name in DEFINING_PER_TEST.get(test, ())
+
+
+def verdict(test: str, notes: list[str], dropped: list[str]) -> str:
+    """How far the built program is from the entry that asked for it."""
+    if any(is_defining(test, name) for name in dropped):
+        return "hollow"
+    return "partial" if dropped else "faithful"
+
+
+def check_defining() -> None:
+    """DEFINING_PER_TEST names options those entries actually ask for."""
+    entries = {entry["test"]: entry for entry in testlist() if entry.get("test")}
+    for test, names in DEFINING_PER_TEST.items():
+        if test not in entries:
+            raise BuildError(f"DEFINING_PER_TEST names {test}, which is not in "
+                             f"the testlist")
+        asked = {name for name, _ in gen_opts(entries[test])}
+        stale = sorted(set(names) - asked)
+        if stale:
+            raise BuildError(
+                f"DEFINING_PER_TEST[{test}] names {', '.join(stale)}, which "
+                f"the entry no longer asks for")
 
 
 def translate(entry: dict) -> tuple[list[str], list[str]]:
@@ -657,32 +1039,56 @@ def translate(entry: dict) -> tuple[list[str], list[str]]:
     accepted, streams = pyflow_arguments(), pyflow_streams()
     options: list[str] = []
     notes: list[str] = []
+    dropped: list[str] = []
+
+    def drop(name: str, opt: str, why: str) -> None:
+        notes.append(f"{opt}: {why}")
+        dropped.append(name)
+
+    rand_instr_test = entry.get("gen_test") == "riscv_rand_instr_test"
     for name, value in gen_opts(entry):
         opt = f"+{name}={value}"
         if name in ("require_signature_addr", "signature_addr"):
             # Set for every program built here; see SIGNATURE_ADDR.
             continue
-        if name in SOLVER_FAILS:
-            notes.append(f"{opt}: {SOLVER_FAILS[name]}")
+        if name == "instr_cnt" and rand_instr_test:
+            # Not a limitation of pyflow: `riscv_rand_instr_test::randomize_cfg`
+            # assigns cfg.instr_cnt = 10000 after the config has read the
+            # plusarg, in the SystemVerilog as well as in pyflow, so this entry
+            # gets 10,000 instructions upstream too. Recorded because the entry
+            # asks for something else and neither flow gives it.
+            notes.append(f"{opt}: overridden to 10000 by "
+                         f"riscv_rand_instr_test.randomize_cfg, which assigns "
+                         f"it after the config has read the plusarg -- upstream "
+                         f"does the same")
+            continue
+        if name in VACUOUS:
+            # Recorded, but not counted against the entry: see VACUOUS.
+            notes.append(f"{opt}: not passed, and costs nothing -- "
+                         f"{VACUOUS[name]}")
             continue
         if name in NEVER_GENERATED and value == "0":
-            notes.append(f"{opt}: {NEVER_GENERATED[name]}")
+            drop(name, opt, NEVER_GENERATED[name])
             continue
         if name == "num_of_sub_program" and value != "0":
-            notes.append(f"{opt}: forced to 0, pyflow's gen_callstack fails on "
-                         f"current pyvsc")
+            drop(name, opt, SUB_PROGRAM_REASON)
             continue
         if name.startswith("directed_instr_"):
             stream = value.split(",")[0]
             if stream not in streams:
-                notes.append(f"{opt}: {stream} is not in pyflow's stream factory")
+                drop(name, opt,
+                     f"{stream} is not in pyflow's stream factory")
                 continue
         if name not in accepted:
-            notes.append(f"{opt}: {reason(name)}")
+            drop(name, opt, reason(name))
             continue
         if name in INERT:
-            notes.append(f"{opt}: accepted by pyflow and never read -- "
-                         f"{INERT[name]}")
+            drop(name, opt, f"accepted by pyflow and never read -- "
+                            f"{INERT[name]}")
+            continue
+        if name in UNREACHABLE:
+            drop(name, opt, f"accepted by pyflow and read on a path it never "
+                            f"takes -- {UNREACHABLE[name]}")
             continue
         if name == "enable_bitmanip_groups":
             # nargs='*', and pyflow spells the groups in upper case.
@@ -690,7 +1096,31 @@ def translate(entry: dict) -> tuple[list[str], list[str]]:
             options += [group.strip().upper() for group in value.split(",")]
             continue
         options += [f"--{name}", value]
-    return options, notes
+
+    if needs_debug_rom(entry):
+        notes.append("the UVM class drives debug stimulus and pyflow generates "
+                     "no debug ROM: `debug_rom:` is a self-loop, so the core "
+                     "cannot service a debug request")
+        dropped.append("debug_rom")
+    return options, notes, dropped
+
+
+def target_for(entry: dict, default: str) -> str:
+    """The pyflow target one entry needs.
+
+    `+enable_b_extension=1` only means anything if the target's `supported_isa`
+    contains RV32B, which of pyflow's six targets is true of `rv32imcb` alone.
+    Generating the three bitmanip entries against the default rv32imc target
+    would produce a program with no B instructions in it and a clean link, which
+    is the worst of both: the entry would look built and would test nothing.
+    """
+    if any(name == "enable_b_extension" for name, _ in gen_opts(entry)):
+        target = PYGEN_SRC / "target" / "rv32imcb" / "riscv_core_setting.py"
+        if not target.is_file():
+            raise BuildError("pyflow has no rv32imcb target; the bitmanip "
+                             "entries have nowhere to generate against")
+        return "rv32imcb"
+    return default
 
 
 def march_for(entry: dict, default: str) -> str:
@@ -765,7 +1195,7 @@ def build_test(entry: dict, args) -> dict:
     """Generate and link the program one testlist entry asks for."""
     name = entry["test"]
     gen_test = entry.get("gen_test", "")
-    options, notes = translate(entry)
+    options, notes, dropped = translate(entry)
     record = {"test": name,
               "rtl_test": entry.get("rtl_test", ""),
               "gen_test": gen_test,
@@ -773,11 +1203,14 @@ def build_test(entry: dict, args) -> dict:
               "sim_opts": entry.get("sim_opts", "").split(),
               "timeout_s": entry.get("timeout_s", ""),
               "march": march_for(entry, args.march),
-              "unsupported": notes}
+              "target": target_for(entry, args.target),
+              "unsupported": notes,
+              "verdict": verdict(name, notes, dropped)}
     if not gen_test:
         # riscv_csr_test is generated by riscv-dv's gen_csr_test.py from the
         # target's CSR description, not by the instruction generator at all.
         record["error"] = "entry has no gen_test; not a generator program"
+        record["verdict"] = "not generated"
         return record
     if not (patched_pygen() / f"pygen_src/test/{gen_test}.py").is_file():
         # pyflow ships riscv_instr_base_test and riscv_rand_instr_test and no
@@ -800,7 +1233,7 @@ def build_test(entry: dict, args) -> dict:
     if not args.skip_generate:
         for attempt in range(args.attempts):
             seed = args.seed + attempt
-            if generate(1, args.instructions, seed, args.target, name=name,
+            if generate(1, args.instructions, seed, record["target"], name=name,
                         options=options, gen_test=gen_test) == 0:
                 record["seed"] = seed
                 break
@@ -853,6 +1286,8 @@ def build_tests(args, wanted: list[str]) -> int:
         entries = [e for e in entries if e["test"] in wanted]
 
     check_inert()
+    check_unreachable()
+    check_defining()
     patched_pygen()
     # One pyflow process per entry, several at a time: a 10,000-instruction
     # program takes about eighty seconds and the whole testlist is an hour
@@ -873,14 +1308,19 @@ def build_tests(args, wanted: list[str]) -> int:
                   file=sys.stderr)
             continue
         notes = record["unsupported"]
-        detail = f"{record['bytes']:>8} bytes"
+        detail = f"{record['bytes']:>8} bytes  {record['verdict']}"
         if notes:
-            detail += f", {len(notes)} gen_opt(s) not honoured"
+            detail += f", {len(notes)} note(s)"
         print(f"  {record['test']:<42} {detail}")
     for record in records:
         for note in record["unsupported"]:
             print(f"    {record['test']}: {note}")
-    print(f"\nbuilt {len(records) - failed} of {len(records)} test program(s)")
+    tally: dict[str, int] = {}
+    for record in records:
+        if "error" not in record:
+            tally[record["verdict"]] = tally.get(record["verdict"], 0) + 1
+    print(f"\nbuilt {len(records) - failed} of {len(records)} test program(s): "
+          + ", ".join(f"{count} {name}" for name, count in sorted(tally.items())))
     return 1 if failed else 0
 
 
@@ -906,10 +1346,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list_tests:
+        check_defining()
         for entry in testlist():
-            options, notes = translate(entry)
-            print(f"  {entry['test']:<42} {entry.get('rtl_test', '')}"
-                  f"{'  (' + str(len(notes)) + ' gen_opts dropped)' if notes else ''}")
+            options, notes, dropped = translate(entry)
+            mark = (verdict(entry["test"], notes, dropped)
+                    if entry.get("gen_test") else "not generated")
+            print(f"  {entry['test']:<42} {entry.get('rtl_test', ''):<46} "
+                  f"{mark}"
+                  f"{'  (' + str(len(dropped)) + ' dropped)' if dropped else ''}")
         return 0
     if args.test or args.all_tests:
         return build_tests(args, [] if args.all_tests else args.test)
