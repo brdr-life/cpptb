@@ -274,9 +274,12 @@ cd build && ./obj_small/core_ibex_tb \
 or, for the testlist rather than one program:
 
 ```sh
-python3 build_programs.py --all-tests
-python3 run_tests.py --config small +disable_fetch_enable_seq=1
+python3 build_programs.py --all-tests --jobs 4
+python3 run_tests.py --config opentitan --jobs 4
 ```
+
+`build_programs.py --list-tests` prints each entry with the verdict its program
+would carry -- faithful, partial or hollow -- before generating anything.
 
 or, for the directed testlist, which needs no generator at all:
 
@@ -510,24 +513,58 @@ not match their entry and prints the reasons under the results.
 
 | gen_opt | Why not |
 | --- | --- |
-| `pmp_*`, `mseccfg`, `enable_write_pmp_csr`, `suppress_pmp_setup` | no pyflow target sets `support_pmp` |
-| `gen_debug_section`, `num_debug_sub_program`, `set_dcsr_ebreak`, `enable_debug_single_step` | `gen_debug_rom` is `# TODO / pass`, and no pyflow target sets `support_debug_mode` |
+| `pmp_*`, `mseccfg`, `enable_write_pmp_csr` | `riscv_pmp_cfg` has no Python implementation at all, `setup_pmp` and `gen_pmp_csr_write` are stubs, and no pyflow target sets `support_pmp` |
+| `gen_debug_section`, `num_debug_sub_program`, `set_dcsr_ebreak`, `enable_debug_single_step`, `enable_ebreak_in_debug_rom` | `gen_debug_rom` is `# TODO / pass`, and no pyflow target sets `support_debug_mode` |
 | `toggle_dit`, `toggle_dummy_instr`, `gen_all_csrs_by_default`, `add_csr_write` | Ibex's own extension, which is SystemVerilog |
 | `uvm_set_type_override=...` | a UVM factory override; there is no factory here |
-| `enable_zba_extension` and the other subset flags | pyflow has only `enable_b_extension` and `enable_bitmanip_groups` |
-| `directed_instr_N=ibex_*` and three of riscv-dv's own streams | not in `riscv_utils.factory`, which is a literal dict of eleven names |
-| `num_of_sub_program=N` | forced to 0; `gen_callstack` fails on current pyvsc |
-| `illegal_instr_ratio`, `hint_instr_ratio` | `riscv_illegal_instr` randomization fails on current pyvsc after a handful of instructions |
-| `no_csr_instr=0`, `no_fence=0` | pyflow generates neither CSR nor fence instructions in either case |
+| `enable_zba_extension` and the other subset flags | pyflow's only B module is the draft v0.93 encoding; see below |
+| `directed_instr_N=ibex_*` and two of riscv-dv's own streams | not in `riscv_utils.factory`, which is a literal dict of eleven names |
+| `num_of_sub_program=N` | forced to 0; `insert_jump_instr` is `pass  # TODO`, so a sub-program would never be called |
+| `no_csr_instr=0` | `csr_c` is `# TODO / pass` and there is no `riscv_csr_instr` class |
+| `enable_access_invalid_csr_level`, `enable_dummy_csr_write`, `enable_misaligned_instr` | parsed, and read on a path pyflow never takes, or not read at all |
+| `no_ecall=0` | pyflow has no `--no_ecall` and never puts ECALL in the pool |
 
-The last row is worth reading twice, because it is not a missing feature.
-`build_basic_instruction_list` guards the CSR instructions with
-`cfg.init_privileged_mode == "MACHINE_MODE"`, an enum compared against a
-string, which is never true; and `create_instr_list` skips FENCE, FENCE_I and
-SFENCE_VMA before the categories are filled, so the SYNCH category is empty.
-Correcting the CSR comparison was tried: the CSR instructions then reach the
-solver and every program fails to generate, so it is left alone and recorded
-instead.
+Four rows are worth reading twice.
+
+**`num_of_sub_program`** was recorded as a solver failure, and that was the
+symptom rather than the cause. `gen_callstack` does die -- it calls
+`self.callstack_gen.init(...)` on a local it has just named `callstack_gen` --
+but fixing that would not help, because `riscv_instr_sequence.insert_jump_instr`
+is `pass`, above a `# TODO riscv_jump_instr class implementation` with the whole
+body commented out. That is the function that puts the jump into the caller, and
+`insert_sub_program` appends the sub-program bodies *after* the jump to
+`test_done`. A fixed `gen_callstack` would produce unreachable code, not a call
+stack. Nine entries ask for sub-programs.
+
+**`no_csr_instr=0`** needs more than the enum-against-string comparison in
+`build_basic_instruction_list` corrected. Behind it, `riscv_instr.csr_c` -- the
+constraint that keeps the address inside the implemented set -- is
+`# TODO / pass`; pyflow has no `riscv_csr_instr` class, so `csr_addr_c`,
+`write_csr_c` and the read-only-write rules do not exist; `create_csr_filter`
+fills `include_reg` and `exclude_reg` with strings nothing reads; and
+`convert2asm` formats the result as `0x{}` around the *decimal* value, so a CSR
+drawn as 0x320 is written `0x800`. Honouring it means porting
+`riscv_csr_instr.sv`, not correcting a comparison. Eight entries ask for it.
+
+**The bitmanip entries do not link.** `enable_bitmanip_groups` *is* honoured --
+`riscv_b_instr.is_supported` reads it -- and `--target rv32imcb` is the one
+pyflow target whose `supported_isa` contains RV32B, so `build_programs.py`
+selects it for those three entries rather than generating a B-free program that
+would link cleanly and test nothing. But pyflow's only B module is
+`isa/rv32b_instr.py`, which is bitmanip **draft v0.93**. What comes out is
+`bfp`, `grevi`, `unshfli`, `cmix`, `crc32.h`, `sbclr`, `packu`, `fsri`, and
+binutils 15.2 assembles none of them, with or without
+`-march=...zba_zbb_zbc_zbs`. Upstream's own comment above those entries says the
+same thing: "Both an updated compiler and ISS are required to verify the
+bitmanip v.1.00 and draft v.0.93 extensions."
+
+**`suppress_pmp_setup` and `disable_pmp_exception_handler` cost nothing.** Both
+ask for the *absence* of something. `riscv_asm_program_gen::setup_pmp` emits an
+allow-everything PMP configuration when the first is set, and Ibex's extension
+skips its PMP exception handler when the second is; pyflow emits neither section
+in the first place, and a program with no PMP entries configured is unrestricted
+in M mode, which is where those two entries run. They are recorded and not
+counted against the entry.
 
 `gen_test` is honoured where pyflow has the test. Forty entries name
 `riscv_rand_instr_test`, which pyflow does have -- with four of its seven
@@ -537,12 +574,11 @@ reason: `riscv_instr_base_test.py` runs its test at import, guarded by
 flag both run, nested inside each other's multiprocessing pool, and the second
 one hangs.
 
-### Seven more pyflow bugs
+### Seven more pyflow bugs, from generating at the sizes the testlist asks for
 
-Generating at the sizes the testlist asks for -- 6,000 to 20,000 instructions
-rather than a few hundred -- turned up seven more, all patched the same way.
-Three are the same mistake: a name pushed into an instruction pool as a string
-where the pool holds `riscv_instr_name_t` members.
+6,000 to 20,000 instructions rather than a few hundred turned up seven more, all
+patched the same way. Three are the same mistake: a name pushed into an
+instruction pool as a string where the pool holds `riscv_instr_name_t` members.
 
 | Bug | Effect |
 | --- | --- |
@@ -584,6 +620,141 @@ SP because the load/store stream around it took SP as its base register.
 `randomize_instr` has the guard for exactly this case and excludes the four
 SP-forcing compressed instructions -- and the exclusion reaches a function that
 does not use it.
+
+### Python's `and` and `or` are not pyvsc operators
+
+This is one bug with five sites in one file, and it is the reason
+`+illegal_instr_ratio` and `+hint_instr_ratio` were recorded above as
+unsupported. The recorded reason -- "randomization fails on current pyvsc after
+a handful of instructions" -- was wrong in an interesting way: it never
+succeeded at all, in any configuration, from the first call.
+
+pyvsc builds a constraint by side effect. Every expression created inside a
+`@vsc.constraint` body is appended to the enclosing scope, and an operator such
+as `&` or `|` consumes its operands and pushes the combination. Python's `and`
+and `or` are not operators: they test the left operand for truthiness, which an
+expression object always has, and return one of the two. So `(a == 1) and
+(b == 2)` leaves **both** comparisons behind as separate conjuncts, an `or`
+chain of eight alternatives becomes a conjunction of eight, and `not (a == 1)`
+evaluates to a Python `False` that goes nowhere while leaving `a == 1` asserted
+with the wrong polarity.
+
+`riscv_illegal_instr.py` writes all three. `legal_rv32_c_slli` is the clearest:
+
+```python
+with vsc.if_then((self.c_msb == 0) and (self.c_op == 2) and (self.xlen == 32)):
+```
+
+means `if (c_msb == 0 && c_op == 2 && XLEN == 32)` and gives the solver
+`c_msb == 0; c_op == 2; if (XLEN == 32)`, which pins every compressed encoding
+to C.SLLI on its own. `has_func7_c` means `(opcode == 19 && func3 inside {1,5})
+|| opcode inside {51,59}` and gives it `opcode == 19 && func3 == 1 &&
+func3 == 5 && opcode == 51 && opcode == 59`.
+
+A minimal unsatisfiable core over the sixteen constraint blocks is ten of them,
+found by delta-debugging with `set_constraint_enabled`, which is what a
+conjunction of mutually exclusive alternatives looks like from the solver's
+side. It is also why no single-constraint reduction found anything: each block
+is satisfiable alone.
+
+With the five sites fixed, all seven `illegal_instr_type_e` values appear in a
+6,000-instruction program and 60 of 60 randomizations succeed:
+
+```
+Counter({'kIllegalOpcode': 26, 'kIllegalSystemInstr': 20, 'kHintInstr': 14,
+         'kIllegalFunc7': 9, 'kReservedCompressedInstr': 6,
+         'kIllegalCompressedOpcode': 6, 'kIllegalFunc3': 5})
+```
+
+An AST scan of `pygen_src` finds Python boolean operators inside
+`@vsc.constraint` bodies in that file and no other, so this is contained.
+
+One more was needed before the result assembled. `get_bin_str` returns
+`hex(instr_bin)` for the 32-bit case, which works by accident, and the bare
+integer for the 16-bit case, so every HINT and every compressed illegal
+instruction came out as `.2byte 24705` where `.2byte 0x6081` was meant. The
+SystemVerilog formats `%8h` and `%4h` and the caller writes `.4byte 0x%s`.
+
+### And `+no_fence=0`
+
+`create_instr_list` drops FENCE, FENCE_I and SFENCE_VMA from the pool
+unconditionally. The SystemVerilog it reimplements guards the same line with the
+option that exists to control it:
+
+```systemverilog
+if (cfg.no_fence && (instr_name inside {FENCE, FENCE_I, SFENCE_VMA})) continue;
+```
+
+so `instr_category["SYNCH"]` is empty and `+no_fence=0` has nothing to add. The
+line above it is the same mistake with the polarity reversed -- the
+SystemVerilog reads `!cfg.enable_sfence && instr_name == SFENCE_VMA`, pyflow
+reads `cfg.enable_sfence and ...` -- so restoring the fence guard on its own
+starts emitting `sfence.vma` into an rv32imc program. pyflow also has none of
+the SystemVerilog's `sfence_c`, which forces `enable_sfence == 0` when the
+target does not set `support_sfence`; that condition is folded into the same
+patch. A 2,000-instruction program then contains 25 `fence` and 14 `fence.i`
+and no `sfence.vma`.
+
+### `riscv_rand_instr_test` generates 200 instructions, not 10,000
+
+`riscv_rand_instr_test.randomize_cfg` hardcodes `cfg.instr_cnt = 10000` over the
+top of the command line, and this port used to patch that to
+`cfg.argv.instr_cnt` so that each entry's `+instr_cnt` was honoured. That patch
+was wrong: the SystemVerilog `riscv_rand_instr_test` does exactly the same
+assignment, after `riscv_instr_gen_config::new` has read `+instr_cnt=`, so
+**upstream generates 10,000 instructions for all forty of those entries whatever
+their `gen_opts` say**. `riscv_ebreak_test`'s `+instr_cnt=6000` is ignored
+upstream too.
+
+Removing the patch turned up a worse problem underneath it. In pyvsc the
+assignment does not work at all. `cfg.instr_cnt` is a plain Python int and the
+constraint that reads it --
+
+```python
+self.main_program_instr_cnt in vsc.rangelist(vsc.rng(10, self.instr_cnt))
+```
+
+-- is elaborated into the model when the config object is built, which happens
+at import, before any test's `randomize_cfg` runs. So the range the solver draws
+from is still `[10, argv.instr_cnt]`, and argparse's default for that is 200. In
+SystemVerilog the constraint is evaluated at `randomize()` and the same two
+lines mean what they say.
+
+Measured on `riscv_ebreak_test`, same seed, everything else equal: with
+`--instr_cnt 400` on the command line and 10000 assigned in `randomize_cfg`,
+`test_done:` lands at line 354. With `--instr_cnt 10000` it lands at 7,791. The
+config dump reports 10000 either way, which is why it is easy to miss. Run as
+shipped, pyflow's `riscv_rand_instr_test` generates a main program of between 10
+and 200 instructions.
+
+`build_programs.py` puts the 10,000 on the command line, where pyvsc can see it,
+and records the entry's own `+instr_cnt` as overridden.
+
+### The debug ROM stub is a `dret`
+
+Thirteen entries send the core into the debug ROM, and only one of them says so
+in its testlist entry -- the other twelve start a debug sequence from their own
+UVM class, which `build_programs.py` reads out of `core_ibex_test_lib.sv` rather
+than keeping a list. pyflow's `gen_debug_rom` is a stub, and what this port used
+to put at `debug_rom:` was a self-loop, so every one of those thirteen would
+have been a cycle timeout caused by the port rather than by anything upstream.
+
+`riscv_debug_rom_gen` says what belongs there:
+
+```systemverilog
+if (!cfg.gen_debug_section) begin
+  // If the debug section should not be generated, we just populate it
+  // with a dret instruction.
+  debug_main = {dret};
+```
+
+and `gen_debug_exception_handler` is `str = {"dret"}` in every case, with its
+own TODO saying so. So `debug_exception` is now exactly upstream's, and
+`debug_rom` is exactly upstream's for an entry that does not ask for a debug
+section. `riscv_debug_stress_test` is one -- its description is "debug_rom is
+empty, with only a dret instruction". The twelve that do ask get debug entry and
+an immediate return where upstream runs a generated ROM, which is the floor
+rather than the article, and is recorded as such.
 
 ### Where that leaves it
 
@@ -1040,15 +1211,17 @@ Upstream never overrides `timeout_in_cycles`, so its budget is
   design's SVA is compiled out. Upstream's flows run with assertions on, and
   they are part of what those flows check. Turning them on means finding out
   how much of lowRISC's SVA Verilator 5 accepts.
-- **The whole testlist.** Eight of the 57 entries have been generated and run.
-  `python3 build_programs.py --all-tests` builds the rest, which takes about an
-  hour; `python3 run_tests.py --list` shows which entries have a program.
-- **The entries pyflow cannot serve.** The PMP, debug and bitmanip entries can
-  be generated, but with the options that define them dropped, so what they run
-  is a plain random program under a differently named test class.
-  `riscv_csr_test` needs riscv-dv's `gen_csr_test.py`, which is a separate
-  generator not wired up here. `rtl_params` is now acted on rather than only
-  parsed, so the ones a build cannot serve are reported inapplicable.
+- **The 28 hollow entries.** They are generated and run, and marked, and what
+  they run is a plain random program under a name that promises something else.
+  Making them mean anything is four separate pieces of work in pyflow, none of
+  them small: `riscv_pmp_cfg.sv` (1,072 lines) for the ten PMP entries,
+  `riscv_debug_rom_gen.sv` (252) for the twelve debug ones, `riscv_csr_instr.sv`
+  plus a `csr_c` for the CSR ones, and a ratified Zba/Zbb/Zbc/Zbs instruction
+  library for the three bitmanip ones. `riscv_csr_test` is a fifth: it needs
+  riscv-dv's `gen_csr_test.py`, a separate generator not wired up here.
+- **`num_of_sub_program`.** Nine entries ask for sub-programs and get none.
+  `riscv_jump_instr` is not implemented in pyflow at all -- `insert_jump_instr`
+  is `pass` -- so this is a class to write, not a line to fix.
 - **The 26 ePMP self-check failures.** Diagnosed above: two test defects, both
   from the same lowRISC commit, neither of them a defect in the core. Nothing
   is fixed here, because the point of the group is to run what upstream ships.
@@ -1063,11 +1236,30 @@ Upstream never overrides `timeout_in_cycles`, so its budget is
 
 ## Bugs worth reporting
 
-In riscv-dv's pyflow, ten bugs: the three on the signature-handshake path and
-the seven in "Seven more pyflow bugs". All are small, several are one word, and
-between them they are the difference between pyflow generating a few hundred
-instructions and generating what the testlist asks for. Each has its evidence
-in `PYGEN_PATCHES`.
+In riscv-dv's pyflow, sixteen bugs: three on the signature-handshake path, seven
+found by generating at the sizes the testlist asks for, the five-site
+`and`/`or`/`not` bug in `riscv_illegal_instr.py` together with the decimal
+`get_bin_str` beside it, the missing `cfg.no_fence` guard in
+`create_instr_list` together with the inverted `enable_sfence` polarity above
+it, and `riscv_rand_instr_test.randomize_cfg` setting an instruction count that
+the constraint reading it was elaborated before. Most are small, several are one
+word. Between them they are the difference
+between pyflow generating a few hundred instructions and generating what the
+testlist asks for, and they take `+illegal_instr_ratio`, `+hint_instr_ratio`
+and `+no_fence=0` from "cannot" to "does". Each has its evidence in
+`PYGEN_PATCHES`.
+
+The `and`/`or` one is worth raising on its own, because it is a hazard of
+pyvsc's API rather than a typo: a constraint written with Python's boolean
+operators compiles, runs, and asserts something other than what it reads as. An
+AST scan for `ast.BoolOp` and `ast.Not` inside `@vsc.constraint` bodies finds
+every instance in a few lines and would make a reasonable lint.
+
+The unimplemented parts of pyflow are worth reporting as a list, because none of
+them announces itself at run time: `riscv_pmp_cfg`, `riscv_debug_rom_gen`,
+`riscv_csr_instr`, `riscv_jump_instr` and `randomize_avail_regs` are absent or
+stubs, and the options that drive them are accepted by the argparse and silently
+do nothing.
 
 In Verilator, three internal errors, each with a small reproducer available from
 the overlays: the covergroup transition bins over enum items, `int'()` on a wide
