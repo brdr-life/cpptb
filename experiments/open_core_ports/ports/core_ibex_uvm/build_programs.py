@@ -132,12 +132,29 @@ PYGEN_PATCHES = [
     # 0x8000_0080. This transcribes those five directives.
     #
     # Upstream jumps to `debug_rom` and `debug_exception`, which its own
-    # generator emits. pyflow cannot: `gen_debug_rom` is `# TODO / pass`, and
-    # the rv32imc target sets support_debug_mode = 0. So the two entry points
-    # are self-loops here. They keep the addresses Spike is built against
-    # (DEBUG_ROM_ENTRY and DEBUG_ROM_TVEC) occupied, and nothing fetches them
-    # without debug stimulus; if something does, the core visibly spins rather
-    # than running whatever happened to be there.
+    # `riscv_debug_rom_gen` emits. pyflow cannot: `gen_debug_rom` is
+    # `# TODO / pass`, and the rv32imc target sets support_debug_mode = 0.
+    #
+    # What goes at those two labels is not a guess. `riscv_debug_rom_gen`
+    # generates `dret` and nothing else at `debug_rom` when
+    # `cfg.gen_debug_section` is 0 --
+    #
+    #     if (!cfg.gen_debug_section) begin
+    #       // If the debug section should not be generated, we just populate it
+    #       // with a dret instruction.
+    #       debug_main = {dret};
+    #
+    # -- and `gen_debug_exception_handler` is `str = {"dret"}` in every case,
+    # with its own TODO saying so. So `debug_exception` is exactly upstream's
+    # here, and `debug_rom` is exactly upstream's for the entries that do not
+    # ask for a debug section.
+    #
+    # For the entries that do ask, this is the floor rather than the article:
+    # they get debug entry and an immediate return where upstream would run a
+    # generated ROM. That is recorded against those entries. It matters that it
+    # is a `dret` and not the self-loop this file used to emit: fourteen entries
+    # send the core into the debug ROM, and a self-loop turns every one of them
+    # into a cycle timeout caused by this port rather than by anything upstream.
     #
     # ports/riscv_dv/README.md notes that pyflow generates generic RV32IMC
     # programs rather than Ibex-tuned ones. This closes the part of that gap
@@ -150,9 +167,9 @@ PYGEN_PATCHES = [
         '        self.instr_stream.extend((".include \\"user_define.h\\"",'
         ' ".globl _start", ".section .text"))\n'
         '        self.instr_stream.extend((".option norvc",\n'
-        '                                  "debug_rom: j debug_rom",\n'
+        '                                  "debug_rom: dret",\n'
         '                                  ".align 3",\n'
-        '                                  "debug_exception: j debug_exception",\n'
+        '                                  "debug_exception: dret",\n'
         '                                  ".align 7",\n'
         '                                  ".option rvc"))\n',
     ),
@@ -1097,10 +1114,16 @@ def translate(entry: dict) -> tuple[list[str], list[str]]:
             continue
         options += [f"--{name}", value]
 
-    if needs_debug_rom(entry):
-        notes.append("the UVM class drives debug stimulus and pyflow generates "
-                     "no debug ROM: `debug_rom:` is a self-loop, so the core "
-                     "cannot service a debug request")
+    asked_for_rom = any(name == "gen_debug_section" and value == "1"
+                        for name, value in gen_opts(entry))
+    if needs_debug_rom(entry) and asked_for_rom:
+        # Without `+gen_debug_section=1` upstream's debug ROM is a bare `dret`
+        # too, so a note there would be false. With it, upstream generates a
+        # program into the ROM and this does not.
+        notes.append("the UVM class sends the core into the debug ROM, and "
+                     "pyflow's gen_debug_rom is a stub: `debug_rom:` here is "
+                     "the bare `dret` riscv_debug_rom_gen emits when "
+                     "gen_debug_section is 0, not the ROM this entry asks for")
         dropped.append("debug_rom")
     return options, notes, dropped
 
