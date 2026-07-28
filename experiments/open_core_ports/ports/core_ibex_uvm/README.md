@@ -264,6 +264,48 @@ upstream file has not changed. An overlay then silently has no effect and the
 same error repeats, which reads exactly like the fix not working. The build
 passes `--no-skip-identical`.
 
+## UVM 1.2 against 1800.2
+
+Upstream selects UVM through the simulator: `-ntb_opts uvm-1.2` for VCS,
+`-uvmhome CDNS-1.2` for Xcelium. Verilator ships no UVM, so this port compiles
+Accellera's `uvm-core` (1800.2-2020.3.1) from `deps/uvm_core`, pinned in
+`sources.toml`. That is a different library from the one the tests were written
+against, and it can move a verdict on its own.
+
+**The full comparison of the two versions is in
+[`ports/ibex_icache_uvm/README.md`](../ibex_icache_uvm/README.md), under "UVM
+1.2 against 1800.2".** Both ports run the same lowRISC DV library, so the
+comparison covers both. What it says about this port:
+
+* **One difference affects the build and is fixed here too.**
+  `dv_base_test::run_phase` reads `uvm_phase::phase_done` directly, which 1.2
+  creates in the phase constructor and 1800.2 creates on demand in
+  `get_objection()`. `build_tb.py` inserts the `get_objection()` call.
+* **Nothing else has changed a verdict here, and the logs say so.** Across the
+  53 riscv-dv runs, the 38 on `small` and the 941 directed runs, there is not
+  one `UVM_WARNING` or `UVM_ERROR` message line: the only occurrences of those
+  tokens are the counters in the report summary. Only three IDs in the whole
+  set come from the UVM library rather than from `` `gfn ``, and all three are
+  `UVM_INFO`: `RNTST`, `UVM/RELNOTES` and `UVM/REPORT/SERVER`. Every fatal in
+  the corpus is Ibex's own, from `core_ibex_base_test`, the cosim scoreboard or
+  a `` `DV_CHECK_RANDOMIZE_FATAL ``.
+* **The severity change that cost `ports/ibex_icache_uvm` a test does not
+  reach here.** `uvm_sequencer_param_base::put_response` reports "Dropping
+  response for sequence N" with `uvm_report_info` on 1.2 and
+  `uvm_report_warning` on 1800.2, and lowRISC counts a warning as a failure.
+  It needs a killed sequence with a response in flight. Nothing in
+  `dv/uvm/core_ibex` kills a sequence: there is no `kill()` call, and
+  `core_ibex_test_lib.sv` waits on `vseq.wait_for_stop()` before its
+  `disable fork` with a comment saying that the disable would otherwise kill
+  processes running sequences. No such message appears in any log, and no
+  override is applied in this port's `build_tb.py`.
+* **The one difference left unfixed cannot reach here either.** 1800.2
+  re-arbitrates silently when a sequence is killed after winning arbitration,
+  where 1.2 reports `UVM_ERROR TRY_NEXT_BLOCKED` or blocks. The
+  `ibex_mem_intf_response_driver` and `irq_request_driver` both use
+  `try_next_item`, so the mechanism is present, but again nothing kills a
+  sequence here.
+
 ## Running
 
 ```sh

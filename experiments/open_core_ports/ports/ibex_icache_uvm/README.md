@@ -8,11 +8,12 @@ Upstream signs it off with VCS and runs it through OpenTitan's dvsim.
 `dv/ibex_icache_sim_cfg.hjson` names `vcs`, and the Makefile beside it defaults
 to `xcelium`. Verilator is not one of the options.
 
-**Status: it builds, and nine of the ten tests in upstream's own list pass on
-Verilator 5.050.** The one that does not is
-`ibex_icache_stress_all_with_reset`, and it fails on twelve UVM warnings from
-the sequencer rather than on anything the scoreboard found. The whole list runs
-in about two and a half minutes at `--jobs 4`.
+**Status: it builds, and all ten tests in upstream's own list pass on
+Verilator 5.050.** The last one to get there was
+`ibex_icache_stress_all_with_reset`, which failed on twelve sequencer messages
+that are `UVM_INFO` on the UVM version upstream runs and `UVM_WARNING` on the
+one this port has to use; see "UVM 1.2 against 1800.2". The whole list runs in
+about two and a half minutes at `--jobs 4`.
 
 This is a baseline in the same sense as `ports/core_ibex_uvm`: an upstream
 verification environment running unmodified stimulus, so that a cpptb port has
@@ -166,6 +167,9 @@ is set by `ibex_icache_passthru_vseq` and `ibex_icache_invalidation_vseq` and
 is read nowhere.
 
 ### 2. A UVM version difference
+
+The full comparison of the two UVM versions is in "UVM 1.2 against 1800.2"
+below. This is the one that stopped the build coming up at all.
 
 `dv_base_test::run_phase` reads `uvm_phase::phase_done` directly on its first
 statement. UVM 1.2 creates that objection in the phase constructor; Accellera's
@@ -397,13 +401,21 @@ a failure here as it is there.
 | `ibex_icache_many_errors` | `ibex_icache_many_errors_vseq` | pass | 17 |
 | `ibex_icache_ecc` | `ibex_icache_ecc_vseq` | pass | 16 |
 | `ibex_icache_stress_all` | `ibex_icache_combo_vseq` | pass | 21 |
-| `ibex_icache_stress_all_with_reset` | `ibex_icache_reset_vseq` | **fail** | 3 |
+| `ibex_icache_stress_all_with_reset` | `ibex_icache_reset_vseq` | pass | 6 |
 
 `ibex_icache_oldval` runs `ibex_icache_oldval_test` rather than
 `ibex_icache_base_test`; the other nine all run the base test.
 
+`ibex_icache_stress_all_with_reset` finishes in a fraction of the time the
+others take, and that is upstream's own accounting rather than anything
+missing. `ibex_icache_combo_vseq::body` credits `trans_now` transactions per
+iteration whether or not the child sequence was killed part way through, so
+with `random_reset` set the loop reaches `num_trans` after twelve short
+sequences instead of twelve long ones. Twelve killed sequences is also exactly
+the number of dropped responses below.
 
-### Why `ibex_icache_stress_all_with_reset` fails
+
+### Why `ibex_icache_stress_all_with_reset` used to fail
 
 Twelve UVM warnings, one per killed child sequence, no errors and no fatals:
 
@@ -429,9 +441,11 @@ clear -- passes on all three.
 
 Nothing here is Verilator-specific: the driver has no way to know its sequence
 was killed, and upstream's own fail patterns treat a UVM warning as a failure.
-Whether upstream sees it depends on whether the kill can ever land between
-items, and on the evidence here it cannot avoid landing inside one. It is not
-fixed, because the point of the port is to run what upstream ships.
+What decides the verdict is which UVM the message comes from.
+`uvm_sequencer_param_base::put_response` reports it with `uvm_report_info` on
+1.2 and `uvm_report_warning` on 1800.2, so upstream never sees a warning at
+all. `build_tb.py` restores the 1.2 severity and the test passes; the reasoning
+and the scope of that override are in "UVM 1.2 against 1800.2" below.
 
 An earlier failure in both stress tests was fixed rather than reported, and is
 worth recording because of what it was. Both died on
@@ -450,6 +464,143 @@ clock grid. The cache carried on prefetching from `prefetch_addr_q`, which
 never been told about. With the alignment in place `ibex_icache_stress_all`
 passes and `ibex_icache_stress_all_with_reset` gets past that error to the
 warnings above.
+
+## UVM 1.2 against 1800.2
+
+Upstream selects UVM through the simulator: `-ntb_opts uvm-1.2` for VCS,
+`-uvmhome CDNS-1.2` for Xcelium. Verilator ships no UVM, so both ports compile
+Accellera's `uvm-core` (1800.2-2020.3.1) from `deps/uvm_core`, pinned in
+`sources.toml`. That substitution has already moved a verdict twice, in
+opposite directions, so the whole surface was compared rather than left to turn
+up one red row at a time. The comparison used the 1.2 release tree; `deps/`
+holds only 1800.2.
+
+Two differences change a verdict here, and both are fixed:
+
+| what | 1.2 | 1800.2 | effect | handling |
+| --- | --- | --- | --- | --- |
+| `uvm_sequencer_param_base::put_response`, "Dropping response for sequence N" | `uvm_report_info` | `uvm_report_warning` | `ibex_icache_stress_all_with_reset` failed on a message upstream never sees | severity restored in `build_tb.py` |
+| `uvm_phase::phase_done` | created by the phase constructor | created on demand by `get_objection()` | null dereference at the first statement of `dv_base_test::run_phase` | overlay calls `get_objection()` |
+
+The `put_response` override is `set_report_severity_id_override(UVM_WARNING,
+"Sequencer", UVM_INFO)` on every component. It is keyed on the severity as well
+as the ID, and in 1800.2 that call site is the only `UVM_WARNING` anywhere in
+the library carrying the ID `Sequencer`. The other three are `uvm_report_fatal`
+in `uvm_sequencer_base` and an override keyed on `UVM_WARNING` cannot touch
+them, so the workaround cannot hide an internal sequencer error.
+
+### One difference that goes the other way, unfixed
+
+**1800.2 recovers silently from a sequence killed after it won arbitration;
+1.2 does not.** `uvm_sequencer::try_next_item` in 1.2 reports
+`UVM_ERROR TRY_NEXT_BLOCKED` whenever the granted sequence fails to deliver an
+item within an NBA delay, with no special case for a killed one:
+
+```systemverilog
+  // 1.2, uvm_sequencer.svh
+  if (!m_req_fifo.try_peek(t))
+    uvm_report_error("TRY_NEXT_BLOCKED", {"try_next_item: the selected sequence '",
+      seq.get_full_name(), "' did not produce an item within an NBA delay. ", ...
+```
+
+1800.2 checks the sequence's process first and re-arbitrates without a message:
+
+```systemverilog
+  // 1800.2, uvm_sequencer.svh
+  if (selected_sequence_request.process_id.status inside {process::KILLED,process::FINISHED}) begin
+    if (arb_completed.exists(selected_sequence_request.request_id)) begin
+      arb_completed.delete(selected_sequence_request.request_id);
+    end
+    selected_sequence = m_choose_next_request();
+  end
+  else begin
+    ... `uvm_error("TRY_NEXT_BLOCKED", ...)
+  end
+```
+
+`get_next_item` has the same shape. 1.2 grants and then blocks in
+`m_req_fifo.peek(t)` forever if the winner is killed before it sends; 1800.2
+routes it through `uvm_sequencer_param_base::m_safe_select_item`, which forks a
+watcher on `process_id.await()` and re-arbitrates.
+
+This is exercised. Every icache test ends `ibex_icache_base_vseq::body` with
+`mem_seq.kill()`, and `ibex_icache_combo_vseq::run_sequence` calls
+`child_seq.kill()` twelve times in `ibex_icache_stress_all_with_reset`. The
+direction is towards a pass: on 1.2 the same kill could produce a `UVM_ERROR`
+from a `try_next_item` driver, or hang a `get_next_item` driver until the
+harness timeout.
+
+**Left as is, and recorded rather than worked around.** Nothing it can hide is
+a statement about the cache: the recovered-from condition is a killed stimulus
+sequence, not a DUT response, and the scoreboard's checks are unaffected either
+way. Restoring the 1.2 behaviour would mean making the port fail on a UVM
+robustness fix.
+
+### New diagnostics in 1800.2 that would be false failures
+
+Each of these is a `UVM_WARNING` or `UVM_ERROR` that 1800.2 issues and 1.2 does
+not, so each would fail a test here that upstream passes. **None of them
+appears in any log in either port**, but they are the shapes to recognise:
+
+| id | condition | where it could come from |
+| --- | --- | --- |
+| `DRVCONNECT` | a `uvm_driver` whose `seq_item_port` was never connected, checked in `end_of_elaboration_phase` | 1.2's `uvm_driver` has no `end_of_elaboration_phase` at all |
+| `SEQBDYZMB`, `SEQPRTZMB` | the process that called `seq.start()` is killed without killing the sequence | `disable fork` around a running sequence |
+| `UVM/SEQ/SP/SET`, `UVM/SEQ/SP/GET` | `starting_phase` written after `get_starting_phase` locked it | not used by lowRISC's DV code |
+| `UVM/ABST_RGTRY/CREATE_ABSTRACT_*` | the factory is asked for an instance of an abstract class | `create_seq_by_name` with a bad `+UVM_TEST_SEQ` |
+| `UVM/SQR/WFSC` | `wait_for_sequences_count` set below 1 | not set here |
+| `NO_DPI_USED` | `UVM_NO_DPI` defined, warned once per run | would fail every test; a reason not to reach for that define on a simulator with no UVM |
+
+`ibex_icache_combo_vseq` is the one place where `SEQPRTZMB` could plausibly
+fire: `run_sequence` forks `child_seq.start()` against a timer and ends with
+`disable fork`. It does not fire, because `child_seq.kill()` runs before the
+`disable fork`.
+
+### What was compared, and found not to matter
+
+* **Every UVM name lowRISC's DV code uses.** 297 identifiers from
+  `dv/sv/{dv_lib,dv_utils,csr_utils,dv_base_reg,common_ifs,push_pull_agent,mem_model,str_utils,mem_bkdr_util}`
+  and the two testbenches resolve to a declaration in one version or the other.
+  Nothing used is removed or renamed: the only name present in 1.2 alone is
+  `UVM_DEFAULT_PATH`, which 1800.2 keeps as `parameter uvm_door_e
+  UVM_DEFAULT_PATH = UVM_DEFAULT_DOOR`, with `typedef uvm_door_e uvm_path_e`
+  beside it.
+* **Every report call site.** 945 in 1.2 and 967 in 1800.2, matched on message
+  text. 74 sites in 1.2 have no same-severity counterpart and 137 in 1800.2
+  have none in 1.2. Excluded as unreachable: everything under `reg/`, because
+  neither testbench has a register model (`ibex_icache_env_cfg` sets
+  `ral_model_names = {}`; `csr_utils_pkg` is in the compile only because
+  `dv_lib_pkg` imports it); every site inside `` `ifndef UVM_NO_DEPRECATED ``,
+  because both flows define `UVM_NO_DEPRECATED`; and the field-automation
+  `RDONLY`/`STRMTC` paths in `uvm_object_defines.svh`, which belong to the
+  auto-configuration operation. Every one of the twenty files that uses
+  `` `uvm_field_* `` extends `uvm_object` or `uvm_sequence_item`, never
+  `uvm_component`, and auto-configuration runs on components only; those
+  objects are printed and nothing else, never copied, compared or packed. What
+  is left is the table above.
+* **The bodies of the 274 methods lowRISC calls that both versions define.**
+* **Identical in substance:** the objection core (`m_raise`, `m_drop`,
+  `set_drain_time`, `get_objection_count`), `uvm_report_handler::initialize`
+  and `process_report_message`, so default severity actions and the point at
+  which a severity override is applied are the same; the whole of
+  `uvm_report_catcher` except an added `file` argument on `summarize`;
+  `uvm_heartbeat`, which this environment uses in `UVM_ANY_ACTIVE` mode;
+  quit-count handling and `UVM_COUNT` to `UVM_EXIT`, which matters because
+  `dv_base_test` sets `max_quit_count = 1`; `uvm_root::run_test` and its
+  `+UVM_TESTNAME` resolution; `uvm_default_factory::create_object_by_name`,
+  which still returns null after a `BDTYP` warning; `uvm_config_db` set/get,
+  rewritten to delegate to `uvm_config_db_default_implementation_t` but keeping
+  the build-phase `default_precedence - get_depth()` rule; and
+  `start_phase_sequence`, which the scrambling key agent depends on.
+* **`uvm_re_match`.** Rewritten in C, but the SV wrapper's new `deglob`
+  argument defaults to 0, so a pattern is still compiled unanchored exactly as
+  in 1.2. `dv_report_catcher` depends on that.
+* **The logs.** Across 1,032 `core_ibex` runs and these 10, there is not one
+  `UVM_WARNING` or `UVM_ERROR` message line: the only occurrences of those
+  tokens are report-summary counters. Five message IDs in the whole corpus come
+  from the UVM library rather than from `` `gfn ``: `RNTST`, `UVM/RELNOTES`,
+  `UVM/REPORT/SERVER`, `UVM/REPORT/CATCHER` and `Sequencer`. The catcher
+  reports zero demotions, so `dv_report_catcher` is not hiding anything either.
 
 ## How much of this is really exercised
 
@@ -525,7 +676,9 @@ of it, which is equivalent here only because nothing else constrains them.
 * **Reseeding.** Upstream runs each test 50 times with random seeds. One fixed
   seed per test is what is measured here, so nothing below is a statement about
   seed sensitivity.
-* **The two stress tests.** Diagnosed, not fixed.
+* **The killed-sequence recovery in 1800.2.** Recorded above, not worked
+  around: this port is more tolerant of a killed stimulus sequence than the UVM
+  upstream runs. It cannot mask anything the scoreboard would have found.
 
 ## Bugs worth reporting
 
