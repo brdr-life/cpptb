@@ -68,6 +68,33 @@ the roadmap as
 with three options and a recommendation. This entry exists so it is not lost
 among the porting findings.
 
+## In Verilator
+
+`ports/ibex_icache_uvm` lists five Verilator randomization defects, each with a
+reduced case in its `shims/`. The comparison in `ports/ibex_icache_cpptb` found
+a sixth.
+
+### 18. A constrained randomize() over an `inside` range is not uniform
+
+Found by comparing `ports/ibex_icache_cpptb` against `ports/ibex_icache_uvm`.
+Verilator's constrained `randomize()` puts about half of every draw over
+`inside {[1:20]}` into `[16:20]`, where a quarter belongs, whether the range is
+a hard constraint or a soft one. Mean 13.2 against 10.5.
+
+This is a sixth entry in the list `ports/ibex_icache_uvm` keeps, and it is the
+whole of the difference between that harness's stimulus and the cpptb port's:
+`ibex_icache_core_base_seq` picks its instruction-run length that way, so the
+UVM baseline runs about 25% more fetches per transaction than its own
+constraints ask for.
+
+**Repro:** `shims/verilator_inside_range_uniformity.sv` in
+`ports/ibex_icache_cpptb`, three ways of picking a number in `[1:20]`.
+**Workaround:** draw the value with `$urandom_range` and constrain nothing,
+which is what `ports/ibex_icache_uvm` already does for every `dist` in that
+environment for three other reasons.
+**Fix direction:** belongs on `verilator/verilator` rather than on Ibex. Not
+filed.
+
 ## In upstream, not filed
 
 ### 14. `tb_cs_registers` is vacuous on Verilator 5.050
@@ -101,6 +128,32 @@ Belongs on `lowRISC/riscv-isa-sim`, not `ibex`.
 **Repro:** build the architectural tests without `-DIBEX_NO_U_MODE` and run any
 of them under co-simulation; both harnesses fail identically at the first
 `csrw menvcfgh` in the suite's boot code.
+
+### 19. Two prim cores do not declare what they use
+
+`lowrisc:prim:ram_1p_adv` declares neither `lowrisc:prim:mubi` nor
+`lowrisc:prim:flop`, although `prim_ram_1p_adv.sv` imports `prim_mubi_pkg` and
+`prim_ram_1p_scr.sv` instantiates `prim_flop`. A fusesoc graph that reaches
+`ram_1p_scr` and nothing else does not close. Every upstream flow that reaches
+it also reaches a core that does depend on them, which is why nothing notices.
+
+**Repro:** a CAPI=2 core depending only on `lowrisc:prim:ram_1p_scr`.
+**Workaround:** name them, as
+`ports/ibex_icache_cpptb/ibex_icache_cpptb.core` does.
+
+### 20. `ibex_icache_caching` checks the caching ratio on about 40% of seeds
+
+The test takes no new memory seed, so the whole run uses seed 0, whose error
+range covers the fetch window whenever `base_addr` lands in the wrong part of
+the address space. When it does, every fetch errors, the caching window resets
+on each one, and the only check the test exists for never runs. Measured over
+40 seeds on the cpptb port and reproduced on the baseline at seed 124.
+
+Upstream's `reseed` of 50 hides this; a single seed does not, and a green
+single-seed result can mean the check never fired.
+
+**Fix direction:** let the caching sequence take one new seed at the start,
+before the cache is enabled, or draw `base_addr` away from the error range.
 
 ### 16, 17. riscv-arch-test gaps
 

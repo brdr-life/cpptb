@@ -48,6 +48,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <deque>
 #include <optional>
 #include <string>
@@ -498,6 +499,11 @@ struct Env {
     std::vector<uint32_t> pending_seeds;
     uint32_t cur_seed = 0;
 
+    // Nonzero to corrupt one bit of the memory response for that grant, so
+    // that a run can demonstrate the scoreboard is live rather than merely
+    // quiet. Set with ICACHE_CORRUPT_GRANT; see README.md.
+    uint64_t corrupt_grant = 0;
+
     // The value the core monitor last sampled on valid_o. This is what
     // `driver_cb.valid` holds, and the core driver's wait_valid needs the
     // sampled value rather than the live one.
@@ -910,6 +916,10 @@ Task<void> mem_monitor(Dut dut, TestContext& test, Env& env) {
             // the seed hash is what the data is checked against.
             response.rdata =
                 response.err ? 0u : read_data(env.cur_seed, address);
+            if (env.corrupt_grant != 0 &&
+                env.scoreboard.counters.mem_grants + 1 == env.corrupt_grant) {
+                response.rdata ^= 1u << 17;
+            }
             response.delay = draw_response_delay(test.random());
             env.responses.push_back(response);
             env.scoreboard.on_mem_grant();
@@ -1064,6 +1074,11 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
                           /*mem_err_shift=*/3,
                           /*disable_caching_ratio_test=*/false);
     Env env{scoreboard};
+    // Read unconditionally, so hierarchy discovery sees the same code path a
+    // real run takes.
+    const char* corrupt = std::getenv("ICACHE_CORRUPT_GRANT");
+    env.corrupt_grant = corrupt != nullptr ? std::strtoull(corrupt, nullptr, 0)
+                                           : 0;
 
     // dv_base_vseq::dut_init, through clk_rst_if::apply_reset. Reset starts
     // released so that asserting it produces the negedge the design's
