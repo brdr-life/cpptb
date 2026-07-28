@@ -11,7 +11,7 @@ it off with VCS and runs it through OpenTitan's dvsim; the tool list in
     python3 build_tb.py --jobs 4
 
 The build description is a FuseSoC CAPI=2 graph rather than the `.f` file lists
-`dv/uvm/core_ibex` uses. `corelist.py` walks it in place; see the docstring
+`dv/uvm/core_ibex` uses. `fusesoc_setup.py` asks fusesoc for it; see the docstring
 there for why that rather than driving fusesoc.
 
 Standard library only, matching the other tools here.
@@ -27,7 +27,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import corelist
+import fusesoc_setup
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -1045,10 +1045,11 @@ def verilator_command(jobs: int, extra: list[str]) -> tuple[list[str], str]:
         raise BuildError(f"no UVM at {UVM}\n"
                          f"run: python3 {ROOT / 'fetch.py'} uvm_core")
 
-    index = corelist.Index(IBEX)
-    files = corelist.walk(index, TOP_CORE, TOP_TARGET)
-    sources, incdirs, control = corelist.sources_and_incdirs(files)
-    top = corelist.toplevel(index, TOP_CORE, TOP_TARGET)
+    resolved = fusesoc_setup.resolve(BUILD / "fusesoc")
+    sources = resolved["sources"]
+    incdirs = resolved["incdirs"]
+    control = resolved["control"]
+    top = resolved["toplevel"]
 
     overlay = apply_overlays()
     sources = [Path(overlay.get(str(path), str(path))) for path in sources]
@@ -1112,20 +1113,20 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.list_sources:
         try:
-            index = corelist.Index(IBEX)
-            files = corelist.walk(index, TOP_CORE, TOP_TARGET)
-        except corelist.CoreError as error:
+            resolved = fusesoc_setup.resolve(BUILD / "fusesoc")
+        except fusesoc_setup.SetupError as error:
             print(f"build_tb: {error}", file=sys.stderr)
             return 1
-        for entry in files:
-            kind = "include" if entry.is_include else entry.file_type or "-"
-            print(f"{kind:20s} {entry.path.relative_to(IBEX)}  [{entry.core}]")
+        print(f"toplevel {resolved['toplevel']}")
+        for kind in ("sources", "incdirs", "control"):
+            for path in resolved[kind]:
+                print(f"{kind:8s} {path.relative_to(IBEX)}")
         return 0
 
     BUILD.mkdir(parents=True, exist_ok=True)
     try:
         command, top = verilator_command(args.jobs, args.extra)
-    except (BuildError, corelist.CoreError) as error:
+    except (BuildError, fusesoc_setup.SetupError) as error:
         print(f"build_tb: {error}", file=sys.stderr)
         return 1
 
