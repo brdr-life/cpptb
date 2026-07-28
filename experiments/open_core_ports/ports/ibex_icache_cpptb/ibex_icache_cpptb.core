@@ -1,0 +1,41 @@
+CAPI=2:
+# Copyright lowRISC contributors.
+# Licensed under the Apache License, Version 2.0, see LICENSE for details.
+# SPDX-License-Identifier: Apache-2.0
+#
+# The RTL half of ports/ibex_icache_cpptb, described the way Ibex describes
+# everything else: a CAPI=2 core whose dependency graph fusesoc resolves.
+# ports/ibex_icache_uvm resolves lowrisc:dv:ibex_icache_sim:0.1 the same way
+# and gets the UVM environment with it; this core asks for the design and the
+# two primitives tb.sv instantiates beside it, and nothing from dv/.
+#
+# fusesoc_setup.py runs this and writes the resulting list into cpptb.toml.
+name: "lowrisc:dv:ibex_icache_cpptb:0.1"
+description: "ibex_icache with its RAMs, for the cpptb port"
+filesets:
+  files_rtl:
+    depend:
+      - lowrisc:ibex:ibex_icache
+      - lowrisc:ibex:ibex_pkg
+      - lowrisc:prim:ram_1p_scr
+      - lowrisc:prim:assert
+      # prim_ram_1p_adv.sv imports prim_mubi_pkg and prim_ram_1p_scr.sv
+      # instantiates prim_flop, and lowrisc:prim:ram_1p_adv declares neither.
+      # Nothing notices upstream because every flow that reaches ram_1p_scr
+      # also reaches a core that does depend on them. Named here so this graph
+      # closes on its own.
+      - lowrisc:prim:mubi
+      - lowrisc:prim:flop
+    files:
+      - ibex_icache_tb_top.sv
+    file_type: systemVerilogSource
+
+targets:
+  default: &default_target
+    filesets:
+      - files_rtl
+    toplevel: ibex_icache_tb_top
+
+  sim:
+    <<: *default_target
+    default_tool: verilator
