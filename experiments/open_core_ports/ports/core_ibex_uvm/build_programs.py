@@ -614,6 +614,70 @@ PYGEN_PATCHES = [
         '                insert_str = "{}.2byte {} # {}".format(pkg_ins.indent,\n',
         '                insert_str = "{}.2byte 0x{} # {}".format(pkg_ins.indent,\n',
     ),
+    # The third piece of the signature handshake, and the one that decides
+    # whether any of the twenty directed test classes can start at all.
+    #
+    # `core_ibex_directed_test::send_stimulus` calls `wait_for_core_setup()`,
+    # which is
+    #
+    #     wait_for_csr_write(CSR_MSTATUS, 10000);
+    #     wait_for_csr_write(CSR_MIE, 5000);
+    #     check_next_core_status(INITIALIZED, ..., 5000);
+    #
+    # so the program has to write MSTATUS and MIE to the signature address
+    # before it says it is initialized. riscv-dv's
+    # `gen_privileged_mode_switch_routine` does that, between entering the
+    # target privileged mode and the `mret` that gets there. pyflow's copy is
+    #
+    #     if cfg.require_signature_addr:
+    #         # TODO
+    #         pass
+    #
+    # and the consequence is not subtle: every debug, interrupt, memory-error,
+    # dret, umode and invalid-CSR entry -- twenty of the fifty-seven -- dies on
+    #
+    #     UVM_FATAL Did not receive write to csr 0x300 within 10000 cycle
+    #     timeout period
+    #
+    # ten thousand cycles into the run, having executed nothing of its program.
+    # This transcribes the SystemVerilog, including the pop of the `mret` that
+    # `enter_privileged_mode` has already appended and re-indenting to match
+    # what that function did to the rest of the block.
+    (
+        "riscv_asm_program_gen.py",
+        "            privil_seq.enter_privileged_mode(privil_mode, instr)\n"
+        "            if cfg.require_signature_addr:\n"
+        "                # TODO\n"
+        "                pass\n",
+        "            privil_seq.enter_privileged_mode(privil_mode, instr)\n"
+        "            if cfg.require_signature_addr:\n"
+        "                ret_instr = instr.pop()\n"
+        "                csr_handshake = []\n"
+        "                if privil_mode == privileged_mode_t.SUPERVISOR_MODE:\n"
+        "                    self.gen_signature_handshake(\n"
+        "                        csr_handshake, signature_type_t.WRITE_CSR,\n"
+        "                        csr=privileged_reg_t.SSTATUS)\n"
+        "                    self.gen_signature_handshake(\n"
+        "                        csr_handshake, signature_type_t.WRITE_CSR,\n"
+        "                        csr=privileged_reg_t.SIE)\n"
+        "                elif privil_mode == privileged_mode_t.USER_MODE:\n"
+        "                    self.gen_signature_handshake(\n"
+        "                        csr_handshake, signature_type_t.WRITE_CSR,\n"
+        "                        csr=privileged_reg_t.USTATUS)\n"
+        "                    self.gen_signature_handshake(\n"
+        "                        csr_handshake, signature_type_t.WRITE_CSR,\n"
+        "                        csr=privileged_reg_t.UIE)\n"
+        "                self.gen_signature_handshake(\n"
+        "                    csr_handshake, signature_type_t.WRITE_CSR,\n"
+        "                    csr=privileged_reg_t.MSTATUS)\n"
+        "                self.gen_signature_handshake(\n"
+        "                    csr_handshake, signature_type_t.WRITE_CSR,\n"
+        "                    csr=privileged_reg_t.MIE)\n"
+        "                self.format_section(csr_handshake)\n"
+        "                instr.extend([pkg_ins.indent + line\n"
+        "                              for line in csr_handshake])\n"
+        "                instr.append(ret_instr)\n",
+    ),
     # A generation error hangs pyflow instead of reporting it. `run` uses
     # `multiprocessing.Pool.map`, and `run_phase` catches `Exception` -- but
     # pyflow's own error path is `logging.critical(...); sys.exit(1)`, in
