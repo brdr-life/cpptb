@@ -920,19 +920,107 @@ The breakpoint exception vectors into the 128 bytes of zeros ahead of the
 entry point and executes `c.unimp` until the detector fires. That is the
 environment, not the core.
 
-**The 26 that fail their own check are worth someone's attention.** All 26 are
-ePMP, none is a cosim mismatch -- Spike is given the same binary and agrees
-with the DUT instruction for instruction -- and they fall into two shapes:
+### The 26 that fail their own check: both are test bugs
 
-- five `test_pmp_csr_1_*_mml1_*` exit 2, meaning `actual_pmpaddr_fail` where
-  the test expected none: it writes `pmpaddr7`, reads it back, and does not get
-  what it wrote, under `mseccfg.MML` with `RLB` clear.
-- twenty-one `test_pmp_ok_1_*` exit 1, 2 or 3, mostly `mmwp` variants.
+All 26 are ePMP and none is a cosim mismatch. They are two defects, both
+introduced by the same lowRISC commit, and neither is a defect in Ibex.
 
-They are not evidence of an Ibex bug yet. The same tests were reading and
-writing the wrong megabyte before the linker script was rebased, so this is the
-first time in this port that they have exercised the addresses their own PMP
-entries name, and the first thing to rule out is the rebase itself.
+**Not the linker script.** Re-running all 26 with `--stock-ld` gives the same
+26 failures with the same exit codes, byte for byte in the results file. The
+rebase is not what makes them fail; it is also not what hides anything, because
+each family fails for a reason that does not depend on where TEST_MEM lands.
+
+The vendored tests came from
+[lowrisc/riscv-isa-sim](https://github.com/lowRISC/riscv-isa-sim) branch
+`mseccfg_tests`, and commit `a7c5d5d` ("Copy over changes made by Saad525")
+moved them from Spike's memory map to Ibex's and gave them a way to signal a
+result. Both changes are in the diff of the two skeletons, and each one broke
+an assumption the generator still makes.
+
+**Twenty-one `test_pmp_ok_1_*`: entry 0 swallows the region under test.**
+`set_cfg()` has two arms. The `M_MODE_RWX` arm programs one NAPOT entry for all
+of M memory; the other arm programs three TOR entries for code, data and
+TEST_MEM separately. The NAPOT entry used to be
+
+```c
+asm volatile ("csrw pmpaddr0, %0 \n" :: "r"((TEST_MEM_START >> 3) - 1) : "memory");
+```
+
+which is the NAPOT encoding of `[0, TEST_MEM_START)`: it stops exactly where
+the region under test begins, and by construction cannot shadow it. `a7c5d5d`
+rewrote it as
+
+```c
+asm volatile ("csrw pmpaddr0, %0 \n" :: "r"((0x80000000 >> 2) | 0xfffff) : "memory");
+```
+
+`0xfffff` is a size as well as a base: against the old base it gave 512 KiB,
+against `0x8000_0000 >> 2` it gives twenty trailing ones, so 8 MiB,
+`[0x8000_0000, 0x8080_0000)`. TEST_MEM at `0x8020_0000` and U_MEM at
+`0x8024_0000` are both inside it. PMP matches lowest index first, so entry 0
+answers for every access the test makes, entry 2 is never consulted, and
+because entry 0 is unlocked and grants RWX, no access ever faults, in M mode or
+in U mode. The trace shows it plainly: `PA:0x80200010 store:0x0909090a` and a
+fetch at `0x80200000`, no trap either side.
+
+The generator picks this arm by `set_m_mode_rwx(cur_files_count % 3 == 0)`,
+which is why it affects a scattered third of the `mml0` entries. 32 of the 192
+have `M_MODE_RWX 1`; **the rule "both actual counters stay 0" predicts the exit
+code of all 32**, the 11 that pass along with the 21 that fail. The 160 with
+`M_MODE_RWX 0` all pass. The other arm of the same function bounds M memory at
+`0x8020_0000`, which is what the NAPOT entry was meant to say.
+
+**Five `test_pmp_csr_1_*_mml1_*`: the signature entry is a locked entry.**
+`a7c5d5d` added
+
+```c
+asm volatile ("csrw pmpaddr7, %0 \n" :: "r"(0x8ffffff8 >> 2) : "memory");  // for ibex signature addr
+```
+
+so the test can reach the testbench's signature address, and, since M mode
+needs `L` set to reach anything once MML is on, added `PMP_L` for entry 7 to
+both arms. The generator was not told. Its `pmpaddr` test picks
+`addr_idx = 7 + count % 9` under the comment "for invalid cfgs, start from 7",
+on the assumption that entries 7 and above are untouched, and its model sets
+`pmpaddr_fail` only in the `addr_idx` 2/3 branch. So for the entries where
+`addr_idx` comes out 7, the test writes a locked `pmpaddr7` and expects the
+write to land.
+
+It does not, and it should not. `pmp7cfg.L` is set and `mseccfg.RLB` is clear,
+so `ibex_cs_registers.sv` gates the write off:
+
+```systemverilog
+assign pmp_cfg_locked[i] = pmp_cfg[i].lock & ~pmp_mseccfg_q.rlb;
+assign pmp_addr_we[i]    = csr_we_int & ~pmp_cfg_locked[i] & ...
+```
+
+That is Smepmp's rule, and it is plain PMP locking rather than anything
+MML-specific: MML only enters into it by being the reason the test locks entry
+7 in the first place. Spike agrees exactly. From `+cosim_log_file=`:
+
+```
+core   0: 0x80001370 (0x3b779073) csrw    pmpaddr7, a5
+core   0: 3 0x80001370 (0x3b779073)
+core   0: 0x80001374 (0x3b702673) csrr    a2, pmpaddr7
+core   0: 3 0x80001374 (0x3b702673) x12 0x23fffffe
+```
+
+The write logs no state change and the read-back is the old value. 18 entries
+reach `addr_idx` 7 with `mml1`; the 5 with `rlb0` fail and the 13 with `rlb1`
+pass, which is the same rule seen from the other side.
+
+Note that this is not
+[lowRISC/ibex#2242](https://github.com/lowRISC/ibex/issues/2242), which is MML
+suppression of `pmpcfg` writes missing from the DV CSR model. Different
+component, different mechanism; the RTL has both.
+
+| bucket | count |
+| --- | ---: |
+| harness or address artefact | 0 |
+| test bug | 26 |
+| Ibex bug | 0 |
+| Spike bug | 0 |
+| specification ambiguity | 0 |
 
 ### Where the cycle budget had to go
 
@@ -961,7 +1049,9 @@ Upstream never overrides `timeout_in_cycles`, so its budget is
   `riscv_csr_test` needs riscv-dv's `gen_csr_test.py`, which is a separate
   generator not wired up here. `rtl_params` is now acted on rather than only
   parsed, so the ones a build cannot serve are reported inapplicable.
-- **The 26 ePMP self-check failures.** Named above, not diagnosed.
+- **The 26 ePMP self-check failures.** Diagnosed above: two test defects, both
+  from the same lowRISC commit, neither of them a defect in the core. Nothing
+  is fixed here, because the point of the group is to run what upstream ships.
 - **A runner.** `run_tests.py` reports outcomes; it does not yet do the
   both-harness reporting the other ports here have.
 - **A configuration between the two.** Everything the directed testlist needs
@@ -991,8 +1081,8 @@ On the Ibex side, `core_ibex_tb_top.sv` drives `unused_assert_connected`
 without the `` `ifdef INC_ASSERT `` that declares it, which breaks any tool
 whose assertion macros are the dummy ones.
 
-And three about the directed tests, all of which make a test pass while
-testing nothing, and none of which any simulator would report:
+And five about the directed tests, none of which any simulator would report.
+Three make a test pass while testing nothing:
 
 - `directed_testlist.yaml`'s riscv-arch-tests config never defines
   `TEST_CASE_1`, so all 107 of those entries compile to a register-init
@@ -1005,3 +1095,19 @@ testing nothing, and none of which any simulator would report:
 - `syscalls.c`'s `tohost_exit(code)` always signals `TEST_PASS`, so no ePMP
   test can fail. 26 of the 744 do fail once the code is read back out of the
   trace.
+
+Two are why those 26 fail, both from `a7c5d5d` on `lowrisc/riscv-isa-sim`'s
+`mseccfg_tests` branch, both diagnosed in full above:
+
+- the `M_MODE_RWX` arm of `set_cfg()` writes `(0x80000000 >> 2) | 0xfffff` to
+  `pmpaddr0`, an 8 MiB NAPOT region that covers TEST_MEM and U_MEM and, being
+  entry 0 and unlocked, grants every access the test expects to fault. The
+  expression it replaced, `(TEST_MEM_START >> 3) - 1`, stopped where TEST_MEM
+  began. 32 of the 192 `test_pmp_ok_1_*` take that arm and 21 of them fail;
+  the other 11 expected no fault anyway. `((TEST_MEM_START >> 3) - 1) |
+  (0x80000000 >> 2)` would restore the intent.
+- the same commit gave `pmpaddr7` to the testbench signature address and set
+  `pmp7cfg.L` whenever MML is set, but `gen_pmp_test.cc` still treats entries 7
+  and up as free and never predicts a `pmpaddr` failure for them. Five
+  `test_pmp_csr_1_*` land on `addr_idx` 7 with `mml1` and `rlb0`, where the
+  write is correctly ignored.
