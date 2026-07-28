@@ -72,6 +72,11 @@ class BuildError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 OVERLAYS: list[tuple[Path, str, str]] = [
+    (
+        ICACHE / "dv/tests/ibex_icache_base_test.sv",
+        '  virtual function void build_phase(uvm_phase phase);\n    super.build_phase(phase);\n  endfunction\n',
+        '  virtual function void build_phase(uvm_phase phase);\n    super.build_phase(phase);\n    // "Dropping response for sequence N, sequence not found" is issued by\n    // uvm_sequencer_param_base::put_response when a response arrives for a\n    // sequence that has gone. UVM 1.2, which upstream runs, reports it with\n    // uvm_report_info; Accellera 1800.2, which this port runs because\n    // Verilator ships no UVM, raised it to uvm_report_warning. lowRISC counts\n    // any UVM_WARNING as a test failure -- dv_report_server says so, and\n    // common_sim_cfg.hjson lists it as a run-fail pattern -- so on 1800.2 the\n    // reset stress test fails on a message upstream never sees.\n    //\n    // Restoring the 1.2 severity keeps the verdict comparable with upstream\'s\n    // rather than papering over a real failure. The underlying race is real\n    // either way: random_reset kills sequences while the core driver has\n    // responses in flight, and those responses are dropped. Upstream does not\n    // treat that as a failure, so neither does this.\n    set_report_severity_id_override(UVM_WARNING, "Sequencer", UVM_INFO);\n  endfunction\n',
+    ),
     # Both agent interfaces open their driver clocking block with
     #
     #     clocking driver_cb @(posedge clk);
