@@ -27,13 +27,24 @@ of the `small` configuration. `--config small` reports all 944 as inapplicable
 rather than running them, which is what upstream's `filter_tests_by_config`
 does with the same data.
 
-Second, the three groups check themselves to different depths. The riscv-tests
-and the epmp tests signal TEST_PASS or TEST_FAIL from the program, so a pass is
-the program's own verdict. The riscv-arch-tests signal TEST_PASS
-unconditionally from `RVMODEL_HALT` and leave the checking to a signature
-comparison against a reference that this flow, like upstream's, does not do --
-so for those a pass means "ran to completion with the RVFI cosim against Spike
-staying quiet", which is a real check but not the test's own.
+Second, the three groups check themselves to three different depths, and only
+one of them reaches the harness on its own.
+
+  riscv-tests (93)       signal TEST_PASS or TEST_FAIL, so a pass is the
+                         program's own verdict.
+  epmp-tests (744)       compute a verdict and then throw it away: syscalls.c's
+                         `tohost_exit(code)` sends TEST_PASS whatever `code`
+                         is. This reads the code back out of the execution
+                         trace, so those do get a verdict here; upstream's
+                         harness cannot fail one of them.
+  riscv-arch-tests (107) signal TEST_PASS unconditionally from `RVMODEL_HALT`
+                         and leave the checking to a signature comparison
+                         against a reference that this flow, like upstream's,
+                         does not do.
+
+For the last of those a pass means "ran to completion with the RVFI cosim
+against Spike staying quiet", which is a real check -- every retired
+instruction is compared against the ISS -- but it is not the test's own.
 
 Standard library only, matching the other tools here.
 """
@@ -49,6 +60,7 @@ import re
 import shlex
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -81,6 +93,9 @@ PATH_KEYS = ("ld_script", "includes", "test_srcs")
 
 class DirectedError(Exception):
     """Something about the test list or the toolchain does not hold."""
+
+
+OVERLAY_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -135,13 +150,54 @@ EXTRA_REQUIREMENTS: list[tuple[str, str, str]] = [
      "build with RV32BNone cannot execute"),
 ]
 
-# What upstream's own directed_tests know about the memory map, and where the
-# vendored ePMP sources disagree with it. Recorded against every epmp entry.
-EPMP_LAYOUT_NOTE = (
-    "the ePMP sources place TEST_MEM at 0x8020_0000, but the linker script "
-    "the testlist names puts it at 0x0020_0000, which lands at 0x8010_0000 "
-    "once the flat binary is loaded at BOOT_ADDR; the two were not updated "
-    "together upstream")
+# Exact-text substitutions into a linker script, by config name. The patched
+# copy goes under build/, never into deps/, and a replacement that stops
+# matching fails the run rather than quietly doing nothing -- the same rule
+# build_tb.py applies to the SystemVerilog overlays.
+#
+# `mseccfg_test.ld` is stale with respect to the ePMP sources beside it. Every
+# generated test says
+#
+#     #define TEST_MEM_START 0x80200000
+#     #define TEST_MEM_END   0x80240000
+#
+# and programs its PMP regions from those constants, but the linker script
+# places TEST_MEM at 0x0020_0000 and M_MEM at 0x0010_0000. The flat binary
+# starts at the lowest section, so loading it at BOOT_ADDR puts _start at
+# 0x8000_0080 -- right -- and TEST_MEM at 0x8010_0000, a megabyte below where
+# the program's own PMP entries say it is. lowRISC regenerated the C for Ibex's
+# memory map and left the script on Spike's.
+#
+# The effect is not subtle and it is not a cosim mismatch, because Spike is
+# given the same binary and agrees with the DUT about every instruction. It is
+# the program's own check failing: of a 13-entry sample, the four failures were
+# all in the two families that execute from or load out of TEST_MEM, and all
+# four pass once the script is corrected.
+#
+# Rebasing the script rather than patching the 744 generated C files keeps the
+# stimulus exactly as upstream generated it. `--stock-ld` runs the script as
+# vendored, for anyone who wants to see the failures.
+LD_SCRIPT_PATCHES: dict[str, list[tuple[str, str]]] = {
+    "epmp-tests": [
+        ("M_MEM (AX)  : ORIGIN = 0x100000, LENGTH = 1M",
+         "M_MEM (AX)  : ORIGIN = 0x80000000, LENGTH = 1M"),
+        ("RESERVED  : ORIGIN = 0x000000, LENGTH = 1M",
+         "RESERVED  : ORIGIN = 0x7ff00000, LENGTH = 1M"),
+        ("TEST_MEM (AX)  : ORIGIN = 0x200000, LENGTH = 256K",
+         "TEST_MEM (AX)  : ORIGIN = 0x80200000, LENGTH = 256K"),
+        ("U_MEM (AX)  : ORIGIN = 0x240000, LENGTH = 64K",
+         "U_MEM (AX)  : ORIGIN = 0x80240000, LENGTH = 64K"),
+        ("    . = 0x100000;\n    __global_pointer$ = 0x140000;",
+         "    . = 0x80000000;\n    __global_pointer$ = 0x80140000;"),
+        ("    _end = 0x180000;",
+         "    _end = 0x80180000;"),
+    ],
+}
+
+LD_SCRIPT_NOTE = (
+    "linker script rebased to Ibex's memory map: the vendored mseccfg_test.ld "
+    "puts TEST_MEM at 0x0020_0000 while the ePMP sources beside it program "
+    "their PMP regions at 0x8020_0000. Pass --stock-ld for upstream's")
 
 
 # ---------------------------------------------------------------------------
@@ -339,12 +395,36 @@ def compile_options(entry: dict, march: str) -> tuple[list[str], list[str]]:
         tokens.append(str(source))
         notes.append(f"{source.name} compiled in: {reason}")
 
-    if entry["config"] == "epmp-tests":
-        notes.append(EPMP_LAYOUT_NOTE)
     return tokens, notes
 
 
-def build_one(entry: dict, march: str, directory: Path) -> dict:
+def linker_script(entry: dict, stock: bool) -> tuple[Path, list[str]]:
+    """The linker script for one entry, patched under build/ where it needs it."""
+    script = entry["ld_script"]
+    patches = LD_SCRIPT_PATCHES.get(entry["config"], [])
+    if stock or not patches:
+        return script, []
+
+    overlay = BUILD / "directed_overlay" / script.name
+    text = script.read_text(encoding="utf-8")
+
+    for old, new in patches:
+        if text.count(old) != 1:
+            raise DirectedError(
+                f"{script.name}: expected exactly one\n  {old!r}\nto replace "
+                f"with\n  {new!r}\nfound {text.count(old)}. Upstream's script "
+                f"has changed and this substitution needs looking at.")
+        text = text.replace(old, new)
+    overlay.parent.mkdir(parents=True, exist_ok=True)
+    # Written every time rather than only when absent, so an edit to the
+    # substitutions above cannot leave a stale copy in place. Under the lock
+    # because entries are built several at a time and they share the file.
+    with OVERLAY_LOCK:
+        overlay.write_text(text, encoding="utf-8")
+    return overlay, [LD_SCRIPT_NOTE]
+
+
+def build_one(entry: dict, march: str, directory: Path, stock_ld: bool) -> dict:
     """Compile one entry to a flat binary, as scripts/compile_test.py does."""
     directory.mkdir(parents=True, exist_ok=True)
     objectfile = directory / "test.o"
@@ -353,12 +433,14 @@ def build_one(entry: dict, march: str, directory: Path) -> dict:
 
     try:
         options, notes = compile_options(entry, march)
+        script, script_notes = linker_script(entry, stock_ld)
+        notes += script_notes
     except DirectedError as error:
         return {"built": False, "notes": [], "detail": str(error)}
 
     commands = [
         [str(GCC), *options,
-         f"-I{entry['includes']}", f"-T{entry['ld_script']}",
+         f"-I{entry['includes']}", f"-T{script}",
          "-o", str(objectfile), str(entry["test_srcs"])],
         [str(OBJCOPY), "-O", "binary", str(objectfile), str(binary)],
     ]
@@ -453,13 +535,45 @@ def run_one(testbench: Path, entry: dict, binary: Path, directory: Path,
     return {"outcome": "no verdict", "detail": "", "seconds": elapsed}
 
 
+# The ePMP programs end in syscalls.c's `tohost_exit(code)`, which writes two
+# words to the signature address:
+#
+#   sw (code << 8) | CORE_STATUS
+#   sw (TEST_PASS << 8) | TEST_RESULT
+#
+# The second is a constant. `exit(ret)` from `checkTestResult`, `main()`
+# returning non-zero, and `handle_trap` all reach it, so every ePMP program
+# tells the testbench it passed no matter what it found -- upstream's harness
+# has no way to fail one of these 744 tests. The result is still there in the
+# first word, and TRACE_EXECUTION records the store, so it is read back out of
+# the tracer log. `handle_trap` is the one caller with a fixed code.
+EPMP_TRAP_CODE = 1337
+EPMP_STATUS_STORE = re.compile(
+    r"PA:0x8ffffff8\s+store:0x([0-9a-f]{8})", re.IGNORECASE)
+
+
+def epmp_exit_code(trace: Path) -> int | None:
+    """The code an ePMP program passed to exit(), from the execution trace."""
+    if not trace.is_file():
+        return None
+    for line in trace.read_text(encoding="utf-8", errors="replace").splitlines():
+        found = EPMP_STATUS_STORE.search(line)
+        if not found:
+            continue
+        word = int(found.group(1), 16)
+        if word & 0xFF == 0x00:  # CORE_STATUS, so the payload is the code
+            return word >> 8
+    return None
+
+
 def handle(entry: dict, testbench: Path, march: str, cycles: int,
-           extra: list[str], build_only: bool) -> dict:
+           wall_seconds: int, extra: list[str], build_only: bool,
+           stock_ld: bool) -> dict:
     directory = BUILD / "directed" / entry["test"]
     result = {"test": entry["test"], "group": entry["config"],
               "rtl_test": entry["rtl_test"]}
 
-    build = build_one(entry, march, directory)
+    build = build_one(entry, march, directory, stock_ld)
     result["notes"] = build["notes"]
     if not build["built"]:
         result["outcome"] = "build failed"
@@ -471,9 +585,22 @@ def handle(entry: dict, testbench: Path, march: str, cycles: int,
         result["detail"] = ""
         return result
 
-    seconds = int(entry.get("timeout_s", 300))
+    seconds = wall_seconds or int(entry.get("timeout_s", 300))
     result.update(run_one(testbench, entry, build["binary"], directory,
                           cycles, seconds, extra))
+
+    if entry["config"] == "epmp-tests" and result["outcome"] == "passed":
+        code = epmp_exit_code(directory / "trace_core_00000000.log")
+        result["exit_code"] = code
+        if code is None:
+            result["outcome"] = "no verdict"
+            result["detail"] = "no CORE_STATUS write found in the trace"
+        elif code != 0:
+            result["outcome"] = "self-check failed"
+            result["detail"] = (f"the program exited {code}"
+                                if code != EPMP_TRAP_CODE else
+                                f"the program took an unhandled trap "
+                                f"(handle_trap exits {EPMP_TRAP_CODE})")
     return result
 
 
@@ -558,7 +685,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--jobs", type=int, default=4,
                         help="entries in flight at once; capped at 4 because "
                              "each simulation spawns its own z3")
-    parser.add_argument("--timeout-cycles", type=int, default=200000)
+    # Upstream never overrides `timeout_in_cycles`, so its budget is the
+    # 100,000,000 cycles core_ibex_base_test defaults to. That is hours here.
+    # This is set instead to about what the wall-clock budget below can reach,
+    # so a test that ends on it has genuinely run out of time rather than out
+    # of an arbitrary number: at 200,000 cycles ten of the pmp_mseccfg entries
+    # reported a timeout and all ten pass at 5,000,000, the first of them
+    # finishing at 236,835.
+    parser.add_argument("--timeout-cycles", type=int, default=5000000)
+    parser.add_argument("--timeout-seconds", type=int, default=0,
+                        help="wall-clock budget per test, overriding the "
+                             "entry's own timeout_s")
+    parser.add_argument("--stock-ld", action="store_true",
+                        help="link with the vendored linker scripts unpatched; "
+                             "see LD_SCRIPT_PATCHES for what that costs")
     parser.add_argument("--build-only", action="store_true",
                         help="compile, do not simulate")
     parser.add_argument("--list", action="store_true",
@@ -617,8 +757,9 @@ def main(argv: list[str] | None = None) -> int:
           f"{len(inapplicable)} inapplicable, {jobs} at a time")
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
         futures = {pool.submit(handle, entry, testbench, march,
-                               args.timeout_cycles, args.extra,
-                               args.build_only): entry
+                               args.timeout_cycles, args.timeout_seconds,
+                               args.extra, args.build_only,
+                               args.stock_ld): entry
                    for entry in runnable}
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
