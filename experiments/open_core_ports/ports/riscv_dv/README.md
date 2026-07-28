@@ -182,6 +182,35 @@ What is established either way is that the stimulus reaches the core and the
 reference model follows it: 20 interrupts taken, over a million instructions
 matched, zero mismatches. The gap is the platform, not the mechanism.
 
+## The upstream side now exists
+
+This port was written without an upstream side to compare against, because
+upstream's flow 5 is UVM and nothing local could run it. `ports/core_ibex_uvm`
+now does: Ibex's own `dv/uvm/core_ibex` testbench builds and runs on Verilator
+5.050, executes riscv-dv programs, and co-simulates against Spike.
+
+Both harnesses currently run riscv-dv stimulus with Spike checking every
+retired instruction, and both report no mismatches:
+
+| harness | program | result |
+| --- | --- | --- |
+| cpptb, this port | `gen_0.vmem`, Simple System link | 586 cycles, 0 failures |
+| UVM, `ports/core_ibex_uvm` | `riscv_arithmetic_basic_test_0.bin` | 6,074 instructions, passed |
+
+That is mutual corroboration, not yet the like-for-like comparison the rest of
+this directory insists on. The two harnesses are running *different* programs,
+because the two platforms end a test differently: Simple System watches the HTIF
+`tohost` address, core_ibex watches a signature address, and riscv-dv bakes its
+base address into the generated code, so the same `.S` cannot simply be relinked
+for both.
+
+Closing that gap is a bounded piece of work and it is what makes the comparison
+mean what it means elsewhere here: same stimulus, two harnesses, a disagreement
+being a port defect and a shared failure being a core property. The options are
+to teach the generator to emit both endings, or to give the cpptb port a
+signature-address device so it can run core_ibex's programs unmodified. The
+second looks smaller.
+
 ## What is left
 
 **A corpus runner.** `ports/riscv_arch_tests/run_cosim_programs.py` runs a fixed
