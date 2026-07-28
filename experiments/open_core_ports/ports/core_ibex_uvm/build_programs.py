@@ -970,6 +970,29 @@ def debug_driving_classes() -> set[str]:
     return _DEBUG_CLASSES
 
 
+# What `riscv_rand_instr_test.randomize_cfg` assigns to `cfg.instr_cnt`, in
+# pyflow and in the SystemVerilog alike, and why this has to reach the command
+# line rather than being left to that assignment.
+#
+# `cfg.instr_cnt` is a plain Python int, and the constraint that reads it --
+#
+#     self.main_program_instr_cnt in vsc.rangelist(vsc.rng(10, self.instr_cnt))
+#
+# -- is elaborated into the pyvsc model when the config object is built, which
+# happens at import, before any test's `randomize_cfg` runs. So assigning
+# `cfg.instr_cnt = 10000` there is too late: the range the solver draws from is
+# still `[10, argv.instr_cnt]`. In SystemVerilog the constraint is evaluated at
+# `randomize()`, so the same two lines mean different things.
+#
+# The effect is not subtle. With `--instr_cnt 400` on the command line and
+# `cfg.instr_cnt = 10000` in randomize_cfg, `riscv_ebreak_test` came out with
+# `test_done:` at line 354; with `--instr_cnt 10000` it is at 5,906. pyflow's
+# own riscv_rand_instr_test, run as shipped, generates a main program of between
+# 10 and 200 instructions -- the argparse default -- and reports 10,000 in its
+# config dump.
+RAND_INSTR_CNT = 10000
+
+
 def needs_debug_rom(entry: dict) -> bool:
     """Whether this entry's run will send the core into the debug ROM.
 
@@ -1073,8 +1096,10 @@ def translate(entry: dict) -> tuple[list[str], list[str]]:
             # assigns cfg.instr_cnt = 10000 after the config has read the
             # plusarg, in the SystemVerilog as well as in pyflow, so this entry
             # gets 10,000 instructions upstream too. Recorded because the entry
-            # asks for something else and neither flow gives it.
-            notes.append(f"{opt}: overridden to 10000 by "
+            # asks for something else and neither flow gives it. The 10000 is
+            # put on the command line below, for the reason RAND_INSTR_CNT
+            # gives.
+            notes.append(f"{opt}: overridden to {RAND_INSTR_CNT} by "
                          f"riscv_rand_instr_test.randomize_cfg, which assigns "
                          f"it after the config has read the plusarg -- upstream "
                          f"does the same")
@@ -1113,6 +1138,11 @@ def translate(entry: dict) -> tuple[list[str], list[str]]:
             options += [group.strip().upper() for group in value.split(",")]
             continue
         options += [f"--{name}", value]
+
+    if rand_instr_test:
+        # See RAND_INSTR_CNT. Appended last so it wins over generate.py's own
+        # --instr_cnt, which argparse resolves to the last occurrence.
+        options += ["--instr_cnt", str(RAND_INSTR_CNT)]
 
     asked_for_rom = any(name == "gen_debug_section" and value == "1"
                         for name, value in gen_opts(entry))
