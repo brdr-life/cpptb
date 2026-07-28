@@ -31,10 +31,12 @@ Standard library only, matching the other tools here.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import build_tb
@@ -173,11 +175,17 @@ def environment() -> dict[str, str]:
 def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
             seconds: int, extra: list[str],
             log_name: str | None = None) -> dict:
+    name = log_name or rtl_test
     command = [str(testbench), f"+UVM_TESTNAME={rtl_test}",
                f"+bin={program}", f"+signature_addr={SIGNATURE_ADDR}",
                f"+timeout_in_cycles={cycles}", *extra]
+    # A directory each, because the tracer writes trace_core_00000000.log into
+    # the working directory and several runs at a time would share one.
+    directory = BUILD / "runs" / name
+    directory.mkdir(parents=True, exist_ok=True)
+    started = time.monotonic()
     try:
-        completed = subprocess.run(command, cwd=BUILD, env=environment(),
+        completed = subprocess.run(command, cwd=directory, env=environment(),
                                    text=True, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, timeout=seconds)
         output, timed_out = completed.stdout, False
@@ -186,20 +194,33 @@ def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
         if isinstance(output, bytes):
             output = output.decode("utf-8", "replace")
         timed_out = True
+    elapsed = time.monotonic() - started
 
-    log = BUILD / "logs" / f"{log_name or rtl_test}.log"
+    log = BUILD / "logs" / f"{name}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(output, encoding="utf-8")
 
-    name = log_name or rtl_test
     if timed_out:
-        return {"test": name, "outcome": "wall-clock timeout", "detail": ""}
+        return {"test": name, "outcome": "wall-clock timeout", "detail": "",
+                "seconds": round(elapsed, 1)}
+    result = {"test": name, "outcome": "no verdict", "detail": "",
+              "seconds": round(elapsed, 1)}
     for pattern, outcome in OUTCOMES:
         found = pattern.search(output)
         if found:
-            detail = found.group(1).strip()[:70] if found.groups() else ""
-            return {"test": name, "outcome": outcome, "detail": detail}
-    return {"test": name, "outcome": "no verdict", "detail": ""}
+            result["outcome"] = outcome
+            result["detail"] = found.group(1).strip()[:70] if found.groups() else ""
+            break
+    # Verilator solves constraints by shelling out to `z3 --in`. Without one on
+    # PATH every randomize() in the testbench fails, `DV_CHECK_RANDOMIZE_FATAL
+    # ends the run, and the whole thing is over in about a tenth of a second.
+    # That is a broken environment, not a result, and it reads as a testbench
+    # failure unless something says so.
+    if elapsed < 1.0 and result["outcome"] != "passed":
+        result["outcome"] = "environment"
+        result["detail"] = (f"ended in {elapsed:.2f}s; is z3 on PATH? "
+                            f"see {log.relative_to(HERE)}")
+    return result
 
 
 # What a result is worth, given how far its program is from its entry.
@@ -279,13 +300,12 @@ def run_testlist(args) -> int:
         else:
             runnable.append(test)
 
-    results = []
-    for test in runnable:
+    def one(test: dict) -> dict | None:
         program = (HERE / test["bin"]).resolve()
         if not program.is_file():
             print(f"  {test['test']:<44} no program at {program}",
                   file=sys.stderr)
-            continue
+            return None
         # timeout_s is the entry's own wall-clock budget where it has one.
         seconds = int(test["timeout_s"]) if test.get("timeout_s") \
             else args.timeout_seconds
@@ -296,10 +316,19 @@ def run_testlist(args) -> int:
         result["rtl_test"] = test["rtl_test"]
         result["unsupported"] = test.get("unsupported", [])
         result["verdict"] = test.get("verdict", "unknown")
-        results.append(result)
         detail = f"  {result['detail']}" if result["detail"] else ""
-        print(f"  {test['test']:<44} {result['outcome']:<16} "
-              f"{result['verdict']}{detail}", flush=True)
+        print(f"  {test['test']:<44} {result['outcome']:<18} "
+              f"{result['verdict']:<9} {result['seconds']:>6.1f}s{detail}",
+              flush=True)
+        return result
+
+    # The binary is 270 MB of model plus a UVM environment, so this is memory
+    # rather than CPU bound above a handful of jobs; four is what run_directed.py
+    # settled on for the same reason.
+    jobs = max(1, min(args.jobs, 4))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+        results = [r for r in pool.map(one, runnable) if r is not None]
+    results.sort(key=lambda result: result["test"])
 
     unbuilt = manifest_failures() if not args.only else []
     built = {test["test"] for test in tests} | {t["test"] for t in unbuilt}
@@ -338,8 +367,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--program", type=Path,
                         help="run every UVM class against this one program "
                              "instead of the per-entry programs")
-    parser.add_argument("--timeout-cycles", type=int, default=200000)
+    parser.add_argument("--timeout-cycles", type=int, default=500000)
     parser.add_argument("--timeout-seconds", type=int, default=180)
+    parser.add_argument("--jobs", type=int, default=4,
+                        help="tests to run at a time; capped at 4")
     parser.add_argument("--only", action="append", default=[],
                         help="run only these testlist entries or UVM classes")
     parser.add_argument("extra", nargs="*", help="further plusargs")
