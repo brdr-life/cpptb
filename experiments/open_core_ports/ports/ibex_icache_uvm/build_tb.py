@@ -749,6 +749,75 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "  data_sel_line = ($urandom_range(99, 0) < dis_err_pct) ? '0 :\n"
         "                    $urandom_range({IC_NUM_WAYS{1'b1}}, 1);\n",
     ),
+    # The ECC error masks are the one place in this testbench where the solver
+    # is the run time. gen_tag_err and gen_data_err are called on every negedge
+    # on which every way's rvalid is set, and each one asks the solver for a
+    # `$countones(mask) inside {[1:2]}` over a 34-bit tag or a 78-bit line,
+    # once per way. Verilator solves by piping to z3, so that is four round
+    # trips per cycle. Measured: ibex_icache_ecc spent 18 minutes at 1 second
+    # of CPU and 41,000 voluntary context switches, blocked on the pipe, and
+    # had not finished. ibex_icache_caching, the sequence it derives from,
+    # takes 48 seconds.
+    #
+    # Drawing the mask directly gives the same distribution. The constraint
+    # admits N one-bit masks and N*(N-1)/2 two-bit masks, all equally likely,
+    # so picking uniformly between those two populations and then uniformly
+    # within one reproduces it exactly.
+    (
+        ICACHE / "dv/env/ibex_icache_ram_if.sv",
+        "    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(tag_mask, $countones(tag_mask)"
+        " inside {[1:2]};, ,\n"
+        "                                       \"ibex_icache_ram_if\")\n",
+        "    // One or two bits set, uniformly over every such mask, drawn\n"
+        "    // directly rather than through the solver. See build_tb.py.\n"
+        "    tag_mask = draw_sparse_mask_tag();\n",
+    ),
+    (
+        ICACHE / "dv/env/ibex_icache_ram_if.sv",
+        "    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(data_mask, $countones(data_mask)"
+        " inside {[1:2]};, ,\n"
+        "                                       \"ibex_icache_ram_if\")\n",
+        "    // As gen_tag_err above.\n"
+        "    data_mask = draw_sparse_mask_data();\n",
+    ),
+    (
+        ICACHE / "dv/env/ibex_icache_ram_if.sv",
+        "function automatic gen_tag_err();\n",
+        "// A mask with one or two bits set, uniform over all such masks. This is\n"
+        "// what `$countones(mask) inside {[1:2]}` asks for; see build_tb.py for\n"
+        "// why it is not asked of the solver.\n"
+        "function automatic bit [TagSizeECC-1:0] draw_sparse_mask_tag();\n"
+        "  bit [TagSizeECC-1:0] mask = '0;\n"
+        "  int unsigned n = TagSizeECC;\n"
+        "  int unsigned singles = n;\n"
+        "  int unsigned pairs   = n * (n - 1) / 2;\n"
+        "  int unsigned first, second;\n"
+        "  first = $urandom_range(n - 1, 0);\n"
+        "  mask[first] = 1'b1;\n"
+        "  if ($urandom_range(singles + pairs - 1, 0) >= singles) begin\n"
+        "    do second = $urandom_range(n - 1, 0); while (second == first);\n"
+        "    mask[second] = 1'b1;\n"
+        "  end\n"
+        "  return mask;\n"
+        "endfunction\n"
+        "\n"
+        "function automatic bit [LineSizeECC-1:0] draw_sparse_mask_data();\n"
+        "  bit [LineSizeECC-1:0] mask = '0;\n"
+        "  int unsigned n = LineSizeECC;\n"
+        "  int unsigned singles = n;\n"
+        "  int unsigned pairs   = n * (n - 1) / 2;\n"
+        "  int unsigned first, second;\n"
+        "  first = $urandom_range(n - 1, 0);\n"
+        "  mask[first] = 1'b1;\n"
+        "  if ($urandom_range(singles + pairs - 1, 0) >= singles) begin\n"
+        "    do second = $urandom_range(n - 1, 0); while (second == first);\n"
+        "    mask[second] = 1'b1;\n"
+        "  end\n"
+        "  return mask;\n"
+        "endfunction\n"
+        "\n"
+        "function automatic gen_tag_err();\n",
+    ),
     # lowRISC's shared DV library excludes itself under Verilator:
     # clk_rst_if.sv wraps its UVM includes and imports in `ifndef VERILATOR, so
     # the interface compiles without `DV_CHECK_FATAL and fails at the first use
