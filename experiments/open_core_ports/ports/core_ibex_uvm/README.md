@@ -34,6 +34,15 @@ evidence about Ibex.
 faithfully at all: their PMP, debug-ROM and bitmanip options have no pyflow
 equivalent, and the RTL parameters they need are not set by the `small` build.
 
+**The other testlist runs: 912 of 944 directed tests pass.**
+`directed_tests/directed_testlist.yaml` is 944 hand-written C and assembly
+entries with no generator anywhere in the flow, and none of them had been
+built here. All 944 build and run on `--config opentitan` now, and the 32 that
+do not pass are named below. Getting a number that meant anything took five
+fixes first, three of them upstream's -- the arch tests were compiling their
+own bodies away, the ePMP linker script is stale by a megabyte, and no ePMP
+test can report a failure to the harness at all. See "The directed tests".
+
 ## Why this matters here
 
 Everything else in `experiments/open_core_ports` compares a cpptb port against
@@ -602,6 +611,15 @@ Seven of the eight ran a program that differs from its entry in at least one
 recorded way, so a pass here means the class runs a riscv-dv program of roughly
 the intended shape to its handshake, not that the entry's intent was covered.
 
+The same eight on `--config opentitan` give the same six passes and the same
+two failures, so nothing in that table is about `PMPEnable`, `SecureIbex` or
+the writeback stage. Without `+disable_fetch_enable_seq=1` both failures report
+the CSR-write timeout above rather than one of each; the cosim mismatch in the
+table was seen with that plusarg set. None of the eight is one of the 18
+entries a configuration can rule out, so the inapplicable count for this
+testlist -- 18 on `small`, 1 on `opentitan` -- falls entirely on entries that
+have no program yet.
+
 Generation is not fast: an entry of a few hundred instructions takes seconds, a
 10,000-instruction one with directed streams several minutes, so `--all-tests`
 is an hour or two at four entries at a time. `--jobs` is capped at half the
@@ -870,6 +888,52 @@ unexpected trap does not fail -- it hangs until the budget runs out. `scall`,
 which ends on a deliberate ecall, is a wall-clock timeout for that reason and
 cannot be anything else in this environment.
 
+### All 944 run
+
+`--config opentitan`, four at a time, everything above applied:
+
+| group | entries | passed | other |
+| --- | ---: | ---: | --- |
+| riscv-tests | 93 | 89 | 3 build failed, 1 wall-clock timeout |
+| riscv-arch-tests | 107 | 105 | 1 build failed, 1 double faults |
+| epmp-tests | 744 | 718 | 26 self-check failed |
+| **total** | **944** | **912** | **32** |
+
+The riscv-tests and epmp rows are one run of all 944; the arch row is a second
+run of that group alone, after `-DTEST_CASE_1=True` was added. Nothing in the
+other two groups changed between them. The 944-entry run took about two hours
+on a box that was busy with something else; the arch group on its own is five
+and a half minutes.
+
+The four that do not build are the vendored sources against a newer binutils,
+not anything about Ibex: `illegal`, `ma_addr` and `ma_fetch` use `mbadaddr` and
+`sptbr`, the pre-1.10 names for `mtval` and `satp`, and `jalr-01` writes
+`la x0, 5b`, which the assembler now rejects.
+
+`scall` is the wall-clock timeout, and cannot be anything else: it ends on a
+deliberate ecall, which `trap_vector` sends to `write_tohost`.
+
+`cebreak-01` reaches the double-fault threshold. `RVMODEL_BOOT` is empty, so
+`mtvec` is still the reset value -- `BOOT_ADDR | 0x1`, vectored at
+`0x8000_0000` -- and the arch tests place their first code at `0x8000_0080`.
+The breakpoint exception vectors into the 128 bytes of zeros ahead of the
+entry point and executes `c.unimp` until the detector fires. That is the
+environment, not the core.
+
+**The 26 that fail their own check are worth someone's attention.** All 26 are
+ePMP, none is a cosim mismatch -- Spike is given the same binary and agrees
+with the DUT instruction for instruction -- and they fall into two shapes:
+
+- five `test_pmp_csr_1_*_mml1_*` exit 2, meaning `actual_pmpaddr_fail` where
+  the test expected none: it writes `pmpaddr7`, reads it back, and does not get
+  what it wrote, under `mseccfg.MML` with `RLB` clear.
+- twenty-one `test_pmp_ok_1_*` exit 1, 2 or 3, mostly `mmwp` variants.
+
+They are not evidence of an Ibex bug yet. The same tests were reading and
+writing the wrong megabyte before the linker script was rebased, so this is the
+first time in this port that they have exercised the addresses their own PMP
+entries name, and the first thing to rule out is the rebase itself.
+
 ### Where the cycle budget had to go
 
 Upstream never overrides `timeout_in_cycles`, so its budget is
@@ -893,13 +957,19 @@ Upstream never overrides `timeout_in_cycles`, so its budget is
   hour; `python3 run_tests.py --list` shows which entries have a program.
 - **The entries pyflow cannot serve.** The PMP, debug and bitmanip entries can
   be generated, but with the options that define them dropped, so what they run
-  is a plain random program under a differently named test class. They also
-  want RTL parameters this build does not set (`PMPEnable`, `SecureIbex`,
-  `RV32B`); `rtl_params` is parsed out of the testlist and not yet acted on.
+  is a plain random program under a differently named test class.
   `riscv_csr_test` needs riscv-dv's `gen_csr_test.py`, which is a separate
-  generator not wired up here.
+  generator not wired up here. `rtl_params` is now acted on rather than only
+  parsed, so the ones a build cannot serve are reported inapplicable.
+- **The 26 ePMP self-check failures.** Named above, not diagnosed.
 - **A runner.** `run_tests.py` reports outcomes; it does not yet do the
   both-harness reporting the other ports here have.
+- **A configuration between the two.** Everything the directed testlist needs
+  is `PMPEnable`, and `opentitan` brings `SecureIbex`, `ICache`,
+  `ICacheScramble`, a writeback stage and bitmanip with it. `maxperf-pmp` in
+  `ibex_configs.yaml` is PMP with none of that and would separate what the PMP
+  tests find from what the rest of the configuration does. It has not been
+  built here.
 
 ## Bugs worth reporting
 
@@ -920,3 +990,18 @@ the wrong answer rather than failing, and has a two-module reproducer.
 On the Ibex side, `core_ibex_tb_top.sv` drives `unused_assert_connected`
 without the `` `ifdef INC_ASSERT `` that declares it, which breaks any tool
 whose assertion macros are the dummy ones.
+
+And three about the directed tests, all of which make a test pass while
+testing nothing, and none of which any simulator would report:
+
+- `directed_testlist.yaml`'s riscv-arch-tests config never defines
+  `TEST_CASE_1`, so all 107 of those entries compile to a register-init
+  prologue and an unconditional `RVMODEL_HALT`. `add-01` retires 73
+  instructions, none of them an add.
+- `vendor/riscv-isa-sim/tests/mseccfg/mseccfg_test.ld` places `TEST_MEM` at
+  `0x0020_0000` where the generated sources beside it program their PMP
+  entries at `0x8020_0000`. Every one of the 744 ePMP entries runs against
+  the wrong megabyte.
+- `syscalls.c`'s `tohost_exit(code)` always signals `TEST_PASS`, so no ePMP
+  test can fail. 26 of the 744 do fail once the code is read back out of the
+  trace.
