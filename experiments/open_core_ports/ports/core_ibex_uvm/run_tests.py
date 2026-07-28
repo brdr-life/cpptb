@@ -37,6 +37,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import build_tb
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 TESTLIST = (ROOT / "deps/ibex/dv/uvm/core_ibex/riscv_dv_extension/testlist.yaml")
@@ -86,6 +88,57 @@ def entries() -> list[tuple[str, str]]:
             pairs.append((test, stripped.split(":", 1)[1].strip()))
             test = None
     return pairs
+
+
+def requirements() -> dict[str, dict[str, list[str]]]:
+    """The `rtl_params` each testlist entry states, by entry name.
+
+    19 of the 57 entries name a parameter their stimulus needs: the five
+    integrity classes want SecureIbex, ten PMP entries want PMPEnable, and the
+    three bitmanip entries name the RV32B values they accept, as a scalar or a
+    list. The other 38 state nothing and run on any configuration.
+    """
+    wanted: dict[str, dict[str, list[str]]] = {}
+    test, inside = None, False
+    for line in TESTLIST.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if stripped.startswith("- test:"):
+            test = stripped.split(":", 1)[1].strip()
+            inside = False
+        elif stripped.startswith("rtl_params:"):
+            inside = True
+        elif inside and indent >= 4 and ":" in stripped:
+            name, _, value = stripped.partition(":")
+            value = value.strip()
+            if value.startswith("[") and value.endswith("]"):
+                values = [v.strip().strip('"\'')
+                          for v in value[1:-1].split(",") if v.strip()]
+            else:
+                values = [value.strip('"\'')]
+            wanted.setdefault(test, {})[name.strip()] = values
+        elif stripped.startswith("- ") or (stripped and indent <= 2):
+            inside = False
+    return wanted
+
+
+def inapplicable(test: str, wanted: dict[str, dict[str, list[str]]],
+                 parameters: dict[str, str],
+                 defines: dict[str, str]) -> str | None:
+    """Why an entry does not apply to the built configuration, or None.
+
+    The same comparison upstream's `ibex_cmd.filter_tests_by_config` makes.
+    Integer parameters come back from ibex_config.py as `-pvalue+`, the enum
+    ones as `+define+IBEX_CFG_*`, so both dictionaries are consulted.
+    """
+    for name, values in wanted.get(test, {}).items():
+        built = parameters.get(name, defines.get(f"IBEX_CFG_{name}"))
+        if built is None:
+            return f"the build does not set {name}"
+        if str(built) not in [str(v) for v in values]:
+            return (f"needs {name}={'/'.join(values)}, "
+                    f"the build has {name}={built}")
+    return None
 
 
 def manifest_tests() -> list[dict]:
@@ -140,14 +193,21 @@ def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
     return {"test": name, "outcome": "no verdict", "detail": ""}
 
 
-def report(results: list[dict]) -> int:
-    (BUILD / "results.json").write_text(json.dumps(results, indent=2),
-                                        encoding="utf-8")
+def report(results: list[dict], skipped: list[dict], config: str) -> int:
+    (BUILD / f"results_{config}.json").write_text(
+        json.dumps({"config": config, "results": results,
+                    "inapplicable": skipped}, indent=2), encoding="utf-8")
     tally: dict[str, int] = {}
     for result in results:
         tally[result["outcome"]] = tally.get(result["outcome"], 0) + 1
     print("\n" + ", ".join(f"{count} {name}"
                            for name, count in sorted(tally.items())))
+
+    if skipped:
+        print(f"\n{len(skipped)} entries are inapplicable to --config "
+              f"{config}, which is neither a pass nor a failure:")
+        for entry in skipped:
+            print(f"  {entry['test']:<44} {entry['reason']}")
 
     mismatched = [r for r in results if r.get("unsupported")]
     if mismatched:
@@ -166,8 +226,20 @@ def run_testlist(args) -> int:
     if args.only:
         tests = [t for t in tests
                  if t["test"] in args.only or t["rtl_test"] in args.only]
-    results = []
+
+    wanted = requirements()
+    parameters, defines = build_tb.config_parameters(args.config)
+    skipped = []
+    runnable = []
     for test in tests:
+        reason = inapplicable(test["test"], wanted, parameters, defines)
+        if reason:
+            skipped.append({"test": test["test"], "reason": reason})
+        else:
+            runnable.append(test)
+
+    results = []
+    for test in runnable:
         program = (HERE / test["bin"]).resolve()
         if not program.is_file():
             print(f"  {test['test']:<44} no program at {program}",
@@ -194,7 +266,7 @@ def run_testlist(args) -> int:
     if missing:
         print(f"\n{len(missing)} entries have no program: "
               f"{', '.join(missing)}")
-    return report(results)
+    return report(results, skipped, args.config)
 
 
 def run_classes(args) -> int:
@@ -213,7 +285,7 @@ def run_classes(args) -> int:
         results.append(result)
         detail = f"  {result['detail']}" if result["detail"] else ""
         print(f"  {rtl_test:<48} {result['outcome']}{detail}", flush=True)
-    return report(results)
+    return report(results, [], args.config)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -237,11 +309,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.list:
         classes = sorted({rtl for _, rtl in pairs})
         built = {test["test"] for test in manifest_tests()}
+        wanted = requirements()
+        parameters, defines = build_tb.config_parameters(args.config)
+        skipped = {test: inapplicable(test, wanted, parameters, defines)
+                   for test, _ in pairs}
         print(f"{len(pairs)} riscv-dv tests over {len(classes)} UVM classes, "
-              f"{len(built)} with a program\n")
+              f"{len(built)} with a program, "
+              f"{sum(1 for r in skipped.values() if r)} inapplicable to "
+              f"--config {args.config}\n")
         for test, rtl in pairs:
+            marks = []
+            if test not in built:
+                marks.append("no program")
+            if skipped[test]:
+                marks.append(skipped[test])
             print(f"  {test:<45} {rtl}"
-                  f"{'' if test in built else '   (no program)'}")
+                  f"{'   (' + '; '.join(marks) + ')' if marks else ''}")
         return 0
 
     if not binary(args.config).is_file():
