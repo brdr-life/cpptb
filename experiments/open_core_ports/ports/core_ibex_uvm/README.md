@@ -1279,14 +1279,18 @@ Upstream never overrides `timeout_in_cycles`, so its budget is
 
 ## Bugs worth reporting
 
-In riscv-dv's pyflow, sixteen bugs: three on the signature-handshake path, seven
-found by generating at the sizes the testlist asks for, the five-site
+In riscv-dv's pyflow, eighteen bugs: three on the signature-handshake path,
+seven found by generating at the sizes the testlist asks for, the five-site
 `and`/`or`/`not` bug in `riscv_illegal_instr.py` together with the decimal
 `get_bin_str` beside it, the missing `cfg.no_fence` guard in
 `create_instr_list` together with the inverted `enable_sfence` polarity above
-it, and `riscv_rand_instr_test.randomize_cfg` setting an instruction count that
-the constraint reading it was elaborated before. Most are small, several are one
-word. Between them they are the difference
+it, `riscv_rand_instr_test.randomize_cfg` setting an instruction count that the
+constraint reading it was elaborated before, the missing MSTATUS and MIE
+signature handshake in `gen_privileged_mode_switch_routine`, and
+`riscv_instr_base_test.run_phase` catching `Exception` where pyflow's own error
+path raises `SystemExit`, which turns any generation error into a permanent
+hang. Most are small, several are one word. Between them they are the
+difference
 between pyflow generating a few hundred instructions and generating what the
 testlist asks for, and they take `+illegal_instr_ratio`, `+hint_instr_ratio`
 and `+no_fence=0` from "cannot" to "does". Each has its evidence in
@@ -1298,11 +1302,18 @@ operators compiles, runs, and asserts something other than what it reads as. An
 AST scan for `ast.BoolOp` and `ast.Not` inside `@vsc.constraint` bodies finds
 every instance in a few lines and would make a reasonable lint.
 
+The `SystemExit` one is the most expensive to hit and the cheapest to fix. It
+cost 37 minutes of a blocked build before anything said what was wrong, and the
+fix is one word: `except Exception` becomes `except BaseException`. Any pyflow
+user who trips one of the two dozen `logging.critical(...); sys.exit(1)` paths
+sees a process at zero CPU and no message at all.
+
 The unimplemented parts of pyflow are worth reporting as a list, because none of
 them announces itself at run time: `riscv_pmp_cfg`, `riscv_debug_rom_gen`,
-`riscv_csr_instr`, `riscv_jump_instr` and `randomize_avail_regs` are absent or
-stubs, and the options that drive them are accepted by the argparse and silently
-do nothing.
+`riscv_csr_instr`, `riscv_jump_instr`, `riscv_loop_instr` (in the factory, three
+quarters commented out) and `randomize_avail_regs` are absent or stubs, no
+target lists `USER_MODE` in `supported_privileged_mode`, and the options that
+drive all of them are accepted by the argparse and silently do nothing.
 
 In Verilator, three internal errors, each with a small reproducer available from
 the overlays: the covergroup transition bins over enum items, `int'()` on a wide
