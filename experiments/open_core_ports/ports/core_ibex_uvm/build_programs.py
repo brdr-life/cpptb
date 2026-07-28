@@ -1150,6 +1150,8 @@ DEFINING = frozenset({
     "enable_dummy_csr_write",
     # "generate csr accesses to invalid CSRs (at a higher priv mode)".
     "enable_access_invalid_csr_level",
+    # Booting into a mode the program never reaches makes a mode test vacuous.
+    "boot_mode",
 })
 
 # The same, where it depends on the entry rather than the option. Checked
@@ -1229,6 +1231,24 @@ def translate(entry: dict) -> tuple[list[str], list[str]]:
                          f"riscv_rand_instr_test.randomize_cfg, which assigns "
                          f"it after the config has read the plusarg -- upstream "
                          f"does the same")
+            continue
+        if name == "boot_mode" and value != "m":
+            # Ibex's own riscv-dv target says
+            #
+            #     privileged_mode_t supported_privileged_mode[] =
+            #         {MACHINE_MODE, USER_MODE};
+            #
+            # and pyflow's rv32imc target says `[privileged_mode_t.MACHINE_MODE]`.
+            # `gen_privileged_mode_switch_routine` loops over the supported
+            # modes and `continue`s on any that is not the initial one, so with
+            # boot_mode=u it emits nothing at all -- not the U-mode entry, and
+            # not the M-mode CSR setup either. The program stays in machine
+            # mode, and `riscv_invalid_csr_test` dies waiting for a handshake
+            # that only that block emits.
+            drop(name, opt,
+                 "pyflow's rv32imc target lists only MACHINE_MODE in "
+                 "supported_privileged_mode, so gen_privileged_mode_switch_"
+                 "routine emits nothing and the program stays in M mode")
             continue
         if name in VACUOUS:
             # Recorded, but not counted against the entry: see VACUOUS.
