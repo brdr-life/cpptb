@@ -150,6 +150,15 @@ def manifest_tests() -> list[dict]:
     return [test for test in data.get("tests", []) if test.get("bin")]
 
 
+def manifest_failures() -> list[dict]:
+    """The entries build_programs.py could not build, with the reason."""
+    manifest = BUILD / "manifest.json"
+    if not manifest.is_file():
+        return []
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    return [test for test in data.get("tests", []) if not test.get("bin")]
+
+
 def environment() -> dict[str, str]:
     import os
 
@@ -193,15 +202,46 @@ def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
     return {"test": name, "outcome": "no verdict", "detail": ""}
 
 
-def report(results: list[dict], skipped: list[dict], config: str) -> int:
+# What a result is worth, given how far its program is from its entry.
+# `build_programs.py` writes the verdict into the manifest; the wording here is
+# what it means for a run.
+VERDICTS = {
+    "faithful": "every gen_opt honoured; the outcome is about the entry",
+    "partial": "the program differs from its entry in ways that do not remove "
+               "the stimulus the entry is named for",
+    "hollow": "an option that defines the entry was dropped; the outcome is "
+              "not evidence about the entry's name, whatever it says",
+}
+
+
+def report(results: list[dict], skipped: list[dict], config: str,
+           unbuilt: list[dict] | None = None) -> int:
     (BUILD / f"results_{config}.json").write_text(
         json.dumps({"config": config, "results": results,
-                    "inapplicable": skipped}, indent=2), encoding="utf-8")
+                    "inapplicable": skipped,
+                    "not built": unbuilt or []}, indent=2), encoding="utf-8")
     tally: dict[str, int] = {}
     for result in results:
         tally[result["outcome"]] = tally.get(result["outcome"], 0) + 1
     print("\n" + ", ".join(f"{count} {name}"
                            for name, count in sorted(tally.items())))
+
+    # The same results split by how much the program has to do with the entry.
+    # A pass on a hollow program is not coverage of the entry it is named for,
+    # so it is counted apart rather than in the total above.
+    print()
+    for verdict, meaning in VERDICTS.items():
+        group = [r for r in results if r.get("verdict") == verdict]
+        if not group:
+            continue
+        passed = sum(1 for r in group if r["outcome"] == "passed")
+        print(f"  {verdict:<9} {passed:>2} of {len(group):>2} passed  "
+              f"-- {meaning}")
+
+    if unbuilt:
+        print(f"\n{len(unbuilt)} entries have no program:")
+        for entry in unbuilt:
+            print(f"  {entry['test']:<44} {entry.get('error', '')}")
 
     if skipped:
         print(f"\n{len(skipped)} entries are inapplicable to --config "
@@ -214,10 +254,11 @@ def report(results: list[dict], skipped: list[dict], config: str) -> int:
         print(f"\n{len(mismatched)} of {len(results)} ran a program that does "
               f"not match its testlist entry:")
         for result in mismatched:
-            print(f"  {result['test']}")
+            print(f"  {result['test']}  ({result.get('verdict', '?')})")
             for note in result["unsupported"]:
                 print(f"    {note}")
-    return 0 if tally.get("passed") == len(results) else 1
+    faithful = [r for r in results if r.get("verdict") == "faithful"]
+    return 0 if all(r["outcome"] == "passed" for r in faithful) else 1
 
 
 def run_testlist(args) -> int:
@@ -254,19 +295,18 @@ def run_testlist(args) -> int:
                          log_name=test["test"])
         result["rtl_test"] = test["rtl_test"]
         result["unsupported"] = test.get("unsupported", [])
+        result["verdict"] = test.get("verdict", "unknown")
         results.append(result)
         detail = f"  {result['detail']}" if result["detail"] else ""
-        mark = " *" if result["unsupported"] else ""
-        print(f"  {test['test']:<44} {result['outcome']}{detail}{mark}",
-              flush=True)
+        print(f"  {test['test']:<44} {result['outcome']:<16} "
+              f"{result['verdict']}{detail}", flush=True)
 
-    built = {test["test"] for test in tests}
-    missing = [test for test, _ in entries()
-               if test not in built and not args.only]
-    if missing:
-        print(f"\n{len(missing)} entries have no program: "
-              f"{', '.join(missing)}")
-    return report(results, skipped, args.config)
+    unbuilt = manifest_failures() if not args.only else []
+    built = {test["test"] for test in tests} | {t["test"] for t in unbuilt}
+    unbuilt += [{"test": test, "error": "never built"}
+                for test, _ in entries()
+                if test not in built and not args.only]
+    return report(results, skipped, args.config, unbuilt)
 
 
 def run_classes(args) -> int:
@@ -308,22 +348,23 @@ def main(argv: list[str] | None = None) -> int:
     pairs = entries()
     if args.list:
         classes = sorted({rtl for _, rtl in pairs})
-        built = {test["test"] for test in manifest_tests()}
+        verdicts = {test["test"]: test.get("verdict", "unknown")
+                    for test in manifest_tests()}
         wanted = requirements()
         parameters, defines = build_tb.config_parameters(args.config)
         skipped = {test: inapplicable(test, wanted, parameters, defines)
                    for test, _ in pairs}
         print(f"{len(pairs)} riscv-dv tests over {len(classes)} UVM classes, "
-              f"{len(built)} with a program, "
+              f"{len(verdicts)} with a program, "
               f"{sum(1 for r in skipped.values() if r)} inapplicable to "
               f"--config {args.config}\n")
         for test, rtl in pairs:
             marks = []
-            if test not in built:
+            if test not in verdicts:
                 marks.append("no program")
             if skipped[test]:
                 marks.append(skipped[test])
-            print(f"  {test:<45} {rtl}"
+            print(f"  {test:<45} {verdicts.get(test, ''):<9} {rtl}"
                   f"{'   (' + '; '.join(marks) + ')' if marks else ''}")
         return 0
 
