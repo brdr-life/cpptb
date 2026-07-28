@@ -150,14 +150,14 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "  // The time of the last clocking event, and a task that waits for\n"
         "  // one if we are not on it. Needed before driving a single-cycle\n"
         "  // pulse through driver_cb; see build_tb.py.\n"
-        "  time driver_cb_edge       = 0;\n"
-        "  bit  driver_cb_edge_valid = 1'b0;\n"
+        "  realtime driver_cb_edge       = 0.0;\n"
+        "  bit      driver_cb_edge_valid = 1'b0;\n"
         "  always @(posedge clk) begin\n"
-        "    driver_cb_edge       = $time;\n"
+        "    driver_cb_edge       = $realtime;\n"
         "    driver_cb_edge_valid = 1'b1;\n"
         "  end\n"
         "  task automatic align_to_driver_cb();\n"
-        "    if (!driver_cb_edge_valid || ($time != driver_cb_edge))"
+        "    if (!driver_cb_edge_valid || ($realtime != driver_cb_edge))"
         " @(driver_cb);\n"
         "  endtask\n"
         "\n"
@@ -191,14 +191,14 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "  // See the note on the same tracker in ibex_icache_core_if.sv and in\n"
         "  // build_tb.py: a pulse through a clocking block output is lost\n"
         "  // unless the first write is made on a clocking event.\n"
-        "  time driver_cb_edge       = 0;\n"
-        "  bit  driver_cb_edge_valid = 1'b0;\n"
+        "  realtime driver_cb_edge       = 0.0;\n"
+        "  bit      driver_cb_edge_valid = 1'b0;\n"
         "  always @(posedge clk) begin\n"
-        "    driver_cb_edge       = $time;\n"
+        "    driver_cb_edge       = $realtime;\n"
         "    driver_cb_edge_valid = 1'b1;\n"
         "  end\n"
         "  task automatic align_to_driver_cb();\n"
-        "    if (!driver_cb_edge_valid || ($time != driver_cb_edge))"
+        "    if (!driver_cb_edge_valid || ($realtime != driver_cb_edge))"
         " @(driver_cb);\n"
         "  endtask\n"
         "\n"
@@ -748,6 +748,59 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "  // Same as gen_tag_err above.\n"
         "  data_sel_line = ($urandom_range(99, 0) < dis_err_pct) ? '0 :\n"
         "                    $urandom_range({IC_NUM_WAYS{1'b1}}, 1);\n",
+    ),
+    # The memory response delay is drawn once per bus transaction, and
+    # Verilator solves a constrained randomize() by piping to z3, so it is a
+    # round trip per response. It is also the only rand field on the item, so
+    # dropping `rand` takes the solver off the response path completely --
+    # Verilator makes no solver call at all for a randomize() with nothing to
+    # solve. Same three buckets and the same weights, and the `!is_grant`
+    # branch of c_no_delay_for_req is folded into the draw.
+    #
+    # This is the lesson ports/core_ibex_uvm ends on: a constrained solve per
+    # transaction is affordable on a commercial simulator and is a pipe round
+    # trip here.
+    (
+        ICACHE / "dv/ibex_icache_mem_agent/ibex_icache_mem_resp_item.sv",
+        "  rand int unsigned delay;\n",
+        "  // Not rand: drawn in pre_randomize below. See build_tb.py.\n"
+        "  int unsigned      delay;\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_mem_agent/ibex_icache_mem_resp_item.sv",
+        """  constraint c_delay_dist {
+    delay dist {
+      min_response_delay                        :/ 5,
+      [min_response_delay+1:mid_response_delay] :/ 5,
+      [mid_response_delay+1:max_response_delay] :/ 1
+    };
+  }
+
+  // The delay field has no effect for requests (i.e. if is_grant is false). Force it to zero rather
+  // than leave mysterious numbers in the logs.
+  constraint c_no_delay_for_req {
+    (!is_grant) -> delay == 0;
+  }
+""",
+        """  // c_delay_dist and c_no_delay_for_req, drawn rather than solved. The
+  // delay field has no effect for requests (i.e. if is_grant is false), so it
+  // is forced to zero rather than left as a mysterious number in the logs.
+  function void pre_randomize();
+    super.pre_randomize();
+    delay = is_grant ? draw_delay() : 0;
+  endfunction
+
+  function int unsigned draw_delay();
+    int unsigned pick = $urandom_range(10, 0);
+    if (pick < 5) return min_response_delay;
+    if (pick < 10) begin
+      if (mid_response_delay < min_response_delay + 1) return min_response_delay;
+      return $urandom_range(mid_response_delay, min_response_delay + 1);
+    end
+    if (max_response_delay < mid_response_delay + 1) return mid_response_delay;
+    return $urandom_range(max_response_delay, mid_response_delay + 1);
+  endfunction
+""",
     ),
     # The ECC error masks are the one place in this testbench where the solver
     # is the run time. gen_tag_err and gen_data_err are called on every negedge
