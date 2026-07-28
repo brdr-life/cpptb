@@ -80,9 +80,10 @@ left. Start there for review.
 
 ## Ports
 
-Both drive the same Ibex design against the same upstream harness, and measure
-deliberately different things. Together they separate what a simulated cycle
-costs from what a run costs.
+The first two drive the same Ibex design against the same upstream harness, and
+measure deliberately different things. Together they separate what a simulated
+cycle costs from what a run costs. The third is a block-level testbench with a
+UVM baseline, and measures whether two scoreboards agree.
 
 - **[`ibex_simple_system`](ports/ibex_simple_system/RESULTS.md)** — CoreMark at
   100 iterations, one program of 40.7 million cycles. Steady-state throughput:
@@ -114,13 +115,30 @@ costs from what a run costs.
   runs Spike in lockstep, which answers the question the other two cannot: they
   show the harnesses agree, this shows the core is right.
 
-Both ports build their software with a pinned prebuilt RISC-V toolchain, so
-neither needs one installed. `ibex_simple_system` commits its firmware as a
+- **[`ibex_icache_cpptb`](ports/ibex_icache_cpptb/RESULTS.md)** — three of the
+  ten tests in Ibex's `dv/uvm/icache`, run against
+  [`ports/ibex_icache_uvm`](ports/ibex_icache_uvm/README.md), which runs the
+  UVM environment unmodified and passes all ten.
+
+  18 of 18 runs pass on both harnesses, and a further 120 cpptb runs across 40
+  seeds. Every rate the two can be compared on agrees within a few per cent
+  except one, and that one is a Verilator defect the comparison found: a
+  constrained `randomize()` over an `inside` range is not uniform over it, so
+  the baseline runs about 25% more instruction fetches per transaction than its
+  own constraints ask for.
+
+  This is the only port whose reference is a scoreboard rather than a
+  signature or a reference model. Every returned fetch is checked against every
+  memory seed the model still holds.
+
+The two program-driven ports build their software with a pinned prebuilt RISC-V
+toolchain, so neither needs one installed. `ibex_simple_system` commits its firmware as a
 VMEM and does not need the toolchain to run at all. Co-simulation additionally
 needs Spike, which `build_spike.py` builds into `deps/` rather than `/opt`.
 
 ## Planned ports
 
-Nothing scheduled. The two Ibex ports cover the throughput and per-run axes on
-one core; the natural next step is a second design rather than a third
-workload on this one. See [future directions](../../docs/future-directions.md).
+Nothing scheduled. The Ibex ports cover the throughput axis, the per-run axis
+and one block-level testbench with a UVM baseline; the natural next step is a
+second design rather than a fourth workload on this one. See
+[future directions](../../docs/future-directions.md).

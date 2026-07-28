@@ -50,7 +50,7 @@ rather than transcribe them.
 
 ## What is ported
 
-Three ports, in `ports/`. Each drives the same design as the upstream harness it
+Four ports, in `ports/`. Each drives the same design as the upstream harness it
 replaces, from the same sources at the same pinned commit, under the same
 Verilator.
 
@@ -60,6 +60,7 @@ Verilator.
 | [`riscv_arch_tests`](ports/riscv_arch_tests/RESULTS.md) | 98 / 193 architectural tests | `small`, `maxperf-pmp-bmfull` | the upstream harness, and Spike per instruction |
 | [`riscv_arch_tests/run_cosim_programs.py`](ports/riscv_arch_tests/README.md) | CoreMark, `pmp_smoke`, `dit_test`, `dummy_instr_test` | all six | Spike per instruction, on both harnesses |
 | [`ibex_cs_registers`](ports/ibex_cs_registers/README.md) | 1,119 random CSR transactions | the `tb_cs_registers` defaults | a C++ model of the CSR block |
+| [`ibex_icache_cpptb`](ports/ibex_icache_cpptb/RESULTS.md) | 3 of `dv/uvm/icache`'s 10 tests | the `tb.sv` defaults, `ICacheECC = 1` | `dv/uvm/icache` under UVM, and its own memory model per fetch |
 
 **Flow 3 is complete.** `run_cosim_programs.py` runs the same four programs
 across the same six configurations as `.github/actions/ibex-rtl-ci-steps`, with
@@ -76,8 +77,16 @@ same feature gating: `pmp_smoke` only where `PMPEnable=1`, `dit_test` and
 which is the only one here that runs no program: it drives random CSR
 transactions at a submodule and scores them against upstream's C++ model.
 
+**Flow 6 is partly ported** as
+[`ibex_icache_cpptb`](ports/ibex_icache_cpptb/RESULTS.md), the first block-level
+port here and the first with a real UVM baseline to be compared against rather
+than a Verilator harness. Three of the ten tests run on both, three seeds each,
+and all 18 runs pass. It is the only port whose reference is a scoreboard
+rather than a signature or a reference model: every returned fetch is checked
+against every memory seed the model still holds.
+
 `riscv_arch_tests` additionally runs a suite upstream does not run at all.
-Flows 1, 2, 5, 6 and 7 remain.
+Flows 1, 2, 5 and 7 remain, and seven of flow 6's ten tests.
 
 ### The rule every port follows
 
@@ -95,6 +104,10 @@ That is checked against real failures rather than assumed:
 - CoreMark built without `SUPPRESS_PCOUNT_DUMP=1` reproduces exactly the
   failure Ibex's own cosim README documents; built with it, 2,794,236
   instructions match.
+- `ibex_icache_caching` completes no caching-ratio window on the seeds where
+  the memory model errors over the fetch window. That happens on both harnesses
+  and is a property of the environment: the test takes no new memory seed, so
+  whether it checks anything is decided by one draw of `base_addr`.
 
 ## What the exercise found
 
@@ -143,9 +156,19 @@ Consolidated from all three ports. Grouped by who owns the problem.
 12. slang rejects the implicit `.PARAM,` shorthand in upstream's bind file,
     which is a Verilator extension.
 
+### In Verilator
+
+18. **A constrained `randomize()` over an `inside` range is not uniform over
+    that range.** About half of every draw over `inside {[1:20]}` lands in
+    `[16:20]`, hard or soft, mean 13.2 against 10.5. A sixth entry in the list
+    `ports/ibex_icache_uvm` keeps, and the whole of the difference between the
+    two icache harnesses' stimulus: the UVM baseline runs about 25% more
+    instruction fetches per transaction than its own constraints ask for.
+    Reduced case in `ports/ibex_icache_cpptb/shims`.
+
 ### In upstream
 
-One is filed. The other three are not, and are listed so that is visible
+One is filed. The others are not, and are listed so that is visible
 rather than assumed.
 
 13. **Upstream's CSR model does not implement MML write suppression.**
@@ -176,6 +199,16 @@ rather than assumed.
     padding as `(1 << (UDB_PMP_GRANULARITY - 3)) - 1`, which underflows for
     granularity 0 and reaches `.rept` as 2^64-1.
 
+19. **`lowrisc:prim:ram_1p_adv` declares neither `lowrisc:prim:mubi` nor
+    `lowrisc:prim:flop`**, although `prim_ram_1p_adv.sv` imports
+    `prim_mubi_pkg` and `prim_ram_1p_scr.sv` instantiates `prim_flop`. A
+    fusesoc graph that reaches `ram_1p_scr` and nothing else does not close.
+20. **`ibex_icache_caching` checks the caching ratio on about 40% of seeds.**
+    It takes no new memory seed, so whether the memory model errors across its
+    whole fetch window is decided by one draw of `base_addr`; when it does,
+    every fetch errors and no window ever completes. Measured over 40 seeds on
+    the cpptb port and reproduced on the baseline.
+
 Upstream handles CSR divergences the same way this port does -- by not
 exercising the CSR. `SUPPRESS_PCOUNT_DUMP=1` for the counters, `MENVCFGH`
 absent from riscv-dv's implemented-CSR list, and `MINSTRET`/`MINSTRETH`
@@ -194,7 +227,8 @@ Ordered by cost, not by value.
 | D | RISC-V Compliance, `ibex_riscv_compliance` | medium | flow 2, exact CI parity |
 | E1 | riscv-dv `pyflow` generation into the existing co-simulation harness | medium | flow 5's stimulus, no UVM |
 | E2 | the `dv/uvm/core_ibex` UVM environment | large | the rest of flow 5 |
-| F | `dv/uvm/icache` | large | flow 6, a block-level testbench |
+| ~~F1~~ | ~~three of `dv/uvm/icache`'s ten tests~~ | done | flow 6's core agent, memory agent and scoreboard |
+| F2 | the other seven icache tests | medium | ECC injection, the combo sequences, and mid-test reset |
 | G | `dv/formal` | — | not a simulation flow; out of scope for cpptb |
 
 Flow 1 is lint. It is not a testbench and nothing about it would exercise cpptb,
