@@ -60,15 +60,19 @@ module verilator_clocking_pulse;
 
   // The workaround: the time of the last clocking event, and a wait for one if
   // we are not already on it.
-  time cb_edge       = 0;
-  bit  cb_edge_valid = 1'b0;
+  // $realtime, not $time: $time is rounded to the module's time unit, so a
+  // caller a picosecond off a clocking event in a 1ns/1ps module compares
+  // equal to the event and the wait is skipped. That is exactly the case this
+  // exists for.
+  realtime cb_edge       = 0.0;
+  bit      cb_edge_valid = 1'b0;
   always @(posedge clk) begin
-    cb_edge       = $time;
+    cb_edge       = $realtime;
     cb_edge_valid = 1'b1;
   end
 
   task automatic align_to_cb();
-    if (!cb_edge_valid || ($time != cb_edge)) @(cb);
+    if (!cb_edge_valid || ($realtime != cb_edge)) @(cb);
   endtask
 
   initial begin
