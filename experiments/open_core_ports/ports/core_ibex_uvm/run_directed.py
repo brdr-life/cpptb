@@ -677,8 +677,23 @@ def report(results: list[dict], inapplicable: list[dict], config: str,
         tally[result["outcome"]] = tally.get(result["outcome"], 0) + 1
 
     print(f"\n{config}: {len(results)} run of {total} entries")
-    for name, count in sorted(tally.items(), key=lambda item: -item[1]):
-        print(f"  {count:>5}  {name}")
+    for outcome, count in sorted(tally.items(), key=lambda item: -item[1]):
+        print(f"  {count:>5}  {outcome}")
+
+    # Per group as well as overall, because a pass does not mean the same
+    # thing in all three. See the module docstring.
+    groups: dict[str, dict[str, int]] = {}
+    for result in results:
+        by_outcome = groups.setdefault(result["group"], {})
+        by_outcome[result["outcome"]] = by_outcome.get(result["outcome"], 0) + 1
+    if len(groups) > 1:
+        print()
+        for group, by_outcome in sorted(groups.items()):
+            summary = ", ".join(f"{count} {outcome}" for outcome, count
+                                in sorted(by_outcome.items(),
+                                          key=lambda item: -item[1]))
+            print(f"  {group:<18} {summary}")
+
     if inapplicable:
         reasons: dict[str, int] = {}
         for entry in inapplicable:
