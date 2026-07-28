@@ -72,6 +72,62 @@ class BuildError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 OVERLAYS: list[tuple[Path, str, str]] = [
+    # Both agent interfaces open their driver clocking block with
+    #
+    #     clocking driver_cb @(posedge clk);
+    #       default output negedge;
+    #
+    # which is an edge-based output skew. Verilator does not implement it:
+    # "Unsupported: clocking event edge override".
+    #
+    # Dropping the line and taking the default #0 output skew drives the same
+    # value into the same posedge of the DUT. A clocking block output written
+    # with a skew of 0 is driven in the NBA region of the clocking event, so a
+    # design sampling on that same posedge still reads the old value and picks
+    # the new one up on the next posedge -- exactly where the negedge drive
+    # would have put it. Upstream says as much in the comment above the line:
+    # the negedge is there to make dumped waves easier to read, not because
+    # the design needs it.
+    #
+    # The alternative, moving the clocking event to @(negedge clk), is what
+    # ports/core_ibex_uvm does for irq_if.sv. It is worse here, because
+    # driver_cb in the core interface has inputs as well: valid and err would
+    # then be sampled after the posedge rather than before it, which advances
+    # every input the driver reads by a cycle.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_if.sv",
+        "\n"
+        "    // Drive signals on the following negedge: this isn't needed by"
+        " the design, but makes it\n"
+        "    // slightly easier to read dumped waves.\n"
+        "    default output negedge;\n",
+        "\n"
+        "    // The output skew that was here drove signals on the following\n"
+        "    // negedge, for wave readability rather than for the design. The\n"
+        "    // default #0 skew lands the same value at the same posedge of\n"
+        "    // the DUT; see build_tb.py.\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_mem_agent/ibex_icache_mem_if.sv",
+        "  default clocking driver_cb @(posedge clk);\n"
+        "    default output negedge;\n",
+        "  default clocking driver_cb @(posedge clk);\n"
+        "    // The output skew that was here is dropped; see build_tb.py and\n"
+        "    // the note on the core interface.\n",
+    ),
+    # tb.sv overrides a parameter the DUT does not have. `ibex_icache` calls
+    # it `TweakInfection`; `ICacheTweakInfection` is the name the wrapper
+    # parameter carries in ibex_if_stage.sv, ibex_core.sv and ibex_top.sv,
+    # which is presumably where it was copied from. Verilator reports
+    # "Parameter not found: 'ICacheTweakInfection'" and stops.
+    #
+    # This is an upstream defect rather than anything about Verilator: no
+    # simulator can elaborate tb.sv as vendored. See README.md.
+    (
+        ICACHE / "dv/tb/tb.sv",
+        "      .ICacheTweakInfection (ICacheTweakInfection),\n",
+        "      .TweakInfection       (ICacheTweakInfection),\n",
+    ),
     # lowRISC's shared DV library excludes itself under Verilator:
     # clk_rst_if.sv wraps its UVM includes and imports in `ifndef VERILATOR, so
     # the interface compiles without `DV_CHECK_FATAL and fails at the first use
