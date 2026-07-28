@@ -10,6 +10,13 @@ file lists, with the same defines, using Verilator instead.
     python3 build_tb.py --config small
     python3 build_tb.py --config opentitan --jobs 16
 
+Each configuration is built into its own `build/obj_<config>`, so more than one
+can be held at a time and a test can be run against the configuration its
+testlist entry asks for. `build/overlay` is shared, because nothing in it
+depends on the configuration; the `--debug-mem` and `--pin-delays` variants
+rewrite it, so a configuration built before one of those flags was used is not
+the same build as one built after.
+
 The sources come from upstream's own `ibex_dv.f`, expanded here rather than
 transcribed, so a change upstream is a change in what gets built rather than a
 silent divergence. The parameters come from `util/ibex_config.py`, the tool
@@ -39,6 +46,19 @@ SPIKE = ROOT / "deps" / "spike_cosim" / "install"
 BUILD = HERE / "build"
 
 TOP = "core_ibex_tb_top"
+
+
+def obj_dir(config: str) -> Path:
+    """Where a configuration's model and binary live.
+
+    One directory per configuration, because the configurations are not
+    interchangeable: `small` sets PMPEnable=0 and SecureIbex=0, so the whole
+    directed test list and the five integrity classes are meaningless on it.
+    A single build/obj meant proving anything about those needed a rebuild
+    first, and the rebuild silently invalidated whatever had been measured
+    before it.
+    """
+    return BUILD / f"obj_{config}"
 
 # Verilator exposes a signal to VPI only when it is marked public, and accepts a
 # write only when it is public_flat_rw. The integrity and glitch tests reach
@@ -778,7 +798,7 @@ def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
         "-j", str(jobs),
         "--top-module", TOP,
         "--timescale", "1ns/10ps",
-        "--Mdir", str(BUILD / "obj"),
+        "--Mdir", str(obj_dir(config)),
         "-o", "core_ibex_tb",
         # The overlay directory comes first so a patched `include is picked up
         # ahead of the upstream one; only files this build patches are in it.
@@ -857,7 +877,7 @@ def main(argv: list[str] | None = None) -> int:
     if completed.returncode != 0:
         print(f"build_tb: failed; see {log}", file=sys.stderr)
         return completed.returncode
-    print(f"build_tb: built {BUILD / 'obj' / 'core_ibex_tb'}")
+    print(f"build_tb: built {obj_dir(args.config) / 'core_ibex_tb'}")
     return 0
 
 

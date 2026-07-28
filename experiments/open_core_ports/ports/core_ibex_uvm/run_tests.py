@@ -41,12 +41,22 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 TESTLIST = (ROOT / "deps/ibex/dv/uvm/core_ibex/riscv_dv_extension/testlist.yaml")
 BUILD = HERE / "build"
-BINARY = BUILD / "obj" / "core_ibex_tb"
 SPIKE_LIB = ROOT / "deps" / "spike_cosim" / "install" / "lib"
 TOOLS_LIB = ROOT / "deps" / ".tools" / "root" / "usr" / "lib" / "x86_64-linux-gnu"
 TOOLS_BIN = ROOT / "deps" / ".tools" / "root" / "usr" / "bin"
 
 SIGNATURE_ADDR = "8ffffffc"
+
+
+def binary(config: str) -> Path:
+    """The testbench built for one Ibex configuration.
+
+    build_tb.py holds one build directory per configuration, so the binary a
+    run uses is chosen here rather than being whichever configuration was
+    built last.
+    """
+    return BUILD / f"obj_{config}" / "core_ibex_tb"
+
 
 # What the run said about itself, most specific first. The report server prints
 # the first two; the rest are how a run that never got there ends.
@@ -98,9 +108,10 @@ def environment() -> dict[str, str]:
     return env
 
 
-def run_one(rtl_test: str, program: Path, cycles: int, seconds: int,
-            extra: list[str], log_name: str | None = None) -> dict:
-    command = [str(BINARY), f"+UVM_TESTNAME={rtl_test}",
+def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
+            seconds: int, extra: list[str],
+            log_name: str | None = None) -> dict:
+    command = [str(testbench), f"+UVM_TESTNAME={rtl_test}",
                f"+bin={program}", f"+signature_addr={SIGNATURE_ADDR}",
                f"+timeout_in_cycles={cycles}", *extra]
     try:
@@ -165,8 +176,9 @@ def run_testlist(args) -> int:
         # timeout_s is the entry's own wall-clock budget where it has one.
         seconds = int(test["timeout_s"]) if test.get("timeout_s") \
             else args.timeout_seconds
-        result = run_one(test["rtl_test"], program, args.timeout_cycles,
-                         seconds, test.get("sim_opts", []) + args.extra,
+        result = run_one(binary(args.config), test["rtl_test"], program,
+                         args.timeout_cycles, seconds,
+                         test.get("sim_opts", []) + args.extra,
                          log_name=test["test"])
         result["rtl_test"] = test["rtl_test"]
         result["unsupported"] = test.get("unsupported", [])
@@ -195,8 +207,9 @@ def run_classes(args) -> int:
     for rtl_test in classes:
         if args.only and rtl_test not in args.only:
             continue
-        result = run_one(rtl_test, args.program.resolve(),
-                         args.timeout_cycles, args.timeout_seconds, args.extra)
+        result = run_one(binary(args.config), rtl_test,
+                         args.program.resolve(), args.timeout_cycles,
+                         args.timeout_seconds, args.extra)
         results.append(result)
         detail = f"  {result['detail']}" if result["detail"] else ""
         print(f"  {rtl_test:<48} {result['outcome']}{detail}", flush=True)
@@ -205,6 +218,9 @@ def run_classes(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--config", default="small",
+                        help="the Ibex configuration to run against; the "
+                             "binary is build/obj_<config>/core_ibex_tb")
     parser.add_argument("--list", action="store_true",
                         help="print the test list and stop")
     parser.add_argument("--program", type=Path,
@@ -228,9 +244,10 @@ def main(argv: list[str] | None = None) -> int:
                   f"{'' if test in built else '   (no program)'}")
         return 0
 
-    if not BINARY.is_file():
-        raise SystemExit(f"run_tests: no testbench at {BINARY}\n"
-                         f"run: python3 {HERE / 'build_tb.py'}")
+    if not binary(args.config).is_file():
+        raise SystemExit(
+            f"run_tests: no testbench at {binary(args.config)}\n"
+            f"run: python3 {HERE / 'build_tb.py'} --config {args.config}")
     if args.program:
         return run_classes(args)
     if not manifest_tests():
