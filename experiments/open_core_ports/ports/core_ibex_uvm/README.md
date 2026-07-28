@@ -71,6 +71,44 @@ expanded rather than transcribed, and the parameters come from
 `-pvalue+` translated to Verilator's `-G`. An upstream change to either is a
 change in what gets built, not a silent divergence.
 
+### More than one configuration at a time
+
+Each configuration builds into its own `build/obj_<config>`, and every runner
+takes `--config` to pick which binary it uses. `small` stays the default.
+
+```sh
+python3 build_tb.py --config small
+python3 build_tb.py --config opentitan
+python3 run_tests.py    --config opentitan ...
+python3 run_directed.py --config opentitan ...
+```
+
+This is not a convenience. `ibex_configs.yaml` gives `small` `PMPEnable: 0`,
+`SecureIbex: 0` and `RV32BNone`, and a large part of what the two testlists
+test is exactly those three. Until each configuration had its own directory
+the only way to run a PMP test was to build over whatever was there, which
+invalidated everything that had been measured before it -- which is how the
+integrity tests came to be verified once and never re-checked.
+
+A test whose `rtl_params` the built configuration does not satisfy is now
+reported as **inapplicable**, which is neither a pass nor a failure. That is
+the comparison upstream's `ibex_cmd.filter_tests_by_config` makes, against the
+same field. What each testlist needs:
+
+| | entries | `small` | `opentitan` |
+| --- | ---: | ---: | ---: |
+| `riscv_dv_extension/testlist.yaml` | 57 | 18 inapplicable | 1 inapplicable |
+| `directed_tests/directed_testlist.yaml` | 944 | **944 inapplicable** | 0 inapplicable |
+
+The 18 are five wanting `SecureIbex`, ten wanting `PMPEnable` and three naming
+an `RV32B` value. The one on `opentitan` is `riscv_bitmanip_full_test`, which
+wants `RV32BFull` where `opentitan` has `RV32BOTEarlGrey`.
+
+The second row is the important one: **all three configs in the directed
+testlist carry `rtl_params: {PMPEnable: 1}`**, so not one of the 944 directed
+tests means anything on the default build. The empty directed test on `small`
+dies on `csrw pmpaddr0` at the fourth instruction of `INIT_PMP`.
+
 ## What it took
 
 Eleven source edits and two C++ shims. All of them are applied to copies under
@@ -216,7 +254,7 @@ passes `--no-skip-identical`.
 
 ```sh
 python3 build_programs.py --count 2 --instructions 300
-cd build && ./obj/core_ibex_tb \
+cd build && ./obj_small/core_ibex_tb \
   +UVM_TESTNAME=core_ibex_base_test \
   +bin=elf/gen_0.bin \
   +signature_addr=8ffffffc \
@@ -228,7 +266,15 @@ or, for the testlist rather than one program:
 
 ```sh
 python3 build_programs.py --all-tests
-python3 run_tests.py +disable_fetch_enable_seq=1
+python3 run_tests.py --config small +disable_fetch_enable_seq=1
+```
+
+or, for the directed testlist, which needs no generator at all:
+
+```sh
+python3 build_tb.py --config opentitan
+python3 run_directed.py --config opentitan --group riscv-tests
+python3 run_directed.py --config opentitan            # all 944
 ```
 
 `+bin` is a **flat binary**, not an ELF: `core_ibex_base_test` loads it byte by

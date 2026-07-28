@@ -40,7 +40,8 @@ one of them reaches the harness on its own.
   riscv-arch-tests (107) signal TEST_PASS unconditionally from `RVMODEL_HALT`
                          and leave the checking to a signature comparison
                          against a reference that this flow, like upstream's,
-                         does not do.
+                         does not do. They also need TEST_CASE_1 defined or
+                         the body is preprocessed away; see EXTRA_GCC_OPTS.
 
 For the last of those a pass means "ran to completion with the RVFI cosim
 against Spike staying quiet", which is a real check -- every retired
@@ -129,6 +130,33 @@ GCC_OPTS_PATCHES: dict[str, list[tuple[str, str, str]]] = {
 MARCH_NOTE = ("this config names no -march, so one derived from the Ibex "
               "configuration is supplied in place of the toolchain default, "
               "which here would include the A extension Ibex has not got")
+
+# Options appended to a config's compile, with the reason, and a check that
+# the option is not already there.
+#
+# Every riscv-arch-test wraps its body in
+#
+#     #ifdef TEST_CASE_1
+#     RVTEST_CASE(0,"//check ISA:=regex(.*32.*);...;def TEST_CASE_1=True;",add)
+#
+# and the framework's own runner (riscof) defines TEST_CASE_1 from that string
+# after matching the ISA. The directed testlist's gcc_opts does not, so all 107
+# arch-test entries compile to `RVTEST_CODE_BEGIN` immediately followed by
+# `RVMODEL_HALT` -- a register-init prologue and an unconditional TEST_PASS,
+# with the test body preprocessed away. add-01 built that way has a 292-byte
+# .text.init, retires 73 instructions, none of them an add, and passes.
+#
+# So the define is supplied. With it add-01's .text.init is 12,868 bytes and
+# the adds are in it. Without it the 107 entries are worth nothing at all;
+# --stock-defines leaves them as upstream has them.
+EXTRA_GCC_OPTS: dict[str, list[tuple[str, str]]] = {
+    "riscv-arch-tests": [
+        ("-DTEST_CASE_1=True",
+         "every arch test hides its body behind #ifdef TEST_CASE_1 and the "
+         "testlist never defines it, so all 107 compile to a prologue and an "
+         "unconditional pass"),
+    ],
+}
 
 # Extra sources appended to a config's compile. See the file for why.
 EXTRA_SOURCES: dict[str, list[tuple[Path, str]]] = {
@@ -369,7 +397,8 @@ def applicability(entry: dict, parameters: dict[str, str],
 # Building one test
 # ---------------------------------------------------------------------------
 
-def compile_options(entry: dict, march: str) -> tuple[list[str], list[str]]:
+def compile_options(entry: dict, march: str,
+                    stock_defines: bool) -> tuple[list[str], list[str]]:
     """(gcc options, notes) for one entry, with every divergence recorded."""
     options = entry["gcc_opts"]
     notes: list[str] = []
@@ -388,6 +417,17 @@ def compile_options(entry: dict, march: str) -> tuple[list[str], list[str]]:
     if not any(token.startswith("-march=") for token in tokens):
         tokens.insert(0, f"-march={march}")
         notes.append(f"-march={march} added: {MARCH_NOTE}")
+
+    if not stock_defines:
+        for option, reason in EXTRA_GCC_OPTS.get(entry["config"], []):
+            name = option.split("=", 1)[0]
+            if any(token.split("=", 1)[0] == name for token in tokens):
+                raise DirectedError(
+                    f"config {entry['config']!r}: gcc_opts already names "
+                    f"{name}, so adding {option!r} would change what upstream "
+                    f"asks for. This addition needs looking at.")
+            tokens.append(option)
+            notes.append(f"{option} added: {reason}")
 
     for source, reason in EXTRA_SOURCES.get(entry["config"], []):
         if not source.is_file():
@@ -424,7 +464,8 @@ def linker_script(entry: dict, stock: bool) -> tuple[Path, list[str]]:
     return overlay, [LD_SCRIPT_NOTE]
 
 
-def build_one(entry: dict, march: str, directory: Path, stock_ld: bool) -> dict:
+def build_one(entry: dict, march: str, directory: Path, stock_ld: bool,
+              stock_defines: bool) -> dict:
     """Compile one entry to a flat binary, as scripts/compile_test.py does."""
     directory.mkdir(parents=True, exist_ok=True)
     objectfile = directory / "test.o"
@@ -432,7 +473,7 @@ def build_one(entry: dict, march: str, directory: Path, stock_ld: bool) -> dict:
     log = directory / "compile.log"
 
     try:
-        options, notes = compile_options(entry, march)
+        options, notes = compile_options(entry, march, stock_defines)
         script, script_notes = linker_script(entry, stock_ld)
         notes += script_notes
     except DirectedError as error:
@@ -568,12 +609,12 @@ def epmp_exit_code(trace: Path) -> int | None:
 
 def handle(entry: dict, testbench: Path, march: str, cycles: int,
            wall_seconds: int, extra: list[str], build_only: bool,
-           stock_ld: bool) -> dict:
+           stock_ld: bool, stock_defines: bool) -> dict:
     directory = BUILD / "directed" / entry["test"]
     result = {"test": entry["test"], "group": entry["config"],
               "rtl_test": entry["rtl_test"]}
 
-    build = build_one(entry, march, directory, stock_ld)
+    build = build_one(entry, march, directory, stock_ld, stock_defines)
     result["notes"] = build["notes"]
     if not build["built"]:
         result["outcome"] = "build failed"
@@ -625,8 +666,8 @@ def select(entries: list[dict], args) -> list[dict]:
 
 
 def report(results: list[dict], inapplicable: list[dict], config: str,
-           total: int) -> int:
-    output = BUILD / f"directed_results_{config}.json"
+           total: int, name: str = "") -> int:
+    output = BUILD / (name or f"directed_results_{config}.json")
     output.write_text(json.dumps(
         {"config": config, "results": results, "inapplicable": inapplicable},
         indent=2), encoding="utf-8")
@@ -660,7 +701,7 @@ def report(results: list[dict], inapplicable: list[dict], config: str,
         for note, count in sorted(kinds.items(), key=lambda item: -item[1]):
             print(f"  {count:>5}  {note}")
 
-    print(f"\nwritten to {output.relative_to(HERE)}")
+    print(f"\nwritten to {output}")
     return 0 if tally.get("passed", 0) == len(results) and results else 1
 
 
@@ -699,6 +740,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stock-ld", action="store_true",
                         help="link with the vendored linker scripts unpatched; "
                              "see LD_SCRIPT_PATCHES for what that costs")
+    parser.add_argument("--stock-defines", action="store_true",
+                        help="compile with only the gcc_opts the testlist "
+                             "states; see EXTRA_GCC_OPTS for what that costs")
+    parser.add_argument("--results", default="",
+                        help="name of the results file under build/, "
+                             "default directed_results_<config>.json")
     parser.add_argument("--build-only", action="store_true",
                         help="compile, do not simulate")
     parser.add_argument("--list", action="store_true",
@@ -759,7 +806,7 @@ def main(argv: list[str] | None = None) -> int:
         futures = {pool.submit(handle, entry, testbench, march,
                                args.timeout_cycles, args.timeout_seconds,
                                args.extra, args.build_only,
-                               args.stock_ld): entry
+                               args.stock_ld, args.stock_defines): entry
                    for entry in runnable}
         for future in concurrent.futures.as_completed(futures):
             result = future.result()
@@ -769,7 +816,8 @@ def main(argv: list[str] | None = None) -> int:
                   flush=True)
 
     results.sort(key=lambda r: (r["group"], r["test"]))
-    return report(results, inapplicable, args.config, len(chosen))
+    return report(results, inapplicable, args.config, len(chosen),
+                  args.results)
 
 
 if __name__ == "__main__":
