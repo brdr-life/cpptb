@@ -17,22 +17,24 @@ build and a running test, all of them X-initialisation or solver behaviour that
 only shows up on a 2-state simulator; all three are found, reduced and fixed
 below. `core_ibex_base_test` now retires instructions with no cosim mismatch.
 
-**Tests pass, with no workarounds left.** Each testlist entry runs the program
-its own `gen_opts` ask for, and a program that reaches its end tells the
-testbench so. Of the first eight entries built, **six pass and two fail**, none
-times out, and the sweep no longer needs `+disable_fetch_enable_seq=1` -- the
-fetch-enable stimulus runs. Separately, all five integrity classes pass on
-`--config opentitan` now that the signals they probe are visible to VPI.
+**The whole riscv-dv testlist is built and run.** 53 of the 57 entries have a
+program; **30 of them pass on `--config opentitan` and 19 on `--config small`**,
+with no plusarg workaround -- the fetch-enable stimulus runs. Separately, all
+five integrity classes pass on `--config opentitan` now that the signals they
+probe are visible to VPI.
 
-The two failures are worth naming: `riscv_debug_wfi_test` reports a cosim
-mismatch, and `riscv_multiple_interrupt_test` fails its own check for a CSR
-write within 10,000 cycles. Both run programs pyflow cannot generate faithfully
--- see the unsupported-option list the runner prints -- so neither is yet
-evidence about Ibex.
+**A pass is not the same as coverage of the entry, and the runner says which is
+which.** Every entry carries a verdict -- 13 faithful, 12 partial, 28 hollow, 1
+that no generator here produces -- and "hollow" means an option that defines the
+entry was dropped, so the outcome is not evidence about the entry's name.
+Seventeen of the thirty passes on `opentitan` are hollow, ten of them PMP
+entries running a program with no PMP configuration in it. See "Where that
+leaves it".
 
-49 of the 57 entries have no program built. About 20 of those cannot be built
-faithfully at all: their PMP, debug-ROM and bitmanip options have no pyflow
-equivalent, and the RTL parameters they need are not set by the `small` build.
+Getting from eight entries to 53 took six more pyflow bugs, one of which -- the
+missing MSTATUS/MIE signature handshake -- was on its own the reason twenty
+directed test classes died 10,000 cycles into every run without executing any of
+their program.
 
 **The other testlist runs: 912 of 944 directed tests pass.**
 `directed_tests/directed_testlist.yaml` is 944 hand-written C and assembly
@@ -111,7 +113,10 @@ same field. What each testlist needs:
 
 The 18 are five wanting `SecureIbex`, ten wanting `PMPEnable` and three naming
 an `RV32B` value. The one on `opentitan` is `riscv_bitmanip_full_test`, which
-wants `RV32BFull` where `opentitan` has `RV32BOTEarlGrey`.
+wants `RV32BFull` where `opentitan` has `RV32BOTEarlGrey`. The three `RV32B`
+entries never get as far as being ruled out: no program links for them at all,
+for a reason that has nothing to do with the configuration. So a sweep reports
+15 inapplicable on `small` and 0 on `opentitan`.
 
 The second row is the important one: **all three configs in the directed
 testlist carry `rtl_params: {PMPEnable: 1}`**, so not one of the 944 directed
@@ -756,45 +761,77 @@ empty, with only a dret instruction". The twelve that do ask get debug entry and
 an immediate return where upstream runs a generated ROM, which is the floor
 rather than the article, and is recorded as such.
 
-### Where that leaves it
+### Where that leaves it: all 57 built and run
 
-Eight entries built and run so far, at the instruction counts their entries ask
-for, with `+disable_fetch_enable_seq=1`:
+**53 of the 57 entries have a program, and all 53 run.** No plusarg workaround:
+`+disable_fetch_enable_seq=1` is not passed and the fetch-enable stimulus runs.
 
-| Entry | Outcome |
-| --- | --- |
-| `riscv_arithmetic_basic_test` | passed |
-| `riscv_ebreak_test` | passed |
-| `riscv_illegal_instr_test` | passed |
-| `riscv_rv32im_instr_test` | passed |
-| `riscv_unaligned_load_store_test` | passed |
-| `riscv_user_mode_rand_test` | passed |
-| `riscv_debug_wfi_test` | cosim mismatch: trap expected at ISS PC 80000c2a, DUT at 80000c26 reported none |
-| `riscv_multiple_interrupt_test` | failed: no write to CSR 0x300 within the test class's 10,000-cycle timeout |
+| | `small` | `opentitan` |
+| --- | ---: | ---: |
+| entries | 57 | 57 |
+| no program | 4 | 4 |
+| inapplicable | 15 | 0 |
+| ran | 38 | 53 |
+| **passed** | **19** | **30** |
 
-Neither of the two is investigated. Both are entries whose UVM class drives
-stimulus of its own -- a debug sequence and an interrupt sequence -- and whose
-program is missing the debug ROM pyflow cannot generate, so the interaction
-between the class and the program is the place to start rather than the program
-alone.
+Split by how much of the entry the program actually carries, which is the number
+that matters:
 
-Seven of the eight ran a program that differs from its entry in at least one
-recorded way, so a pass here means the class runs a riscv-dv program of roughly
-the intended shape to its handshake, not that the entry's intent was covered.
+| verdict | `small` | `opentitan` | what a pass means |
+| --- | ---: | ---: | --- |
+| faithful | 5 of 11 | 6 of 13 | every `gen_opt` honoured; the outcome is about the entry |
+| partial | 6 of 9 | 7 of 12 | the program differs in ways that leave the entry's stimulus intact |
+| hollow | 8 of 18 | 17 of 28 | an option that defines the entry was dropped; the outcome says nothing about the entry's name |
 
-The same eight on `--config opentitan` give the same six passes and the same
-two failures, so nothing in that table is about `PMPEnable`, `SecureIbex` or
-the writeback stage. Without `+disable_fetch_enable_seq=1` both failures report
-the CSR-write timeout above rather than one of each; the cosim mismatch in the
-table was seen with that plusarg set. None of the eight is one of the 18
-entries a configuration can rule out, so the inapplicable count for this
-testlist -- 18 on `small`, 1 on `opentitan` -- falls entirely on entries that
-have no program yet.
+**Seventeen of the thirty passes on `opentitan` are hollow.** Ten of those
+seventeen are the PMP and ePMP entries, which run a plain random program with no
+PMP configuration in it. A pass there means Ibex executed a riscv-dv program
+correctly against Spike with `PMPEnable=1` and nothing configured. That is not
+nothing, and it is not what `riscv_epmp_mml_read_only_test` is for.
 
-Generation is not fast: an entry of a few hundred instructions takes seconds, a
-10,000-instruction one with directed streams several minutes, so `--all-tests`
-is an hour or two at four entries at a time. `--jobs` is capped at half the
-cores because each entry is a separate interpreter with the solver loaded.
+The two configurations agree on every entry they both run, so nothing here is
+about `PMPEnable`, `SecureIbex`, `ICache` or the writeback stage. The 15
+inapplicable on `small` are five wanting `SecureIbex` and ten wanting
+`PMPEnable`; the three bitmanip entries would make 18, and they have no program
+to be inapplicable with.
+
+### What the failures are
+
+Grouped by what the run said, on `--config opentitan`:
+
+| what | entries | why |
+| --- | ---: | --- |
+| `Did not receive core_status IN_DEBUG_MODE within 10000 cycles` | 3 | the debug ROM signals `IN_DEBUG_MODE` and pyflow's is a bare `dret` |
+| `Core did not jump to vectored interrupt handler` | 5 | the interrupt handler's `HANDLING_IRQ` handshake, same shape as the above |
+| `Did not receive write to csr 0x342` | 1 | `riscv_dret_test`, waiting on an MCAUSE handshake from the illegal-instruction handler |
+| `Did not receive write to csr 0x300` | 1 | `riscv_invalid_csr_test`; it boots U-mode, which pyflow does not do, so the whole privileged block is missing |
+| cosim mismatch | 6 | five are "synchronous trap expected at ISS PC, DUT reported none" |
+| `Randomization failed` | 3 | Verilator, not the program: an `interval dist` in `core_ibex_seq_lib.sv` |
+| killed | 2 | the simulator crashes: `SIGSEGV` with no output, and `*** stack smashing detected ***` |
+| cycle timeout | 1 | `riscv_reset_test`, whose class resets the core mid-program |
+| `ECC alert did not fire` | 1 | `riscv_rf_addr_intg_test`; see the forced-array-index defect above |
+
+The first four rows are all the same thing: a signature handshake the program
+does not emit, and the class waits for. `wait_for_core_setup` was the biggest of
+those and is fixed above; what is left needs the debug ROM and the interrupt
+vector table, which is `riscv_debug_rom_gen.sv` and the `HANDLING_IRQ` half of
+`gen_interrupt_vector_table`.
+
+The three `Randomization failed` are worth separating from the rest: they are
+the same Verilator `dist` defect the fetch-enable sequence hit, one file over.
+`core_ibex_seq_lib.sv:26` has `interval dist {[0 : max_interval/10] :/ 1, ...}`
+and Verilator reports it unsatisfiable partway through a run that has already
+solved it several times. That is a simulator problem, not an Ibex one.
+
+Two entries are not stable across runs: `riscv_mem_intg_error_test` passed on
+one sweep and aborted on the next, and `riscv_mem_error_test` moved between a
+randomize failure and a cosim mismatch. The solver is a subprocess and its
+answers are not identical run to run.
+
+Generation is not fast: `--all-tests` is about an hour at four entries at a
+time, and longer on a loaded machine. Each entry is a separate interpreter with
+the solver loaded, so `--jobs` is capped at half the cores. One seed per entry,
+where upstream runs each entry 10 to 15 times.
 
 ### Still open: throughput
 
@@ -1213,12 +1250,18 @@ Upstream never overrides `timeout_in_cycles`, so its budget is
   how much of lowRISC's SVA Verilator 5 accepts.
 - **The 28 hollow entries.** They are generated and run, and marked, and what
   they run is a plain random program under a name that promises something else.
-  Making them mean anything is four separate pieces of work in pyflow, none of
+  Making them mean anything is five separate pieces of work in pyflow, none of
   them small: `riscv_pmp_cfg.sv` (1,072 lines) for the ten PMP entries,
   `riscv_debug_rom_gen.sv` (252) for the twelve debug ones, `riscv_csr_instr.sv`
-  plus a `csr_c` for the CSR ones, and a ratified Zba/Zbb/Zbc/Zbs instruction
-  library for the three bitmanip ones. `riscv_csr_test` is a fifth: it needs
-  riscv-dv's `gen_csr_test.py`, a separate generator not wired up here.
+  plus a `csr_c` for the CSR ones, `USER_MODE` in a target's
+  `supported_privileged_mode` for the three privilege-mode ones, and a ratified
+  Zba/Zbb/Zbc/Zbs instruction library for the three bitmanip ones.
+  `riscv_csr_test` is a sixth: it needs riscv-dv's `gen_csr_test.py`, a separate
+  generator not wired up here.
+- **The interrupt handler's `HANDLING_IRQ` handshake.** Five entries fail on
+  "Core did not jump to vectored interrupt handler", which is the same shape of
+  gap as the MSTATUS one that was fixed: `gen_interrupt_vector_table` in pyflow
+  does emit it, so this one needs finding rather than writing.
 - **`num_of_sub_program`.** Nine entries ask for sub-programs and get none.
   `riscv_jump_instr` is not implemented in pyflow at all -- `insert_jump_instr`
   is `pass` -- so this is a class to write, not a line to fix.
