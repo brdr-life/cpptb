@@ -67,7 +67,8 @@ def generate(count: int, instructions: int, seed: int, target: str,
              pygen: Path | None = None,
              name: str = "gen",
              options: list[str] | None = None,
-             gen_test: str = "riscv_instr_base_test") -> int:
+             gen_test: str = "riscv_instr_base_test",
+             timeout: int | None = None) -> int:
     # A caller may supply a patched copy of the generator; ports/core_ibex_uvm
     # needs one because pyflow's signature-handshake path does not run as
     # shipped. Everything else uses the fetched tree.
@@ -126,10 +127,22 @@ def generate(count: int, instructions: int, seed: int, target: str,
     # occurrence of a repeated option.
     command += list(options or [])
 
-    completed = subprocess.run(
-        command, cwd=out, text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, check=False,
-        env={**_environment(), "PYTHONPATH": str(pygen)})
+    try:
+        completed = subprocess.run(
+            command, cwd=out, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, check=False, timeout=timeout,
+            env={**_environment(), "PYTHONPATH": str(pygen)})
+    except subprocess.TimeoutExpired:
+        # pyflow can hang rather than fail. `riscv_instr_base_test.run` uses
+        # `multiprocessing.Pool.map` and `run_phase` catches `Exception`, while
+        # pyflow's own error path is `sys.exit(1)` -- a `SystemExit`, which is
+        # not an `Exception`. The worker leaves, `Pool.map` waits for a result
+        # that never arrives, and the run sits at zero CPU indefinitely. Without
+        # a bound here that stalls a whole `--all-tests`.
+        print(f"generate: no program after {timeout}s; pyflow is not using any "
+              f"CPU when this happens, see the note above this message in "
+              f"{Path(__file__).name}", file=sys.stderr)
+        return 1
     if completed.returncode != 0:
         tail = "\n".join(
             line for line in completed.stdout.splitlines()

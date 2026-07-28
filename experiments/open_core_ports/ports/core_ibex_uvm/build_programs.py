@@ -614,6 +614,37 @@ PYGEN_PATCHES = [
         '                insert_str = "{}.2byte {} # {}".format(pkg_ins.indent,\n',
         '                insert_str = "{}.2byte 0x{} # {}".format(pkg_ins.indent,\n',
     ),
+    # A generation error hangs pyflow instead of reporting it. `run` uses
+    # `multiprocessing.Pool.map`, and `run_phase` catches `Exception` -- but
+    # pyflow's own error path is `logging.critical(...); sys.exit(1)`, in
+    # `get_rand_instr`, `get_instr`, `create_instr` and half a dozen other
+    # places. `SystemExit` derives from BaseException, not Exception, so it goes
+    # uncaught, the pool worker exits, and `Pool.map` waits for a result that
+    # will never arrive. The parent sits in a futex and the worker in a pipe
+    # read, neither using any CPU, forever.
+    #
+    # `riscv_loop_test` is one that does this: 37 minutes and one second of CPU
+    # before it was killed. With BaseException caught, the same run prints the
+    # traceback pyflow meant to print and `run` raises "Test-generation jobs
+    # failed" in a few seconds.
+    #
+    # `build_programs.py` also puts a wall-clock bound on each attempt, because
+    # this is the kind of bug that comes back in a different place.
+    (
+        "test/riscv_instr_base_test.py",
+        "        try:\n"
+        "            self._run_phase(num)\n"
+        "            return 0\n"
+        "        except Exception as e:\n"
+        "            traceback.print_exc()\n"
+        "            return 1\n",
+        "        try:\n"
+        "            self._run_phase(num)\n"
+        "            return 0\n"
+        "        except BaseException as e:\n"
+        "            traceback.print_exc()\n"
+        "            return 1\n",
+    ),
 ]
 
 
@@ -661,7 +692,8 @@ def copy_and_patch_pygen() -> Path:
 
 def generate(count: int, instructions: int, seed: int, target: str,
              name: str = "gen", options: list[str] | None = None,
-             gen_test: str = "riscv_instr_base_test") -> int:
+             gen_test: str = "riscv_instr_base_test",
+             timeout: int | None = None) -> int:
     from generate import generate as pyflow_generate  # noqa: E402
 
     return pyflow_generate(count, instructions, seed, target, PROGRAMS,
@@ -669,7 +701,8 @@ def generate(count: int, instructions: int, seed: int, target: str,
                            signature_addr=SIGNATURE_ADDR,
                            debug_section=True,
                            pygen=patched_pygen(),
-                           name=name, options=options, gen_test=gen_test)
+                           name=name, options=options, gen_test=gen_test,
+                           timeout=timeout)
 
 
 # ----------------------------------------------------------------------------
@@ -738,6 +771,31 @@ def pyflow_arguments() -> set[str]:
     # does not see them: `for i in range(self.max_directed_instr_stream_seq)`.
     names |= {f"directed_instr_{i}" for i in range(MAX_DIRECTED_STREAMS)}
     return names
+
+
+# Streams pyflow's factory will build and pyflow cannot generate. Being in the
+# factory is not the same as being implemented.
+#
+#   riscv_loop_instr  `post_randomize` is three-quarters commented out. The
+#     SystemVerilog draws each of the three key instructions with
+#     `get_rand_instr(.include_instr({ADDI}))` and then constrains it; pyflow
+#     draws an unrestricted random instruction -- "Removed include_instr ADDI
+#     for now to avoid unrecognized colon" -- so `rd == loop_cnt_reg; rs1 ==
+#     ZERO; imm == loop_init_val` is asked of whatever came out, and fails.
+#     That failure is `sys.exit(1)` inside a pool worker, which is the hang
+#     described in PYGEN_PATCHES. Worse, the constraints on
+#     `loop_update_instr` are commented out entirely ("Commenting for now due
+#     to key error"), so the loop counter is never updated and any loop pyflow
+#     did manage to emit would not terminate. pyflow's own
+#     `riscv_rand_instr_test` has this stream commented out of its directed
+#     list, which is the same conclusion reached from the other side.
+BROKEN_STREAMS = {
+    "riscv_loop_instr":
+        "in pyflow's factory but not implemented: the loop-counter update "
+        "constraints are commented out, so a generated loop never terminates, "
+        "and the loop-init randomize fails because the instruction it "
+        "constrains is drawn at random instead of being an ADDI",
+}
 
 
 def pyflow_streams() -> set[str]:
@@ -1036,11 +1094,15 @@ DEFINING_PER_TEST = {
     # "Jump among large number of sub-programs": with num_of_sub_program forced
     # to 0 there is nothing to jump among.
     "riscv_rand_jump_test": ("num_of_sub_program",),
+    # "Loop test": its one directed stream is the test. See BROKEN_STREAMS.
+    "riscv_loop_test": ("directed_instr_1",),
 }
 
 
 def is_defining(test: str, name: str) -> bool:
     if name.startswith("pmp_") or name.startswith("enable_z"):
+        return True
+    if name in DEFINING_PER_TEST.get(test, ()):
         return True
     if name.startswith("uvm_set_type_override"):
         return True
@@ -1117,6 +1179,9 @@ def translate(entry: dict) -> tuple[list[str], list[str]]:
             continue
         if name.startswith("directed_instr_"):
             stream = value.split(",")[0]
+            if stream in BROKEN_STREAMS:
+                drop(name, opt, BROKEN_STREAMS[stream])
+                continue
             if stream not in streams:
                 drop(name, opt,
                      f"{stream} is not in pyflow's stream factory")
@@ -1287,7 +1352,8 @@ def build_test(entry: dict, args) -> dict:
         for attempt in range(args.attempts):
             seed = args.seed + attempt
             if generate(1, args.instructions, seed, record["target"], name=name,
-                        options=options, gen_test=gen_test) == 0:
+                        options=options, gen_test=gen_test,
+                        timeout=args.generate_timeout) == 0:
                 record["seed"] = seed
                 break
         else:
@@ -1394,6 +1460,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="build a program for every testlist entry")
     parser.add_argument("--attempts", type=int, default=GENERATION_ATTEMPTS,
                         help="seeds to try per entry before giving up")
+    parser.add_argument("--generate-timeout", type=int, default=1200,
+                        help="wall-clock seconds one pyflow attempt may take; "
+                             "pyflow hangs rather than failing when a worker "
+                             "calls sys.exit")
     parser.add_argument("--list-tests", action="store_true",
                         help="print the testlist entries and stop")
     args = parser.parse_args(argv)
