@@ -173,7 +173,7 @@ def environment() -> dict[str, str]:
 
 
 def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
-            seconds: int, extra: list[str],
+            seconds: int, extra: list[str], config: str,
             log_name: str | None = None) -> dict:
     name = log_name or rtl_test
     command = [str(testbench), f"+UVM_TESTNAME={rtl_test}",
@@ -181,14 +181,15 @@ def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
                f"+timeout_in_cycles={cycles}", *extra]
     # A directory each, because the tracer writes trace_core_00000000.log into
     # the working directory and several runs at a time would share one.
-    directory = BUILD / "runs" / name
+    directory = BUILD / "runs" / config / name
     directory.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
+    status = 0
     try:
         completed = subprocess.run(command, cwd=directory, env=environment(),
                                    text=True, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, timeout=seconds)
-        output, timed_out = completed.stdout, False
+        output, timed_out, status = completed.stdout, False, completed.returncode
     except subprocess.TimeoutExpired as expired:
         output = expired.stdout or ""
         if isinstance(output, bytes):
@@ -196,7 +197,10 @@ def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
         timed_out = True
     elapsed = time.monotonic() - started
 
-    log = BUILD / "logs" / f"{name}.log"
+    # One log directory per configuration: the two builds run the same entry
+    # names, and a shared path means the second sweep silently overwrites the
+    # evidence for the first.
+    log = BUILD / "logs" / config / f"{name}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(output, encoding="utf-8")
 
@@ -211,15 +215,27 @@ def run_one(testbench: Path, rtl_test: str, program: Path, cycles: int,
             result["outcome"] = outcome
             result["detail"] = found.group(1).strip()[:70] if found.groups() else ""
             break
+    # A run that produced no output at all did not get as far as UVM. The
+    # likely cause when several run at once is the OOM reaper: the model is
+    # 270 MB before UVM allocates anything.
+    if status < 0 or (not output.strip() and result["outcome"] == "no verdict"):
+        result["outcome"] = "killed"
+        result["detail"] = (f"exit {status}, {len(output)} bytes of output in "
+                            f"{elapsed:.1f}s")
+        return result
     # Verilator solves constraints by shelling out to `z3 --in`. Without one on
     # PATH every randomize() in the testbench fails, `DV_CHECK_RANDOMIZE_FATAL
     # ends the run, and the whole thing is over in about a tenth of a second.
     # That is a broken environment, not a result, and it reads as a testbench
-    # failure unless something says so.
-    if elapsed < 1.0 and result["outcome"] != "passed":
+    # failure unless something says so. The discriminator is whether the run got
+    # as far as loading the program: without a solver it does not, because
+    # `core_ibex_base_test` randomizes in its build phase.
+    if (elapsed < 1.0 and result["outcome"] != "passed"
+            and "Loading single test binary" not in output):
         result["outcome"] = "environment"
-        result["detail"] = (f"ended in {elapsed:.2f}s; is z3 on PATH? "
-                            f"see {log.relative_to(HERE)}")
+        result["detail"] = (f"ended in {elapsed:.2f}s without loading the "
+                            f"program; is z3 on PATH? see "
+                            f"{log.relative_to(HERE)}")
     return result
 
 
@@ -311,7 +327,7 @@ def run_testlist(args) -> int:
             else args.timeout_seconds
         result = run_one(binary(args.config), test["rtl_test"], program,
                          args.timeout_cycles, seconds,
-                         test.get("sim_opts", []) + args.extra,
+                         test.get("sim_opts", []) + args.extra, args.config,
                          log_name=test["test"])
         result["rtl_test"] = test["rtl_test"]
         result["unsupported"] = test.get("unsupported", [])
@@ -350,7 +366,7 @@ def run_classes(args) -> int:
             continue
         result = run_one(binary(args.config), rtl_test,
                          args.program.resolve(), args.timeout_cycles,
-                         args.timeout_seconds, args.extra)
+                         args.timeout_seconds, args.extra, args.config)
         results.append(result)
         detail = f"  {result['detail']}" if result["detail"] else ""
         print(f"  {rtl_test:<48} {result['outcome']}{detail}", flush=True)
