@@ -115,6 +115,104 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "    // The output skew that was here is dropped; see build_tb.py and\n"
         "    // the note on the core interface.\n",
     ),
+    # A one-cycle pulse driven through a clocking block output disappears
+    # unless the first write happens on a clocking event.
+    #
+    #     cb.pulse <= 1'b1;   // should be driven at the next clocking event
+    #     @(cb);              // wakes at that event
+    #     cb.pulse <= 1'b0;   // should be driven at the event after it
+    #
+    # This simulator applies a write made after `@(cb)` to the same clocking
+    # event as the earlier one, so the two collapse and the signal never goes
+    # high. Reduced case in shims/verilator_clocking_pulse.sv.
+    #
+    # Upstream never sees it because `default output negedge` puts the drive
+    # half a cycle after the event, which separates the two. Verilator does not
+    # implement that skew, and a numeric skew does not help either -- the
+    # reduced case shows `default output #2ns` losing the pulse in the same way.
+    #
+    # Waiting for a clocking event before the first write fixes it and gives
+    # back exactly upstream's timing. Off a clocking event, upstream's negedge
+    # drive lands after the *next* posedge, so the pulse is seen one edge
+    # later; waiting first produces the same edge. On a clocking event both
+    # produce a pulse at the following edge.
+    #
+    # This is what breaks ibex_icache_stress_all. dv_base_vseq::dut_init ends
+    # with `#1ps`, so the first item of every child sequence after a mid-test
+    # reset is driven one picosecond off the clock grid; branch_to() then
+    # produces no branch at all, the cache prefetches from prefetch_addr_q
+    # (which ResetAll=0 leaves unreset), and the scoreboard sees a fetch it
+    # was not told to expect.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_if.sv",
+        "  // SVA module\n"
+        "  ibex_icache_core_protocol_checker checker_i (.*);\n",
+        "  // The time of the last clocking event, and a task that waits for\n"
+        "  // one if we are not on it. Needed before driving a single-cycle\n"
+        "  // pulse through driver_cb; see build_tb.py.\n"
+        "  time driver_cb_edge       = 0;\n"
+        "  bit  driver_cb_edge_valid = 1'b0;\n"
+        "  always @(posedge clk) begin\n"
+        "    driver_cb_edge       = $time;\n"
+        "    driver_cb_edge_valid = 1'b1;\n"
+        "  end\n"
+        "  task automatic align_to_driver_cb();\n"
+        "    if (!driver_cb_edge_valid || ($time != driver_cb_edge))"
+        " @(driver_cb);\n"
+        "  endtask\n"
+        "\n"
+        "  // SVA module\n"
+        "  ibex_icache_core_protocol_checker checker_i (.*);\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_if.sv",
+        "  task automatic branch_to(logic [31:0] addr);\n"
+        "    driver_cb.branch      <= 1'b1;\n",
+        "  task automatic branch_to(logic [31:0] addr);\n"
+        "    align_to_driver_cb();\n"
+        "    driver_cb.branch      <= 1'b1;\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_if.sv",
+        "  task automatic invalidate_pulse(int unsigned num_cycles);\n"
+        "    driver_cb.invalidate <= 1'b1;\n",
+        "  task automatic invalidate_pulse(int unsigned num_cycles);\n"
+        "    align_to_driver_cb();\n"
+        "    driver_cb.invalidate <= 1'b1;\n",
+    ),
+    # The memory response is the same shape. drive_responses() calls this
+    # straight out of `rdata_queue.get()` when the item's delay is zero, which
+    # the distribution picks about five times in eleven, and the rvalid pulse
+    # is lost the same way.
+    (
+        ICACHE / "dv/ibex_icache_mem_agent/ibex_icache_mem_if.sv",
+        "  // Interface with SVA assertions\n"
+        "  ibex_icache_mem_protocol_checker checker_i (.*);\n",
+        "  // See the note on the same tracker in ibex_icache_core_if.sv and in\n"
+        "  // build_tb.py: a pulse through a clocking block output is lost\n"
+        "  // unless the first write is made on a clocking event.\n"
+        "  time driver_cb_edge       = 0;\n"
+        "  bit  driver_cb_edge_valid = 1'b0;\n"
+        "  always @(posedge clk) begin\n"
+        "    driver_cb_edge       = $time;\n"
+        "    driver_cb_edge_valid = 1'b1;\n"
+        "  end\n"
+        "  task automatic align_to_driver_cb();\n"
+        "    if (!driver_cb_edge_valid || ($time != driver_cb_edge))"
+        " @(driver_cb);\n"
+        "  endtask\n"
+        "\n"
+        "  // Interface with SVA assertions\n"
+        "  ibex_icache_mem_protocol_checker checker_i (.*);\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_mem_agent/ibex_icache_mem_if.sv",
+        "  task automatic send_response(logic rsp_err, logic [31:0] rsp_rdata);\n"
+        "    driver_cb.rvalid <= 1'b1;\n",
+        "  task automatic send_response(logic rsp_err, logic [31:0] rsp_rdata);\n"
+        "    align_to_driver_cb();\n"
+        "    driver_cb.rvalid <= 1'b1;\n",
+    ),
     # tb.sv overrides a parameter the DUT does not have. `ibex_icache` calls
     # it `TweakInfection`; `ICacheTweakInfection` is the name the wrapper
     # parameter carries in ibex_if_stage.sv, ibex_core.sv and ibex_top.sv,
