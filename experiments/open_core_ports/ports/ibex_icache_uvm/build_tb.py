@@ -182,6 +182,419 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "    // is the accessor that creates it. See build_tb.py.\n"
         "    phase.get_objection().set_drain_time(this, (drain_time_ns * 1ns));\n",
     ),
+    # tb.sv calls clk_rst_if.set_active() as the first statement of its initial
+    # block, and clk_rst_if's own initial block blocks on `@set_active_called`.
+    # Both are at time 0 with nothing between them, so which runs first is
+    # arbitrary. On this simulator tb's runs first, the event fires with nobody
+    # waiting on it, and the clock generator never starts: time steps straight
+    # from the reset assertion to the UVM timeout with no clock edge at all.
+    #
+    # Upstream already knows about this race and works around it one testbench
+    # over: core_ibex_tb_top.sv has `#0; // needed for dsim` immediately before
+    # its own set_active() call. The same `#0` here yields to the interface's
+    # initial block and the clock starts.
+    (
+        ICACHE / "dv/tb/tb.sv",
+        "  initial begin\n"
+        "    // drive clk and rst_n from clk_if\n"
+        "    clk_rst_if.set_active();\n",
+        "  initial begin\n"
+        "    // drive clk and rst_n from clk_if\n"
+        "    // The #0 lets clk_rst_if's initial block reach its wait on\n"
+        "    // set_active_called before the event is triggered. Upstream does\n"
+        "    // the same thing in core_ibex_tb_top.sv. See build_tb.py.\n"
+        "    #0;\n"
+        "    clk_rst_if.set_active();\n",
+    ),
+    # ------------------------------------------------------------------
+    # The distributions.
+    #
+    # Three separate defects in this simulator's `dist` handling, all measured
+    # in shims/verilator_dist_plus_equality.sv and shims/verilator_dist_std_
+    # randomize.sv:
+    #
+    #   1. A `dist` is applied as an equality against a sample drawn from the
+    #      distribution before the solve. Any other constraint on the same
+    #      variable then makes the whole call unsatisfiable unless the sample
+    #      happens to satisfy it. randomize() returns 0.
+    #   2. `std::randomize(x) with { x dist {...} }` ignores the weights
+    #      entirely and returns a uniform pick over the support. The support
+    #      itself, including a zero weight, is honoured.
+    #   3. A `soft` constraint nested inside an `if` in a constraint block is
+    #      honoured when it is satisfiable and *not* dropped when it is not,
+    #      which is the opposite of what soft means. Only top-level soft
+    #      constraints behave correctly, so every soft constraint added below
+    #      is at the top level.
+    #
+    # The fix throughout is the one ports/core_ibex_uvm arrived at: keep the
+    # buckets and the weights, draw the value with $urandom_range instead of
+    # asking the solver for it. Where the value has to stay in the solve
+    # because other constraints narrow it, the drawn bucket is applied as a
+    # top-level `soft` instead of an equality.
+    # ------------------------------------------------------------------
+    #
+    # base_addr carries a three-bucket dist and, separately, an alignment
+    # constraint. Together they fail about half the time, which is
+    # `DV_CHECK_RANDOMIZE_FATAL(core_seq) in ibex_icache_base_vseq at the start
+    # of every test. base_addr is read in body() and in the inline constraint
+    # on branch_addr, both after this point, so drawing it at the top of body()
+    # is the same value in the same places.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/seq_lib/ibex_icache_core_base_seq.sv",
+        "  // Distribution for base_addr which adds extra weight to each end of"
+        " the address space\n"
+        "  constraint c_base_addr { base_addr dist { [0:15]                    "
+        "  :/ 1,\n"
+        "                                            [16:32'hfffffff0]         "
+        "  :/ 2,\n"
+        "                                            [32'hfffffff0:32'hffffffff]"
+        " :/ 1 }; }\n"
+        "\n"
+        "  // Make sure that base_addr is even (otherwise you can fail to"
+        " generate items if you pick a base\n"
+        "  // addr of 32'hffffffff with constrained addresses enabled: the only"
+        " address large enough is\n"
+        "  // 32'hffffffff, but it doesn't have a zero bottom bit).\n"
+        "  constraint c_base_addr_alignment {\n"
+        "    // The branch address is always required to be half-word aligned."
+        " We don't bother conditioning\n"
+        "    // this on the type of transaction because branch_addr is forced to"
+        " be zero in anything but a\n"
+        "    // branch transaction.\n"
+        "    !base_addr[0];\n"
+        "  }\n",
+        "  // The dist and the alignment constraint that were here are drawn in\n"
+        "  // draw_base_addr() below and applied at the top of body(). Same\n"
+        "  // three buckets, same weights, same alignment. See build_tb.py.\n"
+        "  protected function bit [31:0] draw_base_addr();\n"
+        "    bit [31:0]   value;\n"
+        "    int unsigned pick = $urandom_range(3, 0);\n"
+        "    if (pick == 0)      value = $urandom_range(15, 0);\n"
+        "    else if (pick == 3) value = $urandom_range(32'hffffffff,"
+        " 32'hfffffff0);\n"
+        "    else                value = $urandom_range(32'hfffffff0, 16);\n"
+        "    value[0] = 1'b0;\n"
+        "    return value;\n"
+        "  endfunction\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_core_agent/seq_lib/ibex_icache_core_base_seq.sv",
+        "  virtual task body();\n"
+        "    // Set cache_enabled from initial_enable here",
+        "  virtual task body();\n"
+        "    base_addr = draw_base_addr();\n"
+        "\n"
+        "    // Set cache_enabled from initial_enable here",
+    ),
+    # run_req is where the stimulus is actually made, and every field in it
+    # except num_insns is either pinned by an implication or drawn from a dist
+    # that an implication also touches. Each one is drawn here with the same
+    # weights and the implications applied in the order upstream writes them,
+    # so the solver is left with num_insns and, when constrain_branches is set,
+    # branch_addr.
+    #
+    # new_seed is the one worth reading twice. Its weight expression is
+    #
+    #     new_seed dist { 0 :/ 1, [1:32'hffffffff] :/ (invalidate ? 1000 :
+    #                                                  enable ? 0 : 1) }
+    #
+    # and the zero in it is load-bearing: it is the only thing stopping a new
+    # memory seed reaching an enabled cache, which the scoreboard would see as
+    # a multi-way hit. The weights are not constant and this simulator gets
+    # non-constant weights wrong, so that rule cannot be left to it.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/seq_lib/ibex_icache_core_base_seq.sv",
+        """  protected virtual task run_req(ibex_icache_core_req_item req, ibex_icache_core_rsp_item rsp);
+    start_item(req);
+
+    if (constrain_branches && insns_since_branch >= 100)
+      force_branch = 1'b1;
+
+    `DV_CHECK_RANDOMIZE_WITH_FATAL(
+       req,
+
+       // Force a branch if necessary
+       force_branch -> req.trans_type == ICacheCoreTransTypeBranch;
+
+       // If this is a branch and constrain_branches is true then constrain any branch target.
+       (constrain_branches && (req.trans_type == ICacheCoreTransTypeBranch)) ->
+         req.branch_addr inside {[base_addr:top_restricted_addr]};
+
+       // If this is a branch and constrain_branches is false, we don't constrain the branch target,
+       // but we do weight the bottom and top of the address space a bit higher. This is a weaker
+       // version of the weighting that we place on base_addr.
+       (!constrain_branches && (req.trans_type == ICacheCoreTransTypeBranch)) ->
+         req.branch_addr dist { [0:63]                      :/ 1,
+                                [64:32'hffffffbf]           :/ 20,
+                                [32'hffffffc0:32'hffffffff] :/ 1 };
+
+       // If this is a branch and constrain_branches is true, we can ask for up to 100 instructions
+       // (independent of insns_since_branch)
+       (constrain_branches && (req.trans_type == ICacheCoreTransTypeBranch)) ->
+         num_insns <= 100;
+
+       // If this isn't a branch and constrain_branches is true, we can ask for up to 100 -
+       // insns_since_branch instructions. This will be positive because of the check above.
+       (constrain_branches && (req.trans_type != ICacheCoreTransTypeBranch)) ->
+         num_insns <= 100 - insns_since_branch;
+
+       const_enable -> enable == cache_enabled;
+
+       // Toggle the cache enable line one time in 50. This should allow us a reasonable amount of
+       // time in each mode (note that each transaction here results in multiple instruction
+       // fetches)
+       enable dist { cache_enabled :/ gap_between_toggle_enable, ~cache_enabled :/ 1 };
+
+       // If must_invalidate is set, we have to invalidate with this item.
+       must_invalidate -> invalidate == 1'b1;
+
+       // If avoid_invalidation is set, we won't touch the invalidate line, unless we have to.
+       (avoid_invalidation && !(must_invalidate || (stale_seed && enable))) -> invalidate == 1'b0;
+
+       // Start an invalidation every 1+gap_between_invalidations items.
+       invalidate dist { 1'b0 :/ gap_between_invalidations, 1'b1 :/ 1 };
+
+       // If we have seen a new seed since the last invalidation (which must have happened while the
+       // cache was disabled) and this item is enabled, force the cache to invalidate.
+       stale_seed && enable -> invalidate == 1'b1;
+    )
+""",
+        """  protected virtual task run_req(ibex_icache_core_req_item req, ibex_icache_core_rsp_item rsp);
+    // Every field that upstream draws from a dist is drawn here instead, with
+    // the same buckets and the same weights. See build_tb.py for why.
+    ibex_icache_core_trans_type_e d_trans_type;
+    bit [31:0]                    d_branch_addr;
+    bit                           d_enable;
+    bit                           d_invalidate;
+    bit [31:0]                    d_new_seed;
+    int unsigned                  d_insn_lo, d_insn_hi;
+    int unsigned                  pick;
+    int unsigned                  seed_weight;
+
+    start_item(req);
+
+    if (constrain_branches && insns_since_branch >= 100)
+      force_branch = 1'b1;
+
+    // trans_type carries no dist and no constraint but force_branch, so an
+    // unconstrained solve is a uniform pick over the two enum values.
+    d_trans_type = force_branch ? ICacheCoreTransTypeBranch :
+                   ibex_icache_core_trans_type_e'($urandom_range(1, 0));
+
+    // The branch target for the unconstrained case: the same three buckets and
+    // weights, and even, which is what c_branch_addr_alignment asks for.
+    pick = $urandom_range(21, 0);
+    if (pick == 0)       d_branch_addr = $urandom_range(63, 0);
+    else if (pick == 21) d_branch_addr = $urandom_range(32'hffffffff, 32'hffffffc0);
+    else                 d_branch_addr = $urandom_range(32'hffffffbf, 64);
+    d_branch_addr[0] = 1'b0;
+
+    // Toggle the cache enable line one time in gap_between_toggle_enable + 1,
+    // unless const_enable says never.
+    d_enable = const_enable ? cache_enabled :
+               (($urandom_range(gap_between_toggle_enable, 0) == 0) ?
+                  ~cache_enabled : cache_enabled);
+
+    // invalidate, with upstream's three implications applied ahead of the
+    // distribution behind them.
+    if (must_invalidate)             d_invalidate = 1'b1;
+    else if (stale_seed && d_enable) d_invalidate = 1'b1;
+    else if (avoid_invalidation)     d_invalidate = 1'b0;
+    else d_invalidate = ($urandom_range(gap_between_invalidations, 0) == 0);
+
+    // new_seed: dist { 0 :/ 1, nonzero :/ W }. W is 1000 when we are starting
+    // an invalidation, 0 when the cache is enabled and 1 otherwise, and the
+    // zero is what keeps a new seed away from an enabled cache.
+    seed_weight = d_invalidate ? 1000 : (d_enable ? 0 : 1);
+    if (seed_weight == 0 || $urandom_range(seed_weight, 0) == 0) begin
+      d_new_seed = 32'd0;
+    end else begin
+      do d_new_seed = $urandom(); while (d_new_seed == 32'd0);
+    end
+
+    // num_insns keeps its solve, because the caps below narrow it. The bucket
+    // is drawn with the dist's weights and applied as a top-level soft
+    // constraint, so a bucket the caps rule out is dropped rather than
+    // failing the call.
+    if (d_trans_type == ICacheCoreTransTypeBranch) begin
+      pick = $urandom_range(25, 0);
+      if (pick < 5)       begin d_insn_lo = 0;  d_insn_hi = 0;   end
+      else if (pick < 25) begin d_insn_lo = 1;  d_insn_hi = 20;  end
+      else                begin d_insn_lo = 21; d_insn_hi = 100; end
+    end else begin
+      pick = $urandom_range(20, 0);
+      if (pick < 1) begin d_insn_lo = 0; d_insn_hi = 0;  end
+      else          begin d_insn_lo = 1; d_insn_hi = 20; end
+    end
+
+    `DV_CHECK_RANDOMIZE_WITH_FATAL(
+       req,
+
+       req.trans_type == d_trans_type;
+
+       // If this is a branch and constrain_branches is true then constrain any branch target.
+       (constrain_branches && (req.trans_type == ICacheCoreTransTypeBranch)) ->
+         req.branch_addr inside {[base_addr:top_restricted_addr]};
+
+       // The unconstrained branch target, drawn above.
+       (!constrain_branches && (req.trans_type == ICacheCoreTransTypeBranch)) ->
+         req.branch_addr == d_branch_addr;
+
+       // If this is a branch and constrain_branches is true, we can ask for up to 100 instructions
+       // (independent of insns_since_branch)
+       (constrain_branches && (req.trans_type == ICacheCoreTransTypeBranch)) ->
+         num_insns <= 100;
+
+       // If this isn't a branch and constrain_branches is true, we can ask for up to 100 -
+       // insns_since_branch instructions. This will be positive because of the check above.
+       (constrain_branches && (req.trans_type != ICacheCoreTransTypeBranch)) ->
+         num_insns <= 100 - insns_since_branch;
+
+       soft num_insns inside {[d_insn_lo:d_insn_hi]};
+
+       enable     == d_enable;
+       invalidate == d_invalidate;
+       new_seed   == d_new_seed;
+    )
+""",
+    ),
+    # The item's own two dists go with them: c_num_insns_dist becomes the
+    # support the dist implied, which the bucket above narrows, and
+    # c_new_seed_dist goes away because run_req now pins new_seed.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_req_item.sv",
+        """  constraint c_num_insns_dist {
+    // For branch transactions, we want to read zero instructions reasonably frequently. For req
+    // transactions, much less so. Also, we don't bother with long sequences for req transactions:
+    // they won't look any different from the tail end of branch transactions from the cache's point
+    // of view.
+    if (trans_type == ICacheCoreTransTypeBranch)
+      num_insns dist { 0 :/ 5, [1:20] :/ 20, [21:100] :/ 1 };
+    else
+      num_insns dist { 0 :/ 1, [1:20] :/ 20 };
+  }
+
+  constraint c_new_seed_dist {
+    // We always want to pick a new seed when we start an invalidation (for maximum test
+    // sensitivity). If we aren't starting an invalidation, we mustn't pick a new seed if the cache
+    // is enabled (because that could cause multi-way hits). If the cache isn't enabled, pick a new
+    // seed sometimes.
+    new_seed dist { 0 :/ 1, [1:32'hffffffff] :/ (invalidate ? 1000 : enable ? 0 : 1) };
+  }
+""",
+        """  // What is left of c_num_insns_dist: the support the distribution
+  // implied. The weighting is a soft bucket added by run_req in
+  // ibex_icache_core_base_seq.sv, and c_new_seed_dist is drawn there too.
+  // See build_tb.py.
+  constraint c_num_insns_support {
+    if (trans_type == ICacheCoreTransTypeBranch) num_insns inside {[0:100]};
+    else                                         num_insns inside {[0:20]};
+  }
+""",
+    ),
+    # std::randomize ignores dist weights, so these four sites get the same
+    # buckets drawn directly. The first is the worst of them: the shape upstream
+    # asks for puts about 3.5% of transactions in the 1000..1200 cycle bucket,
+    # and a uniform pick over the support puts 76% of them there. Measured in
+    # shims/verilator_dist_std_randomize.sv.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_driver.sv",
+        "    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(req_low_cycles,\n"
+        "                                       req_low_cycles dist {\n"
+        "                                           0           :/"
+        " (allow_no_low_cycles ? 20 : 0),\n"
+        "                                           [1:33]      :/ 5,\n"
+        "                                           [100:200]   :/ 2,\n"
+        "                                           [1000:1200] :/ 1 };)\n",
+        "    // Same four buckets and weights as the dist this replaces, drawn\n"
+        "    // directly. See build_tb.py.\n"
+        "    begin\n"
+        "      int unsigned w_zero, total, pick;\n"
+        "      w_zero = allow_no_low_cycles ? 20 : 0;\n"
+        "      total  = w_zero + 5 + 2 + 1;\n"
+        "      pick   = $urandom_range(total - 1, 0);\n"
+        "      if (pick < w_zero)          req_low_cycles = 0;\n"
+        "      else if (pick < w_zero + 5) req_low_cycles ="
+        " $urandom_range(33, 1);\n"
+        "      else if (pick < w_zero + 7) req_low_cycles ="
+        " $urandom_range(200, 100);\n"
+        "      else                        req_low_cycles ="
+        " $urandom_range(1200, 1000);\n"
+        "    end\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_driver.sv",
+        "    `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(num_cycles,\n"
+        "                                       num_cycles dist { 1 :/ 10,"
+        " [2:20] :/ 1 };)\n",
+        "    // dist { 1 :/ 10, [2:20] :/ 1 }, drawn directly.\n"
+        "    num_cycles = ($urandom_range(10, 0) < 10) ? 1 :"
+        " $urandom_range(20, 2);\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_mem_agent/ibex_icache_mem_driver.sv",
+        "      `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(gnt_delay,\n"
+        "                                         gnt_delay dist {\n"
+        "                                           min_grant_delay          "
+        "               :/ 3,\n"
+        "                                           [min_grant_delay+1 :"
+        " max_grant_delay-1] :/ 1,\n"
+        "                                           max_grant_delay          "
+        "               :/ 1\n"
+        "                                         };)\n",
+        "      // Same three buckets and weights, drawn directly. The middle\n"
+        "      // bucket is empty when the two bounds are adjacent, and its\n"
+        "      // weight goes with it. See build_tb.py.\n"
+        "      begin\n"
+        "        int unsigned w_mid, total, pick;\n"
+        "        w_mid = (max_grant_delay >= min_grant_delay + 2) ? 1 : 0;\n"
+        "        total = 3 + w_mid + 1;\n"
+        "        pick  = $urandom_range(total - 1, 0);\n"
+        "        if (pick < 3)             gnt_delay = min_grant_delay;\n"
+        "        else if (pick < 3 + w_mid) gnt_delay ="
+        " $urandom_range(max_grant_delay - 1, min_grant_delay + 1);\n"
+        "        else                      gnt_delay = max_grant_delay;\n"
+        "      end\n",
+    ),
+    (
+        ICACHE / "dv/env/seq_lib/ibex_icache_combo_vseq.sv",
+        "      `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(cycles_till_reset,\n"
+        "                                         cycles_till_reset dist {\n"
+        "                                           [100:500]  :/ 1,\n"
+        "                                           [501:1000] :/ 4\n"
+        "                                         };)\n",
+        "      // dist { [100:500] :/ 1, [501:1000] :/ 4 }, drawn directly.\n"
+        "      cycles_till_reset = ($urandom_range(4, 0) == 0) ?\n"
+        "                            $urandom_range(500, 100) :"
+        " $urandom_range(1000, 501);\n",
+    ),
+    # The ECC error rate is a std::randomize dist with a non-constant weight,
+    # so it comes out 50/50 rather than dis_err_pct. dis_err_pct defaults to 99,
+    # meaning one line in a hundred should get an error; the uniform pick makes
+    # it one in two, which is the difference between ibex_icache_ecc testing
+    # error handling and testing nothing else.
+    (
+        ICACHE / "dv/env/ibex_icache_ram_if.sv",
+        "  `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(tag_sel_line, tag_sel_line dist"
+        " {'b0 :/ dis_err_pct,\n"
+        "                                      [1:$] :/ 100 - dis_err_pct};, ,"
+        "\"ibex_icache_ram_if\")\n",
+        "  // dist { 0 :/ dis_err_pct, [1:$] :/ 100 - dis_err_pct }, drawn\n"
+        "  // directly: this simulator ignores dist weights under\n"
+        "  // std::randomize. See build_tb.py.\n"
+        "  tag_sel_line = ($urandom_range(99, 0) < dis_err_pct) ? '0 :\n"
+        "                   $urandom_range({IC_NUM_WAYS{1'b1}}, 1);\n",
+    ),
+    (
+        ICACHE / "dv/env/ibex_icache_ram_if.sv",
+        "  `DV_CHECK_STD_RANDOMIZE_WITH_FATAL(data_sel_line, data_sel_line dist"
+        " {'b0 :/ dis_err_pct,\n"
+        "                                     [1:$] :/ 100 - dis_err_pct};, ,"
+        "\"ibex_icache_ram_if\")\n",
+        "  // Same as gen_tag_err above.\n"
+        "  data_sel_line = ($urandom_range(99, 0) < dis_err_pct) ? '0 :\n"
+        "                    $urandom_range({IC_NUM_WAYS{1'b1}}, 1);\n",
+    ),
     # lowRISC's shared DV library excludes itself under Verilator:
     # clk_rst_if.sv wraps its UVM includes and imports in `ifndef VERILATOR, so
     # the interface compiles without `DV_CHECK_FATAL and fails at the first use
