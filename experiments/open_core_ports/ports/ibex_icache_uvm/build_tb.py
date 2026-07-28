@@ -492,6 +492,62 @@ OVERLAYS: list[tuple[Path, str, str]] = [
   }
 """,
     ),
+    # A `solve ... before ...` anywhere in a class stops every `soft`
+    # constraint in that class from being honoured. Reduced case, three classes
+    # differing only in that one line:
+    #
+    #     soft + plain second var : broken 0/200
+    #     soft + if/else          : broken 0/200
+    #     soft + solve before     : broken 197/200
+    #
+    # push_pull_agent_cfg is written in exactly that shape: four `soft
+    # x_min == 0` constraints and four `solve zero_delays before x_max`. The
+    # minima come out as arbitrary 32-bit values, and the sequence then asks
+    # for `delay inside {[min:max]}` on an empty range and dies with
+    # "Randomization failed" part way into every run.
+    #
+    # Nothing in this testbench overrides those four defaults, so making them
+    # hard is what upstream gets on a simulator that honours soft. Removing the
+    # `solve` instead would change which values the maxima take.
+    (
+        LOWRISC_IP / "dv/sv/push_pull_agent/push_pull_agent_cfg.sv",
+        "    soft host_delay_min == 0;\n",
+        "    host_delay_min == 0;  // hard: see build_tb.py on soft and solve\n",
+    ),
+    (
+        LOWRISC_IP / "dv/sv/push_pull_agent/push_pull_agent_cfg.sv",
+        "    soft device_delay_min == 0;\n",
+        "    device_delay_min == 0;  // hard: see build_tb.py\n",
+    ),
+    (
+        LOWRISC_IP / "dv/sv/push_pull_agent/push_pull_agent_cfg.sv",
+        "    soft req_lo_delay_min == 0;\n",
+        "    req_lo_delay_min == 0;  // hard: see build_tb.py\n",
+    ),
+    (
+        LOWRISC_IP / "dv/sv/push_pull_agent/push_pull_agent_cfg.sv",
+        "    soft ack_lo_delay_min == 0;\n",
+        "    ack_lo_delay_min == 0;  // hard: see build_tb.py\n",
+    ),
+    # The same interaction reaches the core request item, where run_req now
+    # adds a top-level soft for the num_insns bucket. The `solve` exists to
+    # stop branch transactions being weighted 2^32 times higher than the
+    # others, and that cannot happen any more: run_req draws trans_type itself
+    # and pins it, so the solver never chooses between the two.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_req_item.sv",
+        "    // Pick trans_type before the other values. We need to do this"
+        " because constraining branch_addr\n"
+        "    // to 0 for non-branch transactions would otherwise mean branch"
+        " transactions got weighted 2^32\n"
+        "    // times higher.\n"
+        "    solve trans_type before branch_addr;\n",
+        "    // The `solve trans_type before branch_addr` that was here is\n"
+        "    // dropped. It stopped branch transactions being weighted 2^32\n"
+        "    // times higher, which cannot happen now that run_req draws\n"
+        "    // trans_type itself, and a solve in the class would stop the\n"
+        "    // soft num_insns bucket being honoured. See build_tb.py.\n",
+    ),
     # std::randomize ignores dist weights, so these four sites get the same
     # buckets drawn directly. The first is the worst of them: the shape upstream
     # asks for puts about 3.5% of transactions in the 1000..1200 cycle bucket,
