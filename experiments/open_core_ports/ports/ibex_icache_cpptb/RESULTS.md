@@ -9,15 +9,12 @@ sources at the same pinned Ibex commit under Verilator 5.050. The port is
 runs pass.** A further 400 cpptb runs over 40 seeds also pass. Nothing either
 scoreboard checks failed on either side.
 
-**And with identical stimulus, 260 of 260 replays pass**: the baseline's runs
-recorded and driven here pin for pin, its outputs compared cycle for cycle, and
-its item stream replayed through this port's own drivers.
-
-**The two harnesses can now be given the same stimulus.** `replay.py` records
-what the baseline's environment does and drives the same thing here, and under
-it the DUT's outputs match cycle for cycle over 4,692,318 cycles of all ten
-tests at ten seeds. That is the section after next, and it is what settles the
-`err/resp` difference the rate comparison below could not.
+**The two harnesses can now be given the same stimulus, and 260 of 260 replays
+pass.** `replay.py` records what the baseline's environment does and drives the
+same thing here, and under it the DUT's outputs match cycle for cycle over
+4,692,318 cycles of all ten tests at ten seeds. That is "The same stimulus on
+both harnesses" below, and it is what settles the `err/resp` difference the
+rate comparison could not.
 
 ## What is comparable and what is not
 
@@ -410,3 +407,13 @@ correct.
 * **Ten seeds per test is not a statement about seed sensitivity.** Upstream's
   `reseed` is 50. Ten seeds are used for the comparison here and 40 for the
   cpptb-only pass rate.
+* **The two stress tests are replayed at the pin level only.** They change
+  `mem_err_shift` and the caching-ratio flag between child sequences and
+  neither is visible at a DUT pin, so a recording cannot drive their
+  scoreboard. Their DUT outputs are compared cycle for cycle like every other
+  test's; their `check_compatible` is not run on the baseline's stimulus.
+* **`grants/fetch` is 0.7% apart under the item replay and that is not
+  explained.** It is one standard error pooled and two on
+  `ibex_icache_many_errors` alone, so it may be nothing, and it is the only
+  rate in this document that does not come back to the baseline's when the
+  item stream is held fixed.
