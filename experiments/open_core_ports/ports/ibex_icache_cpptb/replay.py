@@ -139,7 +139,10 @@ def solver_environment() -> dict:
 def record(test: str, seed: int, prefix: Path, verbosity: str,
            timeout: int) -> dict:
     command, cwd = uvm_command(test, seed, prefix, verbosity)
-    log = prefix.with_suffix(".log")
+    log = Path(f"{prefix}.log")
+    # The sequence trace is opened in append mode, once per sequence start.
+    for suffix in (".pins", ".items", ".seq"):
+        Path(f"{prefix}{suffix}").unlink(missing_ok=True)
     started = time.monotonic()
     with log.open("w", encoding="utf-8") as handle:
         handle.write(" ".join(command) + "\n\n")
@@ -166,12 +169,27 @@ def record(test: str, seed: int, prefix: Path, verbosity: str,
         raise RunError(f"the baseline wrote no recording under {prefix}")
     cycles = sum(1 for line in pins.open(encoding="utf-8")
                  if line.startswith("C "))
-    item_count = sum(1 for line in items.open(encoding="utf-8")
-                     if line.startswith("I "))
-    if cycles == 0 or item_count == 0:
+    counters = read_uvm_log(text)
+    # The item stream is exact in the recording, so the baseline's stimulus
+    # counters need no log at all. Its bus counters still come from the log,
+    # which is the only place that environment reports them, and the pin replay
+    # is what says whether that reading is right.
+    counters["items"] = 0
+    counters["branch_items"] = 0
+    counters["insns_requested"] = 0
+    for line in items.open(encoding="utf-8"):
+        if not line.startswith("I "):
+            continue
+        fields = line.split()
+        counters["items"] += 1
+        counters["branch_items"] += int(fields[2])
+        counters["insns_requested"] += int(fields[7])
+    if cycles == 0 or counters["items"] == 0:
         raise RunError(f"the recording under {prefix} is empty")
-    return {"cycles": cycles, "items": item_count, "seconds": round(elapsed, 1),
-            "log": str(log), "counters": read_uvm_log(text)}
+    return {"cycles": cycles, "items": counters["items"],
+            "seconds": round(elapsed, 1), "log": str(log),
+            "log_counted": counters["mem_responses"] > 0,
+            "counters": counters}
 
 
 # ---------------------------------------------------------------------------
@@ -223,8 +241,14 @@ def replay(test: str, seed: int, prefix: Path, mode: str,
     environment = dict(os.environ)
     environment["CPPTB_TEST"] = test
     environment["CPPTB_RANDOM_SEED"] = str(seed)
-    environment["ICACHE_REPLAY" if mode == "pins" else "ICACHE_ITEMS"] = \
-        str(prefix)
+    environment.pop("ICACHE_REPLAY", None)
+    environment.pop("ICACHE_ITEMS", None)
+    if mode == "pins":
+        environment["ICACHE_REPLAY"] = str(prefix)
+    elif mode == "items":
+        environment["ICACHE_ITEMS"] = str(prefix)
+    # mode "own" is the port generating its own stimulus at the same seed,
+    # which is the third column the tables below want.
 
     started = time.monotonic()
     completed = subprocess.run([str(BINARY)], env=environment, text=True,
@@ -269,33 +293,87 @@ def mean(values: list) -> float:
     return statistics.fmean(values) if values else 0.0
 
 
+def ratio(counters: dict, top: str, bottom: str) -> float:
+    below = counters.get(bottom, 0)
+    return counters.get(top, 0) / below if below else float("nan")
+
+
 def print_summary(results: list) -> None:
-    modes = sorted({entry["mode"] for entry in results})
-    for mode in modes:
+    for mode in sorted({entry["mode"] for entry in results}):
         rows = [entry for entry in results if entry["mode"] == mode]
-        print(f"\n{mode}: {sum(1 for r in rows if r['status'] == 'pass')} of "
-              f"{len(rows)} replays passed")
-        if mode != "pins":
-            continue
-        print("  every DUT output compared at every recorded cycle")
+        passed = sum(1 for entry in rows if entry["status"] == "pass")
+        print(f"\n{mode}: {passed} of {len(rows)} runs passed")
+
+    pins = [entry for entry in results if entry["mode"] == "pins"]
+    if pins:
+        print("\nthe pin replay: every DUT output compared at every recorded "
+              "cycle")
         print(f"  {'test':36}{'cycles':>10}{'checks':>10}"
-              f"{'err/resp uvm':>14}{'err/resp port':>14}")
+              f"{'err/resp log':>14}{'err/resp bus':>14}")
         for test in TESTS + COMBO_TESTS:
-            these = [entry for entry in rows if entry["name"] == test]
+            these = [entry for entry in pins if entry["name"] == test]
             if not these:
                 continue
-            uvm = [entry["uvm_counters"] for entry in these]
-            port = [entry["counters"] for entry in these]
+            logged = [entry for entry in these if entry["log_counted"]]
+            line = (f"  {test:36}"
+                    f"{mean([entry['cycles'] for entry in these]):10.0f}"
+                    f"{mean([entry['checks'] for entry in these]):10.0f}")
+            if logged:
+                line += (f"{mean([ratio(entry['uvm_counters'], 'mem_response_errors', 'mem_responses') for entry in logged]):14.4f}")
+            else:
+                line += f"{'-':>14}"
+            print(line + f"{mean([ratio(entry['counters'], 'mem_response_errors', 'mem_responses') for entry in these]):14.4f}")
+        print("  `log` is what the baseline's own UVM_HIGH log says and `bus` "
+              "is what the")
+        print("  port counted off the wire while replaying the same run. A "
+              "dash means the")
+        print("  recording was made below UVM_HIGH, where that log says "
+              "nothing.")
 
-            def ratio(counters: dict) -> float:
-                below = counters.get("mem_responses", 0)
-                return (counters.get("mem_response_errors", 0) / below
-                        if below else float("nan"))
-
-            print(f"  {test:36}{mean([e['cycles'] for e in these]):10.0f}"
-                  f"{mean([e['checks'] for e in these]):10.0f}"
-                  f"{mean([ratio(c) for c in uvm]):14.4f}"
-                  f"{mean([ratio(c) for c in port]):14.4f}")
+    # The three-way table. `uvm` is the baseline, `items` is the port driven
+    # from the baseline's item stream with its own delays below it, and `own`
+    # is the port generating everything itself at the same seed.
+    columns = [name for name in ("uvm", "items", "own")
+               if name == "uvm" or any(entry["mode"] == name
+                                       for entry in results)]
+    if len(columns) < 2:
+        return
+    print("\ninsns/item and err/resp, means over the seeds run")
+    header = f"  {'test':30}"
+    for label in ("insns/item", "err/resp"):
+        for column in columns:
+            header += f"{label + ' ' + column:>16}"
+    print(header)
+    for test in TESTS + COMBO_TESTS:
+        these = [entry for entry in results if entry["name"] == test]
+        if not these:
+            continue
+        line = f"  {test:30}"
+        for top, bottom in (("insns_requested", "items"),
+                            ("mem_response_errors", "mem_responses")):
+            for column in columns:
+                if column == "uvm":
+                    values = [entry["uvm_counters"] for entry in these
+                              if entry["mode"] == "pins"] or \
+                             [entry["uvm_counters"] for entry in these]
+                    # One recording per seed, however many modes replayed it.
+                    seen = set()
+                    unique = []
+                    for counters in values:
+                        key = tuple(sorted(counters.items()))
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        unique.append(counters)
+                    values = unique
+                else:
+                    values = [entry["counters"] for entry in these
+                              if entry["mode"] == column]
+                if not values:
+                    line += f"{'-':>16}"
+                    continue
+                line += f"{mean([ratio(c, top, bottom) for c in values]):16.4f}"
+        print(line)
 
 
 def main(argv: list | None = None) -> int:
@@ -303,8 +381,9 @@ def main(argv: list | None = None) -> int:
     parser.add_argument("tests", nargs="*", help="default is the eight")
     parser.add_argument("--seeds", type=int, default=1)
     parser.add_argument("--seed", type=int, default=123)
-    parser.add_argument("--mode", choices=["pins", "items", "both"],
-                        default="both")
+    parser.add_argument("--mode", action="append",
+                        choices=["pins", "items", "own"],
+                        help="repeatable; the default is pins and items")
     parser.add_argument("--combo", action="store_true",
                         help="also replay the two stress tests, pins only")
     parser.add_argument("--keep", action="store_true",
@@ -322,7 +401,7 @@ def main(argv: list | None = None) -> int:
         print(f"replay: unknown tests {unknown}", file=sys.stderr)
         return 1
     seeds = [args.seed + index for index in range(args.seeds)]
-    modes = ["pins", "items"] if args.mode == "both" else [args.mode]
+    modes = args.mode or ["pins", "items"]
 
     WORK.mkdir(parents=True, exist_ok=True)
     results = []
@@ -339,12 +418,23 @@ def main(argv: list | None = None) -> int:
                       f"{recorded['items']:5} items "
                       f"{recorded['seconds']:6.1f}s")
                 for mode in modes:
-                    if mode == "items" and test in COMBO_TESTS:
+                    if mode != "pins" and test in COMBO_TESTS:
                         continue
                     entry = replay(test, seed, prefix, mode, args.timeout)
+                    # A UVM_LOW recording reports no transactions, so the
+                    # baseline's bus counters are taken off the wire by the pin
+                    # replay instead. The pin replay is what shows the two
+                    # readings agree; see print_summary.
+                    if (mode == "pins" and entry["status"] == "pass" and
+                            recorded["counters"].get("mem_responses", 0) == 0):
+                        for field in ("mem_grants", "mem_responses",
+                                      "mem_response_errors"):
+                            recorded["counters"][field] = \
+                                entry["counters"].get(field, 0)
                     entry.update({"name": test, "seed": seed, "mode": mode,
                                   "cycles": recorded["cycles"],
-                                  "uvm_counters": recorded["counters"]})
+                                  "log_counted": recorded["log_counted"],
+                                  "uvm_counters": dict(recorded["counters"])})
                     output = entry.pop("output")
                     results.append(entry)
                     mark = "pass" if entry["status"] == "pass" else "FAIL"
@@ -354,7 +444,7 @@ def main(argv: list | None = None) -> int:
                     if entry["status"] != "pass":
                         print(output[-3000:])
                 if not args.keep:
-                    for suffix in (".pins", ".items", ".log"):
+                    for suffix in (".pins", ".items", ".seq", ".log"):
                         Path(f"{prefix}{suffix}").unlink(missing_ok=True)
     except (RunError, subprocess.TimeoutExpired) as error:
         print(f"replay: {error}", file=sys.stderr)
