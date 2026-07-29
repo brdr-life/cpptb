@@ -77,40 +77,45 @@ backend only determines how the simulator resumes `ReadWrite`, `ReadOnly`, and
 | Timing backend | Status | Timing contract | Portability |
 |---|---|---|---|
 | Direct Verilator dispatch | Supported; used by the repository's own conformance and benchmark flows | Complete | Verilator-specific |
-| Standard VPI callbacks | Supported; the backend a project can select | Complete | Standard simulator API |
+| Standard VPI callbacks | Supported; used by the repository's own conformance flow | Complete | Standard simulator API |
 | Generated SV-DPI calendar | Experimental | Complete for generated and observed events | Cross-simulator validation pending |
 
 The generated calendar owns framework clocks and timers and observes selected
 external signals, but standard DPI cannot query the simulator's complete event
 queue. Its `NextTimeStep` therefore cannot yet promise to wake for an arbitrary
 unobserved internal DUT event. Direct Verilator dispatch and standard VPI are
-the supported contract-complete choices. See [Performance](performance.md) for
-the exact backend comparison.
+the supported contract-complete choices. Both need cpptb to own the host loop,
+which means a `--cc --exe --build` link against `src/verilator_timing_main.cpp`
+rather than `--binary`. See [Performance](performance.md) for the exact backend
+comparison.
 
-!!! warning "A project selects the backend through `build.verilator_args`"
+!!! warning "No `cpptb build` configuration provides the timing phases"
 
     There is no `cpptb.toml` timing-backend key. A default `cpptb build` links
     Verilator's own `--binary` main, which owns clocks and timers but
     dispatches no phases, so `ReadWrite`, `ReadOnly` and `NextTimeStep` fail at
-    run time in a project built that way.
-
-    Adding `--vpi` selects the standard VPI callbacks, and all three phase
-    waits then work:
+    run time in a project built that way. The run-time message names this
+    stanza:
 
     ```toml
     [build]
     verilator_args = ["--vpi"]
     ```
 
-    That is the only supported selection, and nothing but the run-time error
-    message points at it. Direct Verilator dispatch, the faster of the two
-    contract-complete backends, is not reachable from `cpptb build` at all: it
-    needs a `--cc --exe --build` link against `src/verilator_timing_main.cpp`
-    rather than `--binary`.
+    That stanza stops the failure and the phase waits then run, and a write
+    issued after `co_await ReadWrite{}` reaches the next clock edge rather than
+    the one just awaited. It does not give the documented timing contract.
+    Verilator's `--binary` main does not re-evaluate the design between the
+    `ReadWrite` and `ReadOnly` callbacks, so a write issued in `ReadWrite` is
+    not settled when `ReadOnly` resumes. Two of the five checks in the
+    timing-phase conformance contract fail in such a build, with no diagnostic
+    beyond the checks themselves. Relinking the same generated wrapper as
+    `--cc --exe --build --vpi` against `src/verilator_timing_main.cpp` passes
+    all five, and `cpptb build` cannot emit that link.
 
     The generated SV-DPI backends are reachable only by matching
     `design.defines` against `build.cxx_flags` by hand. That is not a supported
-    configuration and it has a silent failure: defining `CPPTB_SV_DPI_TIMING`
+    configuration and it fails in more places: defining `CPPTB_SV_DPI_TIMING`
     on its own selects the inline pump, which
     [Performance](performance.md#portable-timing-experiments) records as
     invalid because `ReadOnly` can run before the DUT settles. A testbench
@@ -118,7 +123,10 @@ the exact backend comparison.
 
     The edge-phase convention in
     [Sample on the edge, drive off it](#sample-on-the-edge-drive-off-it) needs
-    no backend support and works in a default build.
+    no backend support and is correct in a default build. It is the only choice
+    a `cpptb build` project has today. [Roadmap](roadmap.md#candidate-directions)
+    records the worked examples behind the paragraphs above and what closing
+    the gap would take.
 
 ## Composition
 
@@ -251,13 +259,13 @@ at the top of the file and holds every one of its driving tasks to it, and each
 one had to be traced edge by edge against the `default output negedge` clocking
 block it replaces. It was the largest single cost of writing those drivers.
 
-Where the timing backend supports them, `ReadOnly` and `ReadWrite` express the
-whole rule directly and are the better choice: sample after
+`ReadOnly` and `ReadWrite` express the whole rule directly: sample after
 `co_await ReadOnly{}`, drive after `co_await ReadWrite{}`. A phase is named
 rather than implied by a clock, so a task that starts with a phase wait is not
-re-anchoring itself. See
-[Timing backend support](#timing-backend-support) for which backends provide
-them and how a project selects one.
+re-anchoring itself. No `cpptb build` configuration supplies those phases to
+their documented contract today, which is why this convention is what the
+examples use. See
+[Timing backend support](#timing-backend-support).
 
 ### Coming from cocotb
 
@@ -375,16 +383,18 @@ of a cocotb testbench carries over unchanged.
 #### Phase waits depend on the timing backend
 
 cocotb always has `ReadOnly` and `ReadWrite`. Here they are provided by the
-timing backend, and one that does not support them reports
+timing backend, and a default `cpptb build` has none, so a testbench that awaits
+a phase compiles and then reports this at run time:
 
 ```
-ReadWrite, ReadOnly, and NextTimeStep require the standard simulator timing
-bridge; enable VPI timing support in the simulator build (Verilator: --vpi)
+ReadWrite, ReadOnly, and NextTimeStep need a timing backend that dispatches
+simulator phases. This build has none: a default `cpptb build` links
+Verilator's own --binary main, which owns clocks and timers but dispatches no
+phases.
 ```
 
-at run time rather than failing the build. A project gets them by adding
-`--vpi` to `build.verilator_args`, which is the only supported way to select a
-phase-dispatching backend and is not named by any `cpptb.toml` key. The
+Adding `--vpi` to `build.verilator_args` makes the phase waits run, but not to
+their documented contract, and no `cpptb.toml` key names a backend. The
 edge-phase convention above needs no backend support, which is why the examples
 use it. See [Timing backend support](#timing-backend-support).
 
