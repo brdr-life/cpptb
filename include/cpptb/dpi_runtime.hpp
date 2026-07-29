@@ -21,6 +21,56 @@
 #include "cpptb/test_result.hpp"
 #include "svdpi.h"
 
+// Timing-backend define combinations
+// ---------------------------------------------------------------------------
+// The SV-DPI pumps are selected by defines that a project sets by hand in
+// `design.defines` and `build.cxx_flags`. Only some combinations produce a
+// simulator that honours the phase contract in docs/scheduling.md, and the
+// difference is one define:
+//
+//   CPPTB_SV_DPI_TIMING alone            inline pump, contract-violating
+//   ... + CPPTB_SV_DPI_NBA_TIMING        passes the conformance contract
+//   ... + CPPTB_SV_DPI_CALENDAR_TIMING   passes, and is the faster of the two
+//
+// The inline pump runs ReadOnly before the design has settled, so a testbench
+// built with it reads stale values and captures a ReadWrite-phase write a
+// cycle early. It reported nothing: the run completed and the answers were
+// wrong. These checks make that a build failure instead.
+//
+// tests/conformance/runtime measures the inline pump deliberately, to show
+// what it does. That is what CPPTB_ALLOW_INVALID_TIMING is for; nothing else
+// should define it.
+
+#if defined(CPPTB_SV_DPI_TIMING) && !defined(CPPTB_SV_DPI_NBA_TIMING) && \
+    !defined(CPPTB_ALLOW_INVALID_TIMING)
+#error \
+    "CPPTB_SV_DPI_TIMING on its own selects the inline pump, which runs " \
+    "ReadOnly before the design settles and gives wrong answers with no " \
+    "diagnostic. Add CPPTB_SV_DPI_NBA_TIMING, or add both that and " \
+    "CPPTB_SV_DPI_CALENDAR_TIMING for the faster backend. See " \
+    "docs/scheduling.md."
+#endif
+
+#if defined(CPPTB_SV_DPI_CALENDAR_TIMING) && !defined(CPPTB_SV_DPI_NBA_TIMING)
+#error \
+    "CPPTB_SV_DPI_CALENDAR_TIMING requires CPPTB_SV_DPI_NBA_TIMING; the " \
+    "calendar pump is built on the NBA one. See docs/scheduling.md."
+#endif
+
+#if (defined(CPPTB_SV_DPI_NBA_TIMING) || defined(CPPTB_SV_DPI_CALENDAR_TIMING)) && \
+    !defined(CPPTB_SV_DPI_TIMING)
+#error \
+    "CPPTB_SV_DPI_NBA_TIMING and CPPTB_SV_DPI_CALENDAR_TIMING only select a " \
+    "pump when CPPTB_SV_DPI_TIMING is also defined. Without it the generated " \
+    "SystemVerilog emits no phase stepping at all. See docs/scheduling.md."
+#endif
+
+#if defined(CPPTB_SV_DPI_TIMING) && defined(CPPTB_VERILATOR_DIRECT_TIMING)
+#error \
+    "CPPTB_SV_DPI_TIMING and CPPTB_VERILATOR_DIRECT_TIMING select different " \
+    "timing backends and cannot both be defined. See docs/scheduling.md."
+#endif
+
 namespace cpptb::dpi {
 
 enum class Phase : uint32_t {
