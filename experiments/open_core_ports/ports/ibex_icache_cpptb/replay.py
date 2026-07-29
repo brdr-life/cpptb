@@ -9,11 +9,12 @@ can see, the port drives the same thing at the same pins, and the DUT's outputs
 are compared cycle for cycle.
 
     python3 replay.py                       # eight tests, one seed, both modes
-    python3 replay.py ibex_icache_caching --seeds 3
+    python3 replay.py --combo --seeds 10 --jobs 7
     python3 replay.py --mode items          # the item stream only
     python3 replay.py --keep                # leave the recordings on disk
+    python3 replay.py --report out.json     # the tables from a saved run
 
-Two modes, from the same recording.
+Three modes, two of them from the same recording.
 
   pins   Every DUT input is driven from the recording and every DUT output is
          compared against it, cycle by cycle. The port's scoreboard runs on the
@@ -27,9 +28,13 @@ Two modes, from the same recording.
          the item distribution, which is what the residual err/resp difference
          in RESULTS.md turns on.
 
+  own    No recording at all: the port generating its own stimulus at the same
+         seed, which is the third column the rate tables want.
+
 The recordings are large: about 60 bytes per cycle, so 4 MB for a run of the
 smoke test. They are written under build/replay and removed afterwards unless
---keep is given.
+--keep is given. The recording run is what takes the time, so --jobs is worth
+setting to about the number of cores.
 
 Standard library only, matching the other tools here.
 """
@@ -170,14 +175,11 @@ def record(test: str, seed: int, prefix: Path, verbosity: str,
         raise RunError(f"the baseline wrote no recording under {prefix}")
     cycles = sum(1 for line in pins.open(encoding="utf-8")
                  if line.startswith("C "))
-    counters = read_uvm_log(text)
+    logged = read_uvm_log(log)
     # The item stream is exact in the recording, so the baseline's stimulus
-    # counters need no log at all. Its bus counters still come from the log,
-    # which is the only place that environment reports them, and the pin replay
-    # is what says whether that reading is right.
-    counters["items"] = 0
-    counters["branch_items"] = 0
-    counters["insns_requested"] = 0
+    # counters need no log at all. Everything else it reports is only in the
+    # log, and the pin replay is what says whether that reading is right.
+    counters = {"items": 0, "branch_items": 0, "insns_requested": 0}
     for line in items.open(encoding="utf-8"):
         if not line.startswith("I "):
             continue
@@ -187,9 +189,15 @@ def record(test: str, seed: int, prefix: Path, verbosity: str,
         counters["insns_requested"] += int(fields[7])
     if cycles == 0 or counters["items"] == 0:
         raise RunError(f"the recording under {prefix} is empty")
+    for field, value in logged.items():
+        if field in counters and counters[field] != value:
+            raise RunError(
+                f"{log.name}: the item recording counts {counters[field]} "
+                f"{field} and the log counts {value}")
+        counters[field] = value
     return {"cycles": cycles, "items": counters["items"],
             "seconds": round(elapsed, 1), "log": str(log),
-            "log_counted": counters["mem_responses"] > 0,
+            "log_counted": bool(logged),
             "counters": counters}
 
 
@@ -197,37 +205,46 @@ def record(test: str, seed: int, prefix: Path, verbosity: str,
 # The baseline's own view of the run
 #
 # Its scoreboard reports every transaction it receives at UVM_HIGH and nowhere
-# else, which is what run_tests.py --compare counts. Counting the same thing
-# here off the same log, on a run the port also replayed, is what says whether
-# a difference between the two harnesses is a difference in what they did or a
-# difference in how it was measured.
+# else, which is what run_tests.py --compare counts out of the log. That parser
+# is used here rather than a second copy of it, so that the pin replay checks
+# it: the same run, counted once out of the log and once off the wire, on every
+# field either side keeps. A difference between the two harnesses is then a
+# difference in what they did rather than in how it was measured.
+#
+# Four fields cannot be compared. key_answers and key_refusals are not
+# recoverable from the pins, because a refusal carries the same pins as an idle
+# cycle; ecc_injections and ecc_errors are not in the log at all; and
+# child_sequences is kept by the code that starts a sequence, which a pin
+# replay does not run.
 # ---------------------------------------------------------------------------
 
-MEM_HEADER = "received mem transaction"
-IS_GRANT_RE = re.compile(r"^  is_grant +integral +1 +'h([01])")
-ERR_RE = re.compile(r"^  err +integral +1 +'h([01])")
-ITEM_LINES = 12
+NOT_COMPARABLE = {"key_answers", "key_refusals", "ecc_injections",
+                  "ecc_errors", "child_sequences"}
 
 
-def read_uvm_log(text: str) -> dict:
-    counters = {"mem_grants": 0, "mem_responses": 0, "mem_response_errors": 0}
-    left = 0
-    for line in text.splitlines():
-        if MEM_HEADER in line:
-            left = ITEM_LINES
-            continue
-        if left <= 0:
-            continue
-        left -= 1
-        match = IS_GRANT_RE.match(line)
-        if match is not None:
-            counters["mem_grants" if match.group(1) == "1"
-                     else "mem_responses"] += 1
-            continue
-        match = ERR_RE.match(line)
-        if match is not None and match.group(1) == "1":
-            counters["mem_response_errors"] += 1
-    return counters
+def cpptb_run_tests():
+    """This port's own run_tests.py, by path.
+
+    UVM_PORT is first on sys.path so that `import run_tests` finds the
+    baseline's runner, and this one shares the name.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("icache_cpptb_run_tests",
+                                                  HERE / "run_tests.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def read_uvm_log(path: Path) -> dict:
+    module = cpptb_run_tests()
+    try:
+        # ibex_icache_env_cfg pins the clock to 50 MHz.
+        return module.read_uvm_log(path, clock_ps=20_000)
+    except module.RunError:
+        # Below UVM_HIGH the log reports no transactions at all, which that
+        # parser refuses rather than reporting as zeros.
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -330,6 +347,16 @@ def print_summary(results: list) -> None:
               "dash means the")
         print("  recording was made below UVM_HIGH, where that log says "
               "nothing.")
+        checked = [entry for entry in pins if entry.get("log_counted")]
+        disagreed = [(entry["name"], entry["seed"], entry["log_vs_bus"])
+                     for entry in checked if entry.get("log_vs_bus")]
+        print(f"  every counter of the {len(checked)} UVM_HIGH runs was read "
+              f"both ways: "
+              + ("they all agree" if not disagreed else "THEY DISAGREE"))
+        for name, seed, fields in disagreed:
+            print(f"    {name} seed {seed}: " +
+                  ", ".join(f"{field} log {left} bus {right}"
+                            for field, left, right in fields))
 
     # The three-way rate table.
     #
@@ -443,16 +470,27 @@ def main(argv: list | None = None) -> int:
             if mode != "pins" and test in COMBO_TESTS:
                 continue
             entry = replay(test, seed, prefix, mode, args.timeout)
-            # A UVM_LOW recording reports no transactions, so the baseline's
-            # bus counters are taken off the wire by the pin replay instead.
-            # The pin replay is what shows the two readings agree; see
-            # print_summary.
-            if (mode == "pins" and entry["status"] == "pass" and
-                    recorded["counters"].get("mem_responses", 0) == 0):
-                for field in ("mem_grants", "mem_responses",
-                              "mem_response_errors"):
-                    recorded["counters"][field] = \
-                        entry["counters"].get(field, 0)
+            if mode == "pins" and entry["status"] == "pass":
+                if recorded["log_counted"]:
+                    # The same run, counted once out of the baseline's log by
+                    # run_tests.py's parser and once off the wire here. Any
+                    # disagreement is a defect in that parser, and a silent one
+                    # would put a measurement artefact into every comparison
+                    # that tool has ever reported.
+                    entry["log_vs_bus"] = sorted(
+                        (field, recorded["counters"][field],
+                         entry["counters"][field])
+                        for field in recorded["counters"]
+                        if field not in NOT_COMPARABLE and
+                        field in entry["counters"] and
+                        recorded["counters"][field] != entry["counters"][field])
+                else:
+                    # Below UVM_HIGH the log says nothing, so the baseline's
+                    # own counters are the ones taken off the wire here.
+                    entry["log_vs_bus"] = []
+                    for field, value in entry["counters"].items():
+                        if field not in NOT_COMPARABLE:
+                            recorded["counters"][field] = value
             entry.update({"name": test, "seed": seed, "mode": mode,
                           "cycles": recorded["cycles"],
                           "log_counted": recorded["log_counted"],
