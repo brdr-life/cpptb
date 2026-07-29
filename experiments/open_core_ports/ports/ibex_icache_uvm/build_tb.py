@@ -722,7 +722,9 @@ OVERLAYS: list[tuple[Path, str, str]] = [
     #
     # It is the same fix as every other draw here, applied to the last
     # distribution below the item stream that the two harnesses did not share.
-    # It is worth about 0.15% of grants/fetch; see ports/ibex_icache_cpptb.
+    # It is worth 0.9% of that comparison's grants/fetch on
+    # ibex_icache_invalidation, 0.14% on ibex_icache_many_errors and nothing
+    # at all on five of its eight tests; see ports/ibex_icache_cpptb.
     (
         LOWRISC_IP / "dv/sv/push_pull_agent/seq_lib/push_pull_base_seq.sv",
         """    `DV_CHECK_RANDOMIZE_WITH_FATAL(item,

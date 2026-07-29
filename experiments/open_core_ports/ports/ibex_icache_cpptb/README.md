@@ -290,9 +290,10 @@ one after it.
 ### What it found
 
 All ten tests at ten seeds: **the DUT's outputs match the recording on every
-one of 4,692,318 cycles**, and this port's scoreboard accepts all 582,812
+one of 4,699,689 cycles**, and this port's scoreboard accepts all 581,244
 fetches of the baseline's runs. The item replay reproduces every rate to within
-a percent.
+half a percent on six of the eight tests it covers, and to within two percent
+on the other two.
 
 `replay.py` also uses `run_tests.py`'s own log parser rather than a second copy
 of it, so the pin replay checks that parser: on all 100 runs, the 15 counters
