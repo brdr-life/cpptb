@@ -137,7 +137,11 @@ def run_cpptb(test: str, seed: int, timeout: int) -> dict:
 CORE_HEADER = "received core transaction"
 MEM_HEADER = "received mem transaction"
 SEED_HEADER = "received new seed"
-DRIVER_HEADER = "core_driver.sv:32"
+# The file, not the line: the line number moved when ports/ibex_icache_uvm
+# gained the stimulus recording, and a header that stops matching reads exactly
+# like a run with no items in it. read_uvm_log now refuses that rather than
+# reporting zeros.
+DRIVER_HEADER = "ibex_icache_core_driver.sv:"
 # ibex_icache_combo_vseq announces each child, and dv_base_scoreboard announces
 # each reset it sees, both at UVM_HIGH.
 CHILD_HEADER = "Running sequence '"
@@ -247,6 +251,18 @@ def read_uvm_log(path: Path, clock_ps: int) -> dict:
     counters["child_sequences"] = max(counters["child_sequences"], 1)
     counters["resets"] = max(counters["resets"], 1)
     counters["cycles"] = last_time // clock_ps
+
+    # A header that no longer matches produces a zero, and a zero here reads
+    # exactly like a run that did nothing. Every one of these is nonzero on
+    # every one of the ten tests, so a zero means this parser has come adrift
+    # from the log rather than that the run was quiet.
+    for field in ("items", "insns_requested", "fetches", "branches",
+                  "mem_grants", "mem_responses"):
+        if counters[field] == 0:
+            raise RunError(
+                f"{path.name}: counted no {field}, which no run of any of "
+                f"these tests does. The log format has moved away from what "
+                f"read_uvm_log matches on.")
     return counters
 
 

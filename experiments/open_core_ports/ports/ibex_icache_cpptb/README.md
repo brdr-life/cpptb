@@ -291,9 +291,18 @@ one after it.
 All ten tests at ten seeds: **the DUT's outputs match the recording on every
 one of 4,692,318 cycles**, and this port's scoreboard accepts all 582,812
 fetches of the baseline's runs. The item replay reproduces every rate to within
-a percent. RESULTS.md has the tables, and has the one thing item replay found
-that the rate comparison could not: the residual `err/resp` difference is the
-item distribution and nothing else.
+a percent.
+
+`replay.py` also uses `run_tests.py`'s own log parser rather than a second copy
+of it, so the pin replay checks that parser: on all 100 runs, the 15 counters
+both sides keep were read once out of the baseline's log and once off the wire,
+and agree exactly. That check found one defect, introduced by this recording:
+the parser matched the driver's item header on `core_driver.sv:32` and the
+overlay moved that line, which reads exactly like a run with no items in it.
+
+RESULTS.md has the tables, and has the one thing item replay found that the
+rate comparison could not: the residual `err/resp` difference is the item
+distribution and nothing else.
 
 ## The ten tests
 

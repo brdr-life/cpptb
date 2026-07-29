@@ -31,11 +31,21 @@ the same weights, so **per-item rates** should agree. Totals scale with
 
 `run_tests.py --compare` reports both. The UVM numbers are counted out of a
 UVM_HIGH log, which is the only place that environment reports per-transaction
-activity. The pin replay checked that reading: on 80 runs where the same
-transactions were counted both out of that log and off the wire by the port
-while it replayed the same run, `mem_grants`, `mem_responses` and
-`mem_response_errors` agree exactly, every time. **None of the differences
-below is a measurement artefact.**
+activity. The pin replay checks that reading, and `replay.py` uses that same
+parser rather than a second copy of it: on 100 runs, every one of the 15
+counters both sides keep was read once out of the log and once off the wire
+while the port replayed the same run, and **they agree exactly, every time**.
+Those 15 are `items`, `branch_items`, `insns_requested`, `fetches`,
+`fetch_errors`, `branches`, `invalidations`, `new_seeds`, `mem_grants`,
+`mem_responses`, `mem_response_errors`, `windows_completed`, `windows_checked`,
+`resets` and `cycles`. None of the differences below is a measurement artefact.
+
+Getting that check to pass found one defect in the parser, introduced by the
+recording itself: `read_uvm_log` matched the driver's item header on
+`core_driver.sv:32`, and the recording overlay moved that line. A header that
+stops matching reads exactly like a run with no items in it, so the parser now
+matches on the file rather than the line and refuses a log in which any of six
+counters is zero.
 
 ## The comparison
 
