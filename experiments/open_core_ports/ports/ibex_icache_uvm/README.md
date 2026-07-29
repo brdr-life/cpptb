@@ -357,6 +357,27 @@ transactions being weighted 2^32 times higher than the others, which cannot
 happen now that `run_req` draws `trans_type` itself, and leaving it would stop
 the soft bucket being honoured.
 
+**And both of them have to be drawn twice**, because
+`ibex_icache_core_back_line_seq` overrides `run_req` rather than extending it.
+Moving `c_new_seed_dist` and `c_num_insns_dist` out of the item and into the
+base sequence's `run_req` therefore left `ibex_icache_back_line` with no
+constraint on `new_seed` at all. Measured on seed 123 before this was noticed:
+**all 918 items of that test drew a nonzero `new_seed`**, where the
+distribution gives a nonzero seed weight zero for an item with the cache
+enabled and no invalidation, which every `back_line` item is. The test never
+invalidates, so nothing ever truncated the scoreboard's seed list: it ended the
+run holding 919 seeds, and a fetch counted as correct if it matched any one of
+them. `num_insns` went the same way, uniform over `[0:5]` instead of half of it
+zero.
+
+The overlay now makes both draws in `back_line`'s own `run_req`, with the
+weights the item's constraints carry -- for `num_insns` that is the dist
+restricted to `num_insns <= 5`, so weight 5 on zero and weight 1 on each of 1
+to 5, because `[1:20] :/ 20` spreads its weight over twenty values.
+`ibex_icache_back_line` still passes, and it now agrees with
+`ports/ibex_icache_cpptb` to within 2% on every rate. This was found by that
+port's comparison; see its RESULTS.md.
+
 ### The solver is the run time, twice
 
 Verilator solves constraints by piping to `z3 --in`, so a constrained
