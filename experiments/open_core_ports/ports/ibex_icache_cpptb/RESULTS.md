@@ -86,13 +86,20 @@ its environment puts on a DUT pin and every value the DUT answers with, one
 line per posedge, plus the core item stream. The port then replays it. The
 mechanism is in [README.md](README.md); what it found is here.
 
-**Pin replay, every DUT input driven from the recording and every DUT output
-compared at the edge the recording read it on. All ten tests, ten seeds,
-4,692,318 cycles: every output matches on every cycle.** No divergence
-anywhere, so the two harnesses present the same interface to the same design.
-That covers `ibex_icache_tb_top.sv` against `tb.sv`, this port's drive point
-against the baseline's clocking blocks, and the RAM and key wiring around the
-DUT.
+**Pin replay: every input of the testbench wrapper driven from the recording
+and every output of it compared at the edge the recording read it on. All ten
+tests, ten seeds, 4,692,318 cycles, and every output matches on every cycle.**
+No divergence anywhere, so the two harnesses present the same interface to the
+same design. That covers `ibex_icache_tb_top.sv` against `tb.sv`, this port's
+drive point against the baseline's clocking blocks, and the RAM and key wiring
+around the DUT.
+
+The twelve outputs compared are `valid_o`, `rdata_o`, `addr_o`, `err_o`,
+`err_plus2_o`, `busy_o`, `instr_req_o`, `instr_addr_o`, `scr_key_req_o`,
+`ic_tag_rvalid_o`, `ic_data_rvalid_o` and `ecc_error_o`, which is every pin at
+the wrapper's boundary. The DUT's RAM request, address and write-data lines are
+inside the wrapper and are not compared directly; a difference in them would
+have to reach the boundary through the RAM read data to be seen.
 
 That is not a vacuous pass. `ICACHE_REPLAY_PERTURB=N` moves the first recorded
 branch target at or after cycle N by 64 bytes, which is the width of the window

@@ -16,8 +16,8 @@ are compared cycle for cycle.
 
 Three modes, two of them from the same recording.
 
-  pins   Every DUT input is driven from the recording and every DUT output is
-         compared against it, cycle by cycle. The port's scoreboard runs on the
+  pins   Every input of the testbench wrapper is driven from the recording
+         and all twelve of its outputs are compared against it, cycle by cycle. The port's scoreboard runs on the
          baseline's stimulus. A divergence here is a difference between the two
          harnesses' wrappers or between the two drive conventions, because the
          design and the simulator are the same.

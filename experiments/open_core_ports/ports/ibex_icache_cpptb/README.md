@@ -182,7 +182,7 @@ writes three files:
 
 | file | written by | contents |
 | --- | --- | --- |
-| `<prefix>.pins` | `tb.sv` | one line per posedge of `clk`: every DUT input and every DUT output |
+| `<prefix>.pins` | `tb.sv` | one line per posedge of `clk`: every input of the testbench wrapper and every output of it |
 | `<prefix>.items` | `ibex_icache_core_driver.sv` | the core item stream, and one line per new memory seed |
 | `<prefix>.seq` | `ibex_icache_core_base_seq.sv` | `base_addr` and `constrain_branches`, one line per sequence |
 
@@ -207,12 +207,13 @@ applied none. About 60 bytes a cycle, so 4 MB for a run of the smoke test.
 
 Two modes read it.
 
-**`ICACHE_REPLAY=<prefix>`** drives every DUT input from the recording and
-compares every DUT output at the edge the recording read it on. Nothing here
-generates stimulus and the memory model is not consulted: the responses are
-already on the wire. What this checks is that the two harnesses present the
-same interface to the same design, which covers `ibex_icache_tb_top.sv` against
-`tb.sv` and this port's drive point against the baseline's clocking blocks. It
+**`ICACHE_REPLAY=<prefix>`** drives every input of `ibex_icache_tb_top` from
+the recording and compares all twelve of its outputs at the edge the recording
+read them on. Nothing here generates stimulus and the memory model is not
+consulted: the responses are already on the wire. What this checks is that the
+two harnesses present the same interface to the same design, which covers
+`ibex_icache_tb_top.sv` against `tb.sv` and this port's drive point against the
+baseline's clocking blocks. It
 also runs **this port's scoreboard on the baseline's stimulus**, which is the
 one thing that had never been done in either direction: `check_compatible`, the
 address sequence, the busy line and the caching ratio all applied to the
