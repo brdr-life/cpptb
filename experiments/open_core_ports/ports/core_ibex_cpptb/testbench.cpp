@@ -435,7 +435,7 @@ struct Counters {
     uint64_t imem_responses = 0;
     uint64_t imem_uninit = 0;
     uint64_t dmem_grants = 0;
-    uint64_t dmem_reads = 0;
+    uint64_t dmem_responses = 0;
     uint64_t dmem_writes = 0;
     uint64_t dmem_uninit = 0;
     uint64_t dmem_spurious = 0;
@@ -793,14 +793,19 @@ Task<void> response_driver(Dut dut, Env& env, Bus& bus) {
             co_await FallingEdge{dut.clk_i};
         }
 
-        ++responses_driven;
+        // Read responses only. A write response carries no data the core
+        // reads: `fixed_data_write_response` makes it a constant, the wrapper
+        // computes matching integrity for whatever is on the pins, and the LSU
+        // discards the payload. Corrupting one is invisible by construction, so
+        // counting them would make the injection index mean nothing.
+        if (!item.write && !item.spurious) ++responses_driven;
         const uint64_t corrupt =
             bus.dside ? env.corrupt_dmem_response : env.corrupt_imem_response;
-        if (corrupt != 0 && responses_driven == corrupt) {
+        if (corrupt != 0 && !item.write && responses_driven == corrupt) {
             // One bit of one response, which is how the co-simulation is shown
             // to be live rather than quiet. See README.md.
             item.data ^= 1u;
-            std::printf("cpptb-core-ibex: corrupting %s response %llu at "
+            std::printf("cpptb-core-ibex: corrupting %s read response %llu at "
                         "0x%s\n", bus.dside ? "dmem" : "imem",
                         static_cast<unsigned long long>(responses_driven),
                         hex32(item.addr).c_str());
@@ -809,7 +814,7 @@ Task<void> response_driver(Dut dut, Env& env, Bus& bus) {
         bus.driving_spurious = item.spurious;
         set_bus_response(dut, bus, true, item.data, item.error, item.bad_intg);
         if (bus.dside) {
-            ++env.counters.dmem_reads;
+            ++env.counters.dmem_responses;
         } else {
             ++env.counters.imem_responses;
         }
@@ -1589,7 +1594,7 @@ void report(const std::string& name, const Env& env) {
         "cpptb-core-ibex %s outcome=%s cycles=%llu retired=%llu "
         "cosim_steps=%llu cosim_matched=%llu traps=%llu "
         "imem_grants=%llu imem_responses=%llu imem_uninit=%llu "
-        "dmem_grants=%llu dmem_reads=%llu dmem_writes=%llu dmem_uninit=%llu "
+        "dmem_grants=%llu dmem_responses=%llu dmem_writes=%llu dmem_uninit=%llu "
         "dmem_spurious=%llu ifetches=%llu pmp_ifetch_errors=%llu "
         "iside_errors=%llu irq_only=%llu double_faults=%llu "
         "fetch_enable_pulses=%llu key_answers=%llu signature_writes=%llu\n",
@@ -1603,7 +1608,7 @@ void report(const std::string& name, const Env& env) {
         static_cast<unsigned long long>(c.imem_responses),
         static_cast<unsigned long long>(c.imem_uninit),
         static_cast<unsigned long long>(c.dmem_grants),
-        static_cast<unsigned long long>(c.dmem_reads),
+        static_cast<unsigned long long>(c.dmem_responses),
         static_cast<unsigned long long>(c.dmem_writes),
         static_cast<unsigned long long>(c.dmem_uninit),
         static_cast<unsigned long long>(c.dmem_spurious),
