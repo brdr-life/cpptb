@@ -712,6 +712,50 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "    soft ack_lo_delay_min == 0;\n",
         "    ack_lo_delay_min == 0;  // hard: see build_tb.py\n",
     ),
+    # The four delays those bounds feed are then drawn rather than solved, for
+    # the reason ports/ibex_icache_cpptb's
+    # shims/verilator_inside_range_uniformity.sv records: a constrained
+    # randomize() over an `inside` range honours the range and is not uniform
+    # over it. Measured on this testbench's own key device, with
+    # device_delay_max at 131 over 37 draws, the mean came out 94 where the
+    # range's mean is 65.
+    #
+    # It is the same fix as every other draw here, applied to the last
+    # distribution below the item stream that the two harnesses did not share.
+    # It is worth about 0.15% of grants/fetch; see ports/ibex_icache_cpptb.
+    (
+        LOWRISC_IP / "dv/sv/push_pull_agent/seq_lib/push_pull_base_seq.sv",
+        """    `DV_CHECK_RANDOMIZE_WITH_FATAL(item,
+      if (cfg.zero_delays) {
+        host_delay == 0;
+        device_delay == 0;
+        req_lo_delay == 0;
+        ack_lo_delay == 0;
+      } else {
+        host_delay inside {[cfg.host_delay_min : cfg.host_delay_max]};
+        device_delay inside {[cfg.device_delay_min : cfg.device_delay_max]};
+        req_lo_delay inside {[cfg.req_lo_delay_min : cfg.req_lo_delay_max]};
+        ack_lo_delay inside {[cfg.ack_lo_delay_min : cfg.ack_lo_delay_max]};
+      }
+    )
+""",
+        """    // The four ranges are drawn rather than solved; see build_tb.py. The
+    // randomize() itself stays, because h_data and d_data come out of it.
+    `DV_CHECK_RANDOMIZE_FATAL(item)
+    item.host_delay   = cfg.zero_delays ? 0 :
+                        $urandom_range(cfg.host_delay_max,
+                                       cfg.host_delay_min);
+    item.device_delay = cfg.zero_delays ? 0 :
+                        $urandom_range(cfg.device_delay_max,
+                                       cfg.device_delay_min);
+    item.req_lo_delay = cfg.zero_delays ? 0 :
+                        $urandom_range(cfg.req_lo_delay_max,
+                                       cfg.req_lo_delay_min);
+    item.ack_lo_delay = cfg.zero_delays ? 0 :
+                        $urandom_range(cfg.ack_lo_delay_max,
+                                       cfg.ack_lo_delay_min);
+""",
+    ),
     # The same interaction reaches the core request item, where run_req now
     # adds a top-level soft for the num_insns bucket. The `solve` exists to
     # stop branch transactions being weighted 2^32 times higher than the
