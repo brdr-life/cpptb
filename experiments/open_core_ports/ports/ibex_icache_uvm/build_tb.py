@@ -386,8 +386,32 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "    // Set cache_enabled from initial_enable here",
         "  virtual task body();\n"
         "    base_addr = draw_base_addr();\n"
+        "    rec_base_addr();\n"
         "\n"
         "    // Set cache_enabled from initial_enable here",
+    ),
+    # base_addr goes into the recording too. It is the one thing a replay of
+    # the item stream needs that no item carries: the core sequence forces a
+    # branch after an errored fetch, that feedback from the DUT cannot be in a
+    # recorded item stream, and a replay that has to force one needs somewhere
+    # to branch to. See ports/ibex_icache_cpptb/README.md.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/seq_lib/ibex_icache_core_base_seq.sv",
+        "  protected function bit [31:0] draw_base_addr();\n",
+        """  // Stimulus recording; see build_tb.py. One line per sequence start.
+  protected function void rec_base_addr();
+    string prefix;
+    int    fd;
+    if (!$value$plusargs("icache_record=%s", prefix)) return;
+    fd = $fopen({prefix, ".seq"}, "a");
+    if (fd == 0) `uvm_fatal(`gfn, "cannot open the sequence trace for writing")
+    $fwrite(fd, "B %0d %08x %0d %0d\\n", $time, base_addr, constrain_branches,
+            num_trans);
+    $fclose(fd);
+  endfunction
+
+  protected function bit [31:0] draw_base_addr();
+""",
     ),
     # run_req is where the stimulus is actually made, and every field in it
     # except num_insns is either pinned by an implication or drawn from a dist

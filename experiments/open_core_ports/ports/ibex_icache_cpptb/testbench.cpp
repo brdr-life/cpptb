@@ -175,6 +175,10 @@ struct Counters {
     uint64_t child_sequences = 0;
     uint64_t resets = 0;
     uint64_t killed_sequences = 0;
+    // ICACHE_ITEMS: items the recording described as requests that this run
+    // had to turn into branches, because it saw an errored fetch where the
+    // recorded run did not. See core_stimulus.
+    uint64_t forced_branches = 0;
     // ibex_icache_ram_if: RAM reads whose data was corrupted on the way to the
     // cache, and cycles on which the cache reported an ECC error.
     uint64_t ecc_injections = 0;
@@ -238,10 +242,24 @@ class Scoreboard {
         ++counters.fetches;
         if (err) ++counters.fetch_errors;
 
-        if (next_addr_.has_value()) {
-            test_.expect_eq("fetch address matches the expected address",
-                            address, *next_addr_);
+        if (next_addr_.has_value() && address != *next_addr_) {
+            // The expected address comes from the previous fetch's opcode
+            // bits, so a failure is about that fetch as much as this one.
+            test_.expect(
+                "fetch arrived at 0x" + hex32(address) +
+                    ", where the previous fetch at 0x" + hex32(last_address_) +
+                    " returned 0x" + hex32(last_insn_data_) + " (err " +
+                    (last_err_ ? "1" : "0") + "/" +
+                    (last_err_plus2_ ? "1" : "0") + ") and so implied 0x" +
+                    hex32(*next_addr_),
+                false);
+        } else if (next_addr_.has_value()) {
+            test_.expect("fetch address matches the expected address", true);
         }
+        last_address_ = address;
+        last_insn_data_ = insn_data;
+        last_err_ = err;
+        last_err_plus2_ = err_plus2;
         next_addr_ = address + (((insn_data & 3u) == 3u) ? 4u : 2u);
 
         check_compatible(address, insn_data, err, err_plus2);
@@ -618,6 +636,10 @@ class Scoreboard {
 
     std::vector<MemState> mem_states_;
     std::optional<uint32_t> next_addr_;
+    uint32_t last_address_ = 0;
+    uint32_t last_insn_data_ = 0;
+    bool last_err_ = false;
+    bool last_err_plus2_ = false;
     size_t invalidate_seed_ = 0;
     size_t last_branch_seed_ = 0;
     size_t last_fetch_age_ = 0;
@@ -713,6 +735,10 @@ struct Env {
     bool replay_pins = false;
     const std::vector<Item>* replay_items = nullptr;
     bool replay_diverged = false;
+    // ibex_icache_core_base_seq's base_addr and constrain_branches, which an
+    // item replay needs when it has to force a branch of its own.
+    uint32_t replay_base_addr = 0;
+    bool replay_constrain_branches = false;
 
     void push_seed(uint32_t seed) {
         scoreboard.on_new_seed(seed);
@@ -1043,8 +1069,36 @@ Task<void> core_stimulus(Dut dut, TestContext& test, Env& env,
     // own, which is what makes this an experiment about the item
     // distribution alone. See README.md.
     if (env.replay_items != nullptr) {
-        for (const Item& item : *env.replay_items) {
+        const uint32_t replay_top =
+            env.replay_base_addr <= 0xffff'ffffu - 64
+                ? env.replay_base_addr + 64
+                : 0xffff'ffffu;
+        bool force_branch_here = false;
+
+        for (const Item& recorded : *env.replay_items) {
             if (env.core_stopped()) break;
+            Item item = recorded;
+
+            // The core sequence has exactly one feedback path from the DUT:
+            // `force_branch -> trans_type == Branch` after an item whose
+            // fetches hit an error. A recorded item stream cannot carry it,
+            // because whether a fetch errors depends on which memory seed was
+            // in force when the read was granted and that turns on grant
+            // timing this run draws for itself. Where this run saw an error
+            // and the recorded one did not, the sequence that made the next
+            // item would have turned it into a branch, so this does too. The
+            // target has to be drawn: a recorded request item carries none.
+            if (force_branch_here && !item.branch) {
+                item.branch = true;
+                item.branch_addr =
+                    env.replay_constrain_branches
+                        ? env.replay_base_addr +
+                              2 * random.randint<uint32_t>(
+                                      0, (replay_top - env.replay_base_addr) / 2)
+                        : draw_branch_addr(random);
+                ++env.scoreboard.counters.forced_branches;
+            }
+
             ++env.scoreboard.counters.items;
             if (item.branch) ++env.scoreboard.counters.branch_items;
             env.scoreboard.counters.insns_requested += item.num_insns;
@@ -1055,6 +1109,7 @@ Task<void> core_stimulus(Dut dut, TestContext& test, Env& env,
             } else {
                 co_await drive_req(dut, test, env, item, saw_error);
             }
+            force_branch_here = saw_error;
         }
         co_return;
     }
@@ -1573,6 +1628,10 @@ struct SeedEvent {
 };
 
 struct Trace {
+    // ibex_icache_core_base_seq's base_addr and constrain_branches, from the
+    // first sequence the recorded run started.
+    uint32_t base_addr = 0;
+    bool constrain_branches = false;
     std::vector<PinCycle> pins;
     // The wide inputs are written only when they change, so these are sparse
     // and a replay holds the last value.
@@ -1705,6 +1764,36 @@ bool read_item_trace(const std::string& path, Trace& trace, uint64_t cycle0,
             continue;
         }
         error = "unrecognised line in " + path + ": " + line;
+        return false;
+    }
+    return true;
+}
+
+// <prefix>.seq, one line per core sequence the recorded run started.
+bool read_seq_trace(const std::string& path, Trace& trace,
+                    std::string& error) {
+    std::ifstream file(path);
+    if (!file) {
+        error = "cannot read " + path;
+        return false;
+    }
+    std::string line;
+    bool first = true;
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] != 'B') continue;
+        const auto words = split_words(line);
+        if (words.size() != 5) {
+            error = "malformed B line in " + path + ": " + line;
+            return false;
+        }
+        if (first) {
+            trace.base_addr = static_cast<uint32_t>(parse_hex(words[2]));
+            trace.constrain_branches = words[3] != "0";
+            first = false;
+        }
+    }
+    if (first) {
+        error = path + " names no sequence";
         return false;
     }
     return true;
@@ -2036,7 +2125,8 @@ void report(TestContext& test, const char* name, const Counters& counters) {
         "mem_grants=%llu mem_responses=%llu mem_response_errors=%llu "
         "windows_completed=%llu windows_checked=%llu possible_old=%llu "
         "actual_old=%llu child_sequences=%llu resets=%llu "
-        "killed_sequences=%llu ecc_injections=%llu ecc_errors=%llu "
+        "killed_sequences=%llu forced_branches=%llu "
+        "ecc_injections=%llu ecc_errors=%llu "
         "key_answers=%llu key_refusals=%llu cycles=%llu\n",
         name, static_cast<unsigned long long>(counters.items),
         static_cast<unsigned long long>(counters.branch_items),
@@ -2058,6 +2148,7 @@ void report(TestContext& test, const char* name, const Counters& counters) {
         static_cast<unsigned long long>(counters.child_sequences),
         static_cast<unsigned long long>(counters.resets),
         static_cast<unsigned long long>(counters.killed_sequences),
+        static_cast<unsigned long long>(counters.forced_branches),
         static_cast<unsigned long long>(counters.ecc_injections),
         static_cast<unsigned long long>(counters.ecc_errors),
         static_cast<unsigned long long>(counters.key_answers),
@@ -2139,6 +2230,10 @@ bool load_trace(TestContext& test, const std::string& prefix, bool want_pins,
         test.expect(error, false);
         return false;
     }
+    if (!want_pins && !read_seq_trace(prefix + ".seq", trace, error)) {
+        test.expect(error, false);
+        return false;
+    }
     if (trace.items.empty()) {
         test.expect("the recording carries at least one core item", false);
         return false;
@@ -2216,7 +2311,11 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
     const bool replay = !replay_prefix.empty();
     const bool replay_scoreboard = replay && !plan.combo;
     env.replay_pins = replay;
-    if (!replay && !items_prefix.empty()) env.replay_items = &trace.items;
+    if (!replay && !items_prefix.empty()) {
+        env.replay_items = &trace.items;
+        env.replay_base_addr = trace.base_addr;
+        env.replay_constrain_branches = trace.constrain_branches;
+    }
 
     test.start_clock(dut.clk_i, kClockPeriod);
 
