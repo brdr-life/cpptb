@@ -595,6 +595,62 @@ OVERLAYS: list[tuple[Path, str, str]] = [
   }
 """,
     ),
+    # ibex_icache_core_back_line_seq overrides run_req rather than extending it,
+    # so the two draws moved out of the item above have to be made there as
+    # well. Without this, removing c_new_seed_dist leaves new_seed with no
+    # constraint at all in ibex_icache_back_line: measured on seed 123, all 918
+    # items drew a nonzero seed where the distribution's weight for an enabled,
+    # non-invalidating item is zero, so the scoreboard ended the run holding 919
+    # seeds and a fetch counted as correct if it matched any of them. num_insns
+    # went the same way, uniform over [0:5] rather than half of it zero.
+    #
+    # The weights here are the item's own dist restricted to `num_insns <= 5`:
+    # weight 5 on zero and weight 1 on each of 1 to 5, because `[1:20] :/ 20`
+    # spreads its weight over twenty values.
+    (
+        ICACHE / "dv/ibex_icache_core_agent/seq_lib/ibex_icache_core_back_line_seq.sv",
+        """  protected virtual task run_req(ibex_icache_core_req_item req, ibex_icache_core_rsp_item rsp);
+    bit [31:0] min_addr, max_addr;
+
+    start_item(req);
+""",
+        """  protected virtual task run_req(ibex_icache_core_req_item req, ibex_icache_core_rsp_item rsp);
+    bit [31:0] min_addr, max_addr;
+
+    // c_num_insns_dist and c_new_seed_dist, which this sequence would
+    // otherwise lose along with the base sequence's run_req. See build_tb.py.
+    int unsigned d_num_insns;
+    bit [31:0]   d_new_seed;
+    int unsigned pick;
+
+    pick = $urandom_range(9, 0);
+    d_num_insns = (pick < 5) ? 0 : (pick - 4);
+
+    // enable is pinned to 1 below and invalidate to must_invalidate, so the
+    // weight on a nonzero seed is 1000 with an invalidation and 0 without one.
+    if (!must_invalidate || $urandom_range(1000, 0) == 0) begin
+      d_new_seed = 32'd0;
+    end else begin
+      do d_new_seed = $urandom(); while (d_new_seed == 32'd0);
+    end
+
+    start_item(req);
+""",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_core_agent/seq_lib/ibex_icache_core_back_line_seq.sv",
+        """       // Ask for at most 5 insns in either phase (in the first phase, this means we have a chance
+       // of jumping back when the cache isn't ready yet).
+       num_insns <= 5;
+""",
+        """       // Ask for at most 5 insns in either phase (in the first phase, this means we have a chance
+       // of jumping back when the cache isn't ready yet). Drawn above rather
+       // than solved; see build_tb.py.
+       num_insns == d_num_insns;
+
+       new_seed == d_new_seed;
+""",
+    ),
     # A `solve ... before ...` anywhere in a class stops every `soft`
     # constraint in that class from being honoured. Reduced case, three classes
     # differing only in that one line:
