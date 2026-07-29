@@ -1268,15 +1268,19 @@ std::vector<uint8_t> read_binary(const std::string& path, std::string& error) {
 // Reporting
 // ---------------------------------------------------------------------------
 
+// One word per ending, because run_directed.py reads the token that follows
+// `outcome=` on a line whose remaining fields are `name=value` pairs. The
+// spelling with spaces is the runner's, so the two harnesses' results files
+// use the same words for the same outcomes.
 const char* ending_name(Ending ending) {
     switch (ending) {
         case Ending::kHandshakePass: return "passed";
-        case Ending::kHandshakeFail: return "self-check failed";
-        case Ending::kCosimMismatch: return "cosim mismatch";
-        case Ending::kDoubleFault: return "double faults";
-        case Ending::kCycleTimeout: return "cycle timeout";
-        case Ending::kMalformedHandshake: return "malformed handshake";
-        default: return "no verdict";
+        case Ending::kHandshakeFail: return "self-check-failed";
+        case Ending::kCosimMismatch: return "cosim-mismatch";
+        case Ending::kDoubleFault: return "double-faults";
+        case Ending::kCycleTimeout: return "cycle-timeout";
+        case Ending::kMalformedHandshake: return "malformed-handshake";
+        default: return "no-verdict";
     }
 }
 
@@ -1387,7 +1391,13 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     dut.clk_i.set(0);
     dut.rst_ni.set(1);
     dut.fetch_enable_i.set(kIbexMuBiOff);
-    dut.mcounteren_writable_i.set(mcounteren_lock ? kIbexMuBiOn : 0);
+    // core_ibex_dut_probe_if has an initial block that sets
+    //     debug_req = 1'b0; mcounteren_writable = ibex_pkg::IbexMuBiOn;
+    // so the counter-enable CSR is writable unless a test says otherwise.
+    // Leaving it at zero costs mcounteren_test a cosim mismatch, because
+    // ibex_cs_registers gates the write on `mcounteren_writable_i ==
+    // IbexMuBiOn` and Spike models no such input.
+    dut.mcounteren_writable_i.set(kIbexMuBiOn);
     dut.debug_req_i.set(0);
     dut.instr_gnt_i.set(0);
     dut.instr_rvalid_i.set(0);
