@@ -23,7 +23,7 @@ and z3 on `PATH`; `run_tests.py` puts z3 there itself through `local_deps.py`,
 and refuses to report anything if it cannot find one. A UVM_HIGH log runs to
 45 MB and lands in `ports/ibex_icache_uvm/build/results`.
 
-The build is about a minute from empty and the ten tests take about a second
+Rebuilding takes about fifteen seconds and the ten tests take about a second
 between them.
 
 ## The design under test
