@@ -341,8 +341,10 @@ uniform on it. Measured on this testbench's own key device, with
 `device_delay_max` at 131 over 37 draws, the mean came out 94 where the
 range's mean is 65; drawn with `$urandom_range` it comes out 69. That was the
 last distribution below the core item stream that `ports/ibex_icache_cpptb`
-did not share with this testbench, and it is worth about 0.15% of that
-comparison's `grants/fetch`. See its RESULTS.md.
+did not share with this testbench. It is worth 0.9% of that comparison's
+`grants/fetch` on `ibex_icache_invalidation`, 0.14% on
+`ibex_icache_many_errors` and nothing at all on five of its eight tests. See
+its RESULTS.md.
 
 Two of them are worth reading twice.
 
