@@ -583,9 +583,18 @@ class Runtime {
 #else
         std::fprintf(
             stderr,
-            "%s: ReadWrite, ReadOnly, and NextTimeStep require the standard "
-            "simulator timing bridge; enable VPI timing support in the "
-            "simulator build (Verilator: --vpi)\n",
+            "%s: ReadWrite, ReadOnly, and NextTimeStep need a timing backend "
+            "that dispatches simulator phases. This build has none: a default "
+            "`cpptb build` links Verilator's own --binary main, which owns "
+            "clocks and timers but dispatches no phases.\n"
+            "  Select the standard VPI backend in cpptb.toml:\n"
+            "\n"
+            "      [build]\n"
+            "      verilator_args = [\"--vpi\"]\n"
+            "\n"
+            "  Or wait on a clock edge instead: sample after `co_await "
+            "RisingEdge{clk}`, drive after `co_await FallingEdge{clk}`. See "
+            "docs/scheduling.md.\n",
             Adapter::result_name);
         return false;
 #endif
