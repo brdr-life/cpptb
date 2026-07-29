@@ -39,11 +39,13 @@ their program.
 **The other testlist runs: 912 of 944 directed tests pass.**
 `directed_tests/directed_testlist.yaml` is 944 hand-written C and assembly
 entries with no generator anywhere in the flow, and none of them had been
-built here. All 944 build and run on `--config opentitan` now, and the 32 that
-do not pass are named below. Getting a number that meant anything took five
-fixes first, three of them upstream's -- the arch tests were compiling their
-own bodies away, the ePMP linker script is stale by a megabyte, and no ePMP
-test can report a failure to the harness at all. See "The directed tests".
+built here. 940 of the 944 build on `--config opentitan` now and all 940 run;
+the four that do not build and the 28 that run and do not pass are named below.
+That is one run of the whole testlist, not a figure assembled from several.
+Getting a number that meant anything took five fixes first, three of them
+upstream's -- the arch tests were compiling their own bodies away, the ePMP
+linker script is stale by a megabyte, and no ePMP test can report a failure to
+the harness at all. See "The directed tests".
 
 ## Why this matters here
 
@@ -1183,11 +1185,19 @@ previous run's data, and its results file is not a result for the testlist.
 | epmp-tests | 744 | 718 | 26 self-check failed |
 | **total** | **944** | **912** | **32** |
 
-The riscv-tests and epmp rows are one run of all 944; the arch row is a second
-run of that group alone, after `-DTEST_CASE_1=True` was added. Nothing in the
-other two groups changed between them. The 944-entry run took about two hours
-on a box that was busy with something else; the arch group on its own is five
-and a half minutes.
+All four rows are one run, `build/directed/opentitan-all944/`, which took 39
+minutes at four at a time. Every record in its `results.json` names the log it
+came from, and the outcomes above are what those 944 logs say when read again.
+
+They used to be two runs. 912 was assembled from a run of all 944 and a later
+run of the 107 arch entries alone, the second having `-DTEST_CASE_1=True` and
+the first not; the file the first wrote totals 914 because its arch rows were
+still the pass-anything build, and the file the second wrote covers only 107 of
+the 944. Both numbers have been quoted for this port. The single run above
+settles it at 912, and confirms the two entries the two files disagreed about:
+`cebreak-01` double faults and `jalr-01` does not build. The other 105 arch
+entries, and all 837 outside that group, are unchanged from what both files
+said.
 
 The four that do not build are the vendored sources against a newer binutils,
 not anything about Ibex: `illegal`, `ma_addr` and `ma_fetch` use `mbadaddr` and
