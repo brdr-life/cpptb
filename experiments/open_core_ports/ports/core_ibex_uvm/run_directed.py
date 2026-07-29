@@ -727,6 +727,7 @@ def handle(entry: dict, run: Path, testbench: Path, march: str, cycles: int,
     if build_only:
         result["outcome"] = "built"
         result["detail"] = ""
+        result["log"] = (directory / "compile.log").relative_to(BUILD).as_posix()
         return result
 
     seconds = wall_seconds or int(entry.get("timeout_s", 300))
