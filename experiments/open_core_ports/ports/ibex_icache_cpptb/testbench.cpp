@@ -1685,6 +1685,17 @@ void report(TestContext& test, const char* name, const Counters& counters) {
         static_cast<unsigned long long>(counters.key_refusals),
         static_cast<unsigned long long>(counters.cycles));
     test.expect("the sequence issued at least one fetch", counters.fetches > 0);
+    if (counters.ecc_injections > 0) {
+        // Upstream states this as SVA in ibex_icache_ram_if, per way and per
+        // cycle, and Verilator compiles it to nothing, so the baseline does not
+        // check it at all. The per-cycle form is stronger than it looks: a
+        // corrupted way only raises ecc_error_o if the lookup reached it, so
+        // what is checked here is the aggregate. See README.md.
+        test.expect(
+            "the cache reported an ECC error for the RAM data that was "
+            "corrupted",
+            counters.ecc_errors > 0);
+    }
 }
 
 // ibex_icache_oldval_test::check_phase. The counters are kept by every run;
