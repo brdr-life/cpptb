@@ -682,6 +682,33 @@ in the support instead of being redrawn with the weights; and `base_addr`,
 `branch_addr` and the ECC masks are drawn before the solve rather than as part
 of it, which is equivalent here only because nothing else constrains them.
 
+## Recording the stimulus
+
+`+icache_record=<prefix>` makes a run write down everything its environment
+does that the DUT can see, so that `ports/ibex_icache_cpptb` can drive the same
+thing and compare the design's answers cycle for cycle. Three overlays add it,
+and **without the plusarg none of them does anything at all**: no file is
+opened and no branch is taken beyond one `$value$plusargs` per sequence.
+
+| file | written by | contents |
+| --- | --- | --- |
+| `<prefix>.pins` | `tb.sv` | one line per posedge of `clk`: every DUT input and every DUT output |
+| `<prefix>.items` | `ibex_icache_core_driver.sv` | the item stream the driver was handed, and one line per new memory seed |
+| `<prefix>.seq` | `ibex_icache_core_base_seq.sv` | `base_addr` and `constrain_branches`, one line per sequence start |
+
+Everything in the pin trace is read in the Active region of the posedge, which
+is the value the design samples at that edge and the value a `monitor_cb` input
+sees. The ECC corruption masks are recovered as
+`ic_*_rdata_o ^ ic_*_rdata_in`, which is exactly what `ibex_icache_ram_if`
+exclusive-ored in and is zero wherever it applied none. About 60 bytes a cycle.
+
+The format and what the comparison found are in
+[`ports/ibex_icache_cpptb`](../ibex_icache_cpptb/README.md) and its RESULTS.md.
+The short version: all ten tests at ten seeds, 4,692,318 cycles, every DUT
+output matching. It also puts an independent scoreboard over this baseline's
+own runs, which is worth having given that an overlay here was found to have
+weakened what it checked.
+
 ## What is not done
 
 * **Functional coverage.** `ibex_icache_fcov_if.sv` and the covergroups in the
