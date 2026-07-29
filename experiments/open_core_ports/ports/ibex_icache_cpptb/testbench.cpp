@@ -726,6 +726,14 @@ struct Env {
     // the run because the agent's config object is randomised once.
     bool key_zero_delays = false;
     uint32_t key_delay_max = 0;
+    // ICACHE_KEY_DELAY_MAX and ICACHE_KEY_ZERO_DELAYS override those two, so
+    // that how much of a rate the key device can account for is a measurement
+    // rather than an argument. See README.md.
+    uint32_t key_delay_max_override = 0;
+    uint32_t key_zero_delays_override = 2;
+    // ICACHE_KEY_DELAY_SCALE, in percent: what the drawn delay is multiplied
+    // by. 100 leaves it alone.
+    uint32_t key_delay_scale = 100;
 
     // Replay. ICACHE_REPLAY drives every DUT input from a recording made by
     // ports/ibex_icache_uvm, in which case nothing here generates stimulus and
@@ -1474,9 +1482,13 @@ Task<void> key_device(Dut dut, TestContext& test, Env& env) {
         }
         if (dut.scr_key_req_o.get() == 0) continue;
 
-        const uint32_t delay =
+        uint32_t delay =
             env.key_zero_delays ? 0u
                                 : random.randint<uint32_t>(0, env.key_delay_max);
+        if (env.key_delay_scale != 100) {
+            delay = static_cast<uint32_t>(
+                (static_cast<uint64_t>(delay) * env.key_delay_scale) / 100u);
+        }
         co_await wait_clks(dut, delay);
         if (env.in_reset) continue;
 
@@ -2311,6 +2323,12 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
     scoreboard.set_keep_state_on_reset(
         env_number("ICACHE_KEEP_STATE_ON_RESET", 0) != 0);
     env.replay_perturb = env_number("ICACHE_REPLAY_PERTURB", 0);
+    env.key_delay_max_override =
+        static_cast<uint32_t>(env_number("ICACHE_KEY_DELAY_MAX", 0));
+    env.key_zero_delays_override =
+        static_cast<uint32_t>(env_number("ICACHE_KEY_ZERO_DELAYS", 2));
+    env.key_delay_scale =
+        static_cast<uint32_t>(env_number("ICACHE_KEY_DELAY_SCALE", 100));
 
     const std::string replay_prefix = env_string("ICACHE_REPLAY");
     const std::string items_prefix = env_string("ICACHE_ITEMS");
@@ -2343,6 +2361,14 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
     // here rather than per request. zero_delays carries dist { 0 := 7, 1 := 3 }.
     env.key_zero_delays = test.random().randint<uint32_t>(0, 9) < 3;
     env.key_delay_max = draw_key_delay_max(test.random());
+    // Both draws happen first, so that a run without the overrides takes the
+    // same values out of the stream as one with them.
+    if (env.key_zero_delays_override < 2) {
+        env.key_zero_delays = env.key_zero_delays_override != 0;
+    }
+    if (env.key_delay_max_override != 0) {
+        env.key_delay_max = env.key_delay_max_override;
+    }
 
     if (replay) {
         // The recording's cycle 0 is the first posedge of the recorded run, by

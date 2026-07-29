@@ -462,10 +462,18 @@ Two things that were divergences are not any more.
   with `device_delay_max` drawn once for the run from the agent config's five
   buckets, and `zero_delays` takes it out entirely three times in ten. Measured
   on `ibex_icache_smoke` at seed 123: 29 answers and 35 refusals here, 25 and 25
-  in the baseline. One thing about it is not reproduced and cannot be: the
-  baseline's per-request delay is `inside {[0:max]}` and a constrained
-  `randomize()` over an `inside` range is not uniform on this simulator, so its
-  delays cluster at the top of the range. See RESULTS.md.
+  in the baseline. The baseline's per-request delay used to be the one
+  distribution below the item stream the two harnesses did not share, because
+  `device_delay inside {[0:max]}` through a constrained `randomize()` is not
+  uniform over the range on this simulator. `ports/ibex_icache_uvm` now draws
+  it with `$urandom_range`, so both sides are uniform. What that was worth is
+  measured in RESULTS.md.
+
+  `ICACHE_KEY_DELAY_SCALE=N` multiplies the drawn delay by N percent,
+  `ICACHE_KEY_DELAY_MAX=N` replaces `device_delay_max` and
+  `ICACHE_KEY_ZERO_DELAYS=0|1` forces `zero_delays`. They exist so that how
+  much of a rate the key device can account for is a measurement rather than an
+  argument; the three of them are what put the number in RESULTS.md.
 * **The chatty second pass.** A `check_compatible` failure now says why each
   seed did not match, in upstream's words, rather than only how many were
   tried. Upstream makes the whole search a second time with a flag; this asks
