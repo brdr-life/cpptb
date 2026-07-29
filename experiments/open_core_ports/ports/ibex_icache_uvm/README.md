@@ -692,7 +692,7 @@ opened and no branch is taken beyond one `$value$plusargs` per sequence.
 
 | file | written by | contents |
 | --- | --- | --- |
-| `<prefix>.pins` | `tb.sv` | one line per posedge of `clk`: every DUT input and every DUT output |
+| `<prefix>.pins` | `tb.sv` | one line per posedge of `clk`: every input of the testbench wrapper and every output of it |
 | `<prefix>.items` | `ibex_icache_core_driver.sv` | the item stream the driver was handed, and one line per new memory seed |
 | `<prefix>.seq` | `ibex_icache_core_base_seq.sv` | `base_addr` and `constrain_branches`, one line per sequence start |
 
