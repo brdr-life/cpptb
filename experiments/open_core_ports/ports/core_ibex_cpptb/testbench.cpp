@@ -465,6 +465,7 @@ enum class Ending {
     kDoubleFault,
     kCycleTimeout,
     kMalformedHandshake,
+    kReplayDivergence,
 };
 
 struct BusConfig {
@@ -480,6 +481,12 @@ struct BusConfig {
     uint32_t zero_delay_pct = 50;
     bool zero_delays = false;
     bool enable_bad_intg_on_uninit_access = false;
+    // ibex_mem_intf_response_agent::build_phase sets this to SecureIbex. With
+    // it clear the driver puts 'x on rdata and rintg for a write response, and
+    // ibex_top's IbexDataRPayloadX assertion says that is only allowed when the
+    // core is not checking integrity on writes. It is set here for the same
+    // reason it is set there.
+    bool fixed_data_write_response = kSecureIbex;
     uint32_t spurious_response_delay_min = 0;
     uint32_t spurious_response_delay_max = 100;
 };
@@ -523,6 +530,13 @@ struct Env {
 
     // core_ibex_mcounteren_lock_test's stimulus, off in the base test.
     bool mcounteren_lock = false;
+
+    // Set when the run is replaying a recording from ports/core_ibex_uvm
+    // rather than generating its own stimulus. The monitors still run -- the
+    // point is to put this port's co-simulation scoreboard on the baseline's
+    // stimulus -- but nothing below them generates a response.
+    bool replay = false;
+    uint64_t replay_cycles = 0;
 
     // Fault injection, so that a run can show these checks are live rather than
     // merely running. See README.md.
@@ -714,6 +728,13 @@ MemItem make_response(Env& env, Bus& bus, Random& random,
         response.data = read_word(env, bus, random, aligned, uninit);
     } else {
         write_word(env, aligned, observed.data, observed.be);
+        if (bus.cfg.fixed_data_write_response) {
+            // "drive data in store response to fixed 32'hffffffff value.
+            // Integrity is calculated below." -- the response sequence.
+            response.data = 0xFFFF'FFFFu;
+        } else {
+            response.data = 0;
+        }
     }
 
     response.bad_intg =
@@ -825,6 +846,23 @@ Task<void> bus_monitor(Dut dut, TestContext& test, Env& env, Bus& bus) {
             }
             item.error = (bus.dside ? dut.data_err_i.get()
                                     : dut.instr_err_i.get()) != 0;
+            if (bus.dside && env.replay && !item.write) {
+                // The baseline answered a read of uninitialised memory with
+                // random data and wrote it into both memory models. What
+                // reaches the wire here is that data, so the same two writes
+                // have to happen or Spike executes against a memory the DUT
+                // never had.
+                const uint32_t aligned = item.addr & ~3u;
+                uint32_t bytes = item.data;
+                for (uint32_t index = 0; index < 4; ++index) {
+                    if (!env.mem.addr_exists(aligned + index)) {
+                        const auto value = static_cast<uint8_t>(bytes);
+                        env.mem.write_byte(aligned + index, value);
+                        env.cosim.write_mem_byte(aligned + index, value);
+                    }
+                    bytes >>= 8;
+                }
+            }
             if (bus.dside) {
                 // core_ibex_env connects the dside monitor to the cosim agent,
                 // and the base test connects it to test_done_port as well.
@@ -858,7 +896,19 @@ Task<void> bus_monitor(Dut dut, TestContext& test, Env& env, Bus& bus) {
             }
             bus.outstanding.push_back(observed);
             ++bus.outstanding_accesses;
-            bus.responses.push_back(make_response(env, bus, random, observed));
+            if (env.replay) {
+                // The response is already on the wire. The memory model is
+                // still kept up to date, because the co-simulation needs to
+                // know which addresses had been written when a read of an
+                // uninitialised one comes back.
+                if (observed.write) {
+                    write_word(env, observed.addr & ~3u, observed.data,
+                               observed.be);
+                }
+            } else {
+                bus.responses.push_back(
+                    make_response(env, bus, random, observed));
+            }
         }
         if (rvalid) --bus.outstanding_accesses;
 
@@ -1240,6 +1290,254 @@ Task<void> mcounteren_lock_stimulus(Dut dut) {
 }
 
 // ---------------------------------------------------------------------------
+// Replay
+//
+// ports/core_ibex_uvm records what its environment drove into the DUT and what
+// the DUT drove back, one line per posedge; this drives the same inputs at the
+// same pins and checks that the DUT answers with the same outputs on the same
+// cycles. Two harnesses running independent random streams can only be compared
+// on whether they reach the same verdict, which is a statement about two
+// programs; this is a statement about one run, cycle by cycle.
+//
+// It also puts this port's co-simulation scoreboard on the baseline's stimulus,
+// which is the one thing neither direction had done: every instruction the
+// baseline retired, checked against Spike by the code in this file.
+//
+// The recording is made by the baseline and replayed here, which is the
+// direction that tests the port against the reference. Every value in it is
+// read in the Active region of a posedge -- what the design samples at that
+// edge -- so the inputs are driven at the drive point before that edge and the
+// outputs are compared at the edge itself.
+// ---------------------------------------------------------------------------
+
+// Bit positions in the two packed fields of a `C` line, as the recording's own
+// header names them. A change to either side has to be a change to both.
+enum : uint32_t {
+    kInRstN = 0,
+    kInInstrGnt = 1,
+    kInInstrRvalid = 2,
+    kInInstrErr = 3,
+    kInInstrBadIntg = 4,
+    kInDataGnt = 5,
+    kInDataRvalid = 6,
+    kInDataErr = 7,
+    kInDataBadIntg = 8,
+    kInKeyValid = 9,
+    kInInstrIntgKnown = 10,
+    kInDataIntgKnown = 11,
+};
+
+enum : uint32_t {
+    kOutInstrReq = 0,
+    kOutDataReq = 1,
+    kOutDataWe = 2,
+    kOutRvfiValid = 3,
+    kOutRvfiTrap = 4,
+    kOutDoubleFault = 5,
+    kOutAlertMinor = 6,
+    kOutAlertMajorInternal = 7,
+    kOutAlertMajorBus = 8,
+    kOutCoreSleep = 9,
+    kOutKeyReq = 10,
+};
+
+struct ReplayKey {
+    Bits<128> key{};
+    uint64_t nonce = 0;
+};
+
+struct ReplayCycle {
+    uint32_t in = 0;
+    uint32_t ctl = 0;
+    uint32_t instr_rdata = 0;
+    uint32_t data_rdata = 0;
+    uint32_t out = 0;
+    uint32_t instr_addr = 0;
+    uint32_t data_addr = 0;
+    uint32_t data_be = 0;
+    uint32_t data_wdata = 0;
+    uint64_t rvfi_order = 0;
+    uint32_t rvfi_pc = 0;
+    uint32_t rvfi_rd = 0;
+    uint32_t rvfi_rd_wdata = 0;
+    // Index into Trace::keys, or -1 for "the key did not change on this cycle".
+    int key = -1;
+};
+
+struct Trace {
+    std::vector<ReplayCycle> cycles;
+    std::vector<ReplayKey> keys;
+    uint64_t intg_unknown = 0;
+};
+
+Bits<128> parse_key(const char* text) {
+    Bits<128> key{};
+    // 32 hex digits, most significant first, in four 32-bit words.
+    for (std::size_t word = 0; word < 4; ++word) {
+        char chunk[9] = {};
+        std::memcpy(chunk, text + word * 8, 8);
+        key.set_word(3 - word,
+                     static_cast<uint32_t>(std::strtoul(chunk, nullptr, 16)));
+    }
+    return key;
+}
+
+Trace read_trace(const std::string& path, std::string& error) {
+    Trace trace;
+    std::FILE* file = std::fopen(path.c_str(), "r");
+    if (file == nullptr) {
+        error = "cannot open the recording " + path;
+        return trace;
+    }
+    char line[512];
+    int pending_key = -1;
+    while (std::fgets(line, sizeof(line), file) != nullptr) {
+        if (line[0] == '#') continue;
+        if (line[0] == 'K') {
+            unsigned long long cycle = 0;
+            char key_text[64] = {};
+            unsigned long long nonce = 0;
+            if (std::sscanf(line, "K %llu %32s %llx", &cycle, key_text,
+                            &nonce) != 3) {
+                error = "malformed K line in " + path;
+                break;
+            }
+            ReplayKey key;
+            key.key = parse_key(key_text);
+            key.nonce = nonce;
+            trace.keys.push_back(key);
+            pending_key = static_cast<int>(trace.keys.size()) - 1;
+            continue;
+        }
+        if (line[0] != 'C') continue;
+        ReplayCycle cycle;
+        unsigned long long number = 0;
+        unsigned long long order = 0;
+        if (std::sscanf(line,
+                        "C %llu %x %x %x %x %x %x %x %x %x %llx %x %x %x",
+                        &number, &cycle.in, &cycle.ctl, &cycle.instr_rdata,
+                        &cycle.data_rdata, &cycle.out, &cycle.instr_addr,
+                        &cycle.data_addr, &cycle.data_be, &cycle.data_wdata,
+                        &order, &cycle.rvfi_pc, &cycle.rvfi_rd,
+                        &cycle.rvfi_rd_wdata) != 14) {
+            error = "malformed C line in " + path;
+            break;
+        }
+        cycle.rvfi_order = order;
+        cycle.key = pending_key;
+        pending_key = -1;
+        // The recording says whether the integrity bits it saw really were the
+        // encoding of the data or its inverse. The wrapper can only drive those
+        // two, so anything else is a response this port cannot reproduce and is
+        // worth reporting rather than silently approximating.
+        if ((((cycle.in >> kInInstrRvalid) & 1u) != 0 &&
+             ((cycle.in >> kInInstrIntgKnown) & 1u) == 0) ||
+            (((cycle.in >> kInDataRvalid) & 1u) != 0 &&
+             ((cycle.in >> kInDataIntgKnown) & 1u) == 0)) {
+            ++trace.intg_unknown;
+        }
+        trace.cycles.push_back(cycle);
+    }
+    std::fclose(file);
+    if (trace.cycles.empty() && error.empty()) {
+        error = "the recording " + path + " has no cycles in it";
+    }
+    return trace;
+}
+
+void apply_cycle(Dut dut, const Trace& trace, std::size_t index) {
+    const ReplayCycle& cycle = trace.cycles[index];
+    dut.rst_ni.set((cycle.in >> kInRstN) & 1u);
+    dut.instr_gnt_i.set((cycle.in >> kInInstrGnt) & 1u);
+    dut.instr_rvalid_i.set((cycle.in >> kInInstrRvalid) & 1u);
+    dut.instr_err_i.set((cycle.in >> kInInstrErr) & 1u);
+    dut.instr_bad_intg_i.set((cycle.in >> kInInstrBadIntg) & 1u);
+    dut.instr_rdata_i.set(cycle.instr_rdata);
+    dut.data_gnt_i.set((cycle.in >> kInDataGnt) & 1u);
+    dut.data_rvalid_i.set((cycle.in >> kInDataRvalid) & 1u);
+    dut.data_err_i.set((cycle.in >> kInDataErr) & 1u);
+    dut.data_bad_intg_i.set((cycle.in >> kInDataBadIntg) & 1u);
+    dut.data_rdata_i.set(cycle.data_rdata);
+    dut.scramble_key_valid_i.set((cycle.in >> kInKeyValid) & 1u);
+    dut.fetch_enable_i.set((cycle.ctl >> 5) & 0xFu);
+    dut.mcounteren_writable_i.set((cycle.ctl >> 1) & 0xFu);
+    dut.debug_req_i.set(cycle.ctl & 1u);
+    if (cycle.key >= 0) {
+        dut.scramble_key_i.set(trace.keys[static_cast<std::size_t>(cycle.key)].key);
+        dut.scramble_nonce_i.set(
+            trace.keys[static_cast<std::size_t>(cycle.key)].nonce);
+    }
+}
+
+Task<void> replay_run(Dut dut, TestContext& test, Env& env,
+                      const Trace& trace) {
+    for (std::size_t index = 0; index < trace.cycles.size(); ++index) {
+        co_await RisingEdge{dut.clk_i};
+        const ReplayCycle& cycle = trace.cycles[index];
+
+        uint32_t out = 0;
+        out |= (dut.instr_req_o.get() != 0 ? 1u : 0u) << kOutInstrReq;
+        out |= (dut.data_req_o.get() != 0 ? 1u : 0u) << kOutDataReq;
+        out |= (dut.data_we_o.get() != 0 ? 1u : 0u) << kOutDataWe;
+        out |= (dut.rvfi_valid_o.get() != 0 ? 1u : 0u) << kOutRvfiValid;
+        out |= (dut.rvfi_trap_o.get() != 0 ? 1u : 0u) << kOutRvfiTrap;
+        out |= (dut.double_fault_seen_o.get() != 0 ? 1u : 0u) << kOutDoubleFault;
+        out |= (dut.alert_minor_o.get() != 0 ? 1u : 0u) << kOutAlertMinor;
+        out |= (dut.alert_major_internal_o.get() != 0 ? 1u : 0u)
+               << kOutAlertMajorInternal;
+        out |= (dut.alert_major_bus_o.get() != 0 ? 1u : 0u) << kOutAlertMajorBus;
+        out |= (dut.core_sleep_o.get() != 0 ? 1u : 0u) << kOutCoreSleep;
+        out |= (dut.scramble_req_o.get() != 0 ? 1u : 0u) << kOutKeyReq;
+
+        const uint32_t instr_addr = dut.instr_addr_o.get();
+        const uint32_t data_addr = dut.data_addr_o.get();
+        const uint32_t data_be = dut.data_be_o.get();
+        const uint32_t data_wdata = dut.data_wdata_o.get();
+        const uint64_t rvfi_order = dut.rvfi_order_o.get();
+        const uint32_t rvfi_pc = dut.rvfi_pc_rdata_o.get();
+        const uint32_t rvfi_rd = dut.rvfi_rd_addr_o.get();
+        const uint32_t rvfi_rd_wdata = dut.rvfi_rd_wdata_o.get();
+
+        const bool same =
+            out == cycle.out && instr_addr == cycle.instr_addr &&
+            data_addr == cycle.data_addr && data_be == cycle.data_be &&
+            data_wdata == cycle.data_wdata &&
+            rvfi_order == cycle.rvfi_order && rvfi_pc == cycle.rvfi_pc &&
+            rvfi_rd == cycle.rvfi_rd && rvfi_rd_wdata == cycle.rvfi_rd_wdata;
+        ++env.replay_cycles;
+        if (!same) {
+            std::printf(
+                "cpptb-core-ibex replay divergence at cycle %llu:\n"
+                "  recorded out=%03x iaddr=%s daddr=%s be=%x wdata=%s "
+                "order=%llu pc=%s rd=%02x rdw=%s\n"
+                "  replayed out=%03x iaddr=%s daddr=%s be=%x wdata=%s "
+                "order=%llu pc=%s rd=%02x rdw=%s\n",
+                static_cast<unsigned long long>(index), cycle.out,
+                hex32(cycle.instr_addr).c_str(), hex32(cycle.data_addr).c_str(),
+                cycle.data_be, hex32(cycle.data_wdata).c_str(),
+                static_cast<unsigned long long>(cycle.rvfi_order),
+                hex32(cycle.rvfi_pc).c_str(), cycle.rvfi_rd,
+                hex32(cycle.rvfi_rd_wdata).c_str(), out,
+                hex32(instr_addr).c_str(), hex32(data_addr).c_str(), data_be,
+                hex32(data_wdata).c_str(),
+                static_cast<unsigned long long>(rvfi_order),
+                hex32(rvfi_pc).c_str(), rvfi_rd,
+                hex32(rvfi_rd_wdata).c_str());
+            test.expect("the DUT answered the recording's stimulus the way the "
+                        "baseline recorded", false);
+            env.finish(Ending::kReplayDivergence,
+                       "cycle " + std::to_string(index));
+            co_return;
+        }
+
+        co_await FallingEdge{dut.clk_i};
+        if (index + 1 < trace.cycles.size()) {
+            apply_cycle(dut, trace, index + 1);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The program
 // ---------------------------------------------------------------------------
 
@@ -1280,6 +1578,7 @@ const char* ending_name(Ending ending) {
         case Ending::kDoubleFault: return "double-faults";
         case Ending::kCycleTimeout: return "cycle-timeout";
         case Ending::kMalformedHandshake: return "malformed-handshake";
+        case Ending::kReplayDivergence: return "replay-divergence";
         default: return "no-verdict";
     }
 }
@@ -1377,6 +1676,50 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     std::string load_error;
     const std::vector<uint8_t> image = read_binary(binary, load_error);
 
+    // IBEX_REPLAY names a recording made by ports/core_ibex_uvm with
+    // +core_ibex_record. With it set nothing below the monitors generates
+    // stimulus: every input comes off the recording and every output is
+    // compared against it.
+    const std::string replay_prefix = env_string("IBEX_REPLAY");
+    env.replay = !replay_prefix.empty();
+    Trace trace;
+    if (env.replay) {
+        std::string trace_error;
+        trace = read_trace(replay_prefix + ".pins", trace_error);
+        test.expect(trace_error.empty() ? "the recording loaded"
+                                        : trace_error.c_str(),
+                    trace_error.empty());
+        // IBEX_REPLAY_PERTURB moves one bit of the first instruction fetched
+        // at or after cycle N, so a run can show the comparison is live rather
+        // than merely running. See README.md.
+        const uint64_t perturb = env_number("IBEX_REPLAY_PERTURB", 0);
+        if (perturb != 0) {
+            for (std::size_t index = perturb; index < trace.cycles.size();
+                 ++index) {
+                if (((trace.cycles[index].in >> kInInstrRvalid) & 1u) == 0) {
+                    continue;
+                }
+                const uint32_t before = trace.cycles[index].instr_rdata;
+                trace.cycles[index].instr_rdata ^= 1u;
+                std::printf("cpptb-core-ibex replay: the instruction returned "
+                            "at cycle %llu was changed from 0x%s to 0x%s\n",
+                            static_cast<unsigned long long>(index),
+                            hex32(before).c_str(),
+                            hex32(trace.cycles[index].instr_rdata).c_str());
+                break;
+            }
+        }
+        if (trace.intg_unknown != 0) {
+            std::printf("cpptb-core-ibex replay: %llu responses carried "
+                        "integrity bits that are neither the encoding of the "
+                        "data nor its inverse, which this wrapper cannot "
+                        "drive\n",
+                        static_cast<unsigned long long>(trace.intg_unknown));
+        }
+        test.expect("every recorded response carries integrity bits the "
+                    "wrapper can reproduce", trace.intg_unknown == 0);
+    }
+
     // ibex_cosim_scoreboard::init_cosim runs in build_phase, before the first
     // clock edge and before anything is loaded.
     if (env_number("IBEX_NO_COSIM", 0) == 0) {
@@ -1413,6 +1756,54 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     dut.scramble_key_i.set(Bits<128>{});
     dut.scramble_nonce_i.set(0);
     test.start_clock(dut.clk_i, kClockPeriod);
+
+    if (env.replay && !trace.cycles.empty()) {
+        // The recording begins at the first posedge of the baseline's run, by
+        // which time its initial block has already driven rst_n. Two idle
+        // cycles with rst_ni high first, so applying cycle 0 produces the real
+        // falling edge the design's asynchronous resets need.
+        co_await clock_cycles(dut.clk_i, 2);
+        co_await FallingEdge{dut.clk_i};
+
+        env.mem.write_byte(kBootAddr, 0);
+        for (std::size_t offset = 0; offset < image.size(); ++offset) {
+            env.mem.write_byte(kBootAddr + static_cast<uint32_t>(offset),
+                               image[offset]);
+        }
+        if (!image.empty()) {
+            env.cosim.write_mem(kBootAddr, image.data(), image.size());
+        }
+        test.expect(load_error.empty() ? "the test binary loaded"
+                                       : load_error.c_str(),
+                    load_error.empty());
+
+        CosimScoreboard replay_scoreboard(test, env);
+        apply_cycle(dut, trace, 0);
+
+        auto replay_imem = test.spawn(bus_monitor(dut, test, env, env.imem));
+        auto replay_dmem = test.spawn(bus_monitor(dut, test, env, env.dmem));
+        auto replay_cosim =
+            test.spawn(cosim_monitor(dut, env, replay_scoreboard));
+        co_await replay_run(dut, test, env, trace);
+        replay_cosim.cancel();
+        replay_dmem.cancel();
+        replay_imem.cancel();
+        co_await replay_cosim;
+        co_await replay_dmem;
+        co_await replay_imem;
+
+        env.counters.cycles = env.replay_cycles;
+        if (env.ending == Ending::kRunning) {
+            env.ending = Ending::kHandshakePass;
+        }
+        std::printf("cpptb-core-ibex replay: %llu of %llu recorded cycles "
+                    "matched\n",
+                    static_cast<unsigned long long>(env.replay_cycles),
+                    static_cast<unsigned long long>(trace.cycles.size()));
+        report(name, env);
+        env.cosim.release();
+        co_return;
+    }
 
     // clk_rst_if::apply_reset(.reset_width_clks(100)), which core_ibex_tb_top
     // forks from its initial block.
