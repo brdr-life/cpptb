@@ -144,8 +144,8 @@ are compared with. That takes the port's own sub-item draws out of the
 comparison and leaves the recording's. On `ibex_icache_many_errors` the port's
 spread over seeds against one recording is 1.2% of `grants/fetch` and the
 spread of the comparison across recordings is 1.1%, so averaging the port away
-is worth a factor of 2.3 in recordings and costs nothing. `build/sweep.py` in
-this directory is the harness; it is scratch, not part of the port.
+is worth a factor of 2.3 in recordings and costs nothing. `sweep.py` is the
+harness, and it reads the recordings `replay.py --keep` leaves behind.
 
 Paired per-recording ratios, port over baseline, mean and standard error over
 the recordings named. `ibex_icache_many_errors` gets sixty because it is the
