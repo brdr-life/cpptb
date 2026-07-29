@@ -433,6 +433,32 @@ Shipped in the Verilator reference flow:
 - simulator capability diagnostics that reject X/Z writes when a two-state
   backend would silently coerce them.
 
+Two small remaining ergonomics items, both found by porting Ibex's icache
+testbench (`experiments/open_core_ports/ports/ibex_icache_cpptb`). Neither
+changes any semantics; both are mechanical work that a project currently
+repeats by hand:
+
+- **Wide four-state ports.** Code generation rejects any port wider than 32
+  bits whose declared type is four-state unless it is an `inout`, for inputs
+  and outputs alike and for interface members as well as top-level ports. The
+  icache wrapper had to redeclare the 128-bit scrambling key and the 64-bit
+  nonce as `bit` before it would build. Internal signals of the same width and
+  type are unaffected, so this is a limit of the packed port transport rather
+  than of the value model, and carrying the B plane for wide ports is the fix.
+  [Four-state values](four-state.md#wide-ports-must-be-declared-two-state)
+  records the exact rule and diagnostic.
+- **A signal bundle for a flat pin list.** A SystemVerilog interface port with
+  a modport already generates a passable per-element group, so a driver and a
+  monitor can share one `dut.link[index]` handle. A design whose protocol pins
+  are ordinary top-level ports has no equivalent. Every task in the icache port
+  therefore takes the whole `Dut` and states which pins it owns only by which
+  ones it happens to touch, and the wrapper module exists partly to lift the
+  core-side, memory-side and key pins to the boundary where the UVM
+  environment binds three interfaces instead. `cpptb_vc`'s `ApbBus` shows the
+  shape that works, an aggregate of generated signal handles constructed by the
+  testbench, but one has to be written per protocol. The work is proportional
+  to the protocol and repeated per port.
+
 Remaining portability work:
 
 Run the complete generated transport and scheduling conformance suite on at
@@ -585,26 +611,50 @@ One item there already has the use case, runnable example and performance peer
 that bar asks for, so it is named here rather than left to be found:
 [aligning the scheduling semantics with cocotb](future-directions.md#align-the-scheduling-semantics-with-cocotb).
 The trigger vocabulary matches cocotb deliberately, but writes apply
-immediately where cocotb defers them, and `ReadWrite`, `ReadOnly` and
-`NextTimeStep` cannot be used from a project because no timing backend
-providing them can be selected. A cocotb testbench translated line for line
-therefore drives a cycle early, and the documented workaround is a convention
-rather than a mechanism.
+immediately where cocotb defers them, so a cocotb testbench translated line for
+line drives a cycle early. The documented workaround is a convention rather
+than a mechanism: sample on the rising edge, drive off the falling one, and
+enter and leave every driving task at a drive point so that it does not
+re-anchor itself.
+
+Porting Ibex's icache testbench
+(`experiments/open_core_ports/ports/ibex_icache_cpptb`) measured what holding
+that convention costs. Every driving task had to be traced edge by edge against
+the `default output negedge` clocking block it replaces, and the convention
+itself is stated in a comment at the top of the file because nothing in the API
+expresses it. It was the largest single cost of writing that port's drivers.
+This is the one real semantics gap the port produced; the two items it added to
+[milestone 6](#6-interfaces-bidirectional-signals-and-portability) are small
+ergonomics work by comparison.
+
+`ReadWrite` and `ReadOnly` express the convention directly, and a project can
+select the standard VPI backend that provides them today by adding `--vpi` to
+`build.verilator_args`. What is missing is that no `cpptb.toml` key names that,
+that the faster direct-dispatch backend remains out of reach of `cpptb build`,
+that a project can assemble a define combination that produces wrong answers
+silently, and that phases still only help an author who knows to reach for
+them.
 
 Three ways to close it, in increasing order of commitment. They are not
 alternatives so much as a sequence: each is useful on its own, and each makes
 the next smaller.
 
-1. **Expose the timing backend.** A `[build] timing_backend` key threaded into
-   code generation would make `ReadOnly` and `ReadWrite` usable from a project,
-   so the cocotb driver and monitor shapes work as written. This is plumbing
-   over machinery that already exists and is already benchmarked in
-   [Performance](performance.md#timing-phase-dispatch); it unblocks documented
-   API that currently fails at run time.
+1. **Name and validate the backend selection.** A `[build] timing_backend` key
+   threaded into code generation would replace an undocumented `--vpi`, reach
+   the direct-dispatch backend as well as the VPI one, and reject the define
+   combinations a project can currently assemble by hand. Done means a project
+   names a backend, `ReadWrite`, `ReadOnly` and `NextTimeStep` either work or
+   fail the build rather than the run, and the timing conformance suite covers
+   every selectable name. This is plumbing over machinery that already exists
+   and is already benchmarked in
+   [Performance](performance.md#timing-phase-dispatch).
 2. **Offer deferred writes.** A queued write applied at the next settle point,
    alongside the immediate `set()`, would make a driver written the cocotb way
-   correct on any backend rather than only where phases are available. This is
-   the one that makes a translated testbench correct rather than merely
+   correct on any backend rather than only where phases are available. Done
+   means a driver that writes straight after an edge wait is correct in a
+   default build, with no phase waits and no drive-point convention, so a port
+   like the icache one needs neither the comment nor the edge-by-edge trace.
+   This is the one that makes a translated testbench correct rather than merely
    expressible.
 3. **Make deferred the default after an edge wait.** The most familiar and the
    largest change. It alters what existing testbenches do and costs a scheduler
@@ -623,6 +673,27 @@ global configuration database, mandatory runtime phases, and objection system
 would add substantial machinery without improving the current testbench model.
 The useful ideas to retain are typed transactions and clear separation between
 sequences, drivers, monitors, and scoreboards.
+
+That judgement now has a same-design comparison behind it, and it belongs
+beside the gaps above so the trade is visible in one place. Ibex's icache
+testbench exists in both forms against the same DUT elaborated from the same 77
+sources: upstream's UVM environment in
+`experiments/open_core_ports/ports/ibex_icache_uvm`, where all ten tests pass,
+and a cpptb port of three of them in
+`experiments/open_core_ports/ports/ibex_icache_cpptb`. The port needs no
+factory, no configuration database, no phasing and no sequencer arbitration,
+and its scoreboard is a plain class the monitor calls synchronously, which is
+what an analysis port already provides. Generating stimulus values directly
+also keeps a class of defect off the path entirely: the two icache ports
+between them document six Verilator defects with reduced cases, five of them in
+constrained randomization, and the cpptb port draws every field from
+`test.random()` with no solver involved, so none of the five has anywhere to
+occur. cpptb's own optional constraint layer would put a solver back on the
+path, but nothing obliges a testbench to use one. Wall time
+is about 230 times lower, with the caveats recorded in the port's `RESULTS.md`:
+the baseline runs about 18% more cycles for an unrelated reason, and it
+elaborates the UVM environment and two protocol-checker modules that the port
+does not, so it compares two harnesses rather than two simulators.
 
 The first component library also does not require a heavyweight sequencer,
 mandatory agent hierarchy, or implicit component startup. Direct coroutine
