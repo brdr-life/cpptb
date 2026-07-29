@@ -26,22 +26,28 @@ edge, so the same shape drives into that edge and the transaction commits a
 cycle early. The symptom is a read-back returning the value just written, which
 reads as a design bug.
 
-**Phase waits are not always available.** `ReadWrite`, `ReadOnly` and
-`NextTimeStep` are documented API, and [Performance](performance.md) benchmarks
-four backends providing them, two of which pass the timing conformance suite.
-None can be selected from a project: `cpptb build` emits one backend, there is
-no `cpptb.toml` key or CLI flag, and passing the defines through
-`build.verilator_args` fails because the supporting SystemVerilog is emitted at
-code-generation time. So a testbench using those waits builds cleanly and fails
-at run time with a message telling the author to rebuild the simulator, which a
-project cannot act on.
+**Phase waits are selectable, but only by an undocumented flag.** `ReadWrite`,
+`ReadOnly` and `NextTimeStep` are documented API, and
+[Performance](performance.md) benchmarks four backends providing them, two of
+which pass the timing conformance suite. A default `cpptb build` provides none
+of them, and a testbench using those waits builds cleanly and fails at run time
+with a message naming `--vpi`. Putting `--vpi` in `build.verilator_args` does
+work: the standard VPI callbacks are then compiled in and all three phase waits
+behave correctly in an ordinary project build. Nothing else about the project
+model acknowledges that. There is no `cpptb.toml` key, the faster direct
+Verilator dispatch is unreachable because it needs a `--cc --exe --build` link
+against `src/verilator_timing_main.cpp` instead of `--binary`, and the
+generated SV-DPI backends are reachable only by matching `design.defines`
+against `build.cxx_flags` by hand, where defining `CPPTB_SV_DPI_TIMING` alone
+silently selects the inline pump that the same benchmarks record as invalid.
 
 Three ways to close the gap, roughly in increasing order of commitment:
 
-1. **Expose the timing backend.** A `[build] timing_backend` key threaded into
-   code generation would make `ReadOnly` and `ReadWrite` usable, so the cocotb
-   driver and monitor shapes work as written. This is plumbing over machinery
-   that already exists and is already measured.
+1. **Name and validate the backend selection.** A `[build] timing_backend` key
+   threaded into code generation would replace the undocumented `--vpi`, reach
+   the direct-dispatch backend as well, and reject the define combinations that
+   currently produce wrong answers without a diagnostic. This is plumbing over
+   machinery that already exists and is already measured.
 2. **Offer deferred writes.** A queued write applied at the next settle point,
    alongside the immediate `set()`, would make a driver written the cocotb way
    correct on any backend rather than only where phases are available.
@@ -49,9 +55,10 @@ Three ways to close the gap, roughly in increasing order of commitment:
    largest change: it alters what existing testbenches do and costs a scheduler
    round trip per write, so it would need the performance peer to justify it.
 
-The first is cheap and unblocks the documented API. The second is what actually
-makes a translated cocotb testbench correct. The third is the only one that
-removes the difference entirely, and is the one that needs the most evidence.
+The first is cheap and turns a flag into a supported choice. The second is what
+actually makes a translated cocotb testbench correct. The third is the only one
+that removes the difference entirely, and is the one that needs the most
+evidence.
 
 Until then the portable answer is the edge-phase convention documented in
 [Scheduling](scheduling.md#sample-on-the-edge-drive-off-it): sample on the
@@ -62,6 +69,19 @@ clears the promotion bar in [Roadmap](roadmap.md#no-priority-backlog) if it is
 wanted. Found while porting Ibex's `dv/cs_registers` testbench, where the
 cocotb-shaped driver was the first thing tried; see
 `experiments/open_core_ports/ports/ibex_cs_registers`.
+
+Porting Ibex's icache testbench put a size on what the convention costs, and it
+is larger than "drive off the falling edge" suggests. Once drivers call each
+other the rule has a second half: every task that drives has to be entered at a
+drive point, return at a drive point, and not open with a wait, because a task
+that opens with a wait re-anchors itself and issues its first write a clock
+late. Nothing states or checks either half, so each of that port's driving
+tasks had to be traced edge by edge against the SystemVerilog clocking block it
+replaces before the port could be believed, and the rule survives only as a
+comment at the top of `testbench.cpp`. See
+`experiments/open_core_ports/ports/ibex_icache_cpptb`, whose per-item rates
+agree with the UVM baseline to about 1% on `fetches/insn`, the measure that
+would move first if a driver were mistimed.
 
 ## Framework capabilities
 
@@ -169,6 +189,20 @@ code. For performance the dependable peers on Verilator remain plain
 SystemVerilog and cocotb, which the four-mode harness already supports. This is
 worth re-testing periodically, since it turns on Verilator maturing rather than
 on anything in this repository.
+
+Two later ports qualify that. `experiments/open_core_ports/ports/core_ibex_uvm`
+and `.../ibex_icache_uvm` run upstream UVM environments that somebody else
+wrote, and the icache one passes all ten of its own tests. Both needed work to
+get there, and `ibex_icache_uvm` records six Verilator defects with reduced
+cases, five of them in constrained randomization: `dist` applied as an equality
+against a pre-drawn sample, `std::randomize` ignoring `dist` weights, a
+`solve ... before ...` disabling every `soft` constraint in the class, a `soft`
+nested inside an `if` not being dropped when it conflicts, and a constrained
+`randomize()` over an `inside` range not being uniform over that range. The
+last of those is the whole of the stimulus difference between the icache UVM
+baseline and its cpptb port. So a UVM baseline can now be made to produce
+correct results on Verilator, and the stimulus it then produces still needs
+checking against what its own constraints describe.
 
 A useful side effect of Verilator's constraint support: pure-SystemVerilog
 twins can now use constrained-random classes rather than procedural stimulus,

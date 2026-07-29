@@ -112,6 +112,30 @@ Top-level ports and interface members currently retain their normal `get()`,
 `set_logic()`, and `drive_logic()` there only after a backend passes the same
 end-to-end capability and conformance requirements.
 
+## Wide ports must be declared two-state
+
+Code generation rejects any port wider than 32 bits whose declared type is
+four-state, unless it is an `inout`:
+
+```
+cpptb: port 'scr_key_i' is 128 bits wide and four-state; wide transport
+currently requires a two-state bit port
+```
+
+The rule applies to inputs and outputs alike and to interface members as well
+as top-level ports. A wide port declared `bit [127:0]` is accepted, and an
+`inout` net is accepted at any width. Internal signals are not affected: a
+128-bit four-state variable below the top is readable and depositable through
+the hierarchy API described above, so this is a limit of the packed port
+transport rather than of the value model. Carrying the B plane for wide ports
+is the fix.
+
+Until then a design whose wide ports are `logic` needs them redeclared as `bit`
+where the testbench meets them. Ibex's icache testbench ported to cpptb
+(`experiments/open_core_ports/ports/ibex_icache_cpptb`) does exactly that for
+the 128-bit scrambling key and the 64-bit nonce on its wrapper module, which
+carry no meaning beyond being random bits.
+
 ## Experimental capability gate
 
 The future Verilator path is guarded by an explicit project option:

@@ -76,8 +76,8 @@ backend only determines how the simulator resumes `ReadWrite`, `ReadOnly`, and
 
 | Timing backend | Status | Timing contract | Portability |
 |---|---|---|---|
-| Direct Verilator dispatch | Supported default | Complete | Verilator-specific |
-| Standard VPI callbacks | Supported fallback | Complete | Standard simulator API |
+| Direct Verilator dispatch | Supported; used by the repository's own conformance and benchmark flows | Complete | Verilator-specific |
+| Standard VPI callbacks | Supported; the backend a project can select | Complete | Standard simulator API |
 | Generated SV-DPI calendar | Experimental | Complete for generated and observed events | Cross-simulator validation pending |
 
 The generated calendar owns framework clocks and timers and observes selected
@@ -87,21 +87,38 @@ unobserved internal DUT event. Direct Verilator dispatch and standard VPI are
 the supported contract-complete choices. See [Performance](performance.md) for
 the exact backend comparison.
 
-!!! warning "The backend is not selectable from a project"
+!!! warning "A project selects the backend through `build.verilator_args`"
 
-    `cpptb build` emits one timing backend and there is no `cpptb.toml` setting
-    or command-line flag to choose another. That backend owns clocks and timers
-    but does not dispatch phases, so `ReadWrite`, `ReadOnly` and `NextTimeStep`
-    fail at run time in a project built this way.
+    There is no `cpptb.toml` timing-backend key. A default `cpptb build` links
+    Verilator's own `--binary` main, which owns clocks and timers but
+    dispatches no phases, so `ReadWrite`, `ReadOnly` and `NextTimeStep` fail at
+    run time in a project built that way.
 
-    Passing the backend defines through `build.verilator_args` does not work
-    either: the supporting SystemVerilog is emitted at code-generation time, so
-    the build fails with `Can't find definition of task/function:
-    'phase_settle_barrier'`.
+    Adding `--vpi` selects the standard VPI callbacks, and all three phase
+    waits then work:
 
-    Until a backend can be selected, use the edge-phase convention in
-    [Sample on the edge, drive off it](#sample-on-the-edge-drive-off-it), which
-    works on every backend.
+    ```toml
+    [build]
+    verilator_args = ["--vpi"]
+    ```
+
+    That is the only supported selection, and nothing but the run-time error
+    message points at it. Direct Verilator dispatch, the faster of the two
+    contract-complete backends, is not reachable from `cpptb build` at all: it
+    needs a `--cc --exe --build` link against `src/verilator_timing_main.cpp`
+    rather than `--binary`.
+
+    The generated SV-DPI backends are reachable only by matching
+    `design.defines` against `build.cxx_flags` by hand. That is not a supported
+    configuration and it has a silent failure: defining `CPPTB_SV_DPI_TIMING`
+    on its own selects the inline pump, which
+    [Performance](performance.md#portable-timing-experiments) records as
+    invalid because `ReadOnly` can run before the DUT settles. A testbench
+    built that way reads unsettled values and reports no diagnostic.
+
+    The edge-phase convention in
+    [Sample on the edge, drive off it](#sample-on-the-edge-drive-off-it) needs
+    no backend support and works in a default build.
 
 ## Composition
 
@@ -217,10 +234,30 @@ testbench one. SystemVerilog testbenches avoid it by driving through
 non-blocking assignments from inside `always_ff`; there is no non-blocking
 assignment to reach for here, so the clock phase does the same job.
 
-Where the timing backend supports them, `ReadOnly` and `ReadWrite` express this
-directly and are the better choice: sample after `co_await ReadOnly{}`, drive
-after `co_await ReadWrite{}`. See [Timing backend support](#timing-backend-support)
-for which backends provide them.
+#### Holding the convention across a whole testbench
+
+One driver is easy. A set of drivers that call each other has a second half to
+the rule, and it is the half that is easy to lose. Name the instant just after
+the falling edge the *drive point*. Then every task that drives a pin must be
+entered at a drive point, must return at a drive point, and must not open with
+a wait. A task that opens with a wait re-anchors itself and places its first
+write one clock later than the SystemVerilog it replaces; a task that returns
+part way through a cycle moves its caller's next write instead.
+
+That rule is a convention, not a mechanism: nothing in the API states it and
+nothing checks it. Ibex's icache testbench ported to cpptb
+(`experiments/open_core_ports/ports/ibex_icache_cpptb`) states it in a comment
+at the top of the file and holds every one of its driving tasks to it, and each
+one had to be traced edge by edge against the `default output negedge` clocking
+block it replaces. It was the largest single cost of writing those drivers.
+
+Where the timing backend supports them, `ReadOnly` and `ReadWrite` express the
+whole rule directly and are the better choice: sample after
+`co_await ReadOnly{}`, drive after `co_await ReadWrite{}`. A phase is named
+rather than implied by a clock, so a task that starts with a phase wait is not
+re-anchoring itself. See
+[Timing backend support](#timing-backend-support) for which backends provide
+them and how a project selects one.
 
 ### Coming from cocotb
 
@@ -345,9 +382,11 @@ ReadWrite, ReadOnly, and NextTimeStep require the standard simulator timing
 bridge; enable VPI timing support in the simulator build (Verilator: --vpi)
 ```
 
-at run time rather than failing the build. The edge-phase convention above needs
-no backend support, which is why the examples use it. See
-[Timing backend support](#timing-backend-support).
+at run time rather than failing the build. A project gets them by adding
+`--vpi` to `build.verilator_args`, which is the only supported way to select a
+phase-dispatching backend and is not named by any `cpptb.toml` key. The
+edge-phase convention above needs no backend support, which is why the examples
+use it. See [Timing backend support](#timing-backend-support).
 
 ### Bound producer pressure and shared resources
 
