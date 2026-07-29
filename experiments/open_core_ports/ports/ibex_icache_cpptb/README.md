@@ -529,5 +529,6 @@ cpptb.toml                   generated; do not edit
 testbench.cpp                agents, memory model, scoreboard, ten tests
 run_tests.py                 runs the port, and the baseline beside it
 replay.py                    records the baseline's stimulus and replays it
+sweep.py                     replays one recording many times, for a rate
 shims/                       one reduced Verilator case, see RESULTS.md
 ```
