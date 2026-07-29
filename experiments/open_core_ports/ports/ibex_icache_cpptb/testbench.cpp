@@ -54,6 +54,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -642,6 +643,18 @@ struct Response {
     uint32_t delay = 0;
 };
 
+// ibex_icache_core_req_item, and the unit of the item stream that
+// ports/ibex_icache_uvm records. Declared here rather than beside the core
+// driver so that Env can hold a recorded list of them.
+struct Item {
+    bool branch = false;
+    uint32_t branch_addr = 0;
+    bool enable = false;
+    bool invalidate = false;
+    uint32_t new_seed = 0;
+    uint32_t num_insns = 0;
+};
+
 struct Env {
     Scoreboard& scoreboard;
     bool disable_mem_errs = false;
@@ -691,6 +704,15 @@ struct Env {
     // the run because the agent's config object is randomised once.
     bool key_zero_delays = false;
     uint32_t key_delay_max = 0;
+
+    // Replay. ICACHE_REPLAY drives every DUT input from a recording made by
+    // ports/ibex_icache_uvm, in which case nothing here generates stimulus and
+    // the memory model is not consulted; ICACHE_ITEMS replays only the core
+    // item stream and leaves the rest of the environment to draw its own.
+    // See README.md.
+    bool replay_pins = false;
+    const std::vector<Item>* replay_items = nullptr;
+    bool replay_diverged = false;
 
     void push_seed(uint32_t seed) {
         scoreboard.on_new_seed(seed);
@@ -931,15 +953,6 @@ Task<void> lower_req(Dut dut, Env& env, uint32_t cycles) {
     if (!env.core_stopped()) dut.req_i.set(1);
 }
 
-struct Item {
-    bool branch = false;
-    uint32_t branch_addr = 0;
-    bool enable = false;
-    bool invalidate = false;
-    uint32_t new_seed = 0;
-    uint32_t num_insns = 0;
-};
-
 // ibex_icache_core_if::branch_to, then the fetches that follow it
 Task<void> branch_then_read(Dut dut, TestContext& test, Env& env,
                             const Item item, bool& saw_error) {
@@ -1022,6 +1035,29 @@ Task<void> core_stimulus(Dut dut, TestContext& test, Env& env,
     uint32_t last_branch = 0;
 
     co_await FallingEdge{dut.clk_i};
+
+    // ICACHE_ITEMS: the item stream came out of a recording of
+    // ports/ibex_icache_uvm, so none of the fields below are drawn. Everything
+    // downstream of the sequence -- the driver's delays, the grant and
+    // response timing, the key device and the ECC masks -- still draws its
+    // own, which is what makes this an experiment about the item
+    // distribution alone. See README.md.
+    if (env.replay_items != nullptr) {
+        for (const Item& item : *env.replay_items) {
+            if (env.core_stopped()) break;
+            ++env.scoreboard.counters.items;
+            if (item.branch) ++env.scoreboard.counters.branch_items;
+            env.scoreboard.counters.insns_requested += item.num_insns;
+
+            bool saw_error = false;
+            if (item.branch) {
+                co_await drive_branch(dut, test, env, item, saw_error);
+            } else {
+                co_await drive_req(dut, test, env, item, saw_error);
+            }
+        }
+        co_return;
+    }
 
     // run_reqs runs num_trans - 1 items.
     for (uint32_t index = 0; index + 1 < num_trans; ++index) {
@@ -1256,22 +1292,29 @@ Task<void> mem_monitor(Dut dut, TestContext& test, Env& env) {
             for (const uint32_t seed : env.pending_seeds) env.cur_seed = seed;
             env.pending_seeds.clear();
 
-            const uint32_t address = dut.instr_addr_o.get();
-            Response response;
-            response.err = is_mem_error(env.disable_mem_errs, env.cur_seed,
-                                        address, env.mem_err_shift);
-            // Upstream drives 'X with the error. Verilator has no X, so the
-            // baseline drives zero here too; a wrong fetch that returned this
-            // without the error flag would still fail the scoreboard, because
-            // the seed hash is what the data is checked against.
-            response.rdata =
-                response.err ? 0u : read_data(env.cur_seed, address);
-            if (env.corrupt_grant != 0 &&
-                env.scoreboard.counters.mem_grants + 1 == env.corrupt_grant) {
-                response.rdata ^= 1u << 17;
+            // Under ICACHE_REPLAY the response was decided by the recorded
+            // environment and is already on the wire, so what is left here is
+            // the monitor alone.
+            if (!env.replay_pins) {
+                const uint32_t address = dut.instr_addr_o.get();
+                Response response;
+                response.err = is_mem_error(env.disable_mem_errs, env.cur_seed,
+                                            address, env.mem_err_shift);
+                // Upstream drives 'X with the error. Verilator has no X, so
+                // the baseline drives zero here too; a wrong fetch that
+                // returned this without the error flag would still fail the
+                // scoreboard, because the seed hash is what the data is
+                // checked against.
+                response.rdata =
+                    response.err ? 0u : read_data(env.cur_seed, address);
+                if (env.corrupt_grant != 0 &&
+                    env.scoreboard.counters.mem_grants + 1 ==
+                        env.corrupt_grant) {
+                    response.rdata ^= 1u << 17;
+                }
+                response.delay = draw_response_delay(test.random());
+                env.responses.push_back(response);
             }
-            response.delay = draw_response_delay(test.random());
-            env.responses.push_back(response);
             env.scoreboard.on_mem_grant();
         }
 
@@ -1457,6 +1500,342 @@ Task<void> ecc_corrupter(Dut dut, TestContext& test, Env& env) {
             dut.ic_data_rdata_mask_i.set(masks);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Replay
+//
+// ports/ibex_icache_uvm records what its environment did; this drives the same
+// thing at the same DUT pins and checks that the DUT answers with the same
+// outputs on the same cycles. Two harnesses running independent random streams
+// can only be compared on the agreement of their rates, which is a statement
+// about two distributions; this is a statement about one run.
+//
+// The recording is written by the tb.sv overlay in ports/ibex_icache_uvm's
+// build_tb.py. Every value in it is read in the Active region of a posedge,
+// which is what the design samples at that edge, so the inputs are driven here
+// at the drive point before that edge and the outputs are compared at the edge
+// itself. See README.md.
+// ---------------------------------------------------------------------------
+
+// Bit positions in the two packed fields of a `C` line, as its header names
+// them.
+enum : uint32_t {
+    kInRstN = 0,
+    kInReq = 1,
+    kInBranch = 2,
+    kInReady = 3,
+    kInEnable = 4,
+    kInInvalidate = 5,
+    kInGnt = 6,
+    kInRvalid = 7,
+    kInErr = 8,
+    kInKeyValid = 9,
+};
+enum : uint32_t {
+    kOutValid = 0,
+    kOutErr = 1,
+    kOutErrPlus2 = 2,
+    kOutBusy = 3,
+    kOutInstrReq = 4,
+    kOutKeyReq = 5,
+    kOutEccError = 6,
+    kOutTagRvalid = 7,
+    kOutDataRvalid = 7 + kNumWays,
+};
+
+struct PinCycle {
+    uint32_t in = 0;
+    uint32_t out = 0;
+    uint32_t branch_addr = 0;
+    uint32_t instr_rdata = 0;
+    uint32_t core_rdata = 0;
+    uint32_t core_addr = 0;
+    uint32_t instr_addr = 0;
+};
+
+struct KeyEvent {
+    uint64_t cycle = 0;
+    Bits<128> key{};
+    uint64_t nonce = 0;
+};
+
+struct MaskEvent {
+    uint64_t cycle = 0;
+    uint64_t tag = 0;
+    Bits<kNumWays * kLineSizeEcc> data{};
+};
+
+struct SeedEvent {
+    // The edge before which the seed reaches the scoreboard.
+    uint64_t cycle = 0;
+    uint32_t seed = 0;
+};
+
+struct Trace {
+    std::vector<PinCycle> pins;
+    // The wide inputs are written only when they change, so these are sparse
+    // and a replay holds the last value.
+    std::vector<KeyEvent> keys;
+    std::vector<MaskEvent> masks;
+    std::vector<SeedEvent> seeds;
+    std::vector<Item> items;
+};
+
+std::vector<std::string> split_words(const std::string& line) {
+    std::vector<std::string> out;
+    std::size_t index = 0;
+    while (index < line.size()) {
+        while (index < line.size() && line[index] == ' ') ++index;
+        const std::size_t start = index;
+        while (index < line.size() && line[index] != ' ') ++index;
+        if (index > start) out.emplace_back(line, start, index - start);
+    }
+    return out;
+}
+
+uint64_t parse_hex(const std::string& text) {
+    return std::strtoull(text.c_str(), nullptr, 16);
+}
+
+// <prefix>.pins
+bool read_pin_trace(const std::string& path, Trace& trace, uint64_t& cycle0,
+                    uint64_t& period, std::string& error) {
+    std::ifstream file(path);
+    if (!file) {
+        error = "cannot read " + path;
+        return false;
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty()) continue;
+        if (line[0] == '#') {
+            unsigned long long value = 0;
+            if (std::sscanf(line.c_str(), "# cycle0_time %llu", &value) == 1) {
+                cycle0 = value;
+            } else if (std::sscanf(line.c_str(), "# period_time %llu",
+                                   &value) == 1) {
+                period = value;
+            }
+            continue;
+        }
+        if (line[0] == 'C') {
+            unsigned long long cycle = 0;
+            PinCycle pin;
+            if (std::sscanf(line.c_str(), "C %llu %x %x %x %x %x %x %x", &cycle,
+                            &pin.in, &pin.branch_addr, &pin.instr_rdata,
+                            &pin.out, &pin.core_rdata, &pin.core_addr,
+                            &pin.instr_addr) != 8) {
+                error = "malformed C line in " + path + ": " + line;
+                return false;
+            }
+            if (cycle != trace.pins.size()) {
+                error = "the pin trace skips a cycle at " + std::to_string(cycle);
+                return false;
+            }
+            trace.pins.push_back(pin);
+            continue;
+        }
+        const auto words = split_words(line);
+        if (line[0] == 'K' && words.size() == 4) {
+            KeyEvent event;
+            event.cycle = std::strtoull(words[1].c_str(), nullptr, 10);
+            event.key = Bits<128>::from_hex(words[2]);
+            event.nonce = parse_hex(words[3]);
+            trace.keys.push_back(event);
+            continue;
+        }
+        if (line[0] == 'M' && words.size() == 4) {
+            MaskEvent event;
+            event.cycle = std::strtoull(words[1].c_str(), nullptr, 10);
+            event.tag = parse_hex(words[2]);
+            event.data =
+                Bits<kNumWays * kLineSizeEcc>::from_hex(words[3]);
+            trace.masks.push_back(event);
+            continue;
+        }
+        error = "unrecognised line in " + path + ": " + line;
+        return false;
+    }
+    if (trace.pins.empty() || period == 0) {
+        error = path + " carries no cycles; the recording run did not get far";
+        return false;
+    }
+    return true;
+}
+
+// <prefix>.items. The times in it are the simulation times at which the core
+// driver took the item and at which it announced a new memory seed; the header
+// of the pin trace says which cycle time zero was and how long a cycle is.
+bool read_item_trace(const std::string& path, Trace& trace, uint64_t cycle0,
+                     uint64_t period, std::string& error) {
+    std::ifstream file(path);
+    if (!file) {
+        error = "cannot read " + path;
+        return false;
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        const auto words = split_words(line);
+        if (line[0] == 'I' && words.size() == 8) {
+            Item item;
+            item.branch = words[2] != "0";
+            item.branch_addr = static_cast<uint32_t>(parse_hex(words[3]));
+            item.enable = words[4] != "0";
+            item.invalidate = words[5] != "0";
+            item.new_seed = static_cast<uint32_t>(parse_hex(words[6]));
+            item.num_insns =
+                static_cast<uint32_t>(std::strtoul(words[7].c_str(), nullptr,
+                                                   10));
+            trace.items.push_back(item);
+            continue;
+        }
+        if (line[0] == 'S' && words.size() == 3) {
+            // Only a pin replay has a use for these, and only a pin replay
+            // read the trace that says what a cycle is.
+            if (period == 0) continue;
+            const uint64_t stamp = std::strtoull(words[1].c_str(), nullptr, 10);
+            SeedEvent event;
+            // The driver announces the seed just after the edge whose time
+            // this is, so the scoreboard has it before the next one.
+            event.cycle = stamp < cycle0 ? 0 : (stamp - cycle0) / period + 1;
+            event.seed = static_cast<uint32_t>(parse_hex(words[2]));
+            trace.seeds.push_back(event);
+            continue;
+        }
+        error = "unrecognised line in " + path + ": " + line;
+        return false;
+    }
+    return true;
+}
+
+void apply_pins(Dut dut, const PinCycle& pin) {
+    dut.rst_ni.set((pin.in >> kInRstN) & 1u);
+    dut.req_i.set((pin.in >> kInReq) & 1u);
+    dut.branch_i.set((pin.in >> kInBranch) & 1u);
+    dut.branch_addr_i.set(pin.branch_addr);
+    dut.ready_i.set((pin.in >> kInReady) & 1u);
+    dut.enable_i.set((pin.in >> kInEnable) & 1u);
+    dut.invalidate_i.set((pin.in >> kInInvalidate) & 1u);
+    dut.instr_gnt_i.set((pin.in >> kInGnt) & 1u);
+    dut.instr_rvalid_i.set((pin.in >> kInRvalid) & 1u);
+    dut.instr_rdata_i.set(pin.instr_rdata);
+    dut.instr_err_i.set((pin.in >> kInErr) & 1u);
+    dut.scr_key_valid_i.set((pin.in >> kInKeyValid) & 1u);
+}
+
+// Apply everything the recording says about the drive point before the edge
+// for `cycle`: the wide inputs, the seeds the core driver announced, and the
+// scoreboard's reset hooks on the edges of the recorded rst_n.
+struct ReplayCursor {
+    std::size_t key = 0;
+    std::size_t mask = 0;
+    std::size_t seed = 0;
+};
+
+void apply_cycle(Dut dut, Env& env, const Trace& trace, uint64_t cycle,
+                 bool run_scoreboard, ReplayCursor& cursor) {
+    if (cycle > 0) {
+        const bool was_reset =
+            ((trace.pins[cycle - 1].in >> kInRstN) & 1u) == 0;
+        const bool now_reset = ((trace.pins[cycle].in >> kInRstN) & 1u) == 0;
+        if (now_reset != was_reset) {
+            env.in_reset = now_reset;
+            if (run_scoreboard) {
+                if (now_reset) {
+                    env.scoreboard.start_reset();
+                } else {
+                    env.scoreboard.end_reset();
+                }
+            }
+        }
+    }
+
+    while (cursor.seed < trace.seeds.size() &&
+           trace.seeds[cursor.seed].cycle <= cycle) {
+        if (run_scoreboard) {
+            env.scoreboard.on_new_seed(trace.seeds[cursor.seed].seed);
+        }
+        ++cursor.seed;
+    }
+
+    apply_pins(dut, trace.pins[cycle]);
+    while (cursor.key < trace.keys.size() &&
+           trace.keys[cursor.key].cycle == cycle) {
+        dut.scr_key_i.set(trace.keys[cursor.key].key);
+        dut.scr_nonce_i.set(trace.keys[cursor.key].nonce);
+        ++cursor.key;
+    }
+    while (cursor.mask < trace.masks.size() &&
+           trace.masks[cursor.mask].cycle == cycle) {
+        dut.ic_tag_rdata_mask_i.set(trace.masks[cursor.mask].tag);
+        dut.ic_data_rdata_mask_i.set(trace.masks[cursor.mask].data);
+        // ibex_icache_ram_if redraws the mask on every falling edge where
+        // every way is returning data, and the recording writes it only when
+        // it changes, so this counts corruptions rather than the negedges that
+        // drew one.
+        if (trace.masks[cursor.mask].tag != 0 ||
+            trace.masks[cursor.mask].data !=
+                Bits<kNumWays * kLineSizeEcc>{}) {
+            ++env.scoreboard.counters.ecc_injections;
+        }
+        ++cursor.mask;
+    }
+}
+
+// Drive every DUT input from the recording and compare every DUT output
+// against it. Driving happens at the drive point before an edge and comparing
+// at the edge itself, which are the two points the recording is written from.
+//
+// Entered at a drive point with the recording's cycle 0 already applied.
+Task<void> replay_run(Dut dut, TestContext& test, Env& env, const Trace& trace,
+                      bool run_scoreboard, ReplayCursor cursor) {
+    for (uint64_t cycle = 0; cycle < trace.pins.size(); ++cycle) {
+        co_await RisingEdge{dut.clk_i};
+        const PinCycle& pin = trace.pins[cycle];
+
+        uint32_t out = 0;
+        out |= (dut.valid_o.get() != 0 ? 1u : 0u) << kOutValid;
+        out |= (dut.err_o.get() != 0 ? 1u : 0u) << kOutErr;
+        out |= (dut.err_plus2_o.get() != 0 ? 1u : 0u) << kOutErrPlus2;
+        out |= (dut.busy_o.get() != 0 ? 1u : 0u) << kOutBusy;
+        out |= (dut.instr_req_o.get() != 0 ? 1u : 0u) << kOutInstrReq;
+        out |= (dut.scr_key_req_o.get() != 0 ? 1u : 0u) << kOutKeyReq;
+        out |= (dut.ecc_error_o.get() != 0 ? 1u : 0u) << kOutEccError;
+        out |= static_cast<uint32_t>(dut.ic_tag_rvalid_o.get()) << kOutTagRvalid;
+        out |= static_cast<uint32_t>(dut.ic_data_rvalid_o.get())
+               << kOutDataRvalid;
+
+        const uint32_t core_rdata = dut.rdata_o.get();
+        const uint32_t core_addr = dut.addr_o.get();
+        const uint32_t instr_addr = dut.instr_addr_o.get();
+
+        if (out != pin.out || core_rdata != pin.core_rdata ||
+            core_addr != pin.core_addr || instr_addr != pin.instr_addr) {
+            // Everything after the first divergence is a consequence of it, so
+            // this stops rather than printing a run's worth of noise.
+            std::printf(
+                "cpptb-icache replay divergence at cycle %llu:\n"
+                "  recorded out=%04x rdata=%08x addr=%08x instr_addr=%08x\n"
+                "  replayed out=%04x rdata=%08x addr=%08x instr_addr=%08x\n",
+                static_cast<unsigned long long>(cycle), pin.out, pin.core_rdata,
+                pin.core_addr, pin.instr_addr, out, core_rdata, core_addr,
+                instr_addr);
+            env.replay_diverged = true;
+            test.expect(
+                "the DUT's outputs match the recording on every cycle, and "
+                "they first differ at cycle " +
+                    std::to_string(cycle),
+                false);
+            co_return;
+        }
+
+        if (cycle + 1 == trace.pins.size()) break;
+        co_await FallingEdge{dut.clk_i};
+        apply_cycle(dut, env, trace, cycle + 1, run_scoreboard, cursor);
+    }
+    test.expect("the DUT's outputs match the recording on every cycle", true);
 }
 
 // ---------------------------------------------------------------------------
@@ -1738,6 +2117,35 @@ uint64_t env_number(const char* name, uint64_t fallback) {
     return text != nullptr ? std::strtoull(text, nullptr, 0) : fallback;
 }
 
+std::string env_string(const char* name) {
+    const char* text = std::getenv(name);
+    return text != nullptr ? std::string(text) : std::string();
+}
+
+// ICACHE_REPLAY=<prefix> and ICACHE_ITEMS=<prefix>. Both name the prefix
+// ports/ibex_icache_uvm was given as +icache_record; the files under it are
+// <prefix>.pins and <prefix>.items.
+bool load_trace(TestContext& test, const std::string& prefix, bool want_pins,
+                Trace& trace) {
+    uint64_t cycle0 = 0;
+    uint64_t period = 0;
+    std::string error;
+    if (want_pins &&
+        !read_pin_trace(prefix + ".pins", trace, cycle0, period, error)) {
+        test.expect(error, false);
+        return false;
+    }
+    if (!read_item_trace(prefix + ".items", trace, cycle0, period, error)) {
+        test.expect(error, false);
+        return false;
+    }
+    if (trace.items.empty()) {
+        test.expect("the recording carries at least one core item", false);
+        return false;
+    }
+    return true;
+}
+
 Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
                            TestPlan plan) {
     // Every pin is touched here, unconditionally and before anything else.
@@ -1762,7 +2170,20 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
     dut.scr_nonce_i.set(0);
     dut.ic_tag_rdata_mask_i.set(uint64_t{0});
     dut.ic_data_rdata_mask_i.set(Bits<kNumWays * kLineSizeEcc>{});
-    test.start_clock(dut.clk_i, kClockPeriod);
+    // Every output is read here for the same reason. scr_key_req_o is read
+    // only by the replay checker, which a discovery run does not reach.
+    static_cast<void>(dut.valid_o.get());
+    static_cast<void>(dut.rdata_o.get());
+    static_cast<void>(dut.addr_o.get());
+    static_cast<void>(dut.err_o.get());
+    static_cast<void>(dut.err_plus2_o.get());
+    static_cast<void>(dut.busy_o.get());
+    static_cast<void>(dut.instr_req_o.get());
+    static_cast<void>(dut.instr_addr_o.get());
+    static_cast<void>(dut.scr_key_req_o.get());
+    static_cast<void>(dut.ic_tag_rvalid_o.get());
+    static_cast<void>(dut.ic_data_rvalid_o.get());
+    static_cast<void>(dut.ecc_error_o.get());
 
     Scoreboard scoreboard(test, /*disable_mem_errs=*/false,
                           /*mem_err_shift=*/3);
@@ -1776,10 +2197,89 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
     scoreboard.set_keep_state_on_reset(
         env_number("ICACHE_KEEP_STATE_ON_RESET", 0) != 0);
 
+    const std::string replay_prefix = env_string("ICACHE_REPLAY");
+    const std::string items_prefix = env_string("ICACHE_ITEMS");
+    Trace trace;
+    if (!replay_prefix.empty() || !items_prefix.empty()) {
+        const bool want_pins = !replay_prefix.empty();
+        if (!load_trace(test, want_pins ? replay_prefix : items_prefix,
+                        want_pins, trace)) {
+            co_return;
+        }
+    }
+
+    // The recorded environment changes mem_err_shift and the caching-ratio
+    // flag between child sequences, and neither is visible at a DUT pin, so a
+    // combo run's scoreboard cannot be driven from a recording. The pin
+    // comparison is what a combo replay is for; its scoreboard is left out
+    // rather than run on state it cannot know.
+    const bool replay = !replay_prefix.empty();
+    const bool replay_scoreboard = replay && !plan.combo;
+    env.replay_pins = replay;
+    if (!replay && !items_prefix.empty()) env.replay_items = &trace.items;
+
+    test.start_clock(dut.clk_i, kClockPeriod);
+
     // push_pull_agent_cfg is randomised once, so its delay bounds are drawn
     // here rather than per request. zero_delays carries dist { 0 := 7, 1 := 3 }.
     env.key_zero_delays = test.random().randint<uint32_t>(0, 9) < 3;
     env.key_delay_max = draw_key_delay_max(test.random());
+
+    if (replay) {
+        // The recording's cycle 0 is the first posedge of the recorded run, by
+        // which time dv_base_vseq::dut_init had already driven rst_n low. The
+        // same two idle cycles with rst_ni high are run here so that applying
+        // cycle 0 is a real falling edge: without one, the RAMs' four-valued
+        // rvalid registers stay at their zero-initialised value, which
+        // `mubi4_test_true_loose` reads as true, and the first cycle disagrees
+        // for a reason that has nothing to do with the stimulus.
+        co_await clock_cycles(dut.clk_i, 2);
+        co_await FallingEdge{dut.clk_i};
+
+        ReplayCursor cursor;
+        if (replay_scoreboard) {
+            scoreboard.set_mem_err_shift(plan.cfg.mem_err_shift);
+            scoreboard.set_disable_caching_ratio_test(
+                plan.cfg.disable_caching_ratio_test);
+            // The stimulus counters come out of the item recording rather than
+            // out of the sequence, so that the report line is comparable with
+            // a generated run's. The key agent's counters have no counterpart:
+            // a refusal carries the same pins as an idle cycle.
+            for (const Item& item : trace.items) {
+                ++scoreboard.counters.items;
+                if (item.branch) ++scoreboard.counters.branch_items;
+                scoreboard.counters.insns_requested += item.num_insns;
+            }
+        }
+        apply_cycle(dut, env, trace, 0, replay_scoreboard, cursor);
+        env.in_reset = ((trace.pins.front().in >> kInRstN) & 1u) == 0;
+        // The falling edge of rst_n that opens the recording is the one
+        // apply_reset fires start_reset on.
+        if (replay_scoreboard && env.in_reset) scoreboard.start_reset();
+
+        std::optional<Process> monitor_core;
+        std::optional<Process> monitor_mem;
+        if (replay_scoreboard) {
+            monitor_core.emplace(test.spawn(core_monitor(dut, env)));
+            monitor_mem.emplace(test.spawn(mem_monitor(dut, test, env)));
+        }
+        co_await replay_run(dut, test, env, trace, replay_scoreboard, cursor);
+        if (monitor_mem.has_value()) {
+            monitor_mem->cancel();
+            co_await *monitor_mem;
+        }
+        if (monitor_core.has_value()) {
+            monitor_core->cancel();
+            co_await *monitor_core;
+        }
+        if (replay_scoreboard) {
+            report(test, name, scoreboard.counters);
+        } else {
+            std::printf("cpptb-icache %s replay-pins-only cycles=%llu\n", name,
+                        static_cast<unsigned long long>(trace.pins.size()));
+        }
+        co_return;
+    }
 
     // The core monitor is started first so that, when a core item and a memory
     // item land on the same edge, the scoreboard sees them in the order its
