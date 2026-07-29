@@ -669,17 +669,19 @@ CPP_DPI_PHASES_RESULT: ReadWrite, ReadOnly, and NextTimeStep need a timing
 backend that dispatches simulator phases. This build has none: a default
 `cpptb build` links Verilator's own --binary main, which owns clocks and
 timers but dispatches no phases.
-  Select the standard VPI backend in cpptb.toml:
+  Wait on a clock edge instead: sample after `co_await RisingEdge{clk}`,
+drive after `co_await FallingEdge{clk}`. That is the supported route and it
+is what the ports in experiments/open_core_ports use.
 
-      [build]
-      verilator_args = ["--vpi"]
-
-  Or wait on a clock edge instead: sample after `co_await RisingEdge{clk}`,
-  drive after `co_await FallingEdge{clk}`. See docs/scheduling.md.
+  Adding `verilator_args = ["--vpi"]` to cpptb.toml stops this error and
+places writes on the right edge, but does NOT give a complete phase
+contract: ReadOnly does not observe a write settled in ReadWrite. Only a
+`--cc --exe --build` link against src/verilator_timing_main.cpp holds the
+full contract, and `cpptb build` cannot produce one. See docs/scheduling.md.
 ```
 
-That stanza lets the test run, and the drive point it produces is right, but
-the phases are not contract-complete. Running the five checks of
+The `--vpi` stanza the message describes lets the test run, and the drive
+point it produces is right, but the phases are not contract-complete. Running the five checks of
 `timing_phase_contract` from `tests/conformance/runtime/testbench.cpp` against
 this design in a `verilator_args = ["--vpi"]` build fails two of them:
 
@@ -760,6 +762,18 @@ and the phase-form driver above drives a cycle early: its write is captured by
 the 6 ns edge rather than the 10 ns one. Nothing in the build or the run says
 so. Those failures are visible only because a probe asserts on them; a
 testbench that does not check settled values reports a pass.
+
+Adding `CPPTB_SV_DPI_NBA_TIMING` (or additionally
+`CPPTB_SV_DPI_CALENDAR_TIMING`) to the same hand-matched define pair selects
+the NBA or calendar pump instead, and those pass all five contract checks and
+place the driver's write on the correct edge in a plain `cpptb build`. The
+machinery for a contract-passing build therefore already exists behind
+unvalidated defines. It is still not the full documented contract: with no
+started clock and no framework timer, a `NextTimeStep` waiter under either
+pump misses a DUT-internal `#5ns` event that direct dispatch and the VPI
+bridge both wake for, and times out against the watchdog. That is the
+observed-events limit the [backend table](scheduling.md#timing-backend-support)
+records.
 
 Three ways to close it, in increasing order of commitment. They are not
 alternatives so much as a sequence: each is useful on its own, and each makes
