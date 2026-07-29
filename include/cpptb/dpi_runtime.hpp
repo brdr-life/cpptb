@@ -587,14 +587,17 @@ class Runtime {
             "that dispatches simulator phases. This build has none: a default "
             "`cpptb build` links Verilator's own --binary main, which owns "
             "clocks and timers but dispatches no phases.\n"
-            "  Select the standard VPI backend in cpptb.toml:\n"
+            "  Wait on a clock edge instead: sample after `co_await "
+            "RisingEdge{clk}`, drive after `co_await FallingEdge{clk}`. That "
+            "is the supported route and it is what the ports in "
+            "experiments/open_core_ports use.\n"
             "\n"
-            "      [build]\n"
-            "      verilator_args = [\"--vpi\"]\n"
-            "\n"
-            "  Or wait on a clock edge instead: sample after `co_await "
-            "RisingEdge{clk}`, drive after `co_await FallingEdge{clk}`. See "
-            "docs/scheduling.md.\n",
+            "  Adding `verilator_args = [\"--vpi\"]` to cpptb.toml stops this "
+            "error and places writes on the right edge, but does NOT give a "
+            "complete phase contract: ReadOnly does not observe a write "
+            "settled in ReadWrite. Only a `--cc --exe --build` link against "
+            "src/verilator_timing_main.cpp holds the full contract, and "
+            "`cpptb build` cannot produce one. See docs/scheduling.md.\n",
             Adapter::result_name);
         return false;
 #endif
