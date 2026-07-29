@@ -17,18 +17,32 @@
 //  * the parameter override is spelled TweakInfection. tb.sv writes
 //    .ICacheTweakInfection, which ibex_icache does not have, so tb.sv cannot
 //    elaborate as vendored on any simulator. ports/ibex_icache_uvm patches it.
-//  * ibex_icache_ram_if is not instantiated. It exists to corrupt RAM read
-//    data for ibex_icache_ecc, which this port does not run, and its
-//    monitor-side clocking block and SVA belong to the UVM environment.
+//  * ibex_icache_ram_if is not instantiated. What it does for
+//    ibex_icache_ecc -- exclusive-or a sparse mask into each way's RAM read
+//    data on the way to the cache -- is done by the two mask inputs below,
+//    which testbench.cpp drives. Its clocking block, its `dist` draws and its
+//    SVA belong to the UVM environment; the draws are in testbench.cpp and the
+//    SVA compiles to nothing under Verilator on either side.
 //  * the key/nonce/valid triple is an input rather than the d_data field of a
 //    push_pull_if. The key device is a coroutine in testbench.cpp.
 //
 // The scramble key latch, the request/valid handshake around it and both RAM
 // instantiations are copied from tb.sv unchanged apart from the signal names.
+//
+// The two mask ports are `bit` rather than `logic` and are flat vectors rather
+// than one entry per way. cpptb's transport carries a port wider than 32 bits
+// only if it is two-state, which is what the 128-bit key already needed, and
+// carries packed vectors rather than unpacked arrays. Neither costs anything
+// here: a mask is a bag of bits with no meaning beyond which of them are set.
 
 module ibex_icache_tb_top import ibex_pkg::*; #(
   parameter bit ICacheECC      = 1'b1,
-  parameter bit TweakInfection = 1'b1
+  parameter bit TweakInfection = 1'b1,
+  // In the parameter port list so that the mask ports below can use them.
+  localparam int unsigned BusSizeECC  = ICacheECC ? (BUS_SIZE + 7) : BUS_SIZE,
+  localparam int unsigned LineSizeECC = BusSizeECC * IC_LINE_BEATS,
+  localparam int unsigned TagSizeECC  = ICacheECC ? (IC_TAG_SIZE + 6) :
+                                                    IC_TAG_SIZE
 ) (
   input  logic                           clk_i,
   input  logic                           rst_ni,
@@ -63,12 +77,19 @@ module ibex_icache_tb_top import ibex_pkg::*; #(
   input  bit   [SCRAMBLE_KEY_W-1:0]      scr_key_i,
   input  bit   [SCRAMBLE_NONCE_W-1:0]    scr_nonce_i,
 
+  // RAM read-data corruption, in place of ibex_icache_ram_if. Each way's slice
+  // is exclusive-ored into that way's read data while the way is returning it,
+  // which is where ibex_icache_ram_if's ic_*_rdata_err mux sits. A zero mask
+  // is the identity, so a test that never writes these sees the RAMs wired
+  // straight through.
+  input  bit   [IC_NUM_WAYS*TagSizeECC-1:0]  ic_tag_rdata_mask_i,
+  input  bit   [IC_NUM_WAYS*LineSizeECC-1:0] ic_data_rdata_mask_i,
+  output logic [IC_NUM_WAYS-1:0]         ic_tag_rvalid_o,
+  output logic [IC_NUM_WAYS-1:0]         ic_data_rvalid_o,
+
   output logic                           ecc_error_o
 );
 
-  localparam int unsigned BusSizeECC       = ICacheECC ? (BUS_SIZE + 7) : BUS_SIZE;
-  localparam int unsigned LineSizeECC      = BusSizeECC * IC_LINE_BEATS;
-  localparam int unsigned TagSizeECC       = ICacheECC ? (IC_TAG_SIZE + 6) : IC_TAG_SIZE;
   localparam int unsigned NumAddrScrRounds = 2;
 
   // RAM wiring, in place of ibex_icache_ram_if
@@ -76,11 +97,13 @@ module ibex_icache_tb_top import ibex_pkg::*; #(
   logic                   ic_tag_write;
   logic [IC_NUM_WAYS-1:0] ic_tag_req;
   logic [TagSizeECC-1:0]  ic_tag_wdata;
+  logic [TagSizeECC-1:0]  ic_tag_rdata_in [IC_NUM_WAYS];
   logic [TagSizeECC-1:0]  ic_tag_rdata [IC_NUM_WAYS];
   logic [IC_NUM_WAYS-1:0] ic_data_req;
   logic                   ic_data_write;
   logic [IC_INDEX_W-1:0]  ic_data_addr;
   logic [LineSizeECC-1:0] ic_data_wdata;
+  logic [LineSizeECC-1:0] ic_data_rdata_in [IC_NUM_WAYS];
   logic [LineSizeECC-1:0] ic_data_rdata [IC_NUM_WAYS];
 
   // Scramble key state, as in tb.sv
@@ -171,6 +194,21 @@ module ibex_icache_tb_top import ibex_pkg::*; #(
   assign scramble_key_d   = scramble_key_q;
   assign scramble_nonce_d = scramble_nonce_q;
 
+  // ibex_icache_ram_if's g_assign_vals, with the mask coming from the
+  // testbench rather than from a `dist` inside the interface.
+  for (genvar way = 0; way < IC_NUM_WAYS; way++) begin : gen_ecc_masks
+    assign ic_tag_rdata[way] =
+        ic_tag_rvalid_o[way]
+            ? (ic_tag_rdata_in[way] ^
+               ic_tag_rdata_mask_i[way*TagSizeECC +: TagSizeECC])
+            : ic_tag_rdata_in[way];
+    assign ic_data_rdata[way] =
+        ic_data_rvalid_o[way]
+            ? (ic_data_rdata_in[way] ^
+               ic_data_rdata_mask_i[way*LineSizeECC +: LineSizeECC])
+            : ic_data_rdata_in[way];
+  end
+
   for (genvar way = 0; way < IC_NUM_WAYS; way++) begin : gen_rams
     prim_ram_1p_scr #(
       .Width            (TagSizeECC),
@@ -195,8 +233,8 @@ module ibex_icache_tb_top import ibex_pkg::*; #(
       .wmask_i          ({TagSizeECC{1'b1}}),
       .intg_error_i     (1'b0),
 
-      .rdata_o          (ic_tag_rdata[way]),
-      .rvalid_o         (),
+      .rdata_o          (ic_tag_rdata_in[way]),
+      .rvalid_o         (ic_tag_rvalid_o[way]),
       .raddr_o          (),
       .rerror_o         (),
       .cfg_i            ('{default: prim_ram_1p_pkg::RAM_1P_CFG_REQ_DEFAULT}),
@@ -230,8 +268,8 @@ module ibex_icache_tb_top import ibex_pkg::*; #(
       .wmask_i          ({LineSizeECC{1'b1}}),
       .intg_error_i     (1'b0),
 
-      .rdata_o          (ic_data_rdata[way]),
-      .rvalid_o         (),
+      .rdata_o          (ic_data_rdata_in[way]),
+      .rvalid_o         (ic_data_rvalid_o[way]),
       .raddr_o          (),
       .rerror_o         (),
       .cfg_i            ('{default: prim_ram_1p_pkg::RAM_1P_CFG_REQ_DEFAULT}),
