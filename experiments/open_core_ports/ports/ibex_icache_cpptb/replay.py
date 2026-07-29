@@ -16,11 +16,12 @@ are compared cycle for cycle.
 
 Three modes, two of them from the same recording.
 
-  pins   Every input of the testbench wrapper is driven from the recording
-         and all twelve of its outputs are compared against it, cycle by cycle. The port's scoreboard runs on the
-         baseline's stimulus. A divergence here is a difference between the two
-         harnesses' wrappers or between the two drive conventions, because the
-         design and the simulator are the same.
+  pins   Every input of the testbench wrapper is driven from the recording and
+         all twelve of its outputs are compared against it, cycle by cycle,
+         with the port's scoreboard running on the baseline's stimulus. A
+         divergence here is a difference between the two harnesses' wrappers or
+         between the two drive conventions, because the design and the
+         simulator are the same.
 
   items  Only the core item stream comes from the recording. Every delay below
          the sequence -- the driver's waits, the grant and response timing, the
