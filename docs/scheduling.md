@@ -89,7 +89,7 @@ which means a `--cc --exe --build` link against `src/verilator_timing_main.cpp`
 rather than `--binary`. See [Performance](performance.md) for the exact backend
 comparison.
 
-!!! warning "No `cpptb build` configuration provides the timing phases"
+!!! warning "No supported `cpptb build` configuration provides the timing phases"
 
     There is no `cpptb.toml` timing-backend key. A default `cpptb build` links
     Verilator's own `--binary` main, which owns clocks and timers but
@@ -114,12 +114,18 @@ comparison.
     all five, and `cpptb build` cannot emit that link.
 
     The generated SV-DPI backends are reachable only by matching
-    `design.defines` against `build.cxx_flags` by hand. That is not a supported
-    configuration and it fails in more places: defining `CPPTB_SV_DPI_TIMING`
-    on its own selects the inline pump, which
+    `design.defines` against `build.cxx_flags` by hand, and nothing validates
+    the combination. Defining `CPPTB_SV_DPI_TIMING` on its own selects the
+    inline pump, which
     [Performance](performance.md#portable-timing-experiments) records as
-    invalid because `ReadOnly` can run before the DUT settles. A testbench
-    built that way reads unsettled values and reports no diagnostic.
+    invalid: `ReadOnly` can run before the DUT settles, and a write issued
+    after `co_await ReadWrite{}` is captured a cycle early. A testbench built
+    that way reads unsettled values and reports no diagnostic. Adding
+    `CPPTB_SV_DPI_NBA_TIMING` (or additionally
+    `CPPTB_SV_DPI_CALENDAR_TIMING`) selects the NBA or calendar pump, which
+    passes the timing conformance contract for generated and observed events,
+    but its `NextTimeStep` cannot wake for a DUT-internal event nothing
+    observes, and the configuration remains unsupported and unvalidated.
 
     The edge-phase convention in
     [Sample on the edge, drive off it](#sample-on-the-edge-drive-off-it) needs
@@ -262,9 +268,9 @@ block it replaces. It was the largest single cost of writing those drivers.
 `ReadOnly` and `ReadWrite` express the whole rule directly: sample after
 `co_await ReadOnly{}`, drive after `co_await ReadWrite{}`. A phase is named
 rather than implied by a clock, so a task that starts with a phase wait is not
-re-anchoring itself. No `cpptb build` configuration supplies those phases to
-their documented contract today, which is why this convention is what the
-examples use. See
+re-anchoring itself. No supported `cpptb build` configuration supplies those
+phases to their documented contract today, which is why this convention is
+what the examples use. See
 [Timing backend support](#timing-backend-support).
 
 ### Coming from cocotb
