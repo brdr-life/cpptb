@@ -162,6 +162,122 @@ FCOV_SOURCES = [
 # does not change which cycle the driver sees it in. The alternative -- two
 # clocking blocks, one per edge -- would diverge further from upstream's source
 # than this does.
+# One line per posedge of clk: every input of the testbench wrapper
+# ports/core_ibex_cpptb elaborates, and every output of it that the two
+# harnesses can be compared on. ports/core_ibex_cpptb/replay.py drives the
+# inputs at its own drive point, half a cycle earlier, and compares the outputs
+# at the edge this reads them on -- which is the value the design samples at
+# that edge, because an `always @(posedge clk)` executes in the Active region
+# before the clocking blocks' non-blocking updates land.
+#
+# Two details are worth stating.
+#
+# The integrity bits are recorded as a pair of flags rather than as the seven
+# bits themselves. ibex_mem_intf_response_seq computes them with
+# prim_secded_inv_39_32_enc(data) and inverts them when it wants a bad-integrity
+# response, and core_ibex_cpptb_tb_top computes them the same way from a
+# `bad_intg` input, so what a replay needs is that one bit. `intg_known` says
+# the recorded rintg really is the encoding or its inverse; a replay that sees
+# it clear on a cycle with rvalid asserted reports that rather than driving
+# something the wrapper cannot express.
+#
+# The key and nonce change rarely and are 192 bits between them, so they get a
+# `K` line only when they change and a reader holds the last value.
+RECORDER = r"""
+  // ------------------------------------------------------------------
+  // Pin recording for ports/core_ibex_cpptb/replay.py. Enabled by
+  // +core_ibex_record=<prefix>, and does nothing without it.
+  // ------------------------------------------------------------------
+  string       cpptb_record_prefix;
+  integer      cpptb_record_fd = 0;
+  int unsigned cpptb_record_cycle = 0;
+  int unsigned cpptb_record_max = 0;
+  logic [ibex_pkg::SCRAMBLE_KEY_W-1:0]   cpptb_last_key;
+  logic [ibex_pkg::SCRAMBLE_NONCE_W-1:0] cpptb_last_nonce;
+  bit          cpptb_key_written = 1'b0;
+
+  function automatic bit cpptb_bad_intg(logic [31:0] rdata, logic [6:0] rintg);
+    logic [38:0] enc;
+    enc = prim_secded_pkg::prim_secded_inv_39_32_enc(rdata);
+    return (rintg === ~enc[38:32]);
+  endfunction
+
+  function automatic bit cpptb_intg_known(logic [31:0] rdata, logic [6:0] rintg);
+    logic [38:0] enc;
+    enc = prim_secded_pkg::prim_secded_inv_39_32_enc(rdata);
+    return (rintg === enc[38:32]) || (rintg === ~enc[38:32]);
+  endfunction
+
+  initial begin
+    if ($value$plusargs("core_ibex_record=%0s", cpptb_record_prefix)) begin
+      void'($value$plusargs("core_ibex_record_max=%0d", cpptb_record_max));
+      cpptb_record_fd = $fopen({cpptb_record_prefix, ".pins"}, "w");
+      if (cpptb_record_fd == 0) begin
+        $fatal(1, "cannot open the cpptb pin recording for writing");
+      end
+      $fwrite(cpptb_record_fd,
+              "# core_ibex pin recording for ports/core_ibex_cpptb/replay.py\n");
+      $fwrite(cpptb_record_fd,
+              "# in  0 rst_n 1 instr_gnt 2 instr_rvalid 3 instr_err 4 instr_bad_intg\n");
+      $fwrite(cpptb_record_fd,
+              "#     5 data_gnt 6 data_rvalid 7 data_err 8 data_bad_intg 9 key_valid\n");
+      $fwrite(cpptb_record_fd,
+              "#     10 instr_intg_known 11 data_intg_known\n");
+      $fwrite(cpptb_record_fd,
+              "# ctl 8:5 fetch_enable 4:1 mcounteren_writable 0 debug_req\n");
+      $fwrite(cpptb_record_fd,
+              "# out 0 instr_req 1 data_req 2 data_we 3 rvfi_valid 4 rvfi_trap\n");
+      $fwrite(cpptb_record_fd,
+              "#     5 double_fault_seen 6 alert_minor 7 alert_major_internal\n");
+      $fwrite(cpptb_record_fd,
+              "#     8 alert_major_bus 9 core_sleep 10 key_req\n");
+      $fwrite(cpptb_record_fd,
+              "# K cycle key nonce\n");
+      $fwrite(cpptb_record_fd,
+              "# C cycle in ctl instr_rdata data_rdata out instr_addr data_addr data_be data_wdata rvfi_order rvfi_pc rvfi_rd rvfi_rd_wdata\n");
+    end
+  end
+
+  always @(posedge clk) begin
+    if (cpptb_record_fd != 0 &&
+        (cpptb_record_max == 0 || cpptb_record_cycle < cpptb_record_max)) begin
+      if (!cpptb_key_written || (scramble_key !== cpptb_last_key) ||
+          (scramble_nonce !== cpptb_last_nonce)) begin
+        $fwrite(cpptb_record_fd, "K %0d %032h %016h\n", cpptb_record_cycle,
+                scramble_key, scramble_nonce);
+        cpptb_last_key    = scramble_key;
+        cpptb_last_nonce  = scramble_nonce;
+        cpptb_key_written = 1'b1;
+      end
+      $fwrite(cpptb_record_fd,
+              "C %0d %03h %03h %08h %08h %03h %08h %08h %1h %08h %016h %08h %02h %08h\n",
+              cpptb_record_cycle,
+              {cpptb_intg_known(data_mem_vif.rdata, data_mem_vif.rintg),
+               cpptb_intg_known(instr_mem_vif.rdata, instr_mem_vif.rintg),
+               scrambling_key_if.ack,
+               cpptb_bad_intg(data_mem_vif.rdata, data_mem_vif.rintg),
+               data_mem_vif.error, data_mem_vif.rvalid, data_mem_vif.grant,
+               cpptb_bad_intg(instr_mem_vif.rdata, instr_mem_vif.rintg),
+               instr_mem_vif.error, instr_mem_vif.rvalid, instr_mem_vif.grant,
+               rst_n},
+              {dut_if.fetch_enable, dut_if.mcounteren_writable,
+               dut_if.debug_req},
+              instr_mem_vif.rdata, data_mem_vif.rdata,
+              {scrambling_key_if.req, dut_if.core_sleep,
+               dut_if.alert_major_bus, dut_if.alert_major_internal,
+               dut_if.alert_minor, dut_if.double_fault_seen,
+               dut.rvfi_trap, dut.rvfi_valid,
+               data_mem_vif.we, data_mem_vif.request, instr_mem_vif.request},
+              instr_mem_vif.addr, data_mem_vif.addr, data_mem_vif.be,
+              data_mem_vif.wdata, dut.rvfi_order, dut.rvfi_pc_rdata,
+              dut.rvfi_rd_addr, dut.rvfi_rd_wdata);
+      cpptb_record_cycle <= cpptb_record_cycle + 1;
+    end
+  end
+endmodule
+"""
+
+
 OVERLAYS = [
     # A class-scope `dist` poisons every other randomize() on the object:
     # this simulator emits the distribution as a hard equality against a
@@ -464,6 +580,14 @@ OVERLAYS = [
         "    join\n"
         "    data = data_l;\n"
         "  endtask : mem_rd_sub\n",
+    ),
+    # The pin recording ports/core_ibex_cpptb/replay.py replays. It writes
+    # nothing at all without +core_ibex_record=<prefix>, so this build is the
+    # build the results above were measured with; see RECORDER below.
+    (
+        CORE_IBEX / "tb/core_ibex_tb_top.sv",
+        "\nendmodule\n",
+        RECORDER,
     ),
 ]
 
