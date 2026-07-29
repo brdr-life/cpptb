@@ -627,26 +627,152 @@ This is the one real semantics gap the port produced; the two items it added to
 [milestone 6](#6-interfaces-bidirectional-signals-and-portability) are small
 ergonomics work by comparison.
 
-`ReadWrite` and `ReadOnly` express the convention directly, and a project can
-select the standard VPI backend that provides them today by adding `--vpi` to
-`build.verilator_args`. What is missing is that no `cpptb.toml` key names that,
-that the faster direct-dispatch backend remains out of reach of `cpptb build`,
-that a project can assemble a define combination that produces wrong answers
-silently, and that phases still only help an author who knows to reach for
-them.
+`ReadWrite` and `ReadOnly` express the convention directly, but no
+`cpptb build` configuration supplies them to their documented contract. A
+default build fails at run time; the `--vpi` stanza that the run-time message
+names stops the failure without making the phases settle correctly; a project
+can assemble a define combination that is wrong in a third way and says
+nothing; and phases still only help an author who knows to reach for them.
+Both contract-complete backends need cpptb to own the host loop, which means a
+`--cc --exe --build` link against `src/verilator_timing_main.cpp` rather than
+the `--binary` link `cpptb build` emits.
+
+### What the gap looks like
+
+The cases below run against one design, `phases`: a 4 ns clock, a
+combinational `comb_sum = drive_value + addend`, and one `always_ff` that
+samples `drive_value` and counts edges. Measured under Verilator 5.050.
+
+**`ReadWrite` and `ReadOnly` fail at run time in a default `cpptb build`.**
+
+```cpp
+Task<void> driver(Dut dut, TestContext& test) {
+    dut.clk.set(0);
+    test.start_clock(dut.clk, 4_ns);
+    co_await RisingEdge{dut.clk};
+    co_await ReadWrite{};
+    dut.drive_value.set(0x55);
+}
+CPPTB_REGISTER_TEST(driver);
+```
+
+`cpptb test` reports only that the process produced nothing:
+
+```
+ERROR driver: simulator did not produce a result file
+```
+
+The reason is in `build/cpptb/<name>/results/<test>.log`:
+
+```
+CPP_DPI_PHASES_RESULT: ReadWrite, ReadOnly, and NextTimeStep need a timing
+backend that dispatches simulator phases. This build has none: a default
+`cpptb build` links Verilator's own --binary main, which owns clocks and
+timers but dispatches no phases.
+  Select the standard VPI backend in cpptb.toml:
+
+      [build]
+      verilator_args = ["--vpi"]
+
+  Or wait on a clock edge instead: sample after `co_await RisingEdge{clk}`,
+  drive after `co_await FallingEdge{clk}`. See docs/scheduling.md.
+```
+
+That stanza lets the test run, and the drive point it produces is right, but
+the phases are not contract-complete. Running the five checks of
+`timing_phase_contract` from `tests/conformance/runtime/testbench.cpp` against
+this design in a `verilator_args = ["--vpi"]` build fails two of them:
+
+```
+ReadOnly observes write settled after ReadWrite: actual=19 expected=35
+ReadWrite observes sampled data after NBA: actual=16 expected=32
+```
+
+The same generated wrapper, testbench and RTL relinked as
+`--cc --exe --build --vpi` against `src/verilator_timing_main.cpp` passes all
+five: that main re-evaluates the model after each `ReadWrite` callback before
+running `ReadOnly`, and Verilator's own `--binary` main does not.
+
+**The drive-point convention.** The icache port states the rule in a comment
+because nothing in the API does, and every driving task holds to it:
+
+```cpp
+// A "drive point" is the instant just after a falling edge of clk_i. Every
+// task below that drives a pin is entered at a drive point and returns at a
+// drive point, and none of them opens with a wait: a task that re-anchored
+// itself would place its first write one cycle later than the UVM driver
+// does.
+
+Task<void> wait_clks(Dut dut, uint32_t count) {
+    if (count == 0) co_return;
+    co_await clock_cycles(dut.clk_i, count);
+    co_await FallingEdge{dut.clk_i};   // return to a drive point
+}
+
+Task<void> lower_req(Dut dut, uint32_t cycles) {
+    if (cycles == 0) co_return;
+    dut.req_i.set(0);                  // already at a drive point: no wait
+    co_await wait_clks(dut, cycles);
+    dut.req_i.set(1);
+}
+```
+
+Written against phases the same driver would carry no convention: it would not
+matter where its caller was, and `wait_clks` would have nothing left to do.
+
+```cpp
+Task<void> lower_req(Dut dut, uint32_t cycles) {
+    if (cycles == 0) co_return;
+    co_await ReadWrite{};
+    dut.req_i.set(0);
+    co_await clock_cycles(dut.clk_i, cycles);
+    co_await ReadWrite{};
+    dut.req_i.set(1);
+}
+```
+
+Both shapes place a write on the edge after the point where the driver
+resumed. On the design above, a driver that resumes on the 6 ns edge and then
+awaits `ReadWrite` is captured by the 10 ns edge; the same driver writing
+immediately after `co_await RisingEdge{}`, which is the line-for-line cocotb
+translation, is captured by the 6 ns edge it just resumed on.
+
+**The silent wrong-answer configuration.** Matching `design.defines` against
+`build.cxx_flags` by hand selects the inline SV-DPI pump:
+
+```toml
+[design]
+defines = ["CPPTB_SV_DPI_TIMING"]
+
+[build]
+cxx_flags = ["-DCPPTB_SV_DPI_TIMING"]
+```
+
+It builds and runs. Three of the five contract checks fail:
+
+```
+ReadOnly observes write settled after ReadWrite: actual=19 expected=35
+ReadWrite observes clocked update in new timestep: actual=0 expected=1
+ReadWrite observes sampled data after NBA: actual=0 expected=32
+```
+
+and the phase-form driver above drives a cycle early: its write is captured by
+the 6 ns edge rather than the 10 ns one. Nothing in the build or the run says
+so. Those failures are visible only because a probe asserts on them; a
+testbench that does not check settled values reports a pass.
 
 Three ways to close it, in increasing order of commitment. They are not
 alternatives so much as a sequence: each is useful on its own, and each makes
 the next smaller.
 
 1. **Name and validate the backend selection.** A `[build] timing_backend` key
-   threaded into code generation would replace an undocumented `--vpi`, reach
-   the direct-dispatch backend as well as the VPI one, and reject the define
-   combinations a project can currently assemble by hand. Done means a project
-   names a backend, `ReadWrite`, `ReadOnly` and `NextTimeStep` either work or
-   fail the build rather than the run, and the timing conformance suite covers
-   every selectable name. This is plumbing over machinery that already exists
-   and is already benchmarked in
+   threaded into code generation would replace a `--vpi` that does not deliver
+   the contract, emit the `--cc --exe --build` link both contract-complete
+   backends need, and reject the define combinations a project can currently
+   assemble by hand. Done means a project names a backend, `ReadWrite`,
+   `ReadOnly` and `NextTimeStep` either work or fail the build rather than the
+   run, and the timing conformance suite covers every selectable name. This is
+   plumbing over machinery that already exists and is already benchmarked in
    [Performance](performance.md#timing-phase-dispatch).
 2. **Offer deferred writes.** A queued write applied at the next settle point,
    alongside the immediate `set()`, would make a driver written the cocotb way
@@ -661,6 +787,34 @@ the next smaller.
    round trip per write, so it needs a performance peer and a migration story
    before it could be justified. It is the only option that removes the
    difference entirely.
+
+### What 1 and 2 would look like in use
+
+Neither exists. Both sketches below are proposals, and the spellings are
+placeholders.
+
+Option 1 replaces the `--vpi` stanza with a name the build understands, and
+rejects a combination it cannot honour instead of running it:
+
+```toml
+# Not implemented.
+[build]
+timing_backend = "verilator-direct"   # or "vpi"
+```
+
+Option 2 adds a queued write beside the immediate `set()`, so a driver written
+the cocotb way is correct with no phase wait and no drive-point convention:
+
+```cpp
+// Not implemented.
+Task<void> driver(Dut dut) {
+    while (true) {
+        co_await RisingEdge{dut.clk};
+        dut.wdata.set_deferred(next_word());   // lands for the next edge
+        dut.wvalid.set_deferred(1);
+    }
+}
+```
 
 Doing 1 and 2 would leave the framework familiar to a cocotb author without
 changing what any existing testbench does. 3 is a separate decision and should

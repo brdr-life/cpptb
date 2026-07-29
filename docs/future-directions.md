@@ -26,28 +26,32 @@ edge, so the same shape drives into that edge and the transaction commits a
 cycle early. The symptom is a read-back returning the value just written, which
 reads as a design bug.
 
-**Phase waits are selectable, but only by an undocumented flag.** `ReadWrite`,
-`ReadOnly` and `NextTimeStep` are documented API, and
-[Performance](performance.md) benchmarks four backends providing them, two of
-which pass the timing conformance suite. A default `cpptb build` provides none
-of them, and a testbench using those waits builds cleanly and fails at run time
-with a message naming `--vpi`. Putting `--vpi` in `build.verilator_args` does
-work: the standard VPI callbacks are then compiled in and all three phase waits
-behave correctly in an ordinary project build. Nothing else about the project
-model acknowledges that. There is no `cpptb.toml` key, the faster direct
-Verilator dispatch is unreachable because it needs a `--cc --exe --build` link
-against `src/verilator_timing_main.cpp` instead of `--binary`, and the
-generated SV-DPI backends are reachable only by matching `design.defines`
-against `build.cxx_flags` by hand, where defining `CPPTB_SV_DPI_TIMING` alone
-silently selects the inline pump that the same benchmarks record as invalid.
+**No project build supplies the phase waits.** `ReadWrite`, `ReadOnly` and
+`NextTimeStep` are documented API, and [Performance](performance.md) benchmarks
+four backends providing them, two of which pass the timing conformance suite. A
+default `cpptb build` provides none of them, and a testbench using those waits
+builds cleanly and fails at run time with a message naming `--vpi`. Putting
+`--vpi` in `build.verilator_args` makes the waits run, and the drive point it
+produces is right, but it does not give the documented contract: `cpptb build`
+links Verilator's `--binary` main, which does not re-evaluate the design
+between the `ReadWrite` and `ReadOnly` callbacks, so two of the five
+timing-phase conformance checks fail with no diagnostic. Both contract-complete
+backends need a `--cc --exe --build` link against
+`src/verilator_timing_main.cpp` instead of `--binary`, which no `cpptb.toml`
+key can ask for. The generated SV-DPI backends are reachable only by matching
+`design.defines` against `build.cxx_flags` by hand, where defining
+`CPPTB_SV_DPI_TIMING` alone silently selects the inline pump that the same
+benchmarks record as invalid. [Roadmap](roadmap.md#what-the-gap-looks-like)
+carries the worked examples and the observed output.
 
 Three ways to close the gap, roughly in increasing order of commitment:
 
 1. **Name and validate the backend selection.** A `[build] timing_backend` key
-   threaded into code generation would replace the undocumented `--vpi`, reach
-   the direct-dispatch backend as well, and reject the define combinations that
-   currently produce wrong answers without a diagnostic. This is plumbing over
-   machinery that already exists and is already measured.
+   threaded into code generation would replace a `--vpi` that does not deliver
+   the contract, emit the link both contract-complete backends need, and reject
+   the define combinations that currently produce wrong answers without a
+   diagnostic. This is plumbing over machinery that already exists and is
+   already measured.
 2. **Offer deferred writes.** A queued write applied at the next settle point,
    alongside the immediate `set()`, would make a driver written the cocotb way
    correct on any backend rather than only where phases are available.
@@ -55,7 +59,8 @@ Three ways to close the gap, roughly in increasing order of commitment:
    largest change: it alters what existing testbenches do and costs a scheduler
    round trip per write, so it would need the performance peer to justify it.
 
-The first is cheap and turns a flag into a supported choice. The second is what
+The first turns a flag that does not deliver the contract into a supported
+choice. The second is what
 actually makes a translated cocotb testbench correct. The third is the only one
 that removes the difference entirely, and is the one that needs the most
 evidence.
