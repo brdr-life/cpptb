@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the ported icache tests, and compare them against the UVM baseline.
 
-    python3 run_tests.py                    # the cpptb port, three seeds
+    python3 run_tests.py                    # the cpptb port, ten tests, three seeds
     python3 run_tests.py --seeds 10
     python3 run_tests.py ibex_icache_caching
     python3 run_tests.py --compare          # also run ports/ibex_icache_uvm
@@ -44,7 +44,17 @@ UVM_PORT = ROOT / "ports" / "ibex_icache_uvm"
 BINARY = (ROOT / "work" / "ibex_icache_cpptb" / "cpptb" / "ibex_icache_cpptb" /
           "obj" / "Vdpi_ibex_icache_cpptb")
 
-TESTS = ["ibex_icache_smoke", "ibex_icache_passthru", "ibex_icache_caching"]
+# Upstream's ten, in the order ibex_icache_sim_cfg.hjson lists them.
+TESTS = ["ibex_icache_smoke",
+         "ibex_icache_passthru",
+         "ibex_icache_caching",
+         "ibex_icache_invalidation",
+         "ibex_icache_oldval",
+         "ibex_icache_back_line",
+         "ibex_icache_many_errors",
+         "ibex_icache_ecc",
+         "ibex_icache_stress_all",
+         "ibex_icache_stress_all_with_reset"]
 
 # One line per run, written by report() in testbench.cpp.
 REPORT_RE = re.compile(r"^cpptb-icache (\S+) (.*)$", re.M)
@@ -55,7 +65,14 @@ RESULT_RE = re.compile(r"RESULT iterations=\d+ checks=(\d+) sim_cycles=(\d+) "
 FIELDS = ["items", "branch_items", "insns_requested", "fetches",
           "fetch_errors", "branches", "invalidations", "new_seeds",
           "mem_grants", "mem_responses", "mem_response_errors",
-          "windows_completed", "windows_checked", "cycles"]
+          "windows_completed", "windows_checked", "child_sequences", "resets",
+          "key_answers", "key_refusals", "ecc_injections", "ecc_errors",
+          "cycles"]
+
+# Counters only one side keeps. The UVM environment reports nothing about the
+# corruption ibex_icache_ram_if injects or about ecc_error_o, so those two
+# columns are printed as a dash for it rather than as a zero.
+UVM_MISSING = {"ecc_injections", "ecc_errors"}
 
 
 class RunError(Exception):
@@ -120,12 +137,21 @@ CORE_HEADER = "received core transaction"
 MEM_HEADER = "received mem transaction"
 SEED_HEADER = "received new seed"
 DRIVER_HEADER = "core_driver.sv:32"
+# ibex_icache_combo_vseq announces each child, and dv_base_scoreboard announces
+# each reset it sees, both at UVM_HIGH.
+CHILD_HEADER = "Running sequence '"
+RESET_HEADER = "reset occurred"
+# The scrambling key agent's driver prints the item it is about to drive. The
+# bottom bit of d_data is the valid bit, so an odd value is an answer that
+# carried a key and an even one is a refusal.
+KEY_HEADER = "Driver received item"
 ITEM_LINES = 12
 TIME_RE = re.compile(r"UVM_INFO @ *(\d+) ps")
 NUM_INSNS_RE = re.compile(r"^  num_insns +integral +32 +'h([0-9a-f]+)")
 NEW_SEED_RE = re.compile(r"^  new_seed +integral +32 +'h([0-9a-f]+)")
 IS_GRANT_RE = re.compile(r"^  is_grant +integral +1 +'h([01])")
 ERR_RE = re.compile(r"^  err +integral +1 +'h([01])")
+D_DATA_RE = re.compile(r"d_data = 0x([0-9a-f]+)")
 
 
 def read_uvm_log(path: Path, clock_ps: int) -> dict:
@@ -159,6 +185,15 @@ def read_uvm_log(path: Path, clock_ps: int) -> dict:
             if DRIVER_HEADER in line and "rcvd item" in line:
                 left, section = ITEM_LINES, "driver"
                 counters["items"] += 1
+                continue
+            if CHILD_HEADER in line:
+                counters["child_sequences"] += 1
+                continue
+            if RESET_HEADER in line:
+                counters["resets"] += 1
+                continue
+            if KEY_HEADER in line:
+                left, section = ITEM_LINES, "key"
                 continue
 
             if left <= 0:
@@ -198,7 +233,18 @@ def read_uvm_log(path: Path, clock_ps: int) -> dict:
                 match = NUM_INSNS_RE.match(line)
                 if match is not None:
                     counters["insns_requested"] += int(match.group(1), 16)
+            elif section == "key":
+                match = D_DATA_RE.search(line)
+                if match is not None:
+                    key = "key_answers" if int(match.group(1)[-1], 16) & 1 \
+                        else "key_refusals"
+                    counters[key] += 1
+                    left = 0
 
+    # Every test resets once in dut_init and runs one sequence, which the log
+    # does not announce for a test that is not a combo. The port counts both.
+    counters["child_sequences"] = max(counters["child_sequences"], 1)
+    counters["resets"] = max(counters["resets"], 1)
     counters["cycles"] = last_time // clock_ps
     return counters
 
@@ -305,6 +351,9 @@ def print_totals(results: list[dict]) -> None:
         for field in FIELDS:
             line = "  " + field.ljust(width)
             for harness in harnesses:
+                if harness == "uvm" and field in UVM_MISSING:
+                    line += "-".rjust(14)
+                    continue
                 values = [entry["counters"].get(field, 0) for entry in rows
                           if entry["harness"] == harness]
                 line += f"{mean(values):14.1f}"
@@ -329,13 +378,13 @@ def print_totals(results: list[dict]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("tests", nargs="*", help="default is all three")
+    parser.add_argument("tests", nargs="*", help="default is all ten")
     parser.add_argument("--seeds", type=int, default=3)
     parser.add_argument("--seed", type=int, default=123,
                         help="first seed; the baseline's default is 123")
     parser.add_argument("--compare", action="store_true",
                         help="also run ports/ibex_icache_uvm and tabulate both")
-    parser.add_argument("--jobs", type=int, default=3,
+    parser.add_argument("--jobs", type=int, default=8,
                         help="parallel UVM runs")
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--json", type=Path)
