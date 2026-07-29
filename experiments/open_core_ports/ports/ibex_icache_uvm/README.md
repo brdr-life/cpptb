@@ -184,13 +184,15 @@ Not a Verilator defect, and worth separating from the ones that are.
 
 ### 3. Verilator defects
 
-Five, four of them new here, each with a reduced case in `shims/`. Three are
-about `dist` and two about clocking blocks and `soft`.
+Six, five of them new here, each with a reduced case in `shims/` or in
+`ports/ibex_icache_cpptb/shims/`. Four are about randomization and two about
+clocking blocks and `soft`.
 
 | defect | reduced case | effect here |
 | --- | --- | --- |
 | a `dist` is applied as an equality against a pre-drawn sample | `verilator_dist_plus_equality.sv` | any other constraint on the same variable makes `randomize()` fail |
 | `std::randomize(x) with { x dist {...} }` ignores the weights | `verilator_dist_std_randomize.sv` | uniform over the support instead |
+| a constrained `randomize()` over an `inside` range is not uniform on it | `ports/ibex_icache_cpptb/shims/verilator_inside_range_uniformity.sv` | the key device's delays cluster at the top of their range |
 | a `solve ... before ...` disables every `soft` constraint in the class | `verilator_soft_with_solve_before.sv` | four delay minima come out arbitrary |
 | a `soft` nested inside an `if` is not dropped when it conflicts | (in the same files) | only top-level `soft` is usable |
 | a one-cycle pulse through a clocking block output is lost | `verilator_clocking_pulse.sv` | no branch is driven after a mid-test reset |
@@ -331,6 +333,16 @@ instead, keeping the same buckets and the same weights. That is the approach
 five decided fields of the core request item, the two driver delays, the two
 ECC way selects, the two ECC masks, the combo sequence's reset timer and the
 memory response delay.
+
+The `inside` range goes the same way. `push_pull_base_seq::randomize_item`
+asks for `device_delay inside {[cfg.device_delay_min : cfg.device_delay_max]}`
+and three more like it, and this simulator honours the range and is not
+uniform on it. Measured on this testbench's own key device, with
+`device_delay_max` at 131 over 37 draws, the mean came out 94 where the
+range's mean is 65; drawn with `$urandom_range` it comes out 69. That was the
+last distribution below the core item stream that `ports/ibex_icache_cpptb`
+did not share with this testbench, and it is worth about 0.15% of that
+comparison's `grants/fetch`. See its RESULTS.md.
 
 Two of them are worth reading twice.
 
