@@ -92,6 +92,11 @@ def build_verilator(manifest: dict[str, Any], timing_backend: str) -> Path:
     if sv_dpi_timing:
         cflags += " -DCPPTB_SV_DPI_TIMING"
         sv_defines.append("-DCPPTB_SV_DPI_TIMING")
+        if timing_backend == "sv-dpi-inline":
+            # The inline pump violates the phase contract and dpi_runtime.hpp
+            # rejects it at compile time. This suite builds it on purpose, to
+            # measure what it does, which is what the escape hatch is for.
+            cflags += " -DCPPTB_ALLOW_INVALID_TIMING"
         if timing_backend == "sv-dpi-nba":
             cflags += " -DCPPTB_SV_DPI_NBA_TIMING"
             sv_defines.append("-DCPPTB_SV_DPI_NBA_TIMING")
