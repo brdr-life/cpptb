@@ -477,10 +477,25 @@ def linker_script(entry: dict, stock: bool) -> tuple[Path, list[str]]:
         text = text.replace(old, new)
     overlay.parent.mkdir(parents=True, exist_ok=True)
     # Written every time rather than only when absent, so an edit to the
-    # substitutions above cannot leave a stale copy in place. Under the lock
-    # because entries are built several at a time and they share the file.
+    # substitutions above cannot leave a stale copy in place, and written
+    # atomically because every entry in the group links against this one path.
+    #
+    # The lock alone was not enough and the failure is worth recording: the lock
+    # covers the write, but `ld` reads the file in a subprocess outside it, so a
+    # rewrite that lands while another entry's link is reading gives that entry a
+    # truncated script. It surfaces as
+    #
+    #     undefined reference to `__global_pointer$'
+    #
+    # on one arbitrary ePMP entry per few hundred, which reads like a toolchain
+    # problem with the test rather than a harness race. A rename over the top is
+    # atomic on the same filesystem, so a reader sees the old file or the new one
+    # and never a partial one.
     with OVERLAY_LOCK:
-        overlay.write_text(text, encoding="utf-8")
+        scratch = overlay.with_name(f"{overlay.name}.{os.getpid()}."
+                                    f"{threading.get_ident()}")
+        scratch.write_text(text, encoding="utf-8")
+        os.replace(scratch, overlay)
     return overlay, [LD_SCRIPT_NOTE]
 
 
