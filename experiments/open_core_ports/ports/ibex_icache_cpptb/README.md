@@ -16,6 +16,7 @@ python3 fusesoc_setup.py --check              # cpptb.toml matches the graph
 uv run --frozen cpptb build --project .
 python3 run_tests.py                          # ten tests, three seeds
 python3 run_tests.py --compare                # and the UVM baseline beside it
+python3 replay.py                             # the baseline's stimulus, here
 ```
 
 `--compare` runs `ports/ibex_icache_uvm` as well, which needs a built baseline
@@ -153,6 +154,146 @@ wait; a task that re-anchored itself would place its first write one cycle
 later than the UVM driver does. Each of them was traced against its upstream
 counterpart edge by edge, and `run_tests.py`'s `cycles/item` is what would
 notice if one of them were off.
+
+## Replay
+
+Until this was built, the two harnesses had only ever been compared on the
+agreement of their per-item rates, because each draws from its own random
+stream. That is a statement about two distributions. `replay.py` makes a
+statement about one run: the baseline writes down everything its environment
+does that the DUT can see, this port drives the same thing at the same pins,
+and the DUT's outputs are compared cycle for cycle.
+
+```sh
+python3 replay.py                       # eight tests, one seed, both modes
+python3 replay.py --combo --seeds 5     # all ten, five seeds
+python3 replay.py ibex_icache_ecc --keep
+```
+
+**The recording is made by the baseline and replayed here**, which is the
+direction that tests the port against the reference. The other direction would
+test the reference against the port, and would need a UVM sequence and driver
+that read a file where the recording here needs one `always @(posedge clk)`
+block.
+
+`+icache_record=<prefix>` is added to `ports/ibex_icache_uvm` by two overlays in
+its `build_tb.py`, and without the plusarg neither does anything at all. It
+writes three files:
+
+| file | written by | contents |
+| --- | --- | --- |
+| `<prefix>.pins` | `tb.sv` | one line per posedge of `clk`: every DUT input and every DUT output |
+| `<prefix>.items` | `ibex_icache_core_driver.sv` | the core item stream, and one line per new memory seed |
+| `<prefix>.seq` | `ibex_icache_core_base_seq.sv` | `base_addr` and `constrain_branches`, one line per sequence |
+
+Everything in the pin trace is read in the Active region of the posedge, which
+is the value the design samples at that edge and the value a `monitor_cb` input
+sees. So a replay that drives those inputs at its drive point, half a cycle
+earlier, presents the design with the same stimulus, and one that reads the
+outputs at the edge itself reads what the recording read. The format is one
+line per cycle:
+
+```
+# C cycle in branch_addr instr_rdata out core_rdata core_addr instr_addr
+C 4123 013 76e76f7c 000061ce 0049 000061ce 76e76f7c 76e76f80
+```
+
+`in` and `out` pack the one-bit signals; the file's header names the bits. The
+scrambling key and the two ECC corruption masks are wide and change rarely, so
+they get `K` and `M` lines only when they change and a reader holds the last
+value. The masks are recovered as `ic_*_rdata_o ^ ic_*_rdata_in`, which is
+exactly what `ibex_icache_ram_if` exclusive-ored in and is zero wherever it
+applied none. About 60 bytes a cycle, so 4 MB for a run of the smoke test.
+
+Two modes read it.
+
+**`ICACHE_REPLAY=<prefix>`** drives every DUT input from the recording and
+compares every DUT output at the edge the recording read it on. Nothing here
+generates stimulus and the memory model is not consulted: the responses are
+already on the wire. What this checks is that the two harnesses present the
+same interface to the same design, which covers `ibex_icache_tb_top.sv` against
+`tb.sv` and this port's drive point against the baseline's clocking blocks. It
+also runs **this port's scoreboard on the baseline's stimulus**, which is the
+one thing that had never been done in either direction: `check_compatible`, the
+address sequence, the busy line and the caching ratio all applied to the
+reference's runs.
+
+The recording begins at the first posedge, by which time `dut_init` has already
+driven `rst_n` low, so a replay runs two idle cycles with `rst_ni` high first
+and applies cycle 0 as a real falling edge. Without one, the RAMs' four-valued
+`rvalid` registers stay at their zero-initialised value, `mubi4_test_true_loose`
+reads that as true, and the first cycle disagrees for a reason that has nothing
+to do with the stimulus.
+
+**`ICACHE_ITEMS=<prefix>`** replays only the core item stream. Every delay below
+the sequence -- the driver's waits, the grant and response timing, the key
+device, the ECC masks -- is still drawn here. That holds the item distribution
+fixed and lets everything else vary, which is what the `err/resp` question in
+RESULTS.md needed.
+
+### What an item replay cannot carry
+
+`ibex_icache_core_base_seq` has exactly one feedback path from the DUT:
+
+```systemverilog
+force_branch = rsp.saw_error;
+...
+force_branch -> req.trans_type == ICacheCoreTransTypeBranch;
+```
+
+so the item stream is not a pure function of the sequence's random draws.
+Whether a fetch errors depends on which memory seed was in force when the read
+was granted, `ibex_icache_mem_resp_seq::take_gnt` drains the seed queue at the
+grant, and grant timing is drawn independently by an item replay. Where a
+replay sees an errored fetch that the recorded run did not, the sequence that
+made the next item would have turned it into a branch.
+
+`ibex_icache_passthru` at seed 123 found this before it was handled: two items
+the recording called requests followed an errored fetch, the cache moved on by
+four bytes across the errored word where the scoreboard's rule reads the opcode
+bits of a zeroed one and says two, and the address check failed. The item
+replay now makes the same conversion the constraint does and counts it in
+`forced_branches`. The branch target has to be drawn, because a recorded
+request item carries none, which is why `base_addr` is in the recording. On
+that run it happens twice in 918 items.
+
+The two stress tests are replayed at the pin level only. They change
+`mem_err_shift` and the caching-ratio flag between child sequences and neither
+is visible at a DUT pin, so a recording cannot drive their scoreboard; that is
+stated rather than worked around.
+
+Two counters have no counterpart under a pin replay. `key_answers` and
+`key_refusals` cannot be recovered, because a refusal carries the same pins as
+an idle cycle, and `ecc_injections` counts recorded mask changes rather than the
+negedges on which `ibex_icache_ram_if` drew a mask.
+
+### Showing the comparison is live
+
+`ICACHE_REPLAY_PERTURB=N` moves the first recorded branch target at or after
+cycle N by 64 bytes, which is the width of the window the constrained sequences
+branch inside, so the cache is redirected somewhere it was never asked to go:
+
+```
+$ ICACHE_REPLAY_PERTURB=5000 CPPTB_TEST=ibex_icache_caching \
+    ICACHE_REPLAY=build/replay/ibex_icache_caching.123 ./Vdpi_ibex_icache_cpptb
+cpptb-icache replay: the branch at cycle 5729 was moved from 0x76e76f0e to
+  0x76e76f4e
+cpptb-icache replay divergence at cycle 5729:
+  recorded out=0019 rdata=b4b7657c addr=76e76fa0 instr_addr=76e76f0c
+  replayed out=0799 rdata=b4b7657c addr=76e76fa0 instr_addr=76e76f4c
+```
+
+At 1000, 5000 and 20000 it is caught on the cycle the change was made or the
+one after it.
+
+### What it found
+
+All ten tests at ten seeds: **the DUT's outputs match the recording on every
+one of 4,692,318 cycles**, and this port's scoreboard accepts all 582,812
+fetches of the baseline's runs. The item replay reproduces every rate to within
+a percent. RESULTS.md has the tables, and has the one thing item replay found
+that the rate comparison could not: the residual `err/resp` difference is the
+item distribution and nothing else.
 
 ## The ten tests
 
@@ -368,5 +509,6 @@ fusesoc_setup.py             resolves the graph, writes and checks cpptb.toml
 cpptb.toml                   generated; do not edit
 testbench.cpp                agents, memory model, scoreboard, ten tests
 run_tests.py                 runs the port, and the baseline beside it
+replay.py                    records the baseline's stimulus and replays it
 shims/                       one reduced Verilator case, see RESULTS.md
 ```

@@ -739,6 +739,11 @@ struct Env {
     // item replay needs when it has to force a branch of its own.
     uint32_t replay_base_addr = 0;
     bool replay_constrain_branches = false;
+    // ICACHE_REPLAY_PERTURB: change the first recorded branch target at or
+    // after this cycle, so that a run can show the pin comparison is live
+    // rather than merely quiet. See README.md.
+    uint64_t replay_perturb = 0;
+    bool replay_perturbed = false;
 
     void push_seed(uint32_t seed) {
         scoreboard.on_new_seed(seed);
@@ -1849,7 +1854,21 @@ void apply_cycle(Dut dut, Env& env, const Trace& trace, uint64_t cycle,
         ++cursor.seed;
     }
 
-    apply_pins(dut, trace.pins[cycle]);
+    PinCycle pin = trace.pins[cycle];
+    if (env.replay_perturb != 0 && !env.replay_perturbed &&
+        cycle >= env.replay_perturb && ((pin.in >> kInBranch) & 1u) != 0) {
+        // Sixty-four bytes, which is the width of the window the constrained
+        // sequences branch inside, so the cache is redirected somewhere it was
+        // not asked to go and instr_addr_o has to follow.
+        pin.branch_addr ^= 0x40u;
+        env.replay_perturbed = true;
+        std::printf(
+            "cpptb-icache replay: the branch at cycle %llu was moved from "
+            "0x%08x to 0x%08x\n",
+            static_cast<unsigned long long>(cycle),
+            trace.pins[cycle].branch_addr, pin.branch_addr);
+    }
+    apply_pins(dut, pin);
     while (cursor.key < trace.keys.size() &&
            trace.keys[cursor.key].cycle == cycle) {
         dut.scr_key_i.set(trace.keys[cursor.key].key);
@@ -2291,6 +2310,7 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
     env.ecc_alias = env_number("ICACHE_ECC_ALIAS", 0) != 0;
     scoreboard.set_keep_state_on_reset(
         env_number("ICACHE_KEEP_STATE_ON_RESET", 0) != 0);
+    env.replay_perturb = env_number("ICACHE_REPLAY_PERTURB", 0);
 
     const std::string replay_prefix = env_string("ICACHE_REPLAY");
     const std::string items_prefix = env_string("ICACHE_ITEMS");

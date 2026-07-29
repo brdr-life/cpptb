@@ -9,18 +9,33 @@ sources at the same pinned Ibex commit under Verilator 5.050. The port is
 runs pass.** A further 400 cpptb runs over 40 seeds also pass. Nothing either
 scoreboard checks failed on either side.
 
+**And with identical stimulus, 260 of 260 replays pass**: the baseline's runs
+recorded and driven here pin for pin, its outputs compared cycle for cycle, and
+its item stream replayed through this port's own drivers.
+
+**The two harnesses can now be given the same stimulus.** `replay.py` records
+what the baseline's environment does and drives the same thing here, and under
+it the DUT's outputs match cycle for cycle over 4,692,318 cycles of all ten
+tests at ten seeds. That is the section after next, and it is what settles the
+`err/resp` difference the rate comparison below could not.
+
 ## What is comparable and what is not
 
-The two harnesses cannot be given the same stimulus. Each draws from its own
-random stream, the same seed means nothing across them, and there is no
-transaction log to replay. What is comparable is the generator: both draw the
-same fields from the same buckets at the same weights, so **per-item rates**
-should agree. Totals scale with `num_trans`, which is drawn independently on
-each side and lands anywhere in 800 to 1000.
+Without a recording the two harnesses cannot be given the same stimulus. Each
+draws from its own random stream, the same seed means nothing across them, and
+before `replay.py` there was no transaction log to replay. What is comparable
+that way is the generator: both draw the same fields from the same buckets at
+the same weights, so **per-item rates** should agree. Totals scale with
+`num_trans`, which is drawn independently on each side and lands anywhere in
+800 to 1000.
 
 `run_tests.py --compare` reports both. The UVM numbers are counted out of a
 UVM_HIGH log, which is the only place that environment reports per-transaction
-activity.
+activity. The pin replay checked that reading: on 80 runs where the same
+transactions were counted both out of that log and off the wire by the port
+while it replayed the same run, `mem_grants`, `mem_responses` and
+`mem_response_errors` agree exactly, every time. **None of the differences
+below is a measurement artefact.**
 
 ## The comparison
 
@@ -56,6 +71,106 @@ The counters that are not rates:
 | answered fraction | 0.488 | 0.495 | the valid bit is one random bit |
 | invalidations, `ibex_icache_invalidation` | 17.3 | 17.0 | |
 | new seeds, `ibex_icache_invalidation` | 17.3 | 17.0 | one per invalidation |
+
+## The same stimulus on both harnesses
+
+`replay.py` runs the baseline with `+icache_record`, which writes every value
+its environment puts on a DUT pin and every value the DUT answers with, one
+line per posedge, plus the core item stream. The port then replays it. The
+mechanism is in [README.md](README.md); what it found is here.
+
+**Pin replay, every DUT input driven from the recording and every DUT output
+compared at the edge the recording read it on. All ten tests, ten seeds,
+4,692,318 cycles: every output matches on every cycle.** No divergence
+anywhere, so the two harnesses present the same interface to the same design.
+That covers `ibex_icache_tb_top.sv` against `tb.sv`, this port's drive point
+against the baseline's clocking blocks, and the RAM and key wiring around the
+DUT.
+
+That is not a vacuous pass. `ICACHE_REPLAY_PERTURB=N` moves the first recorded
+branch target at or after cycle N by 64 bytes, which is the width of the window
+the constrained sequences branch inside:
+
+```
+$ ICACHE_REPLAY_PERTURB=5000 CPPTB_TEST=ibex_icache_caching \
+    ICACHE_REPLAY=build/replay/ibex_icache_caching.123 ./Vdpi_ibex_icache_cpptb
+cpptb-icache replay: the branch at cycle 5729 was moved from 0x76e76f0e to
+  0x76e76f4e
+cpptb: testbench.cpp:1934: the DUT's outputs match the recording on every
+  cycle, and they first differ at cycle 5729
+```
+
+At 1000, 5000 and 20000 the change is caught on the cycle it was made or the
+one after it.
+
+The pin replay also runs **this port's scoreboard on the baseline's stimulus**,
+which had never been done in either direction. Over the eight non-combo tests
+at ten seeds it accepted 582,812 fetches: `check_compatible` against every seed
+the baseline announced, the address sequence, the busy line and the caching
+ratio. Given that `ports/ibex_icache_uvm`'s own overlay was recently found to
+have weakened what the baseline checked, an independent checker over the
+baseline's runs is worth having, and it found nothing.
+
+## What the same stimulus says about the rates
+
+The item replay is the second half of it: only the core item stream comes from
+the recording, and every delay below the sequence is still drawn here. So
+`insns/item` is pinned to the baseline's and everything else is free.
+
+Paired per-seed ratios, port over baseline, mean and standard error over the
+same ten seeds. `items` is the item replay; `own` is the port generating its
+own stimulus, which is what the table further up reports.
+
+| test | `err/resp` items | `err/resp` own | `grants/fetch` items |
+| --- | ---: | ---: | ---: |
+| `ibex_icache_smoke` | 1.000 ± 0.015 | 1.106 ± 0.077 | 1.000 ± 0.002 |
+| `ibex_icache_passthru` | 1.028 ± 0.022 | 1.250 ± 0.114 | 0.999 ± 0.002 |
+| `ibex_icache_caching` | 1.002 ± 0.001 | 0.802 ± 0.201 | 1.003 ± 0.005 |
+| `ibex_icache_invalidation` | 1.049 ± 0.070 | 0.803 ± 0.246 | 0.984 ± 0.051 |
+| `ibex_icache_oldval` | 0.990 ± 0.027 | 1.289 ± 0.122 | 0.993 ± 0.009 |
+| `ibex_icache_back_line` | 1.005 ± 0.003 | 0.812 ± 0.205 | 0.992 ± 0.010 |
+| `ibex_icache_many_errors` | 1.031 ± 0.036 | 1.055 ± 0.183 | 0.978 ± 0.011 |
+| `ibex_icache_ecc` | 1.001 ± 0.001 | 0.802 ± 0.201 | 0.998 ± 0.006 |
+
+Pooled over all 80 runs, item replay against the baseline:
+
+| rate | ratio | from 1 |
+| --- | ---: | ---: |
+| `insns/item` | 1.0000 | exact, by construction |
+| `fetches/insn` | 1.0017 ± 0.0005 | 3.1 standard errors |
+| `grants/fetch` | 0.9933 ± 0.0066 | 1.0 standard errors |
+| `err/resp` | 1.0157 ± 0.0131 | 1.2 standard errors |
+| `cycles/item` | 0.9950 ± 0.0113 | 0.4 standard errors |
+
+**The residual `err/resp` difference is the item distribution and nothing
+else.** With the items held fixed, `passthru` is 1.3 standard errors from
+unity, `oldval` 0.4 and `invalidation` 0.7, where the previous measurement of
+the same three had them at 2.4, 2.4 and 1.6 standard errors apart on the port's
+own stimulus. The mechanism the earlier version of this document guessed at is
+confirmed by the size of it: an errored fetch ends the transaction, so an
+erroring seed is replaced after fewer memory reads than a clean one, and
+relatively sooner on the harness whose transactions are shorter. On
+`ibex_icache_passthru` the port's own `err/resp` is 1.250 times the baseline's
+and the baseline's `insns/item` is 1.212 times the port's; on
+`ibex_icache_oldval` it is 1.289 against 1.248. That is the whole of it, and
+its cause is the Verilator `inside`-range defect in the section below, which is
+a defect in the reference.
+
+`ibex_icache_caching`, `ibex_icache_ecc` and `ibex_icache_back_line` come back
+to unity for a different reason: those are the seed-0 tests, whose whole
+behaviour turns on one draw of `base_addr`, and the item replay takes
+`base_addr` from the recording. Their `own` ratio of 0.802 ± 0.201 is that
+bimodality and not a difference between the harnesses.
+
+`fetches/insn` is 0.17% apart and resolvable at this sample size but not at any
+size that matters. `grants/fetch` does not come all the way back: it is 0.7%
+low pooled, which is one standard error, but `ibex_icache_many_errors` is 2.2%
+low at two standard errors of its own. Something below the item stream accounts
+for a percent or two of the memory reads per fetch. **That was not chased to a
+cause.** The one distribution below the sequence that is known to differ is the
+scrambling key device's per-request delay, which is an `inside` range in the
+baseline and so clusters at the top of it; the sign of that effect was not
+worked out.
 
 ## The one systematic difference, and what causes it
 
@@ -153,11 +268,15 @@ seeds, and all passed. Upstream's `reseed` of 50 hides this; one seed does not.
   invalidation and 17 of them per run, against several hundred for the other
   two, so its spread is the widest and its difference of means is 1.6 standard
   errors. `passthru` and `oldval` are about 2.4 standard errors apart, which is
-  more than noise comfortably explains, and the mechanism that fits the
-  direction is that an errored fetch ends the transaction, so an erroring seed
-  is replaced sooner than a clean one, and it is replaced *relatively* sooner on
-  the harness whose transactions are longer. That is the baseline. This is the
-  one difference in the table that is not chased all the way to the bottom.
+  more than noise comfortably explains.
+
+  **The item replay settles it.** Given the baseline's own item stream, the
+  port's `err/resp` lands on the baseline's on all three, and the residual is
+  the `insns/item` skew below. The mechanism is the one guessed at here: an
+  errored fetch ends the transaction, so an erroring seed is replaced after
+  fewer memory reads than a clean one, and relatively sooner on the harness
+  whose transactions are shorter. The numbers are in "What the same stimulus
+  says about the rates" above.
 * **`insns/item` on `ibex_icache_stress_all_with_reset`, 29% rather than the
   usual 20%.** Every child is stopped after 100 to 1000 cycles, so a larger
   share of the items that run are the first items of a child, which are forced
@@ -169,7 +288,9 @@ seeds, and all passed. Upstream's `reseed` of 50 hides this; one seed does not.
   shorter runs between branches waste more reads per fetch. cpptb runs about 10
   instructions between transactions where the baseline runs about 12.5, from the
   defect above, so it branches more often per fetch. The direction and the
-  magnitude both follow.
+  magnitude both follow. Under the item replay it comes back to 0.993 ± 0.007
+  pooled, so nearly all of it is that defect; the percent or two that is left is
+  the one thing in this document that is measured and not explained.
 
 None of these needed a fix in the port, and all but the last were chased to a
 cause before being reported.

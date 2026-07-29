@@ -6,11 +6,12 @@
     python3 run_tests.py ibex_icache_caching
     python3 run_tests.py --compare          # also run ports/ibex_icache_uvm
 
-The two harnesses cannot be given the same stimulus. Each draws from its own
-random stream, so the same seed means nothing across them and there is no
-transaction log to replay. What is comparable is the generator: both draw the
-same fields from the same buckets at the same weights, so per-item rates
-should agree, and every check either side makes must pass on both.
+This compares the two harnesses on their own stimulus. Each draws from its own
+random stream, so the same seed means nothing across them. What is comparable
+that way is the generator: both draw the same fields from the same buckets at
+the same weights, so per-item rates should agree, and every check either side
+makes must pass on both. For a comparison on identical stimulus, where the
+DUT's outputs are compared cycle for cycle, see replay.py.
 
 --compare therefore reports rates rather than totals. `insns/item` is what the
 stimulus asked for, `fetches/insn` is how much of it the cache delivered,
