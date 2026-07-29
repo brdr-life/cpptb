@@ -47,6 +47,20 @@ For the last of those a pass means "ran to completion with the RVFI cosim
 against Spike staying quiet", which is a real check -- every retired
 instruction is compared against the ISS -- but it is not the test's own.
 
+Every run writes into a directory of its own, `build/directed/<run>/`, holding
+one subdirectory per entry and the `results.json` for that run. `<run>` is
+`<config>-<UTC timestamp>` unless `--run-name` says otherwise, the results file
+names it, and every record in it names its own log by a path relative to
+`build/`. Nothing is written to a path a previous run used, and a run directory
+that already exists stops the run rather than being written over.
+
+That is not tidiness. These outputs were shared between runs once: a run of all
+944 and a later run of the 107 arch entries alone both wrote
+`build/directed/<test>/sim.log`, so 107 of the 944 records described logs that
+had since been replaced by a different build of the same test, two of them with
+a different outcome. A results file that cannot be checked against the logs
+beside it is not evidence. `--index` prints the runs on disk.
+
 Standard library only, matching the other tools here.
 """
 
@@ -73,6 +87,7 @@ IBEX = ROOT / "deps" / "ibex"
 CORE_IBEX = IBEX / "dv" / "uvm" / "core_ibex"
 TESTLIST = CORE_IBEX / "directed_tests" / "directed_testlist.yaml"
 BUILD = HERE / "build"
+RUNS = BUILD / "directed"
 TOOLCHAIN = ROOT / "deps" / "riscv_gcc15" / "bin"
 GCC = TOOLCHAIN / "riscv-none-elf-gcc"
 OBJCOPY = TOOLCHAIN / "riscv-none-elf-objcopy"
@@ -375,7 +390,12 @@ def applicability(entry: dict, parameters: dict[str, str],
     requirements in EXTRA_REQUIREMENTS that the testlist does not state.
     """
     for name, wanted in (entry.get("rtl_params") or {}).items():
-        built = parameters.get(name)
+        # ibex_config.py reports the integer parameters as `-pvalue+` and the
+        # enum ones as `+define+IBEX_CFG_*`, so both dictionaries are consulted;
+        # looking in only the first would mark every entry naming an enum
+        # parameter inapplicable and run fewer tests without saying why. This is
+        # the comparison run_tests.py makes against the same two dictionaries.
+        built = parameters.get(name, defines.get(f"IBEX_CFG_{name}"))
         if built is None:
             return f"the build does not set {name}"
         if str(built) != str(wanted):
@@ -464,6 +484,30 @@ def linker_script(entry: dict, stock: bool) -> tuple[Path, list[str]]:
     return overlay, [LD_SCRIPT_NOTE]
 
 
+# Absolute directory prefixes inside a compiler message. Every path in these
+# commands is absolute and most of them are 90 characters of it, so a message
+# truncated to fit a result field used to be all prefix: jalr-01's build failure
+# was recorded as `/home/.../riscv-test-suite/rv32i_m/I/src/jalr-0`, which says
+# only that it failed. The reason -- `jalr-01.S:73: Error: illegal operands
+# `la x0,5b'` -- had been cut off. Directories go, basenames stay.
+LEADING_DIRECTORIES = re.compile(r"(?:/[^\s:/]+)+/")
+
+
+def first_error(output: str, command: list[str], status: int) -> str:
+    """The line of a failed compile worth recording, without its path prefixes.
+
+    A failure with nothing to say is reported as that rather than as an empty
+    detail, which is indistinguishable from a detail nobody filled in.
+    """
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    chosen = next((line for line in lines
+                   if ": error:" in line or "Error:" in line),
+                  lines[-1] if lines else "")
+    if not chosen:
+        return (f"{Path(command[0]).name} exited {status} with no output")
+    return LEADING_DIRECTORIES.sub("", chosen)[:160]
+
+
 def build_one(entry: dict, march: str, directory: Path, stock_ld: bool,
               stock_defines: bool) -> dict:
     """Compile one entry to a flat binary, as scripts/compile_test.py does."""
@@ -497,11 +541,9 @@ def build_one(entry: dict, march: str, directory: Path, stock_ld: bool,
         output += completed.stdout
         if completed.returncode != 0:
             log.write_text(output, encoding="utf-8")
-            first = next((line for line in completed.stdout.splitlines()
-                          if ": error:" in line or "Error:" in line),
-                         completed.stdout.splitlines()[-1]
-                         if completed.stdout.strip() else "")
-            return {"built": False, "notes": notes, "detail": first.strip()[:120]}
+            return {"built": False, "notes": notes,
+                    "detail": first_error(completed.stdout, command,
+                                          completed.returncode)}
     log.write_text(output, encoding="utf-8")
 
     if binary.stat().st_size == 0:
@@ -527,6 +569,27 @@ OUTCOMES = [
     (re.compile(r"--- RISC-V UVM TEST FAILED ---"), "failed"),
 ]
 
+# `core_ibex_report_server.report_summarize` prints PASSED when the counts for
+# UVM_WARNING, UVM_ERROR and UVM_FATAL are all zero and FAILED otherwise, then
+# prints the counts themselves. So the verdict line and the counts are two
+# statements of the same thing from the same place, and reading both is a check
+# on this reader rather than on the testbench: if the search above finds a pass
+# in a log whose own summary counts an error, the search is matching something
+# it should not, and that is worth stopping on rather than recording as a pass.
+SEVERITY_COUNT = re.compile(
+    r"^\s*(UVM_WARNING|UVM_ERROR|UVM_FATAL)\s*:\s*(\d+)\s*$", re.MULTILINE)
+
+
+def contradicts_pass(output: str) -> str:
+    """Why this log's own report summary disagrees that it passed, or ""."""
+    counts = {name: int(value) for name, value in SEVERITY_COUNT.findall(output)}
+    if not counts:
+        return "the log has no UVM report summary to confirm the verdict"
+    nonzero = {name: n for name, n in counts.items() if n}
+    if nonzero:
+        return ", ".join(f"{name} {n}" for name, n in sorted(nonzero.items()))
+    return ""
+
 
 def environment() -> dict[str, str]:
     env = dict(os.environ)
@@ -545,11 +608,12 @@ def run_one(testbench: Path, entry: dict, binary: Path, directory: Path,
                f"+bin={binary}", f"+signature_addr={SIGNATURE_ADDR}",
                f"+timeout_in_cycles={cycles}", *extra]
     started = time.monotonic()
+    status = 0
     try:
         completed = subprocess.run(command, cwd=directory, env=environment(),
                                    text=True, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, timeout=seconds)
-        output, timed_out = completed.stdout, False
+        output, timed_out, status = completed.stdout, False, completed.returncode
     except subprocess.TimeoutExpired as expired:
         output = expired.stdout or ""
         if isinstance(output, bytes):
@@ -557,23 +621,38 @@ def run_one(testbench: Path, entry: dict, binary: Path, directory: Path,
         timed_out = True
     elapsed = time.monotonic() - started
 
-    (directory / "sim.log").write_text(output, encoding="utf-8")
+    log = directory / "sim.log"
+    log.write_text(output, encoding="utf-8")
+    where = {"log": log.relative_to(BUILD).as_posix(), "seconds": elapsed}
 
     if timed_out:
-        return {"outcome": "wall-clock timeout", "detail": "", "seconds": elapsed}
+        return {"outcome": "wall-clock timeout", "detail": "", **where}
+    # A run the kernel killed is not a verdict about the test. The likely cause
+    # when several run at once is the OOM reaper; the model is 270 MB before UVM
+    # allocates anything. Without this it reads as "no verdict", which is what a
+    # simulation that ran to the end and said nothing also reads as.
+    if status < 0:
+        return {"outcome": "killed",
+                "detail": f"signal {-status} after {elapsed:.1f}s, "
+                          f"{len(output)} bytes of output", **where}
     # A run that ends in a fraction of a second did not simulate anything: it
     # is what a missing z3 looks like, and it has been read as a result here
     # before. Report it as a broken environment rather than as an outcome.
     if elapsed < 1.0 and "RISC-V UVM TEST PASSED" not in output:
         return {"outcome": "no simulation",
-                "detail": f"exited after {elapsed:.2f}s; z3 on PATH?",
-                "seconds": elapsed}
+                "detail": f"exited after {elapsed:.2f}s; z3 on PATH?", **where}
     for pattern, outcome in OUTCOMES:
         found = pattern.search(output)
         if found:
             detail = found.group(1).strip()[:70] if found.groups() else ""
-            return {"outcome": outcome, "detail": detail, "seconds": elapsed}
-    return {"outcome": "no verdict", "detail": "", "seconds": elapsed}
+            if outcome == "passed":
+                disagreement = contradicts_pass(output)
+                if disagreement:
+                    return {"outcome": "unreadable log",
+                            "detail": f"matched a pass, but {disagreement}",
+                            **where}
+            return {"outcome": outcome, "detail": detail, **where}
+    return {"outcome": "no verdict", "detail": "", **where}
 
 
 # The ePMP programs end in syscalls.c's `tohost_exit(code)`, which writes two
@@ -589,36 +668,60 @@ def run_one(testbench: Path, entry: dict, binary: Path, directory: Path,
 # first word, and TRACE_EXECUTION records the store, so it is read back out of
 # the tracer log. `handle_trap` is the one caller with a fixed code.
 EPMP_TRAP_CODE = 1337
+# The two words are written to signature_addr - 4 and signature_addr; the
+# address is derived from the plusarg the run was given rather than written out,
+# so a change to SIGNATURE_ADDR cannot leave this looking for the old one and
+# finding nothing.
+STATUS_ADDRESS = f"{int(SIGNATURE_ADDR, 16) - 4:08x}"
 EPMP_STATUS_STORE = re.compile(
-    r"PA:0x8ffffff8\s+store:0x([0-9a-f]{8})", re.IGNORECASE)
+    rf"PA:0x{STATUS_ADDRESS}\s+store:0x([0-9a-f]{{8}})", re.IGNORECASE)
+EPMP_RESULT_STORE = re.compile(
+    rf"PA:0x{SIGNATURE_ADDR}\s+store:0x([0-9a-f]{{8}})", re.IGNORECASE)
 
 
-def epmp_exit_code(trace: Path) -> int | None:
-    """The code an ePMP program passed to exit(), from the execution trace."""
+def epmp_exit_code(trace: Path) -> tuple[int | None, str]:
+    """(the code an ePMP program passed to exit(), why it is not there).
+
+    The reason distinguishes the three ways this can come back empty, which the
+    caller reported identically before: no trace at all, a trace that never
+    reached `tohost_exit`, and a trace that reached it but whose CORE_STATUS
+    word this reader did not recognise. The last of those is this reader being
+    wrong about the format and is the one worth being loud about.
+    """
     if not trace.is_file():
-        return None
-    for line in trace.read_text(encoding="utf-8", errors="replace").splitlines():
+        return None, f"no execution trace at {trace.name}"
+    text = trace.read_text(encoding="utf-8", errors="replace")
+    for line in text.splitlines():
         found = EPMP_STATUS_STORE.search(line)
         if not found:
             continue
         word = int(found.group(1), 16)
         if word & 0xFF == 0x00:  # CORE_STATUS, so the payload is the code
-            return word >> 8
-    return None
+            return word >> 8, ""
+        return None, (f"the word stored at 0x{STATUS_ADDRESS} is "
+                      f"0x{word:08x}, which is not a CORE_STATUS write")
+    if EPMP_RESULT_STORE.search(text):
+        return None, (f"the program signalled its result but stored nothing to "
+                      f"0x{STATUS_ADDRESS}")
+    return None, "the trace reaches no tohost_exit"
 
 
-def handle(entry: dict, testbench: Path, march: str, cycles: int,
+def handle(entry: dict, run: Path, testbench: Path, march: str, cycles: int,
            wall_seconds: int, extra: list[str], build_only: bool,
            stock_ld: bool, stock_defines: bool) -> dict:
-    directory = BUILD / "directed" / entry["test"]
+    # Under this run's own directory, so the log and the trace beside it belong
+    # to this result and to no other. `run` is empty when the run starts.
+    directory = run / entry["test"]
     result = {"test": entry["test"], "group": entry["config"],
-              "rtl_test": entry["rtl_test"]}
+              "rtl_test": entry["rtl_test"],
+              "dir": directory.relative_to(BUILD).as_posix()}
 
     build = build_one(entry, march, directory, stock_ld, stock_defines)
     result["notes"] = build["notes"]
     if not build["built"]:
         result["outcome"] = "build failed"
         result["detail"] = build["detail"]
+        result["log"] = (directory / "compile.log").relative_to(BUILD).as_posix()
         return result
     result["bytes"] = build["bytes"]
     if build_only:
@@ -631,11 +734,13 @@ def handle(entry: dict, testbench: Path, march: str, cycles: int,
                           cycles, seconds, extra))
 
     if entry["config"] == "epmp-tests" and result["outcome"] == "passed":
-        code = epmp_exit_code(directory / "trace_core_00000000.log")
+        trace = directory / "trace_core_00000000.log"
+        code, missing = epmp_exit_code(trace)
         result["exit_code"] = code
+        result["trace"] = trace.relative_to(BUILD).as_posix()
         if code is None:
             result["outcome"] = "no verdict"
-            result["detail"] = "no CORE_STATUS write found in the trace"
+            result["detail"] = missing
         elif code != 0:
             result["outcome"] = "self-check failed"
             result["detail"] = (f"the program exited {code}"
@@ -650,6 +755,23 @@ def handle(entry: dict, testbench: Path, march: str, cycles: int,
 # ---------------------------------------------------------------------------
 
 def select(entries: list[dict], args) -> list[dict]:
+    """The entries the arguments name, or an error naming what matched nothing.
+
+    A `--only` or `--group` or `--pattern` that names something the testlist
+    does not have used to narrow the selection by nothing at all and run the
+    rest, so a run of "these twelve" could quietly be a run of eleven. A name
+    that matches nothing is a mistake in the argument, not an empty set.
+    """
+    names = {e["test"] for e in entries}
+    groups = {e["config"] for e in entries}
+    unmatched = [f"--group {g}" for g in args.group if g not in groups]
+    unmatched += [f"--only {t}" for t in args.only if t not in names]
+    unmatched += [f"--pattern {p}" for p in args.pattern
+                  if not any(fnmatch.fnmatch(n, p) for n in names)]
+    if unmatched:
+        raise DirectedError("these match no entry in the testlist: "
+                            + ", ".join(unmatched))
+
     chosen = entries
     if args.group:
         chosen = [e for e in chosen if e["config"] in args.group]
@@ -666,11 +788,13 @@ def select(entries: list[dict], args) -> list[dict]:
 
 
 def report(results: list[dict], inapplicable: list[dict], config: str,
-           total: int, name: str = "") -> int:
-    output = BUILD / (name or f"directed_results_{config}.json")
-    output.write_text(json.dumps(
-        {"config": config, "results": results, "inapplicable": inapplicable},
-        indent=2), encoding="utf-8")
+           total: int, run: Path, header: dict, copy_to: str = "") -> int:
+    output = run / "results.json"
+    document = {**header, "results": results, "inapplicable": inapplicable}
+    output.write_text(json.dumps(document, indent=2), encoding="utf-8")
+    if copy_to:
+        (BUILD / copy_to).write_text(json.dumps(document, indent=2),
+                                     encoding="utf-8")
 
     tally: dict[str, int] = {}
     for result in results:
@@ -716,8 +840,53 @@ def report(results: list[dict], inapplicable: list[dict], config: str,
         for note, count in sorted(kinds.items(), key=lambda item: -item[1]):
             print(f"  {count:>5}  {note}")
 
+    if not header.get("complete"):
+        print(f"\nthis run covered {len(results) + len(inapplicable)} of the "
+              f"{header['entries']} entries in the testlist, so it is not a "
+              f"result for the testlist. It supersedes an earlier run only for "
+              f"the entries it names.")
     print(f"\nwritten to {output}")
+    if copy_to:
+        print(f"copied to {BUILD / copy_to}")
     return 0 if tally.get("passed", 0) == len(results) and results else 1
+
+
+# ---------------------------------------------------------------------------
+# Run directories
+# ---------------------------------------------------------------------------
+
+def open_run(name: str, config: str) -> Path:
+    """This run's own directory under build/directed, which must be new.
+
+    Refusing an existing directory is the point. Sharing one is how a results
+    file comes to describe logs that a later, narrower run replaced.
+    """
+    run = RUNS / (name or f"{config}-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}")
+    if run.exists():
+        raise DirectedError(
+            f"{run} already exists. A run writes its logs and its results file "
+            f"into a directory of its own and will not write over another "
+            f"run's; pass --run-name for a different one, or move this aside.")
+    run.mkdir(parents=True)
+    return run
+
+
+def index() -> int:
+    """The runs on disk, newest last, with what each one covered."""
+    runs = sorted(p for p in RUNS.glob("*/results.json"))
+    if not runs:
+        print(f"no runs under {RUNS}")
+        return 1
+    for path in sorted(runs, key=lambda p: p.stat().st_mtime):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        results = data.get("results", [])
+        passed = sum(1 for r in results if r.get("outcome") == "passed")
+        scope = "all" if data.get("complete") else "part"
+        print(f"  {data.get('run', path.parent.name):<34} "
+              f"{data.get('config', '?'):<10} {data.get('started', ''):<21} "
+              f"{scope}  {passed} of {len(results)} passed  "
+              f"{path.relative_to(BUILD)}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -758,9 +927,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stock-defines", action="store_true",
                         help="compile with only the gcc_opts the testlist "
                              "states; see EXTRA_GCC_OPTS for what that costs")
+    parser.add_argument("--run-name", default="",
+                        help="the directory under build/directed this run "
+                             "writes to, default <config>-<UTC timestamp>; it "
+                             "must not already exist")
     parser.add_argument("--results", default="",
-                        help="name of the results file under build/, "
-                             "default directed_results_<config>.json")
+                        help="also copy the results file to this name under "
+                             "build/; the run's own copy is always written to "
+                             "build/directed/<run>/results.json")
+    parser.add_argument("--index", action="store_true",
+                        help="list the runs under build/directed and stop")
     parser.add_argument("--build-only", action="store_true",
                         help="compile, do not simulate")
     parser.add_argument("--list", action="store_true",
@@ -768,15 +944,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("extra", nargs="*", help="further plusargs")
     args = parser.parse_args(argv)
 
+    if args.index:
+        return index()
+
     try:
         entries = merge(*parse_testlist(TESTLIST))
         parameters, defines = build_tb.config_parameters(args.config)
         march = isa_march(defines)
+        chosen = select(entries, args)
     except (DirectedError, build_tb.BuildError) as error:
         print(f"run_directed: {error}", file=sys.stderr)
         return 1
 
-    chosen = select(entries, args)
     if not chosen:
         print("run_directed: nothing selected", file=sys.stderr)
         return 1
@@ -813,12 +992,43 @@ def main(argv: list[str] | None = None) -> int:
             print(f"run_directed: no {tool.name} at {tool}", file=sys.stderr)
             return 1
 
+    if args.results and (BUILD / args.results).exists():
+        print(f"run_directed: {BUILD / args.results} already exists; --results "
+              f"will not write over one", file=sys.stderr)
+        return 1
+    try:
+        run = open_run(args.run_name, args.config)
+    except DirectedError as error:
+        print(f"run_directed: {error}", file=sys.stderr)
+        return 1
+
+    # What this run was, written beside its own logs. `complete` is the one a
+    # reader needs first: a run of part of the testlist is not a result for the
+    # testlist, however many of its own entries passed.
+    started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    header = {
+        "run": run.name,
+        "config": args.config,
+        "started": started,
+        "complete": len(chosen) == len(entries) and not args.build_only,
+        "entries": len(entries),
+        "selected": len(chosen),
+        "build_only": args.build_only,
+        "stock_ld": args.stock_ld,
+        "stock_defines": args.stock_defines,
+        "testbench": str(testbench),
+        "march": march,
+        "command": shlex.join([sys.executable, str(HERE / "run_directed.py")]
+                              + (argv if argv is not None else sys.argv[1:])),
+    }
+
     jobs = max(1, min(args.jobs, 4))
     results: list[dict] = []
     print(f"run_directed: {len(runnable)} entries on --config {args.config}, "
           f"{len(inapplicable)} inapplicable, {jobs} at a time")
+    print(f"run_directed: writing to {run}")
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = {pool.submit(handle, entry, testbench, march,
+        futures = {pool.submit(handle, entry, run, testbench, march,
                                args.timeout_cycles, args.timeout_seconds,
                                args.extra, args.build_only,
                                args.stock_ld, args.stock_defines): entry
@@ -831,8 +1041,9 @@ def main(argv: list[str] | None = None) -> int:
                   flush=True)
 
     results.sort(key=lambda r: (r["group"], r["test"]))
-    return report(results, inapplicable, args.config, len(chosen),
-                  args.results)
+    header["finished"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    return report(results, inapplicable, args.config, len(chosen), run,
+                  header, args.results)
 
 
 if __name__ == "__main__":
