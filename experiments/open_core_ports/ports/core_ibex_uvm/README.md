@@ -1138,6 +1138,40 @@ unexpected trap does not fail -- it hangs until the budget runs out. `scall`,
 which ends on a deliberate ecall, is a wall-clock timeout for that reason and
 cannot be anything else in this environment.
 
+### One directory per run
+
+Each run writes `build/directed/<run>/`, holding one subdirectory per entry and
+that run's `results.json`. `<run>` is `<config>-<UTC timestamp>` unless
+`--run-name` says otherwise, and a directory that already exists stops the run
+rather than being written over. `run_directed.py --index` lists what is on disk.
+
+```
+build/directed/opentitan-20260729T144600Z/
+    results.json                     the run, and one record per entry
+    add-01/compile.log               the two commands and their output
+    add-01/sim.log                   the simulation
+    add-01/trace_core_00000000.log   TRACE_EXECUTION, where the ePMP code is
+```
+
+The results file names the run, the command that produced it, and whether it
+covered the whole testlist; every record in it names its own log by a path
+relative to `build/`. A record and the log it describes can therefore be
+checked against each other, which was not true before.
+
+It was not true because these outputs used to be shared: `build/directed/<test>/`
+was one path however many runs wrote to it. A run of all 944 on 2026-07-27 and a
+run of the 107 arch entries alone 16 minutes later both wrote
+`build/directed/<test>/sim.log`, so 107 of the 944 records described logs that
+had since been replaced. `jalr-01` is the clearest case -- a `sim.log` recording
+a pass, and beside it a `compile.log` written 43 minutes later recording the
+assembler rejecting the file. Two of the 107 had a different outcome in the two
+runs, which is where the difference between the 914 that file totals and the 912
+below comes from. Those outputs are kept under `build/directed_before_run_dirs/`
+with a note; nothing in them is authoritative.
+
+A partial run says so, in the file and on the terminal. It cannot touch a
+previous run's data, and its results file is not a result for the testlist.
+
 ### All 944 run
 
 `--config opentitan`, four at a time, everything above applied:
