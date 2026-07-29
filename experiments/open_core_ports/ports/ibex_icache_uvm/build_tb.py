@@ -1065,6 +1065,188 @@ OVERLAYS: list[tuple[Path, str, str]] = [
         "    data = data_l;\n"
         "  endtask : mem_rd_sub\n",
     ),
+    # ------------------------------------------------------------------
+    # Stimulus recording.
+    #
+    # ports/ibex_icache_cpptb replays what this environment did, so that the
+    # two harnesses can be compared on identical stimulus rather than on the
+    # agreement of two independent random streams. `+icache_record=<prefix>`
+    # writes two files and changes nothing else: without the plusarg neither
+    # block does anything at all.
+    #
+    #   <prefix>.pins   one line per posedge of clk, carrying every DUT input
+    #                   and every DUT output.
+    #   <prefix>.items  the core item stream, and one line per new memory
+    #                   seed with the time it was announced.
+    #
+    # Everything in the pin trace is read in the Active region of the posedge,
+    # which is the value the design samples at that edge and the value a
+    # monitor_cb input sees. A reader that drives those inputs half a cycle
+    # earlier therefore presents the design with the same stimulus.
+    # ------------------------------------------------------------------
+    (
+        ICACHE / "dv/tb/tb.sv",
+        "  // Initiate push pull interface for connection between Icache and a"
+        " scrambling key provider.\n",
+        """  // Stimulus recording for ports/ibex_icache_cpptb's replay check;
+  // see build_tb.py. Inert without +icache_record.
+  //
+  // The ECC corruption masks are recovered as ic_*_rdata_o ^ ic_*_rdata_in,
+  // which is exactly the mask ibex_icache_ram_if exclusive-ored in and is zero
+  // wherever it applied none. Those and the scrambling key are wide and change
+  // rarely, so they are written only when they change and a reader holds the
+  // last value.
+  integer                           rec_fd = 0;
+  longint unsigned                  rec_cycle = 0;
+  longint unsigned                  rec_t0 = 0;
+  string                            rec_prefix;
+  int unsigned                      rec_in, rec_out;
+  bit [IC_NUM_WAYS*TagSizeECC-1:0]  rec_tag_mask, rec_tag_mask_q;
+  bit [IC_NUM_WAYS*LineSizeECC-1:0] rec_data_mask, rec_data_mask_q;
+  bit [SCRAMBLE_KEY_W-1:0]          rec_key_q;
+  bit [SCRAMBLE_NONCE_W-1:0]        rec_nonce_q;
+
+  initial begin
+    if ($value$plusargs("icache_record=%s", rec_prefix)) begin
+      rec_fd = $fopen({rec_prefix, ".pins"}, "w");
+      if (rec_fd == 0) $fatal(1, "cannot open the pin trace for writing");
+      $fwrite(rec_fd, "# ibex_icache pin trace 1\\n");
+      $fwrite(rec_fd, "# in  bit 0 rst_n, 1 req, 2 branch, 3 ready, 4 enable,");
+      $fwrite(rec_fd, " 5 invalidate, 6 gnt, 7 rvalid, 8 err, 9 key_valid\\n");
+      $fwrite(rec_fd, "# out bit 0 valid, 1 err, 2 err_plus2, 3 busy,");
+      $fwrite(rec_fd, " 4 instr_req, 5 key_req, 6 ecc_err,");
+      $fwrite(rec_fd, " 7 tag_rvalid, 9 data_rvalid\\n");
+      $fwrite(rec_fd, "# C cycle in branch_addr instr_rdata");
+      $fwrite(rec_fd, " out core_rdata core_addr instr_addr\\n");
+      $fwrite(rec_fd, "# K cycle scramble_key scramble_nonce\\n");
+      $fwrite(rec_fd, "# M cycle tag_mask data_mask\\n");
+    end
+  end
+
+  always @(posedge clk) begin
+    if (rec_fd != 0) begin
+      for (int unsigned w = 0; w < IC_NUM_WAYS; w++) begin
+        rec_tag_mask[w*TagSizeECC +: TagSizeECC] =
+            ram_if.ic_tag_rdata_o[w] ^ ram_if.ic_tag_rdata_in[w];
+        rec_data_mask[w*LineSizeECC +: LineSizeECC] =
+            ram_if.ic_data_rdata_o[w] ^ ram_if.ic_data_rdata_in[w];
+      end
+
+      rec_in     = 0;
+      rec_in[0]  = rst_n;
+      rec_in[1]  = core_if.req;
+      rec_in[2]  = core_if.branch;
+      rec_in[3]  = core_if.ready;
+      rec_in[4]  = core_if.enable;
+      rec_in[5]  = core_if.invalidate;
+      rec_in[6]  = mem_if.gnt;
+      rec_in[7]  = mem_if.rvalid;
+      rec_in[8]  = mem_if.err;
+      rec_in[9]  = scramble_key_valid;
+
+      rec_out    = 0;
+      rec_out[0] = core_if.valid;
+      rec_out[1] = core_if.err;
+      rec_out[2] = core_if.err_plus2;
+      rec_out[3] = core_if.busy;
+      rec_out[4] = mem_if.req;
+      rec_out[5] = scramble_req;
+      rec_out[6] = ram_if.ecc_err;
+      rec_out[7 +: IC_NUM_WAYS]              = ram_if.ic_tag_rvalid;
+      rec_out[7 + IC_NUM_WAYS +: IC_NUM_WAYS] = ram_if.ic_data_rvalid;
+
+      if (rec_cycle == 0) begin
+        rec_t0 = $time;
+        $fwrite(rec_fd, "# cycle0_time %0d\\n", rec_t0);
+      end
+      if (rec_cycle == 1) begin
+        $fwrite(rec_fd, "# period_time %0d\\n", $time - rec_t0);
+      end
+      if ((rec_key_q !== scramble_key) || (rec_nonce_q !== scramble_nonce)) begin
+        $fwrite(rec_fd, "K %0d %x %x\\n", rec_cycle, scramble_key,
+                scramble_nonce);
+        rec_key_q   = scramble_key;
+        rec_nonce_q = scramble_nonce;
+      end
+      if ((rec_tag_mask_q !== rec_tag_mask) ||
+          (rec_data_mask_q !== rec_data_mask)) begin
+        $fwrite(rec_fd, "M %0d %x %x\\n", rec_cycle, rec_tag_mask,
+                rec_data_mask);
+        rec_tag_mask_q  = rec_tag_mask;
+        rec_data_mask_q = rec_data_mask;
+      end
+      $fwrite(rec_fd, "C %0d %03x %08x %08x %04x %08x %08x %08x\\n",
+              rec_cycle, rec_in, core_if.branch_addr, mem_if.rdata,
+              rec_out, core_if.rdata, core_if.addr, mem_if.addr);
+      rec_cycle = rec_cycle + 1;
+    end
+  end
+
+  // Initiate push pull interface for connection between Icache and a scrambling key provider.
+""",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_driver.sv",
+        "  virtual task automatic reset_signals();\n"
+        "    cfg.vif.reset();\n"
+        "  endtask\n",
+        """  // Stimulus recording for ports/ibex_icache_cpptb's replay check; see
+  // build_tb.py. The item stream this driver is handed, in the order it is
+  // handed it, and one line per new memory seed with the time the analysis
+  // port was written. Inert without +icache_record.
+  int rec_fd    = 0;
+  bit rec_tried = 1'b0;
+
+  protected function void rec_open();
+    string prefix;
+    if (rec_tried) return;
+    rec_tried = 1'b1;
+    if (!$value$plusargs("icache_record=%s", prefix)) return;
+    rec_fd = $fopen({prefix, ".items"}, "w");
+    if (rec_fd == 0) `uvm_fatal(`gfn, "cannot open the item trace for writing")
+    $fwrite(rec_fd,
+            "# I time branch branch_addr enable invalidate new_seed num_insns\\n");
+    $fwrite(rec_fd, "# S time new_seed\\n");
+  endfunction
+
+  protected function void rec_item(ibex_icache_core_req_item item);
+    rec_open();
+    if (rec_fd == 0) return;
+    $fwrite(rec_fd, "I %0d %0d %08x %0d %0d %08x %0d\\n", $time,
+            (item.trans_type == ICacheCoreTransTypeBranch) ? 1 : 0,
+            item.branch_addr, item.enable, item.invalidate, item.new_seed,
+            item.num_insns);
+  endfunction
+
+  protected function void rec_seed(bit [31:0] seed);
+    rec_open();
+    if (rec_fd == 0) return;
+    $fwrite(rec_fd, "S %0d %08x\\n", $time, seed);
+  endfunction
+
+  virtual task automatic reset_signals();
+    cfg.vif.reset();
+  endtask
+""",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_driver.sv",
+        "      seq_item_port.get_next_item(req);\n"
+        "      `uvm_info(`gfn, $sformatf(\"rcvd item:\\n%0s\", req.sprint()),"
+        " UVM_HIGH)\n",
+        "      seq_item_port.get_next_item(req);\n"
+        "      rec_item(req);\n"
+        "      `uvm_info(`gfn, $sformatf(\"rcvd item:\\n%0s\", req.sprint()),"
+        " UVM_HIGH)\n",
+    ),
+    (
+        ICACHE / "dv/ibex_icache_core_agent/ibex_icache_core_driver.sv",
+        "    `DV_CHECK_FATAL(new_seed != 0);\n"
+        "    analysis_port.write(new_seed);\n",
+        "    `DV_CHECK_FATAL(new_seed != 0);\n"
+        "    rec_seed(new_seed);\n"
+        "    analysis_port.write(new_seed);\n",
+    ),
 ]
 
 
