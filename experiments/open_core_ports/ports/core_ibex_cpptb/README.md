@@ -123,7 +123,9 @@ wrong one.
 | `MemoryModel` | `mem_model_pkg::mem_model` |
 | `grant_driver` | `ibex_mem_intf_response_driver::send_grant` |
 | `response_driver` | `ibex_mem_intf_response_driver::send_read_data` |
-| `bus_monitor` | `ibex_mem_intf_monitor`, `ibex_mem_intf_response_seq::body` and the base test's `test_done_port` subscriber |
+| `bus_monitor` | `ibex_mem_intf_monitor`, `ibex_mem_intf_response_seq::body` and the base test's `test_done_port` subscriber, fused; see "Two architectures" |
+| `mem_intf_monitor`, `response_sequence`, `spurious_sequence`, `test_done_subscriber`, `cosim_dside_subscriber`, `response_driver_faithful` | the same, decomposed as UVM decomposes it |
+| `irq_monitor`, `irq_driver` | `irq_agent`'s monitor and driver |
 | `make_response`, `read_word`, `write_word` | `ibex_mem_intf_response_seq`'s item construction, `read` and `write` |
 | `key_device` | `push_pull_agent` in Pull/Device mode |
 | `fetch_enable_stimulus` | `fetch_enable_seq` |
@@ -148,6 +150,46 @@ Four processes and two analysis ports collapse into one coroutine per bus, and
 six forked tasks into one `cosim_monitor`. That fixes an order UVM leaves to the
 scheduler; the order chosen is the order the data flows, and it is stated in the
 file.
+
+## Two architectures, and why
+
+That collapse is the reason this port needs a second configuration. It is a
+defensible way to write the testbench, but it is not UVM's structure, so a
+throughput comparison against UVM charges cpptb for neither the extra processes
+nor the per-transaction object. `IBEX_ARCH` selects which decomposition runs:
+
+| | `lean` (default) | `faithful` |
+| --- | --- | --- |
+| per-bus monitor | fused with the response sequence and the `test_done` subscriber | `mem_intf_monitor`, publishing to two analysis ports |
+| response sequence | called inline by the monitor | `response_sequence`, blocked on the address-phase fifo |
+| driver handover | the sequence pushes into a deque the driver pops | `get_next_item` / `item_done` through `Sequencer` |
+| transaction | `MemItem` by value in a deque | allocated per transaction, published, dropped |
+| signature write | called directly from the monitor | `test_done_subscriber`, a second subscriber on the dside port |
+| interrupt agent | absent | `irq_monitor` sampling five pins every cycle, plus `irq_driver` parked on a sequencer |
+
+`faithful` mirrors the 18 components `core_ibex_env` builds for every test.
+`uvm_analysis_port::write` is a function rather than a task, so its subscribers
+run in the instant the monitor writes; cpptb's `Queue` wakes a consumer through
+`flush_external_wakes`, which resumes it inside the `put`. The two paths
+therefore do the same work at the same point in the same posedge, which is why
+the replay below matches on both.
+
+Two things `faithful` does not mirror:
+
+* Upstream's `ibex_mem_intf_response_seq::body` holds the request arm and the
+  spurious-response arm in one process. Here they are two coroutines, because
+  the arms block on different things -- an analysis fifo and a clock edge -- and
+  joining them needs a select over both that this port does not have.
+* Mirroring UVM's decomposition reproduces its structure but not the cost of its
+  class library executing that structure: the factory, the phasing, and
+  `uvm_object`'s own machinery are absent by design. So `faithful` **bounds** how
+  much of the measured gap is architecture rather than framework. It does not
+  isolate it, and no build of this port can.
+
+The interrupt pins are lifted to the wrapper boundary for this. Nothing under
+`core_ibex_base_test` raises an interrupt, so they are zero on every run either
+way, and `irq_items` in the report says so as a measurement rather than an
+assumption.
 
 ## Timing
 

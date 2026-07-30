@@ -22,16 +22,10 @@
 //   core_ibex_ifetch_if            -> ifetch_*
 //   core_ibex_ifetch_pmp_if        -> ifetch_pmp_*
 //   push_pull_if scrambling_key_if -> scramble_*
-//   irq_if irq_vif                 -> not lifted; see below
+//   irq_if irq_vif                 -> irq_*
 //
 // Deliberate differences from core_ibex_tb_top.sv, all of them consequences of
 // the port's scope or of cpptb's transport:
-//
-//  * The interrupt pins are tied off rather than lifted. Every one of the 944
-//    directed tests runs under core_ibex_base_test, which starts no interrupt
-//    sequence, so the irq_if is driven to zero for the whole of every run this
-//    port covers. Tying them here says that in one place rather than leaving a
-//    bus the testbench must remember to hold low.
 //
 //  * The memory integrity bits are computed here rather than driven. The UVM
 //    response sequence writes
@@ -108,6 +102,17 @@ module core_ibex_cpptb_tb_top import ibex_pkg::*; #(
   input  logic [31:0] instr_rdata_i,
   input  logic        instr_bad_intg_i,
   input  logic        instr_err_i,
+
+  // Interrupts, irq_if irq_vif. Nothing in core_ibex_base_test raises one, so
+  // these are zero for the whole of every run this port covers, and cpptb's
+  // default for an unwritten input is zero. They are lifted rather than tied
+  // because the interrupt agent samples them every cycle, which is work the UVM
+  // environment does on every test and a comparison has to include.
+  input  logic        irq_software_i,
+  input  logic        irq_timer_i,
+  input  logic        irq_external_i,
+  input  logic [14:0] irq_fast_i,
+  input  logic        irq_nm_i,
 
   // Data memory, ibex_mem_intf data_mem_vif
   output logic        data_req_o,
@@ -263,13 +268,13 @@ module core_ibex_cpptb_tb_top import ibex_pkg::*; #(
     .data_wdata_intg_o         (                           ),
     .data_err_i                (data_err_i                 ),
 
-    // Tied off rather than lifted: core_ibex_base_test starts no interrupt
-    // sequence, so irq_if is held at zero for every run this port covers.
-    .irq_software_i            (1'b0                       ),
-    .irq_timer_i               (1'b0                       ),
-    .irq_external_i            (1'b0                       ),
-    .irq_fast_i                (15'b0                      ),
-    .irq_nm_i                  (1'b0                       ),
+    // Lifted to the boundary; zero for every run this port covers, because
+    // core_ibex_base_test starts no interrupt sequence.
+    .irq_software_i            (irq_software_i             ),
+    .irq_timer_i               (irq_timer_i                ),
+    .irq_external_i            (irq_external_i             ),
+    .irq_fast_i                (irq_fast_i                 ),
+    .irq_nm_i                  (irq_nm_i                   ),
 
     .scramble_key_valid_i      (scramble_key_valid_i       ),
     .scramble_key_i            (scramble_key_i             ),

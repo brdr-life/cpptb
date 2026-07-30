@@ -910,6 +910,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", default="small",
                         help="the Ibex configuration to run against; the "
                              "binary is build/obj_<config>/core_ibex_tb")
+    parser.add_argument("--variant", default="",
+                        help="run a measurement build instead of the default "
+                             "one: build/obj_<config>-<variant>/core_ibex_tb, "
+                             "as written by build_tb.py --no-irq-agent")
     parser.add_argument("--group", action="append", default=[],
                         help="only entries from this testlist config group "
                              "(riscv-tests, riscv-arch-tests, epmp-tests)")
@@ -997,10 +1001,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {entry['test']:<58} {entry['config']}")
         return 0
 
-    testbench = BUILD / f"obj_{args.config}" / "core_ibex_tb"
+    obj_name = (f"obj_{args.config}-{args.variant}" if args.variant
+                else f"obj_{args.config}")
+    testbench = BUILD / obj_name / "core_ibex_tb"
     if not args.build_only and not testbench.is_file():
-        print(f"run_directed: no testbench at {testbench}\n"
-              f"run: python3 {HERE / 'build_tb.py'} --config {args.config}",
+        hint = (f"python3 {HERE / 'build_tb.py'} --config {args.config}"
+                + (" --no-irq-agent" if args.variant == "no-irq" else ""))
+        print(f"run_directed: no testbench at {testbench}\nrun: {hint}",
               file=sys.stderr)
         return 1
     for tool in (GCC, OBJCOPY):

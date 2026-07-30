@@ -48,7 +48,7 @@ BUILD = HERE / "build"
 TOP = "core_ibex_tb_top"
 
 
-def obj_dir(config: str) -> Path:
+def obj_dir(config: str, variant: str = "") -> Path:
     """Where a configuration's model and binary live.
 
     One directory per configuration, because the configurations are not
@@ -57,8 +57,13 @@ def obj_dir(config: str) -> Path:
     A single build/obj meant proving anything about those needed a rebuild
     first, and the rebuild silently invalidated whatever had been measured
     before it.
+
+    `variant` extends that to builds of the same configuration whose testbench
+    differs -- currently only --no-irq-agent. Without it a measurement build
+    overwrites the binary the recorded results were produced with, which is the
+    same mistake one directory per configuration exists to prevent.
     """
-    return BUILD / f"obj_{config}"
+    return BUILD / (f"obj_{config}-{variant}" if variant else f"obj_{config}")
 
 # Verilator exposes a signal to VPI only when it is marked public, and accepts a
 # write only when it is public_flat_rw. The integrity and glitch tests reach
@@ -757,11 +762,52 @@ MEASURE_OVERLAYS = [
 ]
 
 
+# Measurement build: take the interrupt agent out of the environment.
+#
+# `core_ibex_env::build_phase` is unconditional, so every test builds the same
+# seven components whether it uses them or not. `core_ibex_cpptb` ports six of
+# them; the interrupt agent is the one it does not have, and its monitor runs
+#
+#     forever begin ... vif.wait_clks(1); end
+#
+# for the whole of every run. So a UVM directed run pays for a component the
+# cpptb run does not, and a throughput comparison between the two charges cpptb
+# nothing for it. Removing it here is how that difference gets a number instead
+# of a caveat.
+#
+# Under core_ibex_base_test nothing drives the interrupt lines, so
+# irq_monitor::collect_irq compares against its initial `stored_irq_val = '0`
+# and never writes an item: the analysis path is dead and only the per-cycle
+# sample loop costs anything. base_test's own `irq_collected_port` is a
+# uvm_tlm_analysis_fifo it flushes on reset and never gets, so dropping the
+# connect changes no behaviour on this test list. It would change behaviour on
+# the eight test classes that raise interrupts, which is why this is a
+# measurement flag and not a default.
+NO_IRQ_OVERLAYS = [
+    (
+        CORE_IBEX / "env/core_ibex_env.sv",
+        "    irq_agent = irq_request_agent::type_id::create(\"irq_agent\", this);\n",
+        "    // measurement: interrupt agent not built; see NO_IRQ_OVERLAYS\n",
+    ),
+    (
+        CORE_IBEX / "env/core_ibex_env.sv",
+        "    vseqr.irq_seqr = irq_agent.sequencer;\n",
+        "    // measurement: no interrupt agent to take a sequencer from\n",
+    ),
+    (
+        CORE_IBEX / "tests/core_ibex_base_test.sv",
+        "    env.irq_agent.monitor.irq_port.connect(this.irq_collected_port.analysis_export);\n",
+        "    // measurement: no interrupt monitor to subscribe to\n",
+    ),
+]
+
+
 class BuildError(RuntimeError):
     pass
 
 
-def apply_overlays(debug: bool = False, pin_delays: bool = False) -> dict[str, str]:
+def apply_overlays(debug: bool = False, pin_delays: bool = False,
+                   no_irq: bool = False) -> dict[str, str]:
     """Write the patched copies and return upstream path -> overlay path."""
     out = BUILD / "overlay"
     if out.is_dir():
@@ -773,6 +819,7 @@ def apply_overlays(debug: bool = False, pin_delays: bool = False) -> dict[str, s
     patched: dict[Path, str] = {}
     rules = OVERLAYS + (DEBUG_OVERLAYS if debug else [])
     rules += MEASURE_OVERLAYS if pin_delays else []
+    rules += NO_IRQ_OVERLAYS if no_irq else []
     for source, old, new in rules:
         if not source.is_file():
             raise BuildError(f"overlay target missing: {source}")
@@ -885,11 +932,12 @@ def pkg_config(packages: list[str], *flags: str) -> list[str]:
 
 
 def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
-                      pin_delays: bool, extra: list[str]) -> list[str]:
+                      pin_delays: bool, extra: list[str],
+                      no_irq: bool = False) -> list[str]:
     parameters, defines = config_parameters(config)
     if not HDL_PUBLIC_VLT.is_file():
         raise BuildError(f"missing Verilator control file: {HDL_PUBLIC_VLT}")
-    overlay = apply_overlays(debug, pin_delays)
+    overlay = apply_overlays(debug, pin_delays, no_irq)
     sources = [overlay.get(path, path)
                for path in expand_filelist(CORE_IBEX / "ibex_dv.f")]
     if not fcov:
@@ -922,7 +970,7 @@ def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
         "-j", str(jobs),
         "--top-module", TOP,
         "--timescale", "1ns/10ps",
-        "--Mdir", str(obj_dir(config)),
+        "--Mdir", str(obj_dir(config, "no-irq" if no_irq else "")),
         "-o", "core_ibex_tb",
         # The overlay directory comes first so a patched `include is picked up
         # ahead of the upstream one; only files this build patches are in it.
@@ -971,6 +1019,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pin-delays", action="store_true",
                         help="measurement build: no constrained solve on the "
                              "memory-response path; see MEASURE_OVERLAYS")
+    parser.add_argument("--no-irq-agent", action="store_true",
+                        help="measurement build: leave the interrupt agent out "
+                             "of the environment, matching what core_ibex_cpptb "
+                             "does not port; see NO_IRQ_OVERLAYS. Builds into "
+                             "obj_<config>-no-irq, so the default binary and "
+                             "whatever was measured with it are untouched")
     parser.add_argument("--show", action="store_true",
                         help="print the command without running it")
     parser.add_argument("extra", nargs="*",
@@ -980,7 +1034,8 @@ def main(argv: list[str] | None = None) -> int:
     BUILD.mkdir(parents=True, exist_ok=True)
     try:
         command = verilator_command(args.config, args.jobs, args.fcov,
-                                    args.debug_mem, args.pin_delays, args.extra)
+                                    args.debug_mem, args.pin_delays, args.extra,
+                                    args.no_irq_agent)
     except BuildError as error:
         print(f"build_tb: {error}", file=sys.stderr)
         return 1
@@ -989,19 +1044,21 @@ def main(argv: list[str] | None = None) -> int:
         print(shlex.join(command))
         return 0
 
-    log = BUILD / f"compile_tb_{args.config}.log"
+    variant = "no-irq" if args.no_irq_agent else ""
+    tag = f"{args.config}-{variant}" if variant else args.config
+    log = BUILD / f"compile_tb_{tag}.log"
     # The command is a page wide with a hundred absolute paths in it. Keeping it
     # beside the log rather than at the top of it leaves the log greppable.
-    (BUILD / f"compile_tb_{args.config}.cmd").write_text(
+    (BUILD / f"compile_tb_{tag}.cmd").write_text(
         shlex.join(command) + "\n", encoding="utf-8")
-    print(f"build_tb: {args.config}, logging to {log.relative_to(HERE)}")
+    print(f"build_tb: {tag}, logging to {log.relative_to(HERE)}")
     with log.open("w", encoding="utf-8") as handle:
         completed = subprocess.run(command, cwd=BUILD, stdout=handle,
                                    stderr=subprocess.STDOUT, check=False)
     if completed.returncode != 0:
         print(f"build_tb: failed; see {log}", file=sys.stderr)
         return completed.returncode
-    print(f"build_tb: built {obj_dir(args.config) / 'core_ibex_tb'}")
+    print(f"build_tb: built {obj_dir(args.config, variant) / 'core_ibex_tb'}")
     return 0
 
 
