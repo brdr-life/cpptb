@@ -14,11 +14,11 @@ copy of that would be a second set of decisions about what upstream's `gcc_opts`
 mean, and a difference between the two harnesses that is really a difference
 between two compiles is the least interesting failure there is.
 
-    python3 ../core_ibex_uvm/build_tb.py --config opentitan   # for --compare
     uv run --frozen cpptb build --project .
     python3 run_directed.py --group riscv-tests
     python3 run_directed.py                       # all 944
-    python3 run_directed.py --only add-01 --compare
+    python3 run_directed.py --against \
+        ../core_ibex_uvm/build/directed/opentitan-all944/results.json
 
 What differs from the UVM runner, and only this:
 
@@ -238,8 +238,63 @@ def handle(entry: dict, run: Path, march: str, cycles: int, wall_seconds: int,
     return result
 
 
+def compare(results: list[dict], against: Path) -> None:
+    """Print the entry-by-entry agreement with another run's results file.
+
+    Usually that is a run of ports/core_ibex_uvm over the same testlist. Both
+    files have the same shape and the same spellings for the same outcomes, so
+    this is a join on the entry name and nothing more. A run that covered a
+    different set of entries is reported as that rather than compared on the
+    overlap, because "943 of 944 agree" and "943 of the 944 we both ran agree"
+    are different claims.
+    """
+    try:
+        other = json.loads(against.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"\ncannot read {against}: {error}")
+        return
+
+    theirs = {r["test"]: r for r in other.get("results", [])}
+    ours = {r["test"]: r for r in results}
+    shared = sorted(set(theirs) & set(ours))
+    print(f"\nagainst {other.get('run', against.parent.name)} "
+          f"({other.get('config', '?')}, "
+          f"{'complete' if other.get('complete') else 'partial'}, "
+          f"{other.get('started', '')})")
+    if len(shared) != len(theirs) or len(shared) != len(ours):
+        print(f"  the two runs share {len(shared)} entries of "
+              f"{len(theirs)} and {len(ours)}; what follows is about those")
+
+    differ = [t for t in shared if theirs[t]["outcome"] != ours[t]["outcome"]]
+    print(f"  {len(shared) - len(differ)} of {len(shared)} entries reach the "
+          f"same outcome")
+    for test in differ:
+        print(f"    {test:<50} there={theirs[test]['outcome']:<20} "
+              f"here={ours[test]['outcome']}")
+
+    # The ePMP verdict is a number recovered from the execution trace rather
+    # than a message, so it is worth comparing on its own: two harnesses can
+    # agree that an entry failed and disagree about what it exited with.
+    codes = [(t, theirs[t].get("exit_code"), ours[t].get("exit_code"))
+             for t in shared
+             if theirs[t].get("exit_code") is not None or
+             ours[t].get("exit_code") is not None]
+    wrong = [c for c in codes if c[1] != c[2]]
+    if codes:
+        print(f"  {len(codes) - len(wrong)} of {len(codes)} ePMP exit codes "
+              f"recovered from the trace agree")
+        for test, there, here in wrong[:10]:
+            print(f"    {test:<50} there={there} here={here}")
+
+    their_seconds = sum(theirs[t].get("seconds", 0.0) for t in shared)
+    our_seconds = sum(ours[t].get("seconds", 0.0) for t in shared)
+    if our_seconds > 0:
+        print(f"  {their_seconds:,.0f} simulator-seconds there, "
+              f"{our_seconds:,.0f} here ({their_seconds / our_seconds:.0f}x)")
+
+
 def report(results: list[dict], inapplicable: list[dict], total: int,
-           run: Path, header: dict) -> int:
+           run: Path, header: dict, against: Path | None = None) -> int:
     output = run / "results.json"
     document = {**header, "results": results, "inapplicable": inapplicable}
     output.write_text(json.dumps(document, indent=2), encoding="utf-8")
@@ -273,6 +328,9 @@ def report(results: list[dict], inapplicable: list[dict], total: int,
     cycles = sum((r.get("counters") or {}).get("cycles", 0) for r in results)
     print(f"\n{cycles:,} cycles and {steps:,} co-simulated instructions in "
           f"{seconds:,.0f} simulator-seconds")
+
+    if against is not None:
+        compare(results, against)
 
     if not header.get("complete"):
         print(f"\nthis run covered {len(results) + len(inapplicable)} of the "
@@ -340,6 +398,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="extra NAME=VALUE for the simulation, such as "
                              "IBEX_CORRUPT_DMEM=1")
     parser.add_argument("--run-name", default="")
+    parser.add_argument("--against", default="",
+                        help="a results.json from another run -- usually "
+                             "ports/core_ibex_uvm's -- to compare this one "
+                             "against, entry by entry")
     parser.add_argument("--index", action="store_true")
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args(argv)
@@ -434,7 +496,8 @@ def main(argv: list[str] | None = None) -> int:
     header["finished"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     header["wall_seconds"] = time.monotonic() - wall_started
     header["jobs"] = jobs
-    return report(results, inapplicable, len(chosen), run, header)
+    return report(results, inapplicable, len(chosen), run, header,
+                  Path(args.against) if args.against else None)
 
 
 if __name__ == "__main__":
