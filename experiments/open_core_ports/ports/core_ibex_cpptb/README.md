@@ -191,6 +191,98 @@ The interrupt pins are lifted to the wrapper boundary for this. Nothing under
 way, and `irq_items` in the report says so as a measurement rather than an
 assumption.
 
+## Functional coverage
+
+`dv/uvm/core_ibex/fcov/` declares three covergroups -- `uarch_cg`,
+`pmp_region_cg` and `pmp_top_cg` -- with 69 coverpoints and 46 crosses between
+them. Neither this port nor the UVM baseline used to sample any of them. The
+baseline still cannot, and that is worth stating precisely rather than as "off
+by default":
+
+```
+$ python3 ../core_ibex_uvm/build_tb.py --config opentitan --fcov
+%Error: Internal Error: core_ibex_fcov_if.sv:589:28: ../V3Ast.h:1061:
+        AstNode is not of expected type, but instead has type 'ENUMITEMREF'
+   589 |       bins out_of_reset = (RESET => BOOT_SET);
+```
+
+That is one hard error, and fixing it would not be enough. The same compile
+discards 456 coverage constructs with COVERIGN warnings:
+
+| ignored | count |
+| --- | ---: |
+| `intersect` in a coverage select expression | 208 |
+| `&&` in a coverage select expression | 131 |
+| explicit coverage cross bins | 71 |
+| `iff` in a coverage cross | 21 |
+| `with`, `\|\|`, `binsof`, `sequence`, `bins` array size | 25 |
+
+A cross whose select expression is dropped keeps every combination its
+coverpoints allow, which is a much larger bin set than the source describes. So
+Verilator cannot produce Ibex's functional coverage, correct or otherwise, and
+there is no reference run to compare this port against.
+
+### How equivalence is checked instead
+
+Against the specification, mechanically. `fcov_model.py` parses the covergroups
+out of the SystemVerilog -- all 69 coverpoints and all 46 crosses, and it
+checks that count against the declarations rather than trusting its own
+parser -- and `--diff` compares them with the model this port declares:
+
+```sh
+IBEX_COVERAGE_JSON=build/cov.json python3 run_directed.py --only add-01
+python3 fcov_model.py --diff build/cov.json
+```
+
+```
+=== uarch_cg ===
+  coverpoints  14 of 39 ported
+  crosses      0 of 27 ported
+54 disagreement(s) between the SystemVerilog and the port
+```
+
+That number is meant to be read. Most of what is missing needs the 318 lines of
+derived-signal logic in `core_ibex_fcov_if.sv` and about 28 more hierarchical
+signals lifted to the wrapper; the crosses need those coverpoints first. A
+coverpoint added upstream shows up here as missing rather than going unnoticed.
+
+### What the framework grew
+
+cpptb's coverage API could express single-range bins, two-way crosses over
+every combination, and two-state transitions. Ibex's coverage needs more, so
+`include/cpptb/coverage.hpp` gained bins over value lists, wildcard bins written
+as the pattern (`"1?????"`), bin arrays, crosses of any arity, cross bin
+selection with `binsof`/`intersect` and its `&&`, `||` and `!`, `iff` guards on
+coverpoints and crosses, and `illegal_bins = default sequence`.
+`tests/unit/coverage_sv_semantics_test.cpp` checks each against IEEE 1800-2023
+clause 19, because there is no simulator here to check them against.
+
+One construct is not exact. SystemVerilog's `with (expr)` filters a cross select
+by an expression over coverpoint *values* where cpptb selects whole bins. The
+two agree whenever the expression is constant across each bin, which holds for
+every `with` in Ibex's coverage, and `where()` records the SystemVerilog it
+stands for so the translation stays checkable. Where an expression varies within
+a bin, no bin-level predicate can match it.
+
+### What implementing `default sequence` found
+
+`cp_controller_fsm` and `cp_controller_fsm_sleep` both end with
+
+```systemverilog
+// TODO: VCS does not implement default sequence so illegal_bins will be empty
+illegal_bins illegal_transitions = default sequence;
+```
+
+Implemented as IEEE 1800 19.5.2 describes it, that bin catches every transition
+no listed bin accepts -- and `DECODE => DECODE` is such a transition. The
+controller sits in `DECODE` for most of every program, so across the directed
+testlist these bins fire **15,080,448 times in 14,987,388 sampled cycles**.
+
+Upstream's comment is the reason nobody has seen it: the coverpoint reads as
+harmless only because no simulator they run implements the construct. It is
+counted here and reported as `coverage_illegal`, and deliberately not treated as
+a testbench failure -- it is a statement about the covergroup, not about Ibex.
+
 ## Timing
 
 The design samples on the rising edge. `co_await RisingEdge` resumes before the

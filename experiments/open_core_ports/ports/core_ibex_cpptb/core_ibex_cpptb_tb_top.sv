@@ -108,6 +108,17 @@ module core_ibex_cpptb_tb_top import ibex_pkg::*; #(
   // instead, so the covergroup in fcov.hpp sees what uarch_cg sees.
   output logic [3:0]  fcov_controller_fsm_o,
   output logic [1:0]  fcov_priv_mode_id_o,
+  output logic [1:0]  fcov_priv_mode_lsu_o,
+  output logic        fcov_mprv_o,
+  output logic        fcov_debug_mode_o,
+  output logic        fcov_debug_req_o,
+  output logic        fcov_data_ind_timing_o,
+  output logic        fcov_dummy_instr_en_o,
+  output logic        fcov_ls_error_exception_o,
+  output logic        fcov_ls_pmp_exception_o,
+  output logic        fcov_branch_taken_o,
+  output logic        fcov_branch_not_taken_o,
+  output logic        fcov_irq_pending_o,
 
   // Interrupts, irq_if irq_vif. Nothing in core_ibex_base_test raises one, so
   // these are zero for the whole of every run this port covers, and cpptb's
@@ -368,9 +379,34 @@ module core_ibex_cpptb_tb_top import ibex_pkg::*; #(
   // What core_ibex_fcov_if reads for cp_controller_fsm and cp_priv_mode_id.
   // The fcov interface binds into ibex_core and names these directly; the
   // paths here are the same signals from outside.
+  // core_ibex_fcov_bind binds core_ibex_fcov_if into ibex_core with `.*`, so
+  // everything the covergroup names is either a port of ibex_core or a
+  // hierarchical reference relative to it. These are the same names from
+  // outside.
   assign fcov_controller_fsm_o =
     dut.u_ibex_top.u_ibex_core.id_stage_i.controller_i.ctrl_fsm_cs;
   assign fcov_priv_mode_id_o   = dut.u_ibex_top.u_ibex_core.priv_mode_id;
+  assign fcov_priv_mode_lsu_o  = dut.u_ibex_top.u_ibex_core.priv_mode_lsu;
+  assign fcov_mprv_o           =
+    dut.u_ibex_top.u_ibex_core.cs_registers_i.mstatus_q.mprv;
+  assign fcov_debug_mode_o     = dut.u_ibex_top.u_ibex_core.debug_mode;
+  assign fcov_debug_req_o      =
+    dut.u_ibex_top.u_ibex_core.id_stage_i.controller_i.fcov_debug_req;
+  assign fcov_data_ind_timing_o =
+    dut.u_ibex_top.u_ibex_core.cs_registers_i.data_ind_timing_o;
+  assign fcov_dummy_instr_en_o =
+    dut.u_ibex_top.u_ibex_core.cs_registers_i.dummy_instr_en_o;
+  assign fcov_ls_error_exception_o =
+    dut.u_ibex_top.u_ibex_core.load_store_unit_i.fcov_ls_error_exception;
+  assign fcov_ls_pmp_exception_o =
+    dut.u_ibex_top.u_ibex_core.load_store_unit_i.fcov_ls_pmp_exception;
+  assign fcov_branch_taken_o =
+    dut.u_ibex_top.u_ibex_core.id_stage_i.fcov_branch_taken;
+  assign fcov_branch_not_taken_o =
+    dut.u_ibex_top.u_ibex_core.id_stage_i.fcov_branch_not_taken;
+  assign fcov_irq_pending_o =
+    dut.u_ibex_top.u_ibex_core.id_stage_i.irq_pending_i |
+    dut.u_ibex_top.u_ibex_core.id_stage_i.irq_nm_i;
 
   assign data_misaligned_first_o =
     dut.u_ibex_top.u_ibex_core.load_store_unit_i.handle_misaligned_d |

@@ -60,6 +60,17 @@ enum class PrivLvl : uint8_t {
 struct FcovSample {
     CtrlFsm fsm = CtrlFsm::Reset;
     PrivLvl priv = PrivLvl::Machine;
+    PrivLvl priv_lsu = PrivLvl::Machine;
+    uint8_t mprv = 0;
+    uint8_t debug_mode = 0;
+    uint8_t debug_req = 0;
+    uint8_t data_ind_timing = 0;
+    uint8_t dummy_instr_en = 0;
+    uint8_t ls_error_exception = 0;
+    uint8_t ls_pmp_exception = 0;
+    uint8_t branch_taken = 0;
+    uint8_t branch_not_taken = 0;
+    uint8_t irq_pending = 0;
 };
 
 // uarch_cg, as far as it is ported.
@@ -132,8 +143,40 @@ class Uarch {
                                      typename Coverpoint<PrivLvl>::Range{
                                          PrivLvl::Hypervisor}});
 
-        // priv_mode_fsm_cross: not in upstream. Declared here it would show up
-        // in the diff as an extra, so it is not declared.
+        // cp_priv_mode_lsu, the same shape as cp_priv_mode_id.
+        auto& priv_lsu = group_.coverpoint(
+            "cp_priv_mode_lsu", [](const FcovSample& s) { return s.priv_lsu; });
+        priv_lsu.bin("PRIV_LVL_M", PrivLvl::Machine)
+            .bin("PRIV_LVL_U", PrivLvl::User)
+            .illegal_bin("illegal", {typename Coverpoint<PrivLvl>::Range{
+                                         PrivLvl::Supervisor},
+                                     typename Coverpoint<PrivLvl>::Range{
+                                         PrivLvl::Hypervisor}});
+
+        // The single-bit coverpoints declared with no bins body. SystemVerilog
+        // auto-bins those: one bin per value of the sampled type, which for a
+        // one-bit signal is two, named `auto[0]` and `auto[1]`. cpptb has no
+        // type reflection to derive them, so they are declared, and the names
+        // follow what a SystemVerilog report would show.
+        auto_bit("cp_mprv", [](const FcovSample& s) { return s.mprv; });
+        auto_bit("cp_debug_mode",
+                 [](const FcovSample& s) { return s.debug_mode; });
+        auto_bit("cp_debug_req",
+                 [](const FcovSample& s) { return s.debug_req; });
+        auto_bit("cp_data_ind_timing",
+                 [](const FcovSample& s) { return s.data_ind_timing; });
+        auto_bit("cp_dummy_instr_en",
+                 [](const FcovSample& s) { return s.dummy_instr_en; });
+        auto_bit("cp_ls_error_exception",
+                 [](const FcovSample& s) { return s.ls_error_exception; });
+        auto_bit("cp_ls_pmp_exception",
+                 [](const FcovSample& s) { return s.ls_pmp_exception; });
+        auto_bit("cp_branch_taken",
+                 [](const FcovSample& s) { return s.branch_taken; });
+        auto_bit("cp_branch_not_taken",
+                 [](const FcovSample& s) { return s.branch_not_taken; });
+        auto_bit("cp_irq_pending",
+                 [](const FcovSample& s) { return s.irq_pending; });
     }
 
     CoverageSampleResult sample(const FcovSample& value) {
@@ -143,6 +186,14 @@ class Uarch {
     CoverageSnapshot snapshot() const { return group_.snapshot(); }
 
    private:
+    // A coverpoint over a one-bit signal with no bins body, which
+    // SystemVerilog auto-bins into one bin per value.
+    template <typename Extractor>
+    void auto_bit(std::string name, Extractor extractor) {
+        auto& point = group_.coverpoint(std::move(name), extractor);
+        point.bin("auto[0]", uint8_t{0}).bin("auto[1]", uint8_t{1});
+    }
+
     Covergroup<FcovSample> group_;
 };
 

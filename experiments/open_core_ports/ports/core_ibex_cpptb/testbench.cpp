@@ -1339,6 +1339,24 @@ Task<void> fcov_sampler(Dut dut, Env& env, Uarch& coverage) {
         const FcovSample sample{
             .fsm = static_cast<CtrlFsm>(dut.fcov_controller_fsm_o.get()),
             .priv = static_cast<PrivLvl>(dut.fcov_priv_mode_id_o.get()),
+            .priv_lsu = static_cast<PrivLvl>(dut.fcov_priv_mode_lsu_o.get()),
+            .mprv = static_cast<uint8_t>(dut.fcov_mprv_o.get()),
+            .debug_mode = static_cast<uint8_t>(dut.fcov_debug_mode_o.get()),
+            .debug_req = static_cast<uint8_t>(dut.fcov_debug_req_o.get()),
+            .data_ind_timing =
+                static_cast<uint8_t>(dut.fcov_data_ind_timing_o.get()),
+            .dummy_instr_en =
+                static_cast<uint8_t>(dut.fcov_dummy_instr_en_o.get()),
+            .ls_error_exception =
+                static_cast<uint8_t>(dut.fcov_ls_error_exception_o.get()),
+            .ls_pmp_exception =
+                static_cast<uint8_t>(dut.fcov_ls_pmp_exception_o.get()),
+            .branch_taken =
+                static_cast<uint8_t>(dut.fcov_branch_taken_o.get()),
+            .branch_not_taken =
+                static_cast<uint8_t>(dut.fcov_branch_not_taken_o.get()),
+            .irq_pending =
+                static_cast<uint8_t>(dut.fcov_irq_pending_o.get()),
         };
         const auto result = coverage.sample(sample);
         if (!result.legal()) {
