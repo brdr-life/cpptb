@@ -1658,18 +1658,28 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     env.imem.cfg.enable_bad_intg_on_uninit_access = false;
     env.dmem.cfg.enable_bad_intg_on_uninit_access =
         env_number("IBEX_BAD_INTG_ON_UNINIT", 1) != 0;
-    // ibex_mem_intf_response_agent_cfg::zero_delays_c, drawn once per agent.
-    env.imem.cfg.zero_delays =
-        random.randint<uint32_t>(0, 99) < env.imem.cfg.zero_delay_pct;
-    env.dmem.cfg.zero_delays =
-        random.randint<uint32_t>(0, 99) < env.dmem.cfg.zero_delay_pct;
+    // ibex_mem_intf_response_agent_cfg declares `rand bit zero_delays` with a
+    // 50/50 dist, and nothing ever randomizes that object: core_ibex_base_test
+    // creates the two configs with type_id::create and writes fields into them,
+    // and no `randomize` names either. So `zero_delays` is 0 on every run of the
+    // baseline and both delay distributions are always drawn. Drawing it here
+    // would be a stimulus difference with nothing behind it.
+    env.imem.cfg.zero_delays = env_number("IBEX_ZERO_DELAYS", 0) != 0;
+    env.dmem.cfg.zero_delays = env.imem.cfg.zero_delays;
     // core_ibex_vseq::pre_body: spurious dside responses in
     // cfg.spurious_response_pct of runs, and core_ibex_base_test turns them off
     // altogether when the configuration is not SecureIbex.
-    const bool allow_spurious =
-        kSecureIbex && env_number("IBEX_DISABLE_SPURIOUS_DSIDE", 0) == 0;
+    //
+    // The percentage is a knob because upstream's 20 and the baseline's
+    // behaviour are not the same number. That draw is a `dist` through a
+    // constrained randomize(), and on Verilator it comes out 1 on 940 of the
+    // baseline's 944 directed runs rather than on about 190 of them. So a run
+    // that matches upstream's intent and a run that matches what the baseline
+    // executes are two different runs, and both are worth being able to make.
+    const uint32_t spurious_pct =
+        static_cast<uint32_t>(env_number("IBEX_SPURIOUS_DSIDE_PCT", 20));
     env.dmem.enable_spurious_response =
-        allow_spurious && random.randint<uint32_t>(0, 99) < 20;
+        kSecureIbex && random.randint<uint32_t>(0, 99) < spurious_pct;
     if (env.dmem.enable_spurious_response) {
         env.dmem.spurious_response_delay_cycles = random.randint<uint32_t>(
             env.dmem.cfg.spurious_response_delay_min,
