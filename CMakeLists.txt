@@ -69,6 +69,12 @@ if(BUILD_TESTING)
     target_link_libraries(cpptb_coverage_test PRIVATE cpptb::cpptb)
     add_test(NAME cpptb.coverage COMMAND cpptb_coverage_test)
 
+    add_executable(cpptb_coverage_sv_semantics_test
+        tests/unit/coverage_sv_semantics_test.cpp)
+    target_link_libraries(cpptb_coverage_sv_semantics_test PRIVATE cpptb::cpptb)
+    add_test(NAME cpptb.coverage_sv_semantics
+        COMMAND cpptb_coverage_sv_semantics_test)
+
     add_executable(cpptb_test_api_test tests/unit/test_api_test.cpp)
     target_link_libraries(cpptb_test_api_test PRIVATE cpptb::cpptb)
     add_test(NAME cpptb.test_api COMMAND cpptb_test_api_test)

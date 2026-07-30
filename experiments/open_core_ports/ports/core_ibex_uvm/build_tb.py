@@ -65,6 +65,22 @@ def obj_dir(config: str, variant: str = "") -> Path:
     """
     return BUILD / (f"obj_{config}-{variant}" if variant else f"obj_{config}")
 
+
+def build_variant(fcov: bool = False, no_irq: bool = False) -> str:
+    """The suffix naming a build that is not the default one.
+
+    Every option that changes what is compiled has to appear here. A build that
+    shares a directory with a different build overwrites it, and then a run
+    measured against one binary is reported against the other; that has already
+    happened once on this project with per-config rather than per-run log paths.
+    """
+    parts = []
+    if fcov:
+        parts.append("fcov")
+    if no_irq:
+        parts.append("no-irq")
+    return "-".join(parts)
+
 # Verilator exposes a signal to VPI only when it is marked public, and accepts a
 # write only when it is public_flat_rw. The integrity and glitch tests reach
 # into the DUT by name with uvm_hdl_read/uvm_hdl_force/uvm_hdl_release, so every
@@ -970,7 +986,7 @@ def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
         "-j", str(jobs),
         "--top-module", TOP,
         "--timescale", "1ns/10ps",
-        "--Mdir", str(obj_dir(config, "no-irq" if no_irq else "")),
+        "--Mdir", str(obj_dir(config, build_variant(fcov, no_irq))),
         "-o", "core_ibex_tb",
         # The overlay directory comes first so a patched `include is picked up
         # ahead of the upstream one; only files this build patches are in it.
@@ -1044,7 +1060,7 @@ def main(argv: list[str] | None = None) -> int:
         print(shlex.join(command))
         return 0
 
-    variant = "no-irq" if args.no_irq_agent else ""
+    variant = build_variant(args.fcov, args.no_irq_agent)
     tag = f"{args.config}-{variant}" if variant else args.config
     log = BUILD / f"compile_tb_{tag}.log"
     # The command is a page wide with a hundred absolute paths in it. Keeping it

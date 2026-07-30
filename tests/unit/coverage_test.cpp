@@ -109,7 +109,7 @@ int main() {
     check(rejected_merge, "different coverage models cannot be merged");
 
     auto late_mismatch = snapshot;
-    late_mismatch.crosses[0].bins.back().right_bin = "different";
+    late_mismatch.crosses[0].bins.back().bins.back() = "different";
     const uint64_t samples_before_failed_merge = merged.samples;
     const uint64_t hits_before_failed_merge =
         find_bin(merged.points[0], "read").hits;
@@ -157,8 +157,7 @@ int main() {
     check(json.find("\"schema_version\":1") != std::string::npos &&
               json.find("\"name\":\"transactions\"") !=
                   std::string::npos &&
-              json.find("\"left_bin\":\"read\"") !=
-                  std::string::npos,
+              json.find("\"bins\":[\"read\"") != std::string::npos,
           "coverage JSON contains stable model and cross data");
     std::remove(path);
 
