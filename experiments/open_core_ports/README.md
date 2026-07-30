@@ -83,7 +83,9 @@ left. Start there for review.
 The first two drive the same Ibex design against the same upstream harness, and
 measure deliberately different things. Together they separate what a simulated
 cycle costs from what a run costs. The third is a block-level testbench with a
-UVM baseline, and measures whether two scoreboards agree.
+UVM baseline, and measures whether two scoreboards agree. The fourth is Ibex's
+own core-level verification environment, and measures whether a cpptb port of it
+reaches the same verdict on the same 944 tests.
 
 - **[`ibex_simple_system`](ports/ibex_simple_system/RESULTS.md)** — CoreMark at
   100 iterations, one program of 40.7 million cycles. Steady-state throughput:
@@ -130,6 +132,32 @@ UVM baseline, and measures whether two scoreboards agree.
   This is the only port whose reference is a scoreboard rather than a
   signature or a reference model. Every returned fetch is checked against every
   memory seed the model still holds.
+
+- **[`core_ibex_cpptb`](ports/core_ibex_cpptb/RESULTS.md)** — Ibex's real
+  verification environment, `dv/uvm/core_ibex`, against
+  [`ports/core_ibex_uvm`](ports/core_ibex_uvm/README.md), which runs the UVM
+  environment on Verilator and passes 912 of the 944 hand-written directed
+  tests.
+
+  The cpptb port passes **the same 912**, and **943 of the 944 entries reach
+  the identical outcome**; all 744 ePMP exit codes recovered from the execution
+  trace agree exactly. The one that differs runs out of wall clock on the
+  baseline and out of cycles here.
+
+  Scoped to `core_ibex_base_test`, which 943 of the 944 entries name, plus the
+  thirty-line class the 944th needs. The other eight test classes and the
+  interrupt and debug agents serve the riscv-dv testlist, where the baseline's
+  own accounting says 17 of its 30 passes are hollow.
+
+  Both harnesses run byte-identical program binaries: the cpptb runner imports
+  the baseline's compile rather than reimplementing it. Record-and-replay closes
+  the loop that a shared verdict cannot: the baseline writes down every pin its
+  environment drives, and **375,100 cycles replay with all thirteen output
+  fields matching on every one**, with this port's Spike scoreboard accepting
+  all 26,090 instructions of the baseline's own runs.
+
+  The whole testlist is 158 simulator-seconds here against the baseline's 9,240,
+  and 107 seconds of wall clock against 2,365 at the same four jobs.
 
 The two program-driven ports build their software with a pinned prebuilt RISC-V
 toolchain, so neither needs one installed. `ibex_simple_system` commits its firmware as a
