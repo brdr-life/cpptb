@@ -505,6 +505,8 @@ struct Bus {
     std::deque<MemItem> responses;
     // ibex_mem_intf_monitor::collect_response_queue
     std::deque<MemItem> outstanding;
+    // Read requests seen, so that IBEX_INJECT_*_ERROR can name one.
+    uint64_t read_requests = 0;
     int outstanding_accesses = 0;
     // The response driver's `spurious_response` output, which the monitor reads
     // as a vif field upstream. There is no such pin on the wrapper because
@@ -540,8 +542,18 @@ struct Env {
 
     // Fault injection, so that a run can show these checks are live rather than
     // merely running. See README.md.
+    //
+    // The first two flip a bit of a response, which is a fault the environment
+    // cannot produce and the design cannot see coming. The second two call
+    // ibex_mem_intf_response_seq::inject_error, which is a real part of the
+    // agent that no directed entry reaches: only memory_error_seq calls it, and
+    // that belongs to test classes this port does not carry. Without a way to
+    // fire it the error path, and the iside-error tracking in the cosim
+    // scoreboard that depends on it, would be ported and dead.
     uint64_t corrupt_imem_response = 0;
     uint64_t corrupt_dmem_response = 0;
+    uint64_t inject_imem_error = 0;
+    uint64_t inject_dmem_error = 0;
 
     // The first reason to stop wins, with one exception: a cosim mismatch is a
     // uvm_fatal upstream whenever it happens, including in the three thousand
@@ -710,6 +722,18 @@ MemItem make_response(Env& env, Bus& bus, Random& random,
                       const MemItem& observed) {
     MemItem response = observed;
     response.rvalid_delay = draw_valid_delay(random, bus.cfg);
+    if (!observed.write) {
+        ++bus.read_requests;
+        const uint64_t at =
+            bus.dside ? env.inject_dmem_error : env.inject_imem_error;
+        if (at != 0 && bus.read_requests == at) {
+            std::printf("cpptb-core-ibex: injecting a bus error on %s read "
+                        "request %llu at 0x%s\n", bus.dside ? "dmem" : "imem",
+                        static_cast<unsigned long long>(bus.read_requests),
+                        hex32(observed.addr).c_str());
+            bus.enable_error = true;
+        }
+    }
     response.error = bus.enable_error;
     bus.enable_error = false;  // "Disable after single inserted error."
 
@@ -1648,6 +1672,8 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
         mcounteren_lock || env_number("IBEX_DISABLE_COSIM", 0) != 0;
     env.corrupt_imem_response = env_number("IBEX_CORRUPT_IMEM", 0);
     env.corrupt_dmem_response = env_number("IBEX_CORRUPT_DMEM", 0);
+    env.inject_imem_error = env_number("IBEX_INJECT_IMEM_ERROR", 0);
+    env.inject_dmem_error = env_number("IBEX_INJECT_DMEM_ERROR", 0);
 
     env.imem.dside = false;
     env.dmem.dside = true;
