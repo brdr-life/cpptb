@@ -119,6 +119,10 @@ module core_ibex_cpptb_tb_top import ibex_pkg::*; #(
   output logic        fcov_branch_taken_o,
   output logic        fcov_branch_not_taken_o,
   output logic        fcov_irq_pending_o,
+  output logic        fcov_wb_reg_no_load_hz_o,
+  output logic        fcov_dummy_instr_if_o,
+  output logic        fcov_dummy_instr_id_o,
+  output logic        fcov_dummy_instr_wb_o,
 
   // Interrupts, irq_if irq_vif. Nothing in core_ibex_base_test raises one, so
   // these are zero for the whole of every run this port covers, and cpptb's
@@ -407,6 +411,15 @@ module core_ibex_cpptb_tb_top import ibex_pkg::*; #(
   assign fcov_irq_pending_o =
     dut.u_ibex_top.u_ibex_core.id_stage_i.irq_pending_i |
     dut.u_ibex_top.u_ibex_core.id_stage_i.irq_nm_i;
+  assign fcov_wb_reg_no_load_hz_o =
+    dut.u_ibex_top.u_ibex_core.id_stage_i.fcov_rf_rd_wb_hz &&
+    !dut.u_ibex_top.u_ibex_core.wb_stage_i.outstanding_load_wb_o;
+  assign fcov_dummy_instr_if_o =
+    dut.u_ibex_top.u_ibex_core.if_stage_i.fcov_insert_dummy_instr;
+  assign fcov_dummy_instr_id_o =
+    dut.u_ibex_top.u_ibex_core.if_stage_i.dummy_instr_id_o;
+  assign fcov_dummy_instr_wb_o =
+    dut.u_ibex_top.u_ibex_core.wb_stage_i.dummy_instr_wb_o;
 
   assign data_misaligned_first_o =
     dut.u_ibex_top.u_ibex_core.load_store_unit_i.handle_misaligned_d |

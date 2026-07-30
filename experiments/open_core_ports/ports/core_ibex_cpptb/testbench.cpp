@@ -1357,6 +1357,15 @@ Task<void> fcov_sampler(Dut dut, Env& env, Uarch& coverage) {
                 static_cast<uint8_t>(dut.fcov_branch_not_taken_o.get()),
             .irq_pending =
                 static_cast<uint8_t>(dut.fcov_irq_pending_o.get()),
+            .wb_reg_no_load_hz =
+                static_cast<uint8_t>(dut.fcov_wb_reg_no_load_hz_o.get()),
+            .dummy_instr_if =
+                static_cast<uint8_t>(dut.fcov_dummy_instr_if_o.get()),
+            .dummy_instr_id =
+                static_cast<uint8_t>(dut.fcov_dummy_instr_id_o.get()),
+            .dummy_instr_wb =
+                static_cast<uint8_t>(dut.fcov_dummy_instr_wb_o.get()),
+            .fetch_enable = static_cast<uint8_t>(dut.fetch_enable_i.get()),
         };
         const auto result = coverage.sample(sample);
         if (!result.legal()) {
