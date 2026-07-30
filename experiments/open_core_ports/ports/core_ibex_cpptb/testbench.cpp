@@ -77,6 +77,7 @@
 
 #include "cpptb/cpptb.hpp"
 #include "dut.hpp"
+#include "fcov.hpp"
 
 // ---------------------------------------------------------------------------
 // Spike
@@ -507,6 +508,9 @@ struct Counters {
     // directed entry, because nothing raises an interrupt under the base test;
     // it is counted so that "zero" is a measurement rather than an assumption.
     uint64_t irq_items = 0;
+    // Illegal coverage bins reached. A uvm_error upstream, and nonzero here
+    // would mean the controller took an FSM edge uarch_cg does not list.
+    uint64_t coverage_illegal = 0;
     uint64_t cosim_steps = 0;
     uint64_t traps = 0;
     uint64_t iside_errors = 0;
@@ -1324,6 +1328,29 @@ Task<void> irq_driver(Dut dut, Queue<std::shared_ptr<IrqItem>>& fifo) {
 }
 
 // ---------------------------------------------------------------------------
+// uarch_cg, sampled where core_ibex_fcov_if samples it: `covergroup uarch_cg
+// @(posedge clk_i)`. See fcov.hpp for what is ported and why the UVM baseline
+// cannot run this at all.
+// ---------------------------------------------------------------------------
+
+Task<void> fcov_sampler(Dut dut, Env& env, Uarch& coverage) {
+    while (true) {
+        co_await RisingEdge{dut.clk_i};
+        const FcovSample sample{
+            .fsm = static_cast<CtrlFsm>(dut.fcov_controller_fsm_o.get()),
+            .priv = static_cast<PrivLvl>(dut.fcov_priv_mode_id_o.get()),
+        };
+        const auto result = coverage.sample(sample);
+        if (!result.legal()) {
+            // An illegal bin is a uvm_error upstream. The default-sequence
+            // bins make this reachable on an FSM edge the covergroup does not
+            // list, which is a check no simulator runs on the baseline.
+            ++env.counters.coverage_illegal;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // push_pull_agent in Pull/Device mode: the scrambling key provider.
 //
 // The agent randomises the whole device data word per transaction and answers
@@ -1957,7 +1984,8 @@ void report(const std::string& name, const Env& env) {
         "dmem_grants=%llu dmem_responses=%llu dmem_writes=%llu dmem_uninit=%llu "
         "dmem_spurious=%llu ifetches=%llu pmp_ifetch_errors=%llu "
         "iside_errors=%llu irq_only=%llu irq_items=%llu double_faults=%llu "
-        "fetch_enable_pulses=%llu key_answers=%llu signature_writes=%llu\n",
+        "fetch_enable_pulses=%llu key_answers=%llu signature_writes=%llu "
+        "coverage_illegal=%llu\n",
         name.c_str(), ending_name(env.ending),
         static_cast<unsigned long long>(c.cycles),
         static_cast<unsigned long long>(c.retired),
@@ -1980,7 +2008,8 @@ void report(const std::string& name, const Env& env) {
         static_cast<unsigned long long>(c.double_faults),
         static_cast<unsigned long long>(c.fetch_enable_pulses),
         static_cast<unsigned long long>(c.key_answers),
-        static_cast<unsigned long long>(c.signature_writes));
+        static_cast<unsigned long long>(c.signature_writes),
+        static_cast<unsigned long long>(c.coverage_illegal));
     if (!env.ending_detail.empty()) {
         std::printf("cpptb-core-ibex detail: %s\n", env.ending_detail.c_str());
     }
@@ -2248,6 +2277,9 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     auto keys = test.spawn(key_device(dut, test, env));
     auto cosim = test.spawn(cosim_monitor(dut, env, scoreboard));
 
+    Uarch coverage;
+    auto fcov = test.spawn(fcov_sampler(dut, env, coverage));
+
     std::vector<Process> components;
     // The analysis fifos and the interrupt agent's port outlive the coroutines
     // that read them, so they are declared here rather than inside the spawns.
@@ -2357,6 +2389,7 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
 
     cosim.cancel();
     keys.cancel();
+    fcov.cancel();
     dmem_grants.cancel();
     imem_grants.cancel();
     // Reverse spawn order, so a component is never cancelled while one that
@@ -2367,10 +2400,27 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     }
     co_await cosim;
     co_await keys;
+    co_await fcov;
     co_await dmem_grants;
     co_await imem_grants;
     for (auto& process : components) {
         co_await process;
+    }
+
+    // The model, whether or not a path was given for it: writing it is how
+    // fcov_model.py --diff can check this against the SystemVerilog.
+    const std::string coverage_path = env_string("IBEX_COVERAGE_JSON");
+    if (!coverage_path.empty()) {
+        const auto model = coverage.snapshot();
+        if (!write_coverage_json(coverage_path.c_str(), model)) {
+            std::fprintf(stderr,
+                         "cpptb-core-ibex: cannot write coverage to %s\n",
+                         coverage_path.c_str());
+        }
+        std::printf("cpptb-core-ibex coverage: %llu of %llu bins, %.1f%%\n",
+                    static_cast<unsigned long long>(model.covered_bins()),
+                    static_cast<unsigned long long>(model.coverable_bins()),
+                    model.coverage_percent());
     }
 
     // ibex_cosim_scoreboard::final_phase reports the same number, and it is the
