@@ -128,6 +128,10 @@ with 296,095 instructions co-simulated and no mismatch.
 
 Same machine, same four-at-a-time, idle box.
 
+Read this table with the section below it: it compares the whole UVM environment
+against this port's own decomposition, and about 21% of the ratio is the two
+differences between them rather than the frameworks. Like for like it is 48.8x.
+
 | | UVM | cpptb | ratio |
 | --- | ---: | ---: | ---: |
 | wall clock, whole testlist | 2,365 s | 105 s | 23x |
@@ -165,6 +169,71 @@ counts are equal by construction.
 20.5 s with the recording on, and one of the ePMP entries 7.3 s against 13.1 s.
 Discounting that, the underlying figure is between 45x and 55x, which is what
 the whole-testlist number says as well.
+
+### What that ratio is actually comparing
+
+Every figure above compares this port's own decomposition against the whole UVM
+environment, and those are not the same testbench. Two differences are inside
+the ratio:
+
+* `core_ibex_env::build_phase` is unconditional, so a UVM run of *any* test
+  builds 18 components. This port has 15 of them: `irq_agent`'s driver, monitor
+  and sequencer are absent, and its monitor samples five pins every cycle for
+  the whole of every run.
+* `bus_monitor` fuses four upstream processes into one coroutine per bus, holds
+  transactions by value rather than allocating one per transaction, and hands
+  the driver work through a shared deque rather than a sequencer handshake.
+
+Both were measured rather than argued about. `build_tb.py --no-irq-agent` takes
+the interrupt agent out of the UVM environment; `IBEX_ARCH=faithful` puts UVM's
+decomposition into this port. Four configurations, the nine replay entries,
+interleaved round-robin so that a load trend lands on all four equally instead
+of on one comparison, and the medians of three clean rounds:
+
+| | cycles/s | |
+| --- | ---: | --- |
+| UVM baseline | 2,565 | all 18 components |
+| UVM, no `irq_agent` | 2,893 | +12.8% |
+| cpptb `faithful` | 141,247 | UVM's decomposition |
+| cpptb `lean` | 151,362 | +7.2% |
+
+| | ratio |
+| --- | ---: |
+| as reported above: `lean` against the full baseline | **59x** |
+| like for like: `faithful` against the baseline without `irq_agent` | **48.8x** |
+
+So the headline overstates the gap by about 21%: x1.128 of it is a component
+this port does not have, and x1.072 is its leaner architecture. **The remaining
+48.8x is the framework.**
+
+Three caveats, all of which cut against reading the 48.8x too precisely:
+
+* The interrupt agent's cost is the noisiest term. Paired round by round it came
+  out 1.061, 1.152 and 1.186; the median is 1.128 but the honest range is +6% to
+  +19%, which moves the like-for-like ratio between about 46x and 52x. The box
+  is shared -- 781 logged-in users and a load average near 2 with nothing of
+  ours running -- and a 280-second UVM run cannot be isolated from that. The
+  cpptb pair, whose runs are two seconds, is tight: 1.048, 1.061, 1.076.
+* A fourth round was discarded. Every configuration in it ran slow -- the two
+  cpptb runs by about 1.9x -- which is a load spike rather than a result, and
+  including it would have put the interrupt agent's cost *below zero* on that
+  round. An earlier attempt at this measurement ran three baseline repetitions
+  and then three no-irq ones, saw them fall 282, 267, 253, and reported +15.8%;
+  that number was a load trend charged to the delta and it is why this one is
+  interleaved.
+* `faithful` **bounds** the architecture term rather than isolating it. It
+  reproduces UVM's structure but not the cost of UVM's class library executing
+  that structure -- no factory, no phasing, no `uvm_object`. Whatever those cost
+  stays in the 48.8x, counted as framework, because no build of this port can
+  separate them.
+
+The two cpptb architectures reach the same verdict on all 944 entries with zero
+disagreements, and both replay the baseline's nine recordings pin-for-pin over
+375,100 cycles. They do not simulate the same number of cycles when generating
+their own stimulus -- 14,413,092 against 14,257,002 over the testlist -- because
+they draw the memory delays in a different order, so the table above compares
+them as a rate. Their fixed work is equal within a round, which is what makes
+the paired ratios meaningful, and the runner checks that rather than assuming it.
 
 ### Build and edit times
 

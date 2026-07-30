@@ -424,6 +424,68 @@ struct MemItem {
     bool m_mode_access = false;
 };
 
+// A transaction handle. The lean path holds MemItem by value in a deque; the
+// faithful path allocates one per transaction and drops it when the last
+// subscriber is done with it, which is the lifetime uvm_object gives it.
+using MemItemPtr = std::shared_ptr<MemItem>;
+
+// ---------------------------------------------------------------------------
+// uvm_analysis_port and the sequencer end of the driver handshake, for the
+// faithful architecture. See the section that uses them for why they exist.
+// ---------------------------------------------------------------------------
+
+// write() is a function upstream, not a task, so every subscriber runs in the
+// instant the monitor writes. Fanning out synchronously here is therefore
+// faithful rather than a shortcut. The subscribers are Queues because
+// uvm_tlm_analysis_fifo is one.
+template <typename T>
+class AnalysisPort {
+   public:
+    void connect(Queue<T>& fifo) { subscribers_.push_back(&fifo); }
+
+    void write(const T& item) {
+        for (auto* fifo : subscribers_) {
+            // uvm_tlm_analysis_fifo is unbounded, so a full one means the Queue
+            // was given a maxsize it should not have had.
+            if (!fifo->put_nowait(item)) {
+                std::fprintf(stderr, "cpptb-core-ibex: an analysis fifo "
+                                     "rejected a write; it must be unbounded\n");
+                std::abort();
+            }
+        }
+    }
+
+    std::size_t subscribers() const { return subscribers_.size(); }
+
+   private:
+    std::vector<Queue<T>*> subscribers_;
+};
+
+// uvm_sequencer's half of get_next_item/item_done: the driver holds an item
+// until it says it is finished, and cannot be given the next one until then.
+// The lean path has the sequence push straight into the driver's queue, which
+// is one fewer handshake per transaction.
+template <typename T>
+class Sequencer {
+   public:
+    void put(T item) { pending_.push_back(std::move(item)); }
+    bool has_item() const { return !in_flight_ && !pending_.empty(); }
+
+    const T& get_next_item() {
+        in_flight_ = true;
+        return pending_.front();
+    }
+
+    void item_done() {
+        pending_.pop_front();
+        in_flight_ = false;
+    }
+
+   private:
+    std::deque<T> pending_;
+    bool in_flight_ = false;
+};
+
 // ---------------------------------------------------------------------------
 // Counters, so that a cpptb run and a UVM run can be compared on more than
 // their verdict. run_directed.py reads the line report() prints.
@@ -441,6 +503,10 @@ struct Counters {
     uint64_t dmem_spurious = 0;
     uint64_t retired = 0;
     uint64_t irq_only_items = 0;
+    // Items the faithful path's interrupt monitor published. Zero on every
+    // directed entry, because nothing raises an interrupt under the base test;
+    // it is counted so that "zero" is a measurement rather than an assumption.
+    uint64_t irq_items = 0;
     uint64_t cosim_steps = 0;
     uint64_t traps = 0;
     uint64_t iside_errors = 0;
@@ -514,6 +580,19 @@ struct Bus {
     // point it writes rvalid, and the monitor reads it at the same posedge, so
     // it behaves exactly as the wire does.
     bool driving_spurious = false;
+
+    // ---- the faithful architecture only; see mem_intf_monitor -------------
+    //
+    // The monitor's two analysis ports, the sequence's view of the first, and
+    // the sequencer the response driver takes work from. Unused on the lean
+    // path, where the monitor calls its subscribers directly and the sequence
+    // pushes into `responses`.
+    AnalysisPort<MemItemPtr> addr_ph_port;
+    AnalysisPort<MemItemPtr> item_collected_port;
+    Queue<MemItemPtr> addr_ph_fifo;
+    Sequencer<MemItemPtr> sequencer;
+    // collect_response_queue, as handles rather than values.
+    std::deque<MemItemPtr> outstanding_items;
 };
 
 struct Env {
@@ -532,6 +611,13 @@ struct Env {
 
     // core_ibex_mcounteren_lock_test's stimulus, off in the base test.
     bool mcounteren_lock = false;
+
+    // Which decomposition to run, chosen with +arch=. `false` is this port's
+    // own, which fuses four upstream processes into one coroutine per bus and
+    // holds transactions by value; `true` mirrors UVM's component structure.
+    // Both are the same testbench and must reach the same verdict on every
+    // entry and the same pins on every replayed cycle -- see README.md.
+    bool faithful = false;
 
     // Set when the run is replaying a recording from ports/core_ibex_uvm
     // rather than generating its own stimulus. The monitors still run -- the
@@ -984,6 +1070,256 @@ void on_signature_write(Env& env, const MemItem& item) {
                    "the data 0x" + hex32(item.data) +
                        " written to the signature address is formatted "
                        "incorrectly");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The faithful architecture.
+//
+// bus_monitor above is four upstream processes at one posedge, and the response
+// sequence hands the driver work by pushing into a queue the driver pops. That
+// is a defensible way to write this testbench and it is what the port measured
+// its throughput with, but it is not UVM's structure, so a throughput
+// comparison against UVM charges cpptb for neither the extra processes nor the
+// per-transaction object. What follows is the same behaviour decomposed the way
+// the UVM environment decomposes it:
+//
+//   ibex_mem_intf_monitor          -> mem_intf_monitor
+//     item_collected_port            -> Bus::item_collected_port, two subscribers
+//     addr_ph_port                   -> Bus::addr_ph_port
+//   ibex_mem_intf_response_seq     -> response_sequence
+//   uvm_sequencer/driver handshake -> Bus::sequencer, get_next_item/item_done
+//   base test's test_done_port     -> test_done_subscriber
+//   irq_agent                      -> irq_monitor + irq_driver
+//
+// Every transaction is allocated, published and dropped, which is the lifetime
+// uvm_object gives it.
+//
+// One thing this cannot reproduce: mirroring UVM's decomposition reproduces the
+// structure but not the cost of UVM's class library executing that structure --
+// its factory, its phasing, uvm_object's own machinery. So the faithful path
+// bounds how much of the measured gap is architecture; it does not isolate it.
+// ---------------------------------------------------------------------------
+
+Task<void> mem_intf_monitor(Dut dut, Env& env, Bus& bus) {
+    while (true) {
+        co_await RisingEdge{dut.clk_i};
+
+        const bool rvalid = bus_rvalid(dut, bus) && !bus.driving_spurious;
+
+        // collect_response_phase
+        if (rvalid && !bus.outstanding_items.empty()) {
+            MemItemPtr item = bus.outstanding_items.front();
+            bus.outstanding_items.pop_front();
+            if (!item->write) {
+                item->data = bus.dside ? dut.data_rdata_i.get()
+                                       : dut.instr_rdata_i.get();
+            }
+            item->error = (bus.dside ? dut.data_err_i.get()
+                                     : dut.instr_err_i.get()) != 0;
+            if (bus.dside && env.replay && !item->write) {
+                // Same reason as the lean path: the baseline answered a read of
+                // uninitialised memory with random data and wrote it into both
+                // models, so the same two writes have to happen here.
+                const uint32_t aligned = item->addr & ~3u;
+                uint32_t bytes = item->data;
+                for (uint32_t index = 0; index < 4; ++index) {
+                    if (!env.mem.addr_exists(aligned + index)) {
+                        const auto value = static_cast<uint8_t>(bytes);
+                        env.mem.write_byte(aligned + index, value);
+                        env.cosim.write_mem_byte(aligned + index, value);
+                    }
+                    bytes >>= 8;
+                }
+            }
+            // Two subscribers on the dside: the cosim agent and the base test.
+            bus.item_collected_port.write(item);
+        }
+
+        // collect_address_phase
+        if (bus_req(dut, bus) && bus_gnt(dut, bus)) {
+            auto observed = std::make_shared<MemItem>();
+            observed->addr = bus_addr(dut, bus);
+            observed->be = bus_be(dut, bus);
+            observed->write = bus_we(dut, bus);
+            if (observed->write) observed->data = bus_wdata(dut, bus);
+            if (bus.dside) {
+                observed->misaligned_first =
+                    dut.data_misaligned_first_o.get() != 0;
+                observed->misaligned_second =
+                    dut.data_misaligned_second_o.get() != 0;
+                observed->misaligned_first_saw_error =
+                    dut.data_misaligned_first_saw_error_o.get() != 0;
+                observed->m_mode_access = dut.data_m_mode_access_o.get() != 0;
+                ++env.counters.dmem_grants;
+                if (observed->write) ++env.counters.dmem_writes;
+            } else {
+                ++env.counters.imem_grants;
+            }
+            bus.outstanding_items.push_back(observed);
+            ++bus.outstanding_accesses;
+            bus.addr_ph_port.write(observed);
+        }
+        if (rvalid) --bus.outstanding_accesses;
+    }
+}
+
+// ibex_mem_intf_response_seq::body's request half: blocked on the address-phase
+// fifo, one response per request, handed to the sequencer.
+Task<void> response_sequence(Dut dut, TestContext& test, Env& env, Bus& bus) {
+    auto& random = test.random();
+    while (true) {
+        MemItemPtr observed = co_await bus.addr_ph_fifo.get();
+        if (env.replay) {
+            // The response is already on the wire; only the memory model needs
+            // keeping up to date. Same as the lean path.
+            if (observed->write) {
+                write_word(env, observed->addr & ~3u, observed->data,
+                           observed->be);
+            }
+            continue;
+        }
+        bus.sequencer.put(std::make_shared<MemItem>(
+            make_response(env, bus, random, *observed)));
+    }
+}
+
+// The other half of the sequence's body: a spurious response when the interface
+// is idle. Upstream this shares one body() with the request half; it is a
+// separate coroutine here because the two arms block on different things, and
+// that is a difference this port cannot remove without a select over an
+// analysis fifo and a clock edge. It is noted in README.md.
+Task<void> spurious_sequence(Dut dut, TestContext& test, Env& env, Bus& bus) {
+    auto& random = test.random();
+    while (true) {
+        co_await RisingEdge{dut.clk_i};
+        if (!bus.enable_spurious_response || bus_req(dut, bus)) continue;
+        if (bus.spurious_response_delay_cycles == 0 &&
+            bus.outstanding_accesses == 0) {
+            auto spurious = std::make_shared<MemItem>();
+            spurious->spurious = true;
+            spurious->rvalid_delay = 0;
+            spurious->data = random.randint<uint32_t>(0, 0xFFFF'FFFFu);
+            bus.sequencer.put(spurious);
+            ++env.counters.dmem_spurious;
+            bus.spurious_response_delay_cycles = random.randint<uint32_t>(
+                bus.cfg.spurious_response_delay_min,
+                bus.cfg.spurious_response_delay_max);
+        } else if (bus.spurious_response_delay_cycles > 0) {
+            --bus.spurious_response_delay_cycles;
+        }
+    }
+}
+
+// The cosim agent's subscriber on the dside monitor's item_collected_port.
+Task<void> cosim_dside_subscriber(Env& env, Queue<MemItemPtr>& fifo) {
+    while (true) {
+        MemItemPtr item = co_await fifo.get();
+        env.cosim.notify_dside_access(
+            item->write, item->addr, item->data, item->be, item->error,
+            item->misaligned_first, item->misaligned_second,
+            item->misaligned_first_saw_error, item->m_mode_access);
+    }
+}
+
+// core_ibex_base_test's own subscriber on the same port, which is what
+// wait_for_test_done watches for the signature write.
+Task<void> test_done_subscriber(Env& env, Queue<MemItemPtr>& fifo) {
+    while (true) {
+        MemItemPtr item = co_await fifo.get();
+        on_signature_write(env, *item);
+    }
+}
+
+// ibex_mem_intf_response_driver::send_read_data, taking work through the
+// sequencer handshake instead of off a shared queue.
+Task<void> response_driver_faithful(Dut dut, Env& env, Bus& bus) {
+    uint64_t responses_driven = 0;
+    while (true) {
+        co_await FallingEdge{dut.clk_i};
+        set_bus_response(dut, bus, false, 0, false, false);
+        bus.driving_spurious = false;
+
+        while (!bus.sequencer.has_item()) {
+            co_await FallingEdge{dut.clk_i};
+        }
+        MemItem item = *bus.sequencer.get_next_item();
+
+        for (uint32_t index = 0; index < item.rvalid_delay; ++index) {
+            co_await FallingEdge{dut.clk_i};
+        }
+
+        if (!item.write && !item.spurious) ++responses_driven;
+        const uint64_t corrupt =
+            bus.dside ? env.corrupt_dmem_response : env.corrupt_imem_response;
+        if (corrupt != 0 && !item.write && responses_driven == corrupt) {
+            item.data ^= 1u;
+            std::printf("cpptb-core-ibex: corrupting %s read response %llu at "
+                        "0x%s\n", bus.dside ? "dmem" : "imem",
+                        static_cast<unsigned long long>(responses_driven),
+                        hex32(item.addr).c_str());
+        }
+
+        bus.driving_spurious = item.spurious;
+        set_bus_response(dut, bus, true, item.data, item.error, item.bad_intg);
+        if (bus.dside) {
+            ++env.counters.dmem_responses;
+        } else {
+            ++env.counters.imem_responses;
+        }
+        bus.sequencer.item_done();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// irq_agent, which core_ibex_env builds for every test and this port did not
+// have. Under core_ibex_base_test nothing drives the interrupt lines, so
+// collect_irq compares against its initial value and never writes an item: the
+// analysis path is dead and the per-cycle sample is the whole cost. That is
+// reproduced rather than optimised away, because it is what the baseline pays.
+// ---------------------------------------------------------------------------
+
+struct IrqItem {
+    bool software = false;
+    bool timer = false;
+    bool external = false;
+    uint32_t fast = 0;
+    bool nm = false;
+
+    bool operator==(const IrqItem&) const = default;
+};
+
+Task<void> irq_monitor(Dut dut, Env& env, AnalysisPort<std::shared_ptr<IrqItem>>& port) {
+    IrqItem stored;
+    while (true) {
+        IrqItem current;
+        current.software = dut.irq_software_i.get() != 0;
+        current.timer = dut.irq_timer_i.get() != 0;
+        current.external = dut.irq_external_i.get() != 0;
+        current.fast = dut.irq_fast_i.get();
+        current.nm = dut.irq_nm_i.get() != 0;
+        if (!(current == stored)) {
+            stored = current;
+            port.write(std::make_shared<IrqItem>(current));
+            ++env.counters.irq_items;
+        }
+        co_await RisingEdge{dut.clk_i};
+    }
+}
+
+// irq_request_driver, parked on a sequencer nothing gives work to. Upstream the
+// driver blocks in get_next_item for the whole run under base_test; blocking on
+// the fifo here is the same thing.
+Task<void> irq_driver(Dut dut, Queue<std::shared_ptr<IrqItem>>& fifo) {
+    while (true) {
+        std::shared_ptr<IrqItem> item = co_await fifo.get();
+        // Nothing in core_ibex_base_test reaches this. If a test class that
+        // raises interrupts is ever ported, this is where the stimulus lands.
+        dut.irq_software_i.set(item->software ? 1 : 0);
+        dut.irq_timer_i.set(item->timer ? 1 : 0);
+        dut.irq_external_i.set(item->external ? 1 : 0);
+        dut.irq_fast_i.set(item->fast);
+        dut.irq_nm_i.set(item->nm ? 1 : 0);
     }
 }
 
@@ -1620,7 +1956,7 @@ void report(const std::string& name, const Env& env) {
         "imem_grants=%llu imem_responses=%llu imem_uninit=%llu "
         "dmem_grants=%llu dmem_responses=%llu dmem_writes=%llu dmem_uninit=%llu "
         "dmem_spurious=%llu ifetches=%llu pmp_ifetch_errors=%llu "
-        "iside_errors=%llu irq_only=%llu double_faults=%llu "
+        "iside_errors=%llu irq_only=%llu irq_items=%llu double_faults=%llu "
         "fetch_enable_pulses=%llu key_answers=%llu signature_writes=%llu\n",
         name.c_str(), ending_name(env.ending),
         static_cast<unsigned long long>(c.cycles),
@@ -1640,6 +1976,7 @@ void report(const std::string& name, const Env& env) {
         static_cast<unsigned long long>(c.pmp_ifetch_errors),
         static_cast<unsigned long long>(c.iside_errors),
         static_cast<unsigned long long>(c.irq_only_items),
+        static_cast<unsigned long long>(c.irq_items),
         static_cast<unsigned long long>(c.double_faults),
         static_cast<unsigned long long>(c.fetch_enable_pulses),
         static_cast<unsigned long long>(c.key_answers),
@@ -1670,6 +2007,16 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     // "so mismatches during lock don't abort".
     env.relax_cosim_check =
         mcounteren_lock || env_number("IBEX_DISABLE_COSIM", 0) != 0;
+    // IBEX_ARCH=faithful runs UVM's decomposition instead of this port's fused
+    // one. Same behaviour, same verdict, same pins; more components. See the
+    // faithful architecture section and README.md.
+    const std::string arch = env_string("IBEX_ARCH", "lean");
+    if (arch != "lean" && arch != "faithful") {
+        std::fprintf(stderr, "cpptb-core-ibex: IBEX_ARCH must be 'lean' or "
+                             "'faithful', not '%s'\n", arch.c_str());
+        std::abort();
+    }
+    env.faithful = arch == "faithful";
     env.corrupt_imem_response = env_number("IBEX_CORRUPT_IMEM", 0);
     env.corrupt_dmem_response = env_number("IBEX_CORRUPT_DMEM", 0);
     env.inject_imem_error = env_number("IBEX_INJECT_IMEM_ERROR", 0);
@@ -1821,17 +2168,53 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
         CosimScoreboard replay_scoreboard(test, env);
         apply_cycle(dut, trace, 0);
 
-        auto replay_imem = test.spawn(bus_monitor(dut, test, env, env.imem));
-        auto replay_dmem = test.spawn(bus_monitor(dut, test, env, env.dmem));
+        // Replay runs whichever decomposition was asked for, because "the two
+        // architectures see the same pins" is the claim that makes their timings
+        // comparable, and this is what tests it.
+        std::vector<Process> replay_components;
+        Queue<MemItemPtr> replay_cosim_fifo;
+        Queue<MemItemPtr> replay_done_fifo;
+        AnalysisPort<std::shared_ptr<IrqItem>> replay_irq_port;
+        Queue<std::shared_ptr<IrqItem>> replay_irq_fifo;
+        if (env.faithful) {
+            env.dmem.item_collected_port.connect(replay_cosim_fifo);
+            env.dmem.item_collected_port.connect(replay_done_fifo);
+            env.imem.addr_ph_port.connect(env.imem.addr_ph_fifo);
+            env.dmem.addr_ph_port.connect(env.dmem.addr_ph_fifo);
+            replay_components.push_back(
+                test.spawn(mem_intf_monitor(dut, env, env.imem)));
+            replay_components.push_back(
+                test.spawn(mem_intf_monitor(dut, env, env.dmem)));
+            replay_components.push_back(
+                test.spawn(response_sequence(dut, test, env, env.imem)));
+            replay_components.push_back(
+                test.spawn(response_sequence(dut, test, env, env.dmem)));
+            replay_components.push_back(
+                test.spawn(cosim_dside_subscriber(env, replay_cosim_fifo)));
+            replay_components.push_back(
+                test.spawn(test_done_subscriber(env, replay_done_fifo)));
+            replay_components.push_back(
+                test.spawn(irq_monitor(dut, env, replay_irq_port)));
+            replay_components.push_back(
+                test.spawn(irq_driver(dut, replay_irq_fifo)));
+        } else {
+            replay_components.push_back(
+                test.spawn(bus_monitor(dut, test, env, env.imem)));
+            replay_components.push_back(
+                test.spawn(bus_monitor(dut, test, env, env.dmem)));
+        }
         auto replay_cosim =
             test.spawn(cosim_monitor(dut, env, replay_scoreboard));
         co_await replay_run(dut, test, env, trace);
         replay_cosim.cancel();
-        replay_dmem.cancel();
-        replay_imem.cancel();
+        for (auto process = replay_components.rbegin();
+             process != replay_components.rend(); ++process) {
+            process->cancel();
+        }
         co_await replay_cosim;
-        co_await replay_dmem;
-        co_await replay_imem;
+        for (auto& process : replay_components) {
+            co_await process;
+        }
 
         env.counters.cycles = env.replay_cycles;
         if (env.ending == Ending::kRunning) {
@@ -1857,14 +2240,52 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
 
     CosimScoreboard scoreboard(test, env);
 
-    auto imem_monitor = test.spawn(bus_monitor(dut, test, env, env.imem));
-    auto dmem_monitor = test.spawn(bus_monitor(dut, test, env, env.dmem));
+    // The grant drivers and the key device are the same on both paths; the
+    // monitor, the response sequence and the response driver are not. See the
+    // faithful architecture section for what differs and why both exist.
     auto imem_grants = test.spawn(grant_driver(dut, test, env, env.imem));
     auto dmem_grants = test.spawn(grant_driver(dut, test, env, env.dmem));
-    auto imem_responses = test.spawn(response_driver(dut, env, env.imem));
-    auto dmem_responses = test.spawn(response_driver(dut, env, env.dmem));
     auto keys = test.spawn(key_device(dut, test, env));
     auto cosim = test.spawn(cosim_monitor(dut, env, scoreboard));
+
+    std::vector<Process> components;
+    // The analysis fifos and the interrupt agent's port outlive the coroutines
+    // that read them, so they are declared here rather than inside the spawns.
+    Queue<MemItemPtr> cosim_dside_fifo;
+    Queue<MemItemPtr> test_done_fifo;
+    AnalysisPort<std::shared_ptr<IrqItem>> irq_port;
+    Queue<std::shared_ptr<IrqItem>> irq_seq_fifo;
+
+    if (env.faithful) {
+        env.dmem.item_collected_port.connect(cosim_dside_fifo);
+        env.dmem.item_collected_port.connect(test_done_fifo);
+        env.imem.addr_ph_port.connect(env.imem.addr_ph_fifo);
+        env.dmem.addr_ph_port.connect(env.dmem.addr_ph_fifo);
+
+        components.push_back(test.spawn(mem_intf_monitor(dut, env, env.imem)));
+        components.push_back(test.spawn(mem_intf_monitor(dut, env, env.dmem)));
+        components.push_back(
+            test.spawn(response_sequence(dut, test, env, env.imem)));
+        components.push_back(
+            test.spawn(response_sequence(dut, test, env, env.dmem)));
+        components.push_back(
+            test.spawn(spurious_sequence(dut, test, env, env.dmem)));
+        components.push_back(
+            test.spawn(response_driver_faithful(dut, env, env.imem)));
+        components.push_back(
+            test.spawn(response_driver_faithful(dut, env, env.dmem)));
+        components.push_back(
+            test.spawn(cosim_dside_subscriber(env, cosim_dside_fifo)));
+        components.push_back(
+            test.spawn(test_done_subscriber(env, test_done_fifo)));
+        components.push_back(test.spawn(irq_monitor(dut, env, irq_port)));
+        components.push_back(test.spawn(irq_driver(dut, irq_seq_fifo)));
+    } else {
+        components.push_back(test.spawn(bus_monitor(dut, test, env, env.imem)));
+        components.push_back(test.spawn(bus_monitor(dut, test, env, env.dmem)));
+        components.push_back(test.spawn(response_driver(dut, env, env.imem)));
+        components.push_back(test.spawn(response_driver(dut, env, env.dmem)));
+    }
 
     // core_ibex_base_test::run_phase: fetch_enable off, a hundred clocks, the
     // backdoor load into both memory models, then fetch_enable on. The wait
@@ -1936,20 +2357,21 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
 
     cosim.cancel();
     keys.cancel();
-    dmem_responses.cancel();
-    imem_responses.cancel();
     dmem_grants.cancel();
     imem_grants.cancel();
-    dmem_monitor.cancel();
-    imem_monitor.cancel();
+    // Reverse spawn order, so a component is never cancelled while one that
+    // publishes to it is still running.
+    for (auto process = components.rbegin(); process != components.rend();
+         ++process) {
+        process->cancel();
+    }
     co_await cosim;
     co_await keys;
-    co_await dmem_responses;
-    co_await imem_responses;
     co_await dmem_grants;
     co_await imem_grants;
-    co_await dmem_monitor;
-    co_await imem_monitor;
+    for (auto& process : components) {
+        co_await process;
+    }
 
     // ibex_cosim_scoreboard::final_phase reports the same number, and it is the
     // evidence the check ran at all: a co-simulation that created Spike and
