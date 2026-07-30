@@ -156,8 +156,8 @@ reaches the same verdict on the same 944 tests.
   fields matching on every one**, with this port's Spike scoreboard accepting
   all 26,090 instructions of the baseline's own runs.
 
-  The whole testlist is 158 simulator-seconds here against the baseline's 9,240,
-  and 107 seconds of wall clock against 2,365 at the same four jobs.
+  The whole testlist is 145 simulator-seconds here against the baseline's 9,240,
+  and 103 seconds of wall clock against 2,365 at the same four jobs.
 
 The two program-driven ports build their software with a pinned prebuilt RISC-V
 toolchain, so neither needs one installed. `ibex_simple_system` commits its firmware as a

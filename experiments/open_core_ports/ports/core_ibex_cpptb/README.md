@@ -43,14 +43,17 @@ export PATH="$HOME/.local/bin:$PATH"          # fusesoc 2.4.3
 python3 fusesoc_setup.py --check              # cpptb.toml matches the graph
 uv run --frozen cpptb build --project .
 python3 run_directed.py --group riscv-tests   # 93 entries
-python3 run_directed.py                       # all 944
+python3 run_directed.py --against \
+    ../core_ibex_uvm/build/directed/opentitan-all944/results.json
 python3 replay.py                             # the baseline's own runs, here
 python3 inject.py --bus dmem --count 30 --no-cosim
 ```
 
 A run needs Spike, which `../../build_spike.py` builds into `deps/`, and does
-not need z3: nothing in this testbench solves a constraint. `--compare` against
-the baseline needs `python3 ../core_ibex_uvm/build_tb.py --config opentitan`
+not need z3: nothing in this testbench solves a constraint. `--against` joins
+this run against a `results.json` from `ports/core_ibex_uvm` entry by entry and
+prints the disagreements; making one of those, and making a recording for
+`replay.py`, needs `python3 ../core_ibex_uvm/build_tb.py --config opentitan`
 first, and that build does need z3 at run time.
 
 A rebuild after an edit to `testbench.cpp` is about two minutes and the whole

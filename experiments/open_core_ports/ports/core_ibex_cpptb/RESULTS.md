@@ -14,7 +14,7 @@ names the logs it describes.
 | | run | when |
 | --- | --- | --- |
 | UVM baseline | `ports/core_ibex_uvm/build/directed/opentitan-all944` | 2026-07-29 14:44Z |
-| cpptb | `ports/core_ibex_cpptb/build/directed/cpptb-all944-v2` | 2026-07-29 17:38Z |
+| cpptb | `ports/core_ibex_cpptb/build/directed/cpptb-all944-final` | 2026-07-29 17:49Z |
 | cpptb, spurious responses forced on | `ports/core_ibex_cpptb/build/directed/cpptb-all944-spurious` | 2026-07-29 17:40Z |
 | replay | `ports/core_ibex_cpptb/build/replay/default9-v2` | 2026-07-29 17:42Z |
 | injection | `ports/core_ibex_cpptb/build/inject/imem-add01`, `.../dmem30` | 2026-07-29 17:16Z |
@@ -40,8 +40,19 @@ Per group:
 | epmp-tests | 744 | 718 | 718 | the exit code recovered from the trace, plus the co-simulation |
 
 **943 of the 944 entries reach the identical outcome on the two harnesses, and
-all 744 ePMP exit codes recovered from the execution trace agree exactly.** The
-one that differs is `scall`:
+all 744 ePMP exit codes recovered from the execution trace agree exactly.**
+`run_directed.py --against` makes that join and prints it as part of the run, so
+it is in `cpptb-all944-final`'s own output rather than assembled afterwards:
+
+```
+against opentitan-all944 (opentitan, complete, 2026-07-29T14:44:50Z)
+  943 of 944 entries reach the same outcome
+    scall                       there=wall-clock timeout   here=cycle timeout
+  744 of 744 ePMP exit codes recovered from the trace agree
+  9,240 simulator-seconds there, 145 here (64x)
+```
+
+The one that differs is `scall`:
 
 | | UVM | cpptb |
 | --- | --- | --- |
@@ -94,24 +105,24 @@ Same machine, same four-at-a-time, idle box.
 
 | | UVM | cpptb | ratio |
 | --- | ---: | ---: | ---: |
-| wall clock, whole testlist | 2,365 s | 107 s | 22x |
-| simulator-seconds, summed over the 944 | 9,240 | 158 | 58x |
-| per entry, shortest | 1.81 s | 0.024 s | 75x |
-| per entry, median | 7.72 s | 0.073 s | 106x |
-| per entry, longest | 300 s (the budget) | 43.3 s | |
+| wall clock, whole testlist | 2,365 s | 103 s | 23x |
+| simulator-seconds, summed over the 944 | 9,240 | 145 | 64x |
+| per entry, shortest | 1.81 s | 0.023 s | 79x |
+| per entry, median | 7.72 s | 0.077 s | 100x |
+| per entry, longest | 300 s (the budget) | 35.2 s | |
 
 Per group, in simulator-seconds:
 
 | group | entries | UVM | cpptb | ratio |
 | --- | ---: | ---: | ---: | ---: |
-| riscv-tests | 93 | 1,829 | 71.5 | 26x |
-| riscv-arch-tests | 107 | 1,106 | 19.8 | 56x |
-| epmp-tests | 744 | 6,304 | 67.0 | 94x |
-| **total** | **944** | **9,240** | **158.3** | **58x** |
+| riscv-tests | 93 | 1,829 | 58.8 | 31x |
+| riscv-arch-tests | 107 | 1,106 | 18.0 | 61x |
+| epmp-tests | 744 | 6,304 | 67.8 | 93x |
+| **total** | **944** | **9,240** | **144.6** | **64x** |
 
 The ePMP column has the largest ratio because those entries are short and
 numerous: 744 process starts, resets and backdoor loads, where cpptb's
-per-run floor is 24 ms and the baseline's is 1.81 s. That floor is UVM coming
+per-run floor is 23 ms and the baseline's is 1.81 s. That floor is UVM coming
 up, the factory resolving a test, and eight components building; the arch tests,
 which run longer per entry, show the throughput ratio instead.
 
@@ -252,7 +263,7 @@ This port drew it at 50% for its first full run, which is what the constraint
 reads as and not what the baseline does. It is a knob now,
 `IBEX_ZERO_DELAYS`, defaulting to the baseline's behaviour. The run it affected
 passed 911 rather than 912 for an unrelated reason and is superseded; the
-current run is `cpptb-all944-v2`.
+current run is `cpptb-all944-final`.
 
 ### The 20% spurious-response draw fires 99.6% of the time on Verilator
 
