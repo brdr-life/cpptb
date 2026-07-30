@@ -283,6 +283,13 @@ constant with matching integrity that the load/store unit discards, so
 corrupting one is invisible by construction and counting them would make the
 index mean nothing.
 
+`IBEX_INJECT_IMEM_ERROR=N` and `IBEX_INJECT_DMEM_ERROR=N` are a different thing:
+they call `ibex_mem_intf_response_seq::inject_error` on the Nth read request,
+which is a real part of the agent that no directed entry reaches, because only
+`memory_error_seq` calls it. Without them the error path and the iside-error
+tracking in the co-simulation scoreboard would be ported and dead. RESULTS.md
+has what they show.
+
 Two of the forty instruction-bus injections crash Spike with
 `*** stack smashing detected ***`. `ports/core_ibex_uvm/README.md` records the
 same crash on two of its own riscv-dv runs, so it is the reference model rather

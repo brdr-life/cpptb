@@ -14,7 +14,7 @@ names the logs it describes.
 | | run | when |
 | --- | --- | --- |
 | UVM baseline | `ports/core_ibex_uvm/build/directed/opentitan-all944` | 2026-07-29 14:44Z |
-| cpptb | `ports/core_ibex_cpptb/build/directed/cpptb-all944-final` | 2026-07-29 17:49Z |
+| cpptb | `ports/core_ibex_cpptb/build/directed/cpptb-all944-final2` | 2026-07-29 17:57Z |
 | cpptb, spurious responses forced on | `ports/core_ibex_cpptb/build/directed/cpptb-all944-spurious` | 2026-07-29 17:40Z |
 | replay | `ports/core_ibex_cpptb/build/replay/default9-v2` | 2026-07-29 17:42Z |
 | injection | `ports/core_ibex_cpptb/build/inject/imem-add01`, `.../dmem30` | 2026-07-29 17:16Z |
@@ -42,14 +42,14 @@ Per group:
 **943 of the 944 entries reach the identical outcome on the two harnesses, and
 all 744 ePMP exit codes recovered from the execution trace agree exactly.**
 `run_directed.py --against` makes that join and prints it as part of the run, so
-it is in `cpptb-all944-final`'s own output rather than assembled afterwards:
+it is in `cpptb-all944-final2`'s own output rather than assembled afterwards:
 
 ```
 against opentitan-all944 (opentitan, complete, 2026-07-29T14:44:50Z)
   943 of 944 entries reach the same outcome
     scall                       there=wall-clock timeout   here=cycle timeout
   744 of 744 ePMP exit codes recovered from the trace agree
-  9,240 simulator-seconds there, 145 here (64x)
+  9,240 simulator-seconds there, 150 here (62x)
 ```
 
 The one that differs is `scall`:
@@ -95,9 +95,34 @@ Two of those are worth reading as gaps rather than as work done. **No directed
 entry reads uninitialised data memory**, so the dside path that returns random
 data, writes it into both memory models and raises a bad-integrity response
 never fires in this testlist -- on either harness. And `iside_errors` is zero:
-nothing in the 944 injects a bus error on an instruction fetch, so
-`run_cosim_imem_errors` and `run_cosim_prune_imem_errors` are ported and
-exercised only to the extent of running.
+nothing in the 944 asks the agent for a bus error on an instruction fetch,
+because only `memory_error_seq` calls `inject_error` and that belongs to test
+classes neither this port nor these entries carry.
+
+That second one is a path that would otherwise be ported and dead, so there is a
+knob to fire it. `IBEX_INJECT_IMEM_ERROR=N` makes the agent error the Nth
+instruction read, exactly as `ibex_mem_intf_response_seq::inject_error` does:
+
+```
+$ IBEX_INJECT_IMEM_ERROR=900 ... add-01/test.bin
+cpptb-core-ibex: injecting a bus error on imem read request 900 at 0x80000e8c
+cpptb-core-ibex core_ibex_base_test outcome=double-faults cycles=13141
+  retired=1003 cosim_matched=903 traps=100 ifetches=1004 iside_errors=1
+  double_faults=100
+```
+
+`add-01` has no trap handler, so the instruction access fault double-faults
+until the detector's threshold. **The co-simulation stays quiet through all 100
+of them**, which is the evidence that wanted stating: Spike takes an instruction
+access fault only when it is told to, so a quiet run means
+`run_cosim_ifetch` recorded the failing address, `run_cosim_imem_errors`
+attached it to the right instruction order, and `set_iside_error` reached the
+reference model. `iside_errors=1` is that queue entry. At read requests 200, 400,
+900 and 1,500 the outcome is the same and the co-simulation is quiet each time.
+
+The equivalent on the data bus, `IBEX_INJECT_DMEM_ERROR`, produces a load access
+fault the ePMP handler does service, and the run continues to the cycle budget
+with 296,095 instructions co-simulated and no mismatch.
 
 ## Timing
 
@@ -105,20 +130,20 @@ Same machine, same four-at-a-time, idle box.
 
 | | UVM | cpptb | ratio |
 | --- | ---: | ---: | ---: |
-| wall clock, whole testlist | 2,365 s | 103 s | 23x |
-| simulator-seconds, summed over the 944 | 9,240 | 145 | 64x |
+| wall clock, whole testlist | 2,365 s | 105 s | 23x |
+| simulator-seconds, summed over the 944 | 9,240 | 150 | 62x |
 | per entry, shortest | 1.81 s | 0.023 s | 79x |
-| per entry, median | 7.72 s | 0.077 s | 100x |
-| per entry, longest | 300 s (the budget) | 35.2 s | |
+| per entry, median | 7.72 s | 0.079 s | 98x |
+| per entry, longest | 300 s (the budget) | 39.9 s | |
 
 Per group, in simulator-seconds:
 
 | group | entries | UVM | cpptb | ratio |
 | --- | ---: | ---: | ---: | ---: |
-| riscv-tests | 93 | 1,829 | 58.8 | 31x |
-| riscv-arch-tests | 107 | 1,106 | 18.0 | 61x |
-| epmp-tests | 744 | 6,304 | 67.8 | 93x |
-| **total** | **944** | **9,240** | **144.6** | **64x** |
+| riscv-tests | 93 | 1,829 | 66.0 | 28x |
+| riscv-arch-tests | 107 | 1,106 | 14.0 | 79x |
+| epmp-tests | 744 | 6,304 | 69.5 | 91x |
+| **total** | **944** | **9,240** | **149.5** | **62x** |
 
 The ePMP column has the largest ratio because those entries are short and
 numerous: 744 process starts, resets and backdoor loads, where cpptb's
@@ -263,7 +288,7 @@ This port drew it at 50% for its first full run, which is what the constraint
 reads as and not what the baseline does. It is a knob now,
 `IBEX_ZERO_DELAYS`, defaulting to the baseline's behaviour. The run it affected
 passed 911 rather than 912 for an unrelated reason and is superseded; the
-current run is `cpptb-all944-final`.
+current run is `cpptb-all944-final2`.
 
 ### The 20% spurious-response draw fires 99.6% of the time on Verilator
 
