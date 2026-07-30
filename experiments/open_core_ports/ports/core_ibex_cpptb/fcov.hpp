@@ -71,7 +71,16 @@ struct FcovSample {
     uint8_t branch_taken = 0;
     uint8_t branch_not_taken = 0;
     uint8_t irq_pending = 0;
+    uint8_t wb_reg_no_load_hz = 0;
+    uint8_t dummy_instr_if = 0;
+    uint8_t dummy_instr_id = 0;
+    uint8_t dummy_instr_wb = 0;
+    uint8_t fetch_enable = 0;
 };
+
+// ibex_pkg::IbexMuBiOn / IbexMuBiOff, the two values cp_fetch_enable names.
+inline constexpr uint8_t kMuBiOn = 0x5;
+inline constexpr uint8_t kMuBiOff = 0xA;
 
 // uarch_cg, as far as it is ported.
 class Uarch {
@@ -167,16 +176,56 @@ class Uarch {
                  [](const FcovSample& s) { return s.data_ind_timing; });
         auto_bit("cp_dummy_instr_en",
                  [](const FcovSample& s) { return s.dummy_instr_en; });
-        auto_bit("cp_ls_error_exception",
-                 [](const FcovSample& s) { return s.ls_error_exception; });
-        auto_bit("cp_ls_pmp_exception",
-                 [](const FcovSample& s) { return s.ls_pmp_exception; });
+        auto& ls_error = auto_bit(
+            "cp_ls_error_exception",
+            [](const FcovSample& s) { return s.ls_error_exception; });
+        auto& ls_pmp = auto_bit(
+            "cp_ls_pmp_exception",
+            [](const FcovSample& s) { return s.ls_pmp_exception; });
         auto_bit("cp_branch_taken",
                  [](const FcovSample& s) { return s.branch_taken; });
         auto_bit("cp_branch_not_taken",
                  [](const FcovSample& s) { return s.branch_not_taken; });
         auto_bit("cp_irq_pending",
                  [](const FcovSample& s) { return s.irq_pending; });
+        auto_bit("cp_wb_reg_no_load_hz",
+                 [](const FcovSample& s) { return s.wb_reg_no_load_hz; });
+        auto_bit("cp_dummy_instr_if_stage",
+                 [](const FcovSample& s) { return s.dummy_instr_if; });
+        auto_bit("cp_dummy_instr_id_stage",
+                 [](const FcovSample& s) { return s.dummy_instr_id; });
+        auto_bit("cp_dummy_instr_wb_stage",
+                 [](const FcovSample& s) { return s.dummy_instr_wb; });
+
+        // cp_fetch_enable, whose third bin is `default`: everything the first
+        // two do not name. cpptb has no default bin, and the multi-bit encoding
+        // means "not on and not off" is every other value of the field, so it
+        // is declared as the complement of the two named values.
+        auto& fetch = group_.coverpoint(
+            "cp_fetch_enable",
+            [](const FcovSample& s) { return s.fetch_enable; });
+        fetch.bin("fetch_on", kMuBiOn).bin("fetch_off", kMuBiOff);
+        for (uint16_t value = 0; value < 16; ++value) {
+            if (value == kMuBiOn || value == kMuBiOff) continue;
+            fetch.bin("fetch_inval[" + std::to_string(value) + "]",
+                      static_cast<uint8_t>(value));
+        }
+
+        // priv_mode_exception_cross: cross cp_priv_mode_id,
+        //   cp_ls_pmp_exception, cp_ls_error_exception {
+        //     illegal_bins pmp_and_error_exeption_both =
+        //       (binsof(cp_ls_pmp_exception) intersect {1'b1} &&
+        //        binsof(cp_ls_error_exception) intersect {1'b1});
+        //   }
+        //
+        // Three coverpoints and a select expression -- the two things Verilator
+        // drops. Without the filter this cross would have 2*2*2 bins and the
+        // combination the design must never produce would be counted as
+        // coverable rather than caught.
+        group_.cross("priv_mode_exception_cross", priv, ls_pmp, ls_error)
+            .illegal("pmp_and_error_exeption_both",
+                     binsof(ls_pmp, {uint8_t{1}}) &&
+                         binsof(ls_error, {uint8_t{1}}));
     }
 
     CoverageSampleResult sample(const FcovSample& value) {
@@ -189,9 +238,10 @@ class Uarch {
     // A coverpoint over a one-bit signal with no bins body, which
     // SystemVerilog auto-bins into one bin per value.
     template <typename Extractor>
-    void auto_bit(std::string name, Extractor extractor) {
+    Coverpoint<uint8_t>& auto_bit(std::string name, Extractor extractor) {
         auto& point = group_.coverpoint(std::move(name), extractor);
         point.bin("auto[0]", uint8_t{0}).bin("auto[1]", uint8_t{1});
+        return point;
     }
 
     Covergroup<FcovSample> group_;
