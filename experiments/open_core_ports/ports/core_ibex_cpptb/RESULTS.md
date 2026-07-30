@@ -351,10 +351,10 @@ change what is checked rather than how:
 | --- | ---: |
 | upstream, the parts this port replaces | 3,833 SystemVerilog |
 | upstream, the parts it does not (the eight classes, the interrupt agent) | 2,547 SystemVerilog |
-| this port | 383 SystemVerilog + 1,968 C++ |
-| this port's tooling | 1,467 Python, standard library only |
+| this port | 383 SystemVerilog + 2,004 C++ |
+| this port's tooling | 1,530 Python, standard library only |
 
 The SystemVerilog wrapper is 383 lines against `core_ibex_tb_top.sv`'s 425, and
 about half of it is the port list the interfaces used to be. Nothing in the
-2,351 lines of design-facing code is generated; the 136-source RTL list and the
+2,387 lines of design-facing code is generated; the 136-source RTL list and the
 18 parameters and defines in `cpptb.toml` are.
