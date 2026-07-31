@@ -1333,9 +1333,17 @@ Task<void> irq_driver(Dut dut, Queue<std::shared_ptr<IrqItem>>& fifo) {
 // cannot run this at all.
 // ---------------------------------------------------------------------------
 
-Task<void> fcov_sampler(Dut dut, Env& env, Uarch& coverage) {
+// `enabled` gates the sampling, not the coroutine. Skipping the spawn instead
+// changes how many processes wake on each posedge, which changes the order the
+// response sequences draw their delays in, which changes the stimulus: with the
+// sampler spawned add-01 runs 30,138 cycles and without it 26,895. Both are
+// valid runs, but they are not the same work, so timing one against the other
+// measures nothing. Keeping the coroutine and skipping its body leaves the
+// stimulus identical and isolates what the covergroup costs.
+Task<void> fcov_sampler(Dut dut, Env& env, Uarch& coverage, bool enabled) {
     while (true) {
         co_await RisingEdge{dut.clk_i};
+        if (!enabled) continue;
         const FcovSample sample{
             .fsm = static_cast<CtrlFsm>(dut.fcov_controller_fsm_o.get()),
             .priv = static_cast<PrivLvl>(dut.fcov_priv_mode_id_o.get()),
@@ -2304,8 +2312,12 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     auto keys = test.spawn(key_device(dut, test, env));
     auto cosim = test.spawn(cosim_monitor(dut, env, scoreboard));
 
+    // IBEX_COVERAGE=off leaves the covergroup unsampled, which is the only way
+    // to price what sampling costs. Upstream has no such switch because on
+    // Verilator it has no coverage to switch off.
     Uarch coverage;
-    auto fcov = test.spawn(fcov_sampler(dut, env, coverage));
+    const bool sample_coverage = env_string("IBEX_COVERAGE", "on") != "off";
+    auto fcov = test.spawn(fcov_sampler(dut, env, coverage, sample_coverage));
 
     std::vector<Process> components;
     // The analysis fifos and the interrupt agent's port outlive the coroutines
