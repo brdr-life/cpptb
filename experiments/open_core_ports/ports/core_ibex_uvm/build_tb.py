@@ -799,6 +799,33 @@ MEASURE_OVERLAYS = [
 # connect changes no behaviour on this test list. It would change behaviour on
 # the eight test classes that raise interrupts, which is why this is a
 # measurement flag and not a default.
+# Measurement build: get the functional coverage past Verilator's front end.
+#
+# `--fcov` alone does not compile. Verilator 5.050 stops with
+#
+#   %Error: Internal Error: core_ibex_fcov_if.sv:589:28: ../V3Ast.h:1061:
+#   AstNode is not of expected type, but instead has type 'ENUMITEMREF'
+#
+# on the transition bins over `ctrl_fsm_e`. Casting each enum item to its
+# underlying value is enough to get past it, and changes nothing about what the
+# bins mean.
+#
+# This does NOT give correct coverage, and it is not meant to. The same compile
+# discards 456 constructs with COVERIGN warnings -- every `intersect`, every
+# explicit cross bin, every `iff` in a cross -- so the bin set it builds is not
+# the one the source describes. What it does give is a build in which
+# Verilator's covergroup sampling actually runs, which is the only way to put a
+# number on what coverage costs the baseline. Read the timing, not the coverage.
+# A regex with an expected count rather than exact-text replacements, because
+# two of the transitions -- (WAIT_SLEEP => SLEEP) and (SLEEP => FIRST_FETCH) --
+# appear in both cp_controller_fsm and cp_controller_fsm_sleep, and the
+# exact-text rule requires each match to be unique.
+FCOV_FILE = CORE_IBEX / "fcov/core_ibex_fcov_if.sv"
+FCOV_TRANSITION = re.compile(
+    r"\((?P<from>[A-Z_][A-Z_0-9]*)\s*=>\s*(?P<to>[A-Z_][A-Z_0-9]*)\)")
+FCOV_TRANSITION_COUNT = 19
+
+
 NO_IRQ_OVERLAYS = [
     (
         CORE_IBEX / "env/core_ibex_env.sv",
@@ -823,7 +850,7 @@ class BuildError(RuntimeError):
 
 
 def apply_overlays(debug: bool = False, pin_delays: bool = False,
-                   no_irq: bool = False) -> dict[str, str]:
+                   no_irq: bool = False, fcov: bool = False) -> dict[str, str]:
     """Write the patched copies and return upstream path -> overlay path."""
     out = BUILD / "overlay"
     if out.is_dir():
@@ -846,6 +873,21 @@ def apply_overlays(debug: bool = False, pin_delays: bool = False,
                 f"present exactly once; upstream has changed and the overlay "
                 f"in build_tb.py needs revisiting")
         patched[source] = text.replace(old, new)
+
+    if fcov:
+        if not FCOV_FILE.is_file():
+            raise BuildError(f"overlay target missing: {FCOV_FILE}")
+        text = patched.get(FCOV_FILE, FCOV_FILE.read_text(encoding="utf-8"))
+        text, count = FCOV_TRANSITION.subn(
+            lambda m: (f"(ibex_pkg::ctrl_fsm_e'({m['from']}) => "
+                       f"ibex_pkg::ctrl_fsm_e'({m['to']}))"),
+            text)
+        if count != FCOV_TRANSITION_COUNT:
+            raise BuildError(
+                f"expected {FCOV_TRANSITION_COUNT} coverage transition bins to "
+                f"cast, found {count}; upstream has changed and "
+                f"FCOV_TRANSITION needs revisiting")
+        patched[FCOV_FILE] = text
 
     total = 0
     for source in RESET_WAIT_FILES:
@@ -953,7 +995,7 @@ def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
     parameters, defines = config_parameters(config)
     if not HDL_PUBLIC_VLT.is_file():
         raise BuildError(f"missing Verilator control file: {HDL_PUBLIC_VLT}")
-    overlay = apply_overlays(debug, pin_delays, no_irq)
+    overlay = apply_overlays(debug, pin_delays, no_irq, fcov)
     sources = [overlay.get(path, path)
                for path in expand_filelist(CORE_IBEX / "ibex_dv.f")]
     if not fcov:
