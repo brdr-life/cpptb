@@ -22,11 +22,19 @@ at a pinned commit, and commit only summarised results.
 ```
 sources.toml     upstream projects, each pinned to an exact commit
 fetch.py         clones a pinned commit into deps/ and verifies it
+FINDINGS.md      every defect this exercise turned up, with links
+open-issues.md   the subset still needing a decision
 deps/            gitignored: fetched upstream trees
 work/            gitignored: build scratch
 results/         gitignored except committed summaries
 ports/<name>/    one directory per ported testbench
 ```
+
+[FINDINGS.md](FINDINGS.md) is the short version of what porting these
+testbenches found: eleven Verilator defects, fourteen in Ibex and lowRISC's DV
+library, seven in riscv-dv, one in Spike, and seven limitations of cpptb itself.
+Each entry links to the problematic code and says which feature it was hit
+through.
 
 ## Usage
 
