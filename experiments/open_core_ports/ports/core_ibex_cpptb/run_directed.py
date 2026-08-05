@@ -128,6 +128,10 @@ def run_one(entry: dict, binary: Path, directory: Path, cycles: int,
     env = environment()
     env["CPPTB_TEST"] = entry["rtl_test"]
     env["CPPTB_RANDOM_SEED"] = str(seed)
+    # One coverage model per entry, beside its log. Coverage closure is the
+    # union over the regression, not any single run's figure, so every entry
+    # writes one and coverage.py merges them.
+    env["IBEX_COVERAGE_JSON"] = str(directory / "coverage.json")
     env["IBEX_BIN"] = str(binary)
     env["IBEX_SIGNATURE_ADDR"] = SIGNATURE_ADDR
     env["IBEX_TIMEOUT_CYCLES"] = str(cycles)
