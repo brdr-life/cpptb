@@ -39,7 +39,7 @@ because silence is the failure mode.
 | Finding | Evidence | Hit through |
 | --- | --- | --- |
 | **456 covergroup constructs are silently discarded** with `COVERIGN` warnings: 208 `intersect`, 131 `&&`, 71 explicit cross bins, 21 `iff`-in-cross, 9 `with`, 8 `\|\|`, 2 `binsof`, 2 `default sequence`, 2 bin-array sizes. A cross whose select is dropped keeps *every* combination, so the bin set is larger than the source describes and the result reads as coverage without being it. | `build/compile_tb_opentitan-fcov.log` | Functional coverage |
-| **Verilator 5.050 runs 130 of Ibex's 132 assertions.** The two exceptions are V11. This is a finding *for* Verilator: the guard that excludes them (I1 below) predates the capability. | `build_tb.py --assertions`; `core_ibex_tb_top`'s own `$assertoff` calls resolve real assertion names | SVA |
+| **Verilator 5.050 runs 130 of Ibex's 132 assertions.** The two exceptions are V11. Across the whole directed testlist — 944 entries, ~15M cycles — **no assertion fires**, and the outcomes match the baseline entry for entry, 912 of 944 with zero differences. So the checking is free of false positives and currently switched off for no reason: the guard that excludes it (I1 below) predates the capability. | `build_tb.py --assertions`, run `assert-all944`; `core_ibex_tb_top`'s own `$assertoff` calls resolve real assertion names | SVA |
 
 Branches with reduced cases and fixes live in `~/code/vl-{B,C,K,P,S,T}`.
 Upstream issues referenced: #7676, #7963, #8010, #8024.
@@ -50,7 +50,7 @@ Upstream issues referenced: #7676, #7963, #8010, #8024.
 
 | # | Finding | Where | Hit through |
 | --- | --- | --- | --- |
-| I1 | `prim_assert.sv` sends the Verilator branch to `prim_assert_dummy_macros.svh`, where **every assertion macro expands to nothing**. All 132 assertions compile away, upstream and here. The guard predates Verilator supporting them — see above. | `deps/ibex/vendor/lowrisc_ip/ip/prim/rtl/prim_assert.sv:102` | Trying to enable assertions |
+| I1 | `prim_assert.sv` sends the Verilator branch to `prim_assert_dummy_macros.svh`, where **every assertion macro expands to nothing**. All 132 assertions compile away, upstream and here. Verilator 5.050 runs 130 of them across the full testlist with no failure and no change in outcome, so the guard costs 130 live properties and buys nothing. **The clearest upstream contribution in this list.** | `deps/ibex/vendor/lowrisc_ip/ip/prim/rtl/prim_assert.sv:102` | Trying to enable assertions |
 | I2 | `clk_rst_if.sv` wraps its UVM includes in `` `ifndef VERILATOR ``, so the shared DV library **excludes itself** and fails at the first `DV_CHECK_FATAL`. | `deps/ibex/vendor/lowrisc_ip/dv/sv/common_ifs/clk_rst_if.sv` | Building the UVM testbench on Verilator |
 | I3 | `logic o_rst_n;` has **no initialiser**. On four-state X→0 gives an edge; on two-state 0→0 gives none, so the asynchronous reset never fires, the core boots in User mode, and the first CSR access of every program traps. | `deps/ibex/vendor/lowrisc_ip/dv/sv/common_ifs/clk_rst_if.sv` | Every directed test failing identically |
 | I4 | `wait (vif.<cb>.reset === 1'b0)` **fires at time 0**: a clocking-block input has no sampled value before its first clocking event. Ten sites. | `RESET_WAIT` in [`ports/core_ibex_uvm/build_tb.py`](ports/core_ibex_uvm/build_tb.py) lists them | UVM agents starting before reset |
