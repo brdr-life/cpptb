@@ -2447,7 +2447,8 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     }
 
     // The model, whether or not a path was given for it: writing it is how
-    // fcov_model.py --diff can check this against the SystemVerilog.
+    // fcov_model.py --diff can check this against the SystemVerilog, and how
+    // coverage.py merges a whole regression into one figure.
     const std::string coverage_path = env_string("IBEX_COVERAGE_JSON");
     if (!coverage_path.empty()) {
         const auto model = coverage.snapshot();

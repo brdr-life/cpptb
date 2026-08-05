@@ -66,7 +66,8 @@ def obj_dir(config: str, variant: str = "") -> Path:
     return BUILD / (f"obj_{config}-{variant}" if variant else f"obj_{config}")
 
 
-def build_variant(fcov: bool = False, no_irq: bool = False) -> str:
+def build_variant(fcov: bool = False, no_irq: bool = False,
+                  assertions: bool = False) -> str:
     """The suffix naming a build that is not the default one.
 
     Every option that changes what is compiled has to appear here. A build that
@@ -75,6 +76,8 @@ def build_variant(fcov: bool = False, no_irq: bool = False) -> str:
     happened once on this project with per-config rather than per-run log paths.
     """
     parts = []
+    if assertions:
+        parts.append("assert")
     if fcov:
         parts.append("fcov")
     if no_irq:
@@ -816,6 +819,64 @@ MEASURE_OVERLAYS = [
 # the one the source describes. What it does give is a build in which
 # Verilator's covergroup sampling actually runs, which is the only way to put a
 # number on what coverage costs the baseline. Read the timing, not the coverage.
+# Measurement build: compile the RTL's assertions instead of discarding them.
+#
+# prim_assert.sv picks its macro implementation by tool, and the Verilator
+# branch takes the dummy header:
+#
+#     `ifdef VERILATOR
+#      `include "prim_assert_dummy_macros.svh"
+#
+# where every macro expands to nothing. So all 132 `ASSERT`, `ASSERT_KNOWN` and
+# `COVER` in Ibex's RTL compile away, on this build and on upstream's. The guard
+# dates from when no open simulator could do concurrent assertions; Verilator 5
+# has --assert, so whether it still needs to be there is a question worth
+# answering rather than assuming.
+#
+# Taking the standard-macros branch is the whole change. INC_ASSERT comes with
+# it, which is what the other branches do and what the assertion-only signals
+# in prim_count.sv are written against.
+ASSERT_OVERLAYS = [
+    (
+        IBEX / "vendor/lowrisc_ip/ip/prim/rtl/prim_assert.sv",
+        "`ifdef VERILATOR\n `include \"prim_assert_dummy_macros.svh\"\n"
+        "`elsif SYNTHESIS\n",
+        "`ifdef VERILATOR\n `include \"prim_assert_standard_macros.svh\"\n"
+        " `define INC_ASSERT\n`elsif SYNTHESIS\n",
+    ),
+    # Two of the 132 do not compile, and the reason is worth stating: they
+    # reach into an instance from inside the generate block that holds it,
+    #
+    #     tag_bank.key_valid_i && (tag_bank.key_i == sampled_scramble_key)
+    #
+    # where `tag_bank` is the instance at ibex_top.sv:615, and Verilator answers
+    # "Can't find definition of 'tag_bank'". Every other assertion in the design
+    # compiles, so these two are dropped here to find that out rather than
+    # letting them stand for the rest.
+    (
+        IBEX / "rtl/ibex_top.sv",
+        "          `ASSERT(ScrambleKeyAppliedAtTagBank_A,\n"
+        "                  scramble_key_valid_i\n"
+        "                  |-> ##[0:10]\n"
+        "                  tag_bank.key_valid_i && (tag_bank.key_i == "
+        "sampled_scramble_key),\n"
+        "                  clk_i, !rst_ni\n"
+        "          )\n"
+        "          `ASSERT(ScrambleKeyAppliedAtDataBank_A,\n"
+        "                  scramble_key_valid_i\n"
+        "                  |-> ##[0:10]\n"
+        "                  data_bank.key_valid_i && (data_bank.key_i == "
+        "sampled_scramble_key),\n"
+        "                  clk_i, !rst_ni\n"
+        "          )\n",
+        # Not a line starting with the tool's name: that is read as a lint
+        # pragma and fails with %Error-BADVLTPRAGMA.
+        "          // measurement: the two hierarchical-reference assertions\n"
+        "          // that do not resolve here; see ASSERT_OVERLAYS\n",
+    ),
+]
+
+
 # A regex with an expected count rather than exact-text replacements, because
 # two of the transitions -- (WAIT_SLEEP => SLEEP) and (SLEEP => FIRST_FETCH) --
 # appear in both cp_controller_fsm and cp_controller_fsm_sleep, and the
@@ -850,7 +911,8 @@ class BuildError(RuntimeError):
 
 
 def apply_overlays(debug: bool = False, pin_delays: bool = False,
-                   no_irq: bool = False, fcov: bool = False) -> dict[str, str]:
+                   no_irq: bool = False, fcov: bool = False,
+                   assertions: bool = False) -> dict[str, str]:
     """Write the patched copies and return upstream path -> overlay path."""
     out = BUILD / "overlay"
     if out.is_dir():
@@ -863,6 +925,7 @@ def apply_overlays(debug: bool = False, pin_delays: bool = False,
     rules = OVERLAYS + (DEBUG_OVERLAYS if debug else [])
     rules += MEASURE_OVERLAYS if pin_delays else []
     rules += NO_IRQ_OVERLAYS if no_irq else []
+    rules += ASSERT_OVERLAYS if assertions else []
     for source, old, new in rules:
         if not source.is_file():
             raise BuildError(f"overlay target missing: {source}")
@@ -991,11 +1054,12 @@ def pkg_config(packages: list[str], *flags: str) -> list[str]:
 
 def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
                       pin_delays: bool, extra: list[str],
-                      no_irq: bool = False) -> list[str]:
+                      no_irq: bool = False,
+                      assertions: bool = False) -> list[str]:
     parameters, defines = config_parameters(config)
     if not HDL_PUBLIC_VLT.is_file():
         raise BuildError(f"missing Verilator control file: {HDL_PUBLIC_VLT}")
-    overlay = apply_overlays(debug, pin_delays, no_irq, fcov)
+    overlay = apply_overlays(debug, pin_delays, no_irq, fcov, assertions)
     sources = [overlay.get(path, path)
                for path in expand_filelist(CORE_IBEX / "ibex_dv.f")]
     if not fcov:
@@ -1025,10 +1089,11 @@ def verilator_command(config: str, jobs: int, fcov: bool, debug: bool,
         # overlay silently has no effect until the object directory is cleared.
         # Cost is a full re-verilation per build; correctness is worth it.
         "--no-skip-identical",
+        *(["--assert"] if assertions else []),
         "-j", str(jobs),
         "--top-module", TOP,
         "--timescale", "1ns/10ps",
-        "--Mdir", str(obj_dir(config, build_variant(fcov, no_irq))),
+        "--Mdir", str(obj_dir(config, build_variant(fcov, no_irq, assertions))),
         "-o", "core_ibex_tb",
         # The overlay directory comes first so a patched `include is picked up
         # ahead of the upstream one; only files this build patches are in it.
@@ -1077,6 +1142,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pin-delays", action="store_true",
                         help="measurement build: no constrained solve on the "
                              "memory-response path; see MEASURE_OVERLAYS")
+    parser.add_argument("--assertions", action="store_true",
+                        help="measurement build: compile the RTL's assertions "
+                             "instead of the dummy macros Verilator normally "
+                             "gets, and pass --assert; see ASSERT_OVERLAYS")
     parser.add_argument("--no-irq-agent", action="store_true",
                         help="measurement build: leave the interrupt agent out "
                              "of the environment, matching what core_ibex_cpptb "
@@ -1093,7 +1162,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         command = verilator_command(args.config, args.jobs, args.fcov,
                                     args.debug_mem, args.pin_delays, args.extra,
-                                    args.no_irq_agent)
+                                    args.no_irq_agent, args.assertions)
     except BuildError as error:
         print(f"build_tb: {error}", file=sys.stderr)
         return 1
@@ -1102,7 +1171,7 @@ def main(argv: list[str] | None = None) -> int:
         print(shlex.join(command))
         return 0
 
-    variant = build_variant(args.fcov, args.no_irq_agent)
+    variant = build_variant(args.fcov, args.no_irq_agent, args.assertions)
     tag = f"{args.config}-{variant}" if variant else args.config
     log = BUILD / f"compile_tb_{tag}.log"
     # The command is a page wide with a hundred absolute paths in it. Keeping it
