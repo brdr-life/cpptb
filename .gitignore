@@ -19,6 +19,13 @@ benchmarks/uvm-sim-compare/results/*.log
 experiments/open_core_ports/deps/
 experiments/open_core_ports/work/
 experiments/open_core_ports/results/*.log
+# Simulation output written beside the thing that produced it. compare.py
+# deletes and regenerates ibex_simple_system.log on every run, and the tracer
+# writes trace_core_*.log wherever it is invoked; four of these had been
+# committed by accident.
+experiments/open_core_ports/*.log
+experiments/open_core_ports/ports/*/*.log
+experiments/open_core_ports/**/trace_core_*.log
 benchmarks/authoring_core/results/
 benchmarks/peripheral_suite/results/
 benchmarks/framework_comparison/**/results/
