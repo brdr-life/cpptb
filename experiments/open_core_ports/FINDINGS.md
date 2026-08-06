@@ -32,14 +32,14 @@ because silence is the failure mode.
 | V8 | Constrained `randomize()` over `inside {[1:20]}` is **not uniform** — about half of every draw lands in `[16:20]`, where a quarter belongs. Mean 13.2 against 10.5. | [`ports/ibex_icache_cpptb/shims/verilator_inside_range_uniformity.sv`](ports/ibex_icache_cpptb/shims/verilator_inside_range_uniformity.sv) | Comparing the cpptb port's stimulus against the UVM baseline's |
 | V9 | **Internal error** on a transition bin over enum items: `AstNode is not of expected type, but instead has type 'ENUMITEMREF'`. | `deps/ibex/dv/uvm/core_ibex/fcov/core_ibex_fcov_if.sv:589` — `bins out_of_reset = (RESET => BOOT_SET);` | `build_tb.py --fcov`, functional coverage |
 | V10 | A **second internal fault**, with no source location, after V9 is worked around by casting each enum item to `ctrl_fsm_e`. | `FCOV_TRANSITION` in [`ports/core_ibex_uvm/build_tb.py`](ports/core_ibex_uvm/build_tb.py) applies the cast; the fault follows | `build_tb.py --fcov`, functional coverage |
-| V11 | An assertion cannot reach into an **instance from the generate block that holds it**: `Can't find definition of 'tag_bank'`. | `deps/ibex/rtl/ibex_top.sv:701,707` — `tag_bank.key_valid_i`, instance at `:615` | `build_tb.py --assertions`, SVA |
+| V11 | An assertion cannot reach into an **instance from the generate block that holds it**: `Can't find definition of 'tag_bank'`. | `deps/ibex/rtl/ibex_top.sv:701,707` — `tag_bank.key_valid_i`, instance at `:615`; dropped by `ASSERT_OVERLAYS` so the other 130 can compile | Compiling the RTL's assertions, SVA |
 
 ### Not defects, but material
 
 | Finding | Evidence | Hit through |
 | --- | --- | --- |
 | **456 covergroup constructs are silently discarded** with `COVERIGN` warnings: 208 `intersect`, 131 `&&`, 71 explicit cross bins, 21 `iff`-in-cross, 9 `with`, 8 `\|\|`, 2 `binsof`, 2 `default sequence`, 2 bin-array sizes. A cross whose select is dropped keeps *every* combination, so the bin set is larger than the source describes and the result reads as coverage without being it. | `build/compile_tb_opentitan-fcov.log` | Functional coverage |
-| **Verilator 5.050 runs 130 of Ibex's 132 assertions.** The two exceptions are V11. Across the whole directed testlist — 944 entries, ~15M cycles — **no assertion fires**, and the outcomes match the baseline entry for entry, 912 of 944 with zero differences. So the checking is free of false positives and currently switched off for no reason: the guard that excludes it (I1 below) predates the capability. | `build_tb.py --assertions`, run `assert-all944`; `core_ibex_tb_top`'s own `$assertoff` calls resolve real assertion names | SVA |
+| **Verilator 5.050 runs 130 of Ibex's 132 assertions.** The two exceptions are V11. Across the whole directed testlist — 944 entries, ~15M cycles — **no assertion fires**, and the outcomes match the baseline entry for entry, 912 of 944 with zero differences. So the checking is free of false positives, and **it is now on by default here** -- `--no-assertions` restores upstream's behaviour. | Runs `assert-all944` and `default-with-assertions`; `core_ibex_tb_top`'s own `$assertoff` calls resolve real assertion names | SVA |
 
 Branches with reduced cases and fixes live in `~/code/vl-{B,C,K,P,S,T}`.
 Upstream issues referenced: #7676, #7963, #8010, #8024.
@@ -84,7 +84,7 @@ opposite of the obvious guess.
 
 | Site | Works around | Still true on 5.050? | How it was tested |
 | --- | --- | --- | --- |
-| `prim_assert.sv:102` | concurrent assertions | **No — removed.** 130 of 132 run, none fires over 944 entries | Full testlist; outcomes identical to the baseline |
+| `prim_assert.sv:102` | concurrent assertions | **No — removed, and now the default.** 130 of 132 run, none fires over 944 entries | Full testlist twice; 912 pass and zero entries differ from the pre-assertion baseline |
 | `clk_rst_if.sv:22` | UVM under Verilator | **No** — already overlaid | The whole UVM environment runs |
 | `pins_if.sv:87` | drive strengths (`1'bz`, pull) | **No**, but unreachable | Simulated: strong beats weak, pull-up holds when released, all four cases correct |
 | `ibex_register_file_latch.sv:161` | `$fatal "Latch-based register file not supported for Verilator simulation"` | **No**, but unreachable | Simulated: wrote x1–x5, read them back, x0 reads zero and stays zero after a write |
@@ -201,3 +201,6 @@ Worth listing because each was a measurement that would have been wrong.
 | `run_tests.py --compare` matched a log line **by line number**, silently reporting the baseline's `insns/item` as zero after an overlay moved it. | `ports/ibex_icache_uvm/run_tests.py` |
 | Our own overlay left `back_line` with no `new_seed` constraint, so its scoreboard ended holding 919 seeds and accepted a fetch matching any of them. | `ports/ibex_icache_uvm/build_tb.py` |
 | A blocked A/B timing measurement charged a load trend to the delta and reported +15.8%; interleaving gives a different answer. | `docs`, and the method note in `ports/core_ibex_cpptb/RESULTS.md` |
+| **The headline speedup compared two different testbenches.** The reported 62x set this port's own decomposition against the whole UVM environment: the port was missing `irq_agent`, which the UVM env builds for every test and whose monitor samples five pins every cycle, and it fused four processes per bus where UVM has separate components and a per-transaction object. Measured like for like -- `IBEX_ARCH=faithful` against `build_tb.py --no-irq-agent` -- it is **48.8x**, so about 21% of the ratio was the difference between the testbenches rather than between the frameworks. | `ports/core_ibex_cpptb/RESULTS.md` §"What that ratio is actually comparing" |
+| Two more timing measurements were void before they were right. Gating coverage by not spawning the sampler changed the stimulus and reported +18.7% for what is about +4.7%; and the two architectures do not draw their delays in the same order, so their runs are compared as a rate rather than as fixed work. Both were caught by checking cycle counts rather than trusting them. | C5, and `ports/core_ibex_cpptb/RESULTS.md` |
+| An intermediate result read as a new Verilator constraint-solver bug -- `std::randomize` with an `inside` exclusion returning all-zeros -- and was **z3 missing from `PATH`**, the same failure mode as three earlier times. The reproducer that printed `solver failed` is what caught it. | The trap is documented in `ports/core_ibex_uvm/run_directed.py`'s `run_one` |
