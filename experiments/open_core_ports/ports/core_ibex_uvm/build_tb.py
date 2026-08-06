@@ -76,8 +76,8 @@ def build_variant(fcov: bool = False, no_irq: bool = False,
     happened once on this project with per-config rather than per-run log paths.
     """
     parts = []
-    if assertions:
-        parts.append("assert")
+    if not assertions:
+        parts.append("no-assert")
     if fcov:
         parts.append("fcov")
     if no_irq:
@@ -1142,10 +1142,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pin-delays", action="store_true",
                         help="measurement build: no constrained solve on the "
                              "memory-response path; see MEASURE_OVERLAYS")
-    parser.add_argument("--assertions", action="store_true",
-                        help="measurement build: compile the RTL's assertions "
-                             "instead of the dummy macros Verilator normally "
-                             "gets, and pass --assert; see ASSERT_OVERLAYS")
+    parser.add_argument("--no-assertions", action="store_true",
+                        help="compile the dummy assertion macros Verilator "
+                             "normally gets, discarding the RTL's 132 "
+                             "assertions. On by default because they work; see "
+                             "ASSERT_OVERLAYS")
     parser.add_argument("--no-irq-agent", action="store_true",
                         help="measurement build: leave the interrupt agent out "
                              "of the environment, matching what core_ibex_cpptb "
@@ -1162,7 +1163,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         command = verilator_command(args.config, args.jobs, args.fcov,
                                     args.debug_mem, args.pin_delays, args.extra,
-                                    args.no_irq_agent, args.assertions)
+                                    args.no_irq_agent,
+                                    not args.no_assertions)
     except BuildError as error:
         print(f"build_tb: {error}", file=sys.stderr)
         return 1
@@ -1171,7 +1173,8 @@ def main(argv: list[str] | None = None) -> int:
         print(shlex.join(command))
         return 0
 
-    variant = build_variant(args.fcov, args.no_irq_agent, args.assertions)
+    variant = build_variant(args.fcov, args.no_irq_agent,
+                            not args.no_assertions)
     tag = f"{args.config}-{variant}" if variant else args.config
     log = BUILD / f"compile_tb_{tag}.log"
     # The command is a page wide with a hundred absolute paths in it. Keeping it

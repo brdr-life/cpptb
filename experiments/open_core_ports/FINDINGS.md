@@ -64,6 +64,7 @@ Upstream issues referenced: #7676, #7963, #8010, #8024.
 | I12 | `ibex_icache_caching` checks the caching ratio on only about **40% of seeds**. | [open-issues.md](open-issues.md) §20 | icache equivalence comparison |
 | I13 | Builds write **into the source tree**: `dv/uvm/core_ibex/link.log`, `examples/sw/benchmarks/coremark/coremark.map`, and ten `build-*/` directories under `deps/ibex`. Untracked, so nothing is corrupted, but outputs land where inputs live. | `deps/ibex/` | `git status` in the vendored checkout |
 | I14 | The 944 directed tests **never raise an interrupt, enter debug mode or sleep**, leaving 26 coverage bins unreachable — named bin by bin by `coverage.py`. | `coverage.py build/directed/<run>` in [`ports/core_ibex_cpptb`](ports/core_ibex_cpptb/) | Merging functional coverage over the regression |
+| I15 | **Side-effecting code inside an assertion macro.** `prim_lfsr` randomizes its default seed inside `` `ASSERT_I(...) ``, so on any tool that compiles assertions out the randomization silently does not happen and the seed keeps its initial value — measured as `0x0`, a dead LFSR, rather than the intended `DefaultSeed`. The `` `ifdef VERILATOR `` guard above it is what stops that being visible today, which makes the two guards coupled: remove either alone and the behaviour is wrong. | `deps/ibex/vendor/lowrisc_ip/ip/prim/rtl/prim_lfsr.sv:251` | Testing whether the LFSR guard was obsolete |
 
 ---
 
@@ -78,13 +79,17 @@ library and our own ports.
 Fourteen sites in tracked upstream source. Five are in files the core_ibex build
 compiles:
 
-| Site | Works around | Still true on 5.050? |
-| --- | --- | --- |
-| `prim_assert.sv:102` | concurrent assertions | **No.** 130 of 132 run, none fires over 944 entries — I1 |
-| `clk_rst_if.sv:22` | UVM under Verilator | **No.** Overlaid here; the whole UVM environment runs — I2 |
-| `pins_if.sv:87` | drive strengths (`1'bz`, pull) | **Yes.** Verilator has no strengths; the branch picks a strength-free assign |
-| `dv_fcov_macros.svh:14` | covergroups | **Yes**, though not for the original reason: two internal faults and 456 discarded constructs — V9, V10 |
-| `ibex_register_file_latch.sv:161` | `$fatal "Latch-based register file not supported for Verilator simulation"` | **No.** It elaborates clean on 5.050, no errors and no `LATCH` warning. Caveat below. |
+Each was tested rather than reasoned about, and two of the verdicts came out the
+opposite of the obvious guess.
+
+| Site | Works around | Still true on 5.050? | How it was tested |
+| --- | --- | --- | --- |
+| `prim_assert.sv:102` | concurrent assertions | **No — removed.** 130 of 132 run, none fires over 944 entries | Full testlist; outcomes identical to the baseline |
+| `clk_rst_if.sv:22` | UVM under Verilator | **No** — already overlaid | The whole UVM environment runs |
+| `pins_if.sv:87` | drive strengths (`1'bz`, pull) | **No**, but unreachable | Simulated: strong beats weak, pull-up holds when released, all four cases correct |
+| `ibex_register_file_latch.sv:161` | `$fatal "Latch-based register file not supported for Verilator simulation"` | **No**, but unreachable | Simulated: wrote x1–x5, read them back, x0 reads zero and stays zero after a write |
+| `dv_fcov_macros.svh:14` | covergroups | **Yes.** Two internal faults and 456 discarded constructs — V9, V10 | `build_tb.py --fcov` |
+| `prim_lfsr.sv:251` | randomizing the LFSR default seed | **Yes — and load-bearing.** See below | Simulated with `SIMULATION` defined and the guard disabled |
 
 The remaining nine are in files this build does not compile: `prim_pad_attr`,
 `prim_pad_wrapper` (×2), `prim_usb_diff_rx` — all drive strengths, all still
@@ -103,22 +108,43 @@ Three notes on the ones that need qualifying:
   so it is unexercised either way, and clean elaboration is not the same as
   correct simulation. The claim here is only that the blanket "not supported"
   no longer holds at elaboration.
-- **`prim_lfsr:251`.** Under Verilator the LFSR default seed is fixed where
-  other tools randomize it, which would matter for the icache. It is moot:
-  the whole block sits behind `` `ifdef SIMULATION ``, and neither our build nor
-  upstream's `.f` files define `SIMULATION`, so the seed is fixed on every
-  simulator here. Its non-Verilator branch also needs `std::randomize` with a
-  `dist`, which is V5.
+- **`prim_lfsr:251` is load-bearing, and why is a finding of its own — I15.**
+  Removing it makes things worse, not better. The non-Verilator branch
+  randomizes the seed inside an assertion macro:
+
+  ```systemverilog
+  `ASSERT_I(DefaultSeedLocalRandomizeCheck_A, std::randomize(DefaultSeedLocal) with {
+                                              !(DefaultSeedLocal inside {'0, '1});})
+  ```
+
+  With `prim_assert.sv`'s dummy macros — Verilator's default — `ASSERT_I`
+  expands to nothing, so the randomization never runs and `DefaultSeedLocal`
+  keeps its initial `0`. Measured: seed `0x0`, and the LFSR never advances,
+  where the guard as shipped gives `DefaultSeed`. With the standard macros the
+  same code randomizes correctly. So the two guards are coupled, and removing
+  this one alone converts a fixed seed into a dead one.
+
+  It is also moot for this build — the block sits behind `` `ifdef SIMULATION ``
+  and nothing here defines it — but the coupling is the point.
 - **`dv_vif_wrap.sv:58`,** the only `VCS`/`XCELIUM` guard, is benign: the branch
   Verilator takes is identical to the Xcelium one.
 
 `SYNTHESIS` (14 sites) and `FPV_ON` (14) are not simulator workarounds and are
 out of scope. **Our own ports carry no tool guards** in tracked source.
 
-So the answer to "how much more of this is there": two guards were genuinely
-hiding working functionality, and both were already found — the assertions, and
-the DV library excluding itself. A third is stale but unreachable. Everything
-else is either still true, moot, or correct by design.
+So the answer to "how much more of this is there": **four guards are stale, and
+only one of them is reachable.** The assertions are now on by default here. The
+DV library excluding itself was already overlaid. Drive strengths and the latch
+register file both work, and neither is reachable — nothing instantiates
+`pins_if`, and no configuration in `ibex_configs.yaml` selects `RegFileLatch` —
+so removing those two guards would change nothing and the overlays are not
+worth their weight. `prim_lfsr`'s guard turned out to be load-bearing. The rest
+are still true, moot, or correct by design.
+
+Two of these came out opposite to the obvious guess. Drive strengths were
+written off as unsupported on received wisdom and turned out to work; the LFSR
+guard looked stale and turned out to be the only thing preventing a dead
+LFSR.
 
 ---
 
