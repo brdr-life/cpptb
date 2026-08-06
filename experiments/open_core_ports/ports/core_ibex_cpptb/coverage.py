@@ -162,7 +162,13 @@ def main() -> int:
     parser.add_argument("--json", type=Path, help="write the merged model here")
     args = parser.parse_args()
 
-    run = args.run if args.run.is_absolute() else HERE / args.run
+    # Relative to where it was invoked, the way a command-line tool should be,
+    # and only then relative to the port directory. Resolving against the
+    # script's own directory first turned `coverage.py ports/x/build/...` run
+    # from the experiment root into `ports/x/ports/x/build/...`.
+    run = args.run
+    if not run.is_absolute() and not run.is_dir():
+        run = HERE / args.run
     try:
         merged, entries, _ = load(run)
     except MergeError as error:
