@@ -67,6 +67,61 @@ Upstream issues referenced: #7676, #7963, #8010, #8024.
 
 ---
 
+## Audit: every tool guard, and whether its reason still holds
+
+`prim_assert.sv` turned out to hide 130 working assertions behind a guard that
+predated the capability, which raises the obvious question of how many more
+there are. This is the exhaustive answer, not a sample: every
+`` `ifdef``/`` `ifndef`` naming a tool across the Ibex tree, the lowRISC DV
+library and our own ports.
+
+Fourteen sites in tracked upstream source. Five are in files the core_ibex build
+compiles:
+
+| Site | Works around | Still true on 5.050? |
+| --- | --- | --- |
+| `prim_assert.sv:102` | concurrent assertions | **No.** 130 of 132 run, none fires over 944 entries — I1 |
+| `clk_rst_if.sv:22` | UVM under Verilator | **No.** Overlaid here; the whole UVM environment runs — I2 |
+| `pins_if.sv:87` | drive strengths (`1'bz`, pull) | **Yes.** Verilator has no strengths; the branch picks a strength-free assign |
+| `dv_fcov_macros.svh:14` | covergroups | **Yes**, though not for the original reason: two internal faults and 456 discarded constructs — V9, V10 |
+| `ibex_register_file_latch.sv:161` | `$fatal "Latch-based register file not supported for Verilator simulation"` | **No.** It elaborates clean on 5.050, no errors and no `LATCH` warning. Caveat below. |
+
+The remaining nine are in files this build does not compile: `prim_pad_attr`,
+`prim_pad_wrapper` (×2), `prim_usb_diff_rx` — all drive strengths, all still
+needed; `prim_double_lfsr` and `prim_lfsr` — see below; `rst_shadowed_if:16` —
+the same UVM-exclusion pattern as `clk_rst_if` and so probably as obsolete,
+untested because nothing here compiles it; and `tb_cs_registers.sv:51` and
+`ibex_simple_system.sv:131`, which exclude a SystemVerilog clock generator
+because under Verilator the C++ harness drives the clock. Those last two are
+**correct as written** — worth saying, because they look like the same pattern
+and are not.
+
+Three notes on the ones that need qualifying:
+
+- **The latch register file.** The `$fatal` is stale, but no Ibex configuration
+  selects `RegFileLatch` — every entry in `ibex_configs.yaml` is `RegFileFF` —
+  so it is unexercised either way, and clean elaboration is not the same as
+  correct simulation. The claim here is only that the blanket "not supported"
+  no longer holds at elaboration.
+- **`prim_lfsr:251`.** Under Verilator the LFSR default seed is fixed where
+  other tools randomize it, which would matter for the icache. It is moot:
+  the whole block sits behind `` `ifdef SIMULATION ``, and neither our build nor
+  upstream's `.f` files define `SIMULATION`, so the seed is fixed on every
+  simulator here. Its non-Verilator branch also needs `std::randomize` with a
+  `dist`, which is V5.
+- **`dv_vif_wrap.sv:58`,** the only `VCS`/`XCELIUM` guard, is benign: the branch
+  Verilator takes is identical to the Xcelium one.
+
+`SYNTHESIS` (14 sites) and `FPV_ON` (14) are not simulator workarounds and are
+out of scope. **Our own ports carry no tool guards** in tracked source.
+
+So the answer to "how much more of this is there": two guards were genuinely
+hiding working functionality, and both were already found — the assertions, and
+the DV library excluding itself. A third is stale but unreachable. Everything
+else is either still true, moot, or correct by design.
+
+---
+
 ## riscv-dv and pyflow
 
 About eighteen findings, written up in
