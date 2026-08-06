@@ -57,6 +57,14 @@ words. This is that missing baseline.
 
 ## Building
 
+**Assertions are on by default.** `prim_assert.sv` sends the Verilator branch to
+`prim_assert_dummy_macros.svh`, where every assertion macro expands to nothing,
+so upstream's own Verilator runs check none of the RTL's 132 assertions. 130 of
+them compile and run here; across all 944 directed entries none fires and the
+outcomes are identical to the build without them. `--no-assertions` restores
+upstream's behaviour. The two that do not compile are in FINDINGS.md as V11.
+
+
 ```sh
 python3 ../../fetch.py uvm_core     # Accellera's UVM, pinned in sources.toml
 python3 build_tb.py --config small
