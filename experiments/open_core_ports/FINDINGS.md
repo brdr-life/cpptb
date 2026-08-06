@@ -41,8 +41,10 @@ because silence is the failure mode.
 | **456 covergroup constructs are silently discarded** with `COVERIGN` warnings: 208 `intersect`, 131 `&&`, 71 explicit cross bins, 21 `iff`-in-cross, 9 `with`, 8 `\|\|`, 2 `binsof`, 2 `default sequence`, 2 bin-array sizes. A cross whose select is dropped keeps *every* combination, so the bin set is larger than the source describes and the result reads as coverage without being it. | `build/compile_tb_opentitan-fcov.log` | Functional coverage |
 | **Verilator 5.050 runs 130 of Ibex's 132 assertions.** The two exceptions are V11. Across the whole directed testlist — 944 entries, ~15M cycles — **no assertion fires**, and the outcomes match the baseline entry for entry, 912 of 944 with zero differences. So the checking is free of false positives, and **it is now on by default here** -- `--no-assertions` restores upstream's behaviour. | Runs `assert-all944` and `default-with-assertions`; `core_ibex_tb_top`'s own `$assertoff` calls resolve real assertion names | SVA |
 
-Branches with reduced cases and fixes live in `~/code/vl-{B,C,K,P,S,T}`.
-Upstream issues referenced: #7676, #7963, #8010, #8024.
+Every reduced case ships in this repository, in the `shims/` directories the
+table links. Fix branches for a subset are staged for upstream submission;
+existing verilator/verilator issues referenced above: #7676, #7963, #8010,
+#8024.
 
 ---
 

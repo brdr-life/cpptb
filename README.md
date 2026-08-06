@@ -69,6 +69,40 @@ See [testbench authoring](docs/testbench-authoring.md),
 [scheduling](docs/scheduling.md), and [code generation](docs/code-generation.md)
 for the detailed contracts.
 
+## What does not work yet
+
+Stated here rather than discovered the hard way:
+
+- **Scheduler phase waits.** `co_await ReadWrite{}`, `ReadOnly{}`, and
+  `NextTimeStep{}` report an actionable error in a default build rather than
+  running: the default link owns clocks and timers but dispatches no simulator
+  phases. Sample after `RisingEdge`, drive after `FallingEdge` instead — that is
+  the supported pattern, and [scheduling](docs/scheduling.md) works through the
+  gap and the plan for closing it.
+- **Verilator is the only end-to-end simulator.** The generated transport is
+  standard SV-DPI and elaboration is simulator-independent through Slang, but
+  nothing else is exercised in CI yet.
+- **The build-time discovery pass runs your testbench.** A testbench that hangs
+  or exits at time zero therefore fails the *build*, and the failure reads like
+  a compile error. If a first build stalls, suspect the testbench's own control
+  flow before the toolchain.
+- **Coverage is explicit.** There are no automatic per-value bins for a sampled
+  type and no `default` bin; every bin is declared. `with (expr)` cross filters
+  are matched at bin granularity — exact whenever the expression is constant
+  across each bin, and `where()` records the expression it stands for so a
+  translation from SystemVerilog stays checkable.
+- **Sources added through raw `verilator_args` are not tracked for rebuilds**,
+  and `.svh` files are rejected in the source list — include their directory
+  instead.
+- Editing a running process's coroutine set changes stimulus ordering for
+  random streams: two testbenches that draw from the same seed produce
+  identical stimulus only if they wake the same processes in the same order.
+
+The measurements behind the performance and equivalence claims — and forty-one
+findings from porting Ibex's UVM testbenches, with reduced cases — live under
+[experiments/open_core_ports](experiments/open_core_ports/), which fetches
+several GB of external dependencies and is not part of the installable package.
+
 ## Requirements
 
 `make doctor` checks every requirement below against the local toolchain and

@@ -278,6 +278,49 @@ def pkg_config(*flags: str) -> str:
     return result.stdout.strip()
 
 
+# Where the compiler runs, relative to this port. cpptb builds the Verilated
+# model in <build.directory>/cpptb/<name>/obj, and the -CFLAGS/-LDFLAGS strings
+# in cpptb.toml reach the compiler verbatim with that directory as its cwd. The
+# committed file must carry no absolute paths -- they would be one machine's --
+# so every path in those strings is written relative to OBJ_DIR instead. The
+# rpath is `$ORIGIN`-relative for the same reason: the binary lives in OBJ_DIR
+# and the loader resolves $ORIGIN against the binary's own location, so the
+# result works wherever the checkout lives and whatever the run cwd is.
+#
+# The coupling this buys into: if cpptb ever changes its object-directory
+# layout, the depth here changes with it. check mode catches that -- the build
+# would fail on a missing header, and --check fails loudly on the flag lines
+# before that.
+OBJ_DIR = ROOT / "work" / "core_ibex_cpptb" / "cpptb" / "core_ibex_cpptb" / "obj"
+
+
+def _portable_flags(text: str) -> str:
+    """Rewrite every absolute path under ROOT to be relative to OBJ_DIR."""
+    out = []
+    for token in text.split():
+        if token.startswith("-Wl,-rpath,"):
+            target = Path(token[len("-Wl,-rpath,"):])
+            relative = os.path.relpath(target, OBJ_DIR)
+            # Two hops eat escapes between here and the linker: make turns $$
+            # into $, then the shell would expand a bare $ORIGIN to nothing --
+            # measured, the binary ended up with RUNPATH [/../../../../..].
+            # The backslash survives make, so the shell sees \$ORIGIN and
+            # passes the literal through.
+            out.append(f"-Wl,-rpath,\\$$ORIGIN/{relative}")
+            continue
+        for prefix in ("-I", "-L"):
+            if token.startswith(prefix) and token[len(prefix):].startswith("/"):
+                target = Path(token[len(prefix):])
+                try:
+                    target.relative_to(ROOT)
+                except ValueError:
+                    break  # a system path; leave it alone
+                token = prefix + os.path.relpath(target, OBJ_DIR)
+                break
+        out.append(token)
+    return " ".join(out)
+
+
 def _relative(path: Path) -> str:
     try:
         return str(path.relative_to(HERE))
@@ -350,13 +393,15 @@ def render(resolved: dict, config: str, parameters: dict[str, str],
     # elaborated for. Passed as a bare token and stringified in testbench.cpp:
     # the define travels cpptb.toml -> Verilator -> make -> shell and each hop
     # strips a layer of quoting.
-    cflags = pkg_config("--cflags")
-    libs = pkg_config("--libs")
+    cflags = _portable_flags(f'{pkg_config("--cflags")} -I{IBEX}/dv/cosim')
+    libs = _portable_flags(pkg_config("--libs"))
     isa = isa_string(defines, parameters)
     lines.append('  "-CFLAGS",')
-    lines.append(f'  "{cflags} -I{IBEX}/dv/cosim -DCPPTB_COSIM_ISA={isa}",')
+    lines.append(f'  "{cflags} -DCPPTB_COSIM_ISA={isa}",')
     lines.append('  "-LDFLAGS",')
-    lines.append(f'  "{libs}",')
+    # A TOML literal string, because the rpath carries a backslash the basic
+    # (double-quoted) form would reject as an unknown escape.
+    lines.append(f"  '{libs}',")
     lines.append(f'  "{_relative(IBEX / "dv" / "cosim" / "spike_cosim.cc")}",')
     for path in resolved["control"]:
         lines.append(f'  "{_relative(path)}",')
