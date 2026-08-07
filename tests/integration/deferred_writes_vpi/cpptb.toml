@@ -1,0 +1,11 @@
+# The same contract on the other supported backend. Sources are shared with
+# the sibling project; only the backend differs.
+[design]
+sources = ["../deferred_writes/pipeline.sv"]
+
+[testbench]
+sources = ["../deferred_writes/testbench.cpp"]
+
+[build]
+timing_backend = "vpi"
+deferred_writes = true

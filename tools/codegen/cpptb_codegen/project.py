@@ -54,6 +54,11 @@ class ProjectSpec:
     #   "verilator-direct"  Verilator's scheduler driven directly; fastest.
     #   "vpi"               standard VPI callbacks; the portable route.
     timing_backend: str = ""
+    # The cocotb write model: set() queues and flushes at the ReadWrite settle
+    # point, set_now() stays immediate, and a get() in between reads the
+    # simulator's value. Requires timing_backend, because the flush point is
+    # the phase the backend dispatches.
+    deferred_writes: bool = False
 
     @property
     def target_build_dir(self) -> Path:
@@ -559,6 +564,16 @@ def resolve_project(
     timing_backend = _timing_backend(build.get("timing_backend"))
     _reject_hand_rolled_timing(timing_backend, verilator_args, defines,
                                cxx_flags)
+    deferred_writes = _boolean(
+        build.get("deferred_writes"), "cpptb.toml build.deferred_writes"
+    )
+    if deferred_writes and not timing_backend:
+        raise ProjectError(
+            "build.deferred_writes needs build.timing_backend: the queued "
+            "writes flush at the ReadWrite phase, which only a timing "
+            'backend dispatches. Set timing_backend = "verilator-direct" '
+            'or "vpi"'
+        )
     if any(
         argument
         in {"--fourstate", "-fourstate", "--no-fourstate", "-no-fourstate"}
@@ -605,4 +620,5 @@ def resolve_project(
         experimental_four_state=selected_four_state,
         simulator=selected_simulator,
         timing_backend=timing_backend,
+        deferred_writes=deferred_writes,
     )

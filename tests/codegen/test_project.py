@@ -274,6 +274,31 @@ experimental_four_state = true
             with self.assertRaisesRegex(ProjectError, "--binary"):
                 resolve_project(project=root)
 
+    def test_deferred_writes_requires_a_timing_backend(self):
+        # The queue flushes at the ReadWrite phase; without a backend nothing
+        # dispatches it and every write would be silently lost.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                "[build]\ndeferred_writes = true\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ProjectError, "timing_backend"):
+                resolve_project(project=root)
+
+    def test_deferred_writes_rides_a_selected_backend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\ntiming_backend = "vpi"\ndeferred_writes = true\n',
+                encoding="utf-8",
+            )
+            spec = resolve_project(project=root)
+            self.assertTrue(spec.deferred_writes)
+
     def test_inferred_top_is_cached_by_project_content(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

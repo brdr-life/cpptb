@@ -843,7 +843,7 @@ the next smaller.
    at resolve time with the key named; the run-time diagnostic in a
    backendless build names the key; and `make test` conformance-checks both
    names on every run.
-2. **Offer deferred writes, as a project mode.** `deferred_writes = true` in
+2. **Offer deferred writes, as a project mode — done, except the port validation.** `deferred_writes = true` in
    `cpptb.toml` makes `set()` itself carry cocotb's semantics -- queued,
    flushed at the `ReadWrite` settle point the selected backend provides --
    with `set_now()` as the marked escape hatch, mirroring cocotb's
@@ -852,16 +852,17 @@ the next smaller.
    enforced at build time, which keeps one mechanism instead of a
    default-build variant. Pinned semantics, matching cocotb exactly: a
    `get()` between `set()` and the flush returns the simulator's current
-   value, not the queued one, and the conformance contract grows checks for
-   both that and write-lands-next-edge. Validation is outcome parity on one
-   Ibex port converted to the mode.
+   value, not the queued one. `tests/integration/deferred_writes` pins that,
+   write-lands-next-edge, settled-by-ReadOnly, and the `set_now()` escape
+   hatch on both supported backends in every `make test`. Outstanding:
+   outcome parity on one Ibex port converted to the mode.
 3. **Flip the mode's default.** With 2 shaped as a project mode, full cocotb
    parity out of the box is a change of default, not an API migration. It
    still alters what existing testbenches do and costs a scheduler round trip
    per write, so it waits for mileage on the opt-in and a `timing_phases`
    benchmark peer under the `1.10x` guard.
 
-### What 1 looks like in use, and 2 will
+### What 1 and 2 look like in use
 
 Option 1 is implemented:
 
@@ -874,7 +875,7 @@ Option 2, under the mode, keeps one write spelling -- a driver written the
 cocotb way is correct with no drive-point convention:
 
 ```cpp
-// Requires deferred_writes = true; not implemented yet.
+// Requires deferred_writes = true.
 Task<void> driver(Dut dut) {
     while (true) {
         co_await RisingEdge{dut.clk};

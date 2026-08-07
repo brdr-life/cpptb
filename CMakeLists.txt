@@ -134,6 +134,10 @@ endif()
 
 install(TARGETS ${CPPTB_INSTALL_TARGETS} EXPORT cpptbTargets)
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+# The framework host loop that build.timing_backend links. Shipped as source
+# because it is compiled per project against that project's Verilated model.
+install(FILES src/verilator_timing_main.cpp
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/cpptb/src)
 install(
     EXPORT cpptbTargets
     FILE cpptbTargets.cmake

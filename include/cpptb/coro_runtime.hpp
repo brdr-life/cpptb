@@ -6,6 +6,7 @@
 #include <coroutine>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
@@ -4371,7 +4372,36 @@ class Testbench {
         scheduler_.resume_edge(signal_id, edge);
     }
 
-    void notify_read_write() { scheduler_.resume_phase(WaitKind::ReadWrite); }
+    // Deferred writes, the cocotb write model behind `deferred_writes = true`.
+    //
+    // Under the mode, a port `set()` queues here instead of writing, and the
+    // queue flushes at the start of the ReadWrite phase -- after the awaited
+    // edge's own updates, so a driver that writes straight after
+    // `co_await RisingEdge{}` lands its value on the *next* edge instead of
+    // the one just awaited. `get()` between the two reads the simulator's
+    // value, exactly as cocotb's caching does. Queueing alone is enough to
+    // arm the phase: `has_read_write_waiters()` reports the pending flush, so
+    // the timing backend schedules a ReadWrite step whether or not any
+    // coroutine awaits one.
+    void defer_write(std::function<void()> apply) {
+        deferred_writes_.push_back(std::move(apply));
+    }
+
+    bool has_deferred_writes() const { return !deferred_writes_.empty(); }
+
+    void flush_deferred_writes() {
+        // Writes issued while flushing -- a ReadWrite waiter driving after it
+        // resumes -- belong to the next round, which stays armed because the
+        // queue reports itself pending. Swapping first keeps the rule exact.
+        std::vector<std::function<void()>> applying;
+        applying.swap(deferred_writes_);
+        for (auto& apply : applying) apply();
+    }
+
+    void notify_read_write() {
+        flush_deferred_writes();
+        scheduler_.resume_phase(WaitKind::ReadWrite);
+    }
 
     void notify_read_only() { scheduler_.resume_phase(WaitKind::ReadOnly); }
 
@@ -4406,7 +4436,8 @@ class Testbench {
 #endif
 
     bool has_read_write_waiters() const {
-        return scheduler_.has_phase_waiters(WaitKind::ReadWrite);
+        return scheduler_.has_phase_waiters(WaitKind::ReadWrite) ||
+               has_deferred_writes();
     }
 
     bool has_read_only_waiters() const {
@@ -4527,6 +4558,7 @@ class Testbench {
     Scheduler scheduler_;
     uint64_t time_ = 0;
     uint32_t failures_ = 0;
+    std::vector<std::function<void()>> deferred_writes_;
 };
 
 }  // namespace cpptb::coro
