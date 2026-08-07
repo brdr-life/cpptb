@@ -113,6 +113,7 @@ _AUTHORING_TEMPLATE_IDS = {
     "force_direct": 25,
     "hier_data": 26,
     "timing_phases": 27,
+    "timing_phases_deferred": 27,
     "queue_sync": 28,
     "test_lifecycle": 29,
     "dynamic_spawn": 30,
@@ -244,6 +245,10 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     ),
     _authoring("hier_data", "Wide and four-state hierarchy data"),
     _authoring("timing_phases", "Simulator timing phases"),
+    _authoring(
+        "timing_phases_deferred",
+        "Simulator timing phases, deferred writes",
+    ),
     _authoring(
         "test_lifecycle", "Test lifecycle checks", default_iterations=5_000_000
     ),

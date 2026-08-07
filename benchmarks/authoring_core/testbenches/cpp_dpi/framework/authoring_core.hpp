@@ -196,7 +196,13 @@ constexpr const char* kernel_name() {
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_HIER_DATA
     return "hier_data";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TIMING_PHASES
+#ifdef CPPTB_DEFERRED_WRITES
+    // Same kernel, cocotb's write model: the deferred flavor is a separate
+    // registry entry so its ratio is certified on its own.
+    return "timing_phases_deferred";
+#else
     return "timing_phases";
+#endif
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_QUEUE_SYNC
     return "queue_sync";
 #elif AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_TEST_LIFECYCLE

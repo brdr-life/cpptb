@@ -1268,6 +1268,26 @@ Task<void> run_timing_phases(Context context) {
         const uint32_t second = first ^ 0xa5a5'5a5au;
         ++context.result.features.timing_phases;
 
+#ifdef CPPTB_DEFERRED_WRITES
+        // The deferred peer keeps the same await cadence and check count as
+        // the immediate kernel and samples where the deferred contract
+        // guarantees settlement. A write queued from inside the ReadWrite
+        // phase re-arms that phase, so the scheduler drains the queue
+        // within the timestep -- cocotb's writes-until-stable loop -- and
+        // by ReadOnly both writes have applied in order.
+        co_await FallingEdge{context.dut.clk};
+        context.dut.array_i.at(1).set(first);
+        co_await ReadWrite{};
+
+        context.dut.array_i.at(1).set(second);
+        co_await ReadOnly{};
+        check(context, "the queue drained and settled by ReadOnly",
+              context.dut.array_o.at(1).get(), second ^ 0x6d2b'79f6u);
+        check(context, "the drained write reads back from the simulator",
+              context.dut.array_i.at(1).get(), second);
+
+        co_await NextTimeStep{};
+#else
         co_await FallingEdge{context.dut.clk};
         context.dut.array_i.at(1).set(first);
         co_await ReadWrite{};
@@ -1280,6 +1300,7 @@ Task<void> run_timing_phases(Context context) {
               context.dut.array_o.at(1).get(), second ^ 0x6d2b'79f6u);
 
         co_await NextTimeStep{};
+#endif
     }
 
     report(context);

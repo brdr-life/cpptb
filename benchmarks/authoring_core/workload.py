@@ -35,6 +35,7 @@ KERNELS = (
     "force_direct",
     "hier_data",
     "timing_phases",
+    "timing_phases_deferred",
     "test_lifecycle",
     "dynamic_spawn",
     "dynamic_task",
@@ -335,7 +336,7 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             force_release=force_release,
         )
 
-    if kernel == "timing_phases":
+    if kernel in ("timing_phases", "timing_phases_deferred"):
         return ExpectedCounts(
             iterations=iterations,
             transactions=0,
@@ -801,6 +802,7 @@ def expected_checksum(iterations: int, *, kernel: str | None = None) -> int:
     if kernel in (
         "force_direct",
         "timing_phases",
+        "timing_phases_deferred",
         "test_lifecycle",
         "structured_logging",
         "structured_log_history",

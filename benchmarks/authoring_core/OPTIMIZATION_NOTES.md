@@ -39,6 +39,30 @@ The focused task-value run exercised the new confirmation path and passed at
 after the initial 16 pairs, so the saved `latest` artifact contains that newer
 measurement.
 
+## register_coverage A/B against the coverage.hpp restructure (2026-08-07)
+
+The `register_coverage` kernel had no published ratio (the roadmap's "timing
+publication awaits a host-load window") when the coverage.hpp Bin restructure
+landed, and an early post-restructure sample read `2.376x`, which raised the
+question of whether the restructure was the cause. A same-window A/B — the
+pre-restructure header from `72515dc~1` rebuilt and measured back-to-back with
+the current one — answers it:
+
+| Header | Paired medians | Independent median | Strata disagreement |
+| --- | --- | --- | --- |
+| pre-restructure | `2.674x` / `2.891x` | `2.752x` | `47.20%` |
+| current | `2.682x` / `2.783x` | `2.716x` | `2.22%` |
+
+Both windows were classified `invalid_environment` by CPU corroboration (a
+handful of samples on a shared host), so neither number is publishable — but
+the comparison is: the restructure did not move the kernel (`2.752x` →
+`2.716x`, inside noise), and the elevated absolute ratio exists with the old
+header too. Whatever makes this exact pair ~2.7x predates the restructure and
+was never published as anything lower. Publishing a certified ratio for this
+kernel still awaits an admitted window, and if ~2.7x survives one, the kernel
+needs either optimization of the passive-coverage observation path or a
+documented waiver — the `hard_1_10` gate will not pass it as-is.
+
 ## Parked
 
 These ideas remain available if future profiles show a meaningful need:

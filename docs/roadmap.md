@@ -48,7 +48,7 @@ milestone blockers. The current development priority is the framework.
 | 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--next">In progress</span> | Process-aware logging and scheduler wait diagnostics are done; waveforms and distributable packages remain |
 | 8 | [Coherent clock and reset control](#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Runtime clock ownership and explicit reusable reset components |
 | 9 | [Batched execution and run-ahead experiments](#9-batched-execution-and-run-ahead-experiments) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Reduce DPI scheduler resumptions across fine-grained timing boundaries |
-| 10 | [Static hierarchy discovery](#10-static-hierarchy-discovery) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Produce the discovery outputs without executing user test code during the build |
+| 10 | [Static hierarchy discovery](#10-static-hierarchy-discovery) | <strong class="roadmap-status roadmap-status--done">Done</strong> | Produce the discovery outputs without executing user test code during the build |
 | - | [No-priority backlog](#no-priority-backlog) | <span class="roadmap-status roadmap-status--planned">No priority</span> | Deferred interoperability, protocol-component, synchronization, lookup, and harness work |
 
 Select a milestone to jump to its detailed scope below.
@@ -583,7 +583,23 @@ current gap.
 
 ## 10. Static hierarchy discovery
 
-**Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>
+**Status:** <strong class="roadmap-status roadmap-status--done">Done</strong>
+
+Shipped. The build recovers the access set by scanning compile-only object
+sections -- no link, no run -- and clocks are registered at runtime by
+`start_clock()` itself: the generated wrapper carries a driver task per
+writable one-bit signal (including unpacked-array elements, which is how
+interface-member clocks arrive) and queries the runtime after `PHASE_INIT`
+for the ones actually started. Both failure modes below are gone, `clocks.json`
+and its staleness checks are gone, and the executed-discovery entry point
+survives only as an explicit opt-in (`clock_discovery_source`) for
+manifest-driven flows. Validated by the example matrix under both timing
+backends, the icache port on both backends with identical check counts, a
+pin-exact core_ibex replay, and the directed 944 against the UVM baseline.
+The behavior change step 2 called out is real and documented: cross-test
+clock conflicts are now legal per-test configurations that fail at run time
+if genuinely conflicting. The section below is kept as the original problem
+statement and plan.
 
 The build's hierarchy-discovery pass compiles the testbench under
 `CPPTB_HIERARCHY_DISCOVERY` and then **runs it**. Scoping measured what that
@@ -843,7 +859,7 @@ the next smaller.
    at resolve time with the key named; the run-time diagnostic in a
    backendless build names the key; and `make test` conformance-checks both
    names on every run.
-2. **Offer deferred writes, as a project mode — done, except the port validation.** `deferred_writes = true` in
+2. **Offer deferred writes, as a project mode — done.** `deferred_writes = true` in
    `cpptb.toml` makes `set()` itself carry cocotb's semantics -- queued,
    flushed at the `ReadWrite` settle point the selected backend provides --
    with `set_now()` as the marked escape hatch, mirroring cocotb's
@@ -854,8 +870,11 @@ the next smaller.
    `get()` between `set()` and the flush returns the simulator's current
    value, not the queued one. `tests/integration/deferred_writes` pins that,
    write-lands-next-edge, settled-by-ReadOnly, and the `set_now()` escape
-   hatch on both supported backends in every `make test`. Outstanding:
-   outcome parity on one Ibex port converted to the mode.
+   hatch on both supported backends in every `make test`. The port
+   validation is done: the icache port converted to the mode passes ten of
+   ten on both backends with check counts identical to the immediate-mode
+   run, after three drive-point corrections documented in
+   [Coming from cocotb](coming-from-cocotb.md).
 3. **Flip the mode's default.** With 2 shaped as a project mode, full cocotb
    parity out of the box is a change of default, not an API migration. It
    still alters what existing testbenches do and costs a scheduler round trip

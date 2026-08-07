@@ -2766,6 +2766,9 @@ module authoring_core_sv_tb;
       "packed_view": run_packed_view();
       "hier_data": run_hier_data();
       "timing_phases": run_timing_phases();
+      // The deferred flavor is a C++ write-model variant; the SystemVerilog
+      // reference schedule is identical.
+      "timing_phases_deferred": run_timing_phases();
       "test_lifecycle": run_test_lifecycle();
       "dynamic_spawn": run_dynamic_spawn();
       "dynamic_task": run_dynamic_task();
@@ -2799,7 +2802,8 @@ module authoring_core_sv_tb;
       default: $fatal(1, "unknown AUTHORING_CORE_KERNEL=%s", kernel);
     endcase
 
-    if (kernel != "timing_phases" && kernel != "apb_component" &&
+    if (kernel != "timing_phases" &&
+        kernel != "timing_phases_deferred" && kernel != "apb_component" &&
         kernel != "transaction_recording" &&
         kernel != "memory_model" && kernel != "memory_model_direct" &&
         kernel != "register_prediction_validity" &&
