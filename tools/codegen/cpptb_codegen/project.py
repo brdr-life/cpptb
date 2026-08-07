@@ -455,6 +455,8 @@ def resolve_project(
     build_dir: Path | None = None,
     simulator: str | None = None,
     experimental_four_state: bool | None = None,
+    timing_backend: str | None = None,
+    deferred_writes: bool | None = None,
     refresh_top: bool = False,
 ) -> ProjectSpec:
     """Resolve CLI overrides, optional TOML, then filesystem conventions."""
@@ -561,13 +563,24 @@ def resolve_project(
     )
     _reject_optimization_in_verilator_args(verilator_args)
     cxx_flags = tuple(_string_list(build.get("cxx_flags"), "build.cxx_flags"))
-    timing_backend = _timing_backend(build.get("timing_backend"))
-    _reject_hand_rolled_timing(timing_backend, verilator_args, defines,
-                               cxx_flags)
-    deferred_writes = _boolean(
-        build.get("deferred_writes"), "cpptb.toml build.deferred_writes"
+    # CLI overrides land before the cross-key validation, so a mode given on
+    # the command line is checked against the merged configuration exactly as
+    # if it had been written in the toml.
+    selected_timing_backend = (
+        _timing_backend(timing_backend)
+        if timing_backend is not None
+        else _timing_backend(build.get("timing_backend"))
     )
-    if deferred_writes and not timing_backend:
+    _reject_hand_rolled_timing(selected_timing_backend, verilator_args,
+                               defines, cxx_flags)
+    selected_deferred = (
+        deferred_writes
+        if deferred_writes is not None
+        else _boolean(
+            build.get("deferred_writes"), "cpptb.toml build.deferred_writes"
+        )
+    )
+    if selected_deferred and not selected_timing_backend:
         raise ProjectError(
             "build.deferred_writes needs build.timing_backend: the queued "
             "writes flush at the ReadWrite phase, which only a timing "
@@ -619,6 +632,6 @@ def resolve_project(
         ),
         experimental_four_state=selected_four_state,
         simulator=selected_simulator,
-        timing_backend=timing_backend,
-        deferred_writes=deferred_writes,
+        timing_backend=selected_timing_backend,
+        deferred_writes=selected_deferred,
     )

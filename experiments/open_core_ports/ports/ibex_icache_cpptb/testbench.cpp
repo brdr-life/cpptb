@@ -46,6 +46,16 @@
 // Monitors read on the rising edge, where co_await RisingEdge resumes before
 // the design has evaluated it, which is the same value `@(posedge clk)` sees in
 // the Active region.
+//
+// Under `deferred_writes = true` the same source runs the cocotb shape
+// instead: the drive point moves to the rising edge, and every set() queues
+// until the ReadWrite flush of that timestep -- after the edge's own updates
+// -- so a queued write is captured by the next rising edge, exactly what the
+// falling-edge anchor achieved by geometry. The DrivePoint alias below
+// carries the whole difference; the drivers and their task contracts are
+// otherwise identical. Replay stays a baseline-mode tool: it compares pins
+// against UVM recordings made under the falling-edge anchors, which the
+// deferred shape moves by design.
 
 #include <algorithm>
 #include <bit>
@@ -68,6 +78,38 @@ namespace {
 using cpptb::Dut;
 using cpptb::TestContext;
 using namespace cpptb::coro;
+
+// The per-mode drive anchor. The baseline sits half a cycle off the sampling
+// edge because set() is immediate. The deferred shape anchors at the rising
+// edge *and then the ReadWrite settle point*: these drivers read protocol
+// pins at their anchor (a grant loop samples req_o), and a bare RisingEdge
+// resumes before the design evaluates the edge, which would hand them the
+// previous cycle's requests. After ReadWrite the edge's updates have applied
+// -- the post-eval instant cocotb's RisingEdge callback actually delivers --
+// and a set() issued there queues for the next flush round of the same
+// timestep, landing after this edge and before the next: the cocotb write.
+// Advance one full cycle, drive anchor to drive anchor.
+inline Task<void> drive_point(Dut dut) {
+#ifdef CPPTB_DEFERRED_WRITES
+    co_await RisingEdge{dut.clk_i};
+    co_await ReadWrite{};
+#else
+    co_await FallingEdge{dut.clk_i};
+#endif
+}
+
+// Settle from just after a rising edge to THIS cycle's drive anchor. The
+// baseline's FallingEdge does that by geometry; the deferred shape must not
+// consume another edge, only descend to the ReadWrite point of the cycle it
+// is already in. Using drive_point here held branch_i for two edges and cost
+// 52 scoreboard failures before the distinction was drawn.
+inline Task<void> settle_to_drive(Dut dut) {
+#ifdef CPPTB_DEFERRED_WRITES
+    co_await ReadWrite{};
+#else
+    co_await FallingEdge{dut.clk_i};
+#endif
+}
 
 // ibex_icache_env_cfg constrains clk_freq_mhz to 50.
 constexpr auto kClockPeriod = 20_ns;
@@ -902,7 +944,7 @@ uint64_t secded_39_32_codeword(uint32_t payload) {
 Task<void> wait_clks(Dut dut, uint32_t count) {
     if (count == 0) co_return;
     co_await clock_cycles(dut.clk_i, count);
-    co_await FallingEdge{dut.clk_i};
+    co_await settle_to_drive(dut);
 }
 
 // ibex_icache_core_if::wait_clks with stop_on_reset set, which is its default.
@@ -913,7 +955,7 @@ Task<void> wait_clks_core(Dut dut, Env& env, uint32_t count) {
     if (env.core_stopped()) co_return;
     for (uint32_t index = 0; index < count; ++index) {
         co_await RisingEdge{dut.clk_i};
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
         if (env.core_stopped()) co_return;
     }
 }
@@ -927,7 +969,7 @@ Task<void> wait_valid(Dut dut, Env& env) {
     while (!env.sampled_valid) {
         if (env.core_stopped()) co_return;
         co_await RisingEdge{dut.clk_i};
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
     }
 }
 
@@ -953,7 +995,7 @@ Task<bool> read_insn(Dut dut, TestContext& test, Env& env) {
             break;
         }
     }
-    co_await FallingEdge{dut.clk_i};
+    co_await drive_point(dut);
     dut.ready_i.set(0);
     co_return err;
 }
@@ -998,7 +1040,7 @@ Task<void> branch_then_read(Dut dut, TestContext& test, Env& env,
     dut.branch_i.set(1);
     dut.branch_addr_i.set(item.branch_addr);
     co_await RisingEdge{dut.clk_i};
-    co_await FallingEdge{dut.clk_i};
+    co_await settle_to_drive(dut);
     dut.branch_i.set(0);
     dut.ready_i.set(0);
     co_await read_insns(dut, test, env, item.num_insns, saw_error);
@@ -1073,7 +1115,7 @@ Task<void> core_stimulus(Dut dut, TestContext& test, Env& env,
     bool back_phase = false;
     uint32_t last_branch = 0;
 
-    co_await FallingEdge{dut.clk_i};
+    co_await drive_point(dut);
 
     // ICACHE_ITEMS: the item stream came out of a recording of
     // ports/ibex_icache_uvm, so none of the fields below are drawn. Everything
@@ -1402,13 +1444,13 @@ Task<void> mem_monitor(Dut dut, TestContext& test, Env& env) {
 // stop-on-reset: upstream's drive_grant keeps toggling through a reset, and
 // req is low there so nothing is granted.
 Task<void> mem_grant_driver(Dut dut, TestContext& test) {
-    co_await FallingEdge{dut.clk_i};
+    co_await drive_point(dut);
     while (true) {
         const uint32_t delay = draw_gnt_delay(test.random());
         co_await wait_clks(dut, delay);
         dut.instr_gnt_i.set(1);
         co_await RisingEdge{dut.clk_i};
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
         dut.instr_gnt_i.set(0);
     }
 }
@@ -1426,7 +1468,7 @@ Task<void> mem_responder(Dut dut, Env& env) {
     uint32_t countdown = 0;
 
     while (true) {
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
 
         if (env.in_reset) {
             if (driving) {
@@ -1475,7 +1517,7 @@ Task<void> mem_responder(Dut dut, Env& env) {
 Task<void> key_device(Dut dut, TestContext& test, Env& env) {
     auto& random = test.random();
     while (true) {
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
         if (env.in_reset) {
             dut.scr_key_valid_i.set(0);
             continue;
@@ -1504,7 +1546,7 @@ Task<void> key_device(Dut dut, TestContext& test, Env& env) {
         // TwoPhase, which is the default handshake: the answer is driven for a
         // single cycle.
         co_await RisingEdge{dut.clk_i};
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
         dut.scr_key_valid_i.set(0);
     }
 }
@@ -1519,7 +1561,7 @@ Task<void> ecc_corrupter(Dut dut, TestContext& test, Env& env) {
     auto& random = test.random();
 
     while (true) {
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
         if (!env.ecc_enabled || env.in_reset) continue;
 
         if (dut.ic_tag_rvalid_o.get() == kAllWays) {
@@ -1952,7 +1994,7 @@ Task<void> replay_run(Dut dut, TestContext& test, Env& env, const Trace& trace,
         }
 
         if (cycle + 1 == trace.pins.size()) break;
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
         apply_cycle(dut, env, trace, cycle + 1, run_scoreboard, cursor);
     }
     test.expect("the DUT's outputs match the recording on every cycle", true);
@@ -2279,8 +2321,8 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
     // -DCPPTB_HIERARCHY_DISCOVERY and runs it to learn which signals are
     // clocks and which paths need a transport, so a signal only reached down a
     // conditional branch can be missed.
-    dut.clk_i.set(0);
-    dut.rst_ni.set(1);
+    dut.clk_i.set_now(0);
+    dut.rst_ni.set_now(1);
     dut.req_i.set(0);
     dut.branch_i.set(0);
     dut.branch_addr_i.set(0);
@@ -2379,7 +2421,7 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
         // `mubi4_test_true_loose` reads as true, and the first cycle disagrees
         // for a reason that has nothing to do with the stimulus.
         co_await clock_cycles(dut.clk_i, 2);
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
 
         ReplayCursor cursor;
         if (replay_scoreboard) {
@@ -2440,7 +2482,7 @@ Task<void> run_icache_test(Dut dut, TestContext& test, const char* name,
     // so that asserting it produces the negedge the design's asynchronous
     // resets need.
     co_await clock_cycles(dut.clk_i, 2);
-    co_await FallingEdge{dut.clk_i};
+    co_await settle_to_drive(dut);
     co_await apply_reset(dut, test, env);
 
     const uint32_t num_trans =

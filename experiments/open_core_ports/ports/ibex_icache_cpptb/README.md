@@ -519,6 +519,36 @@ which applies `ibex_icache_oldval_test::check_phase` to a sequence that
 invalidates nothing and never disables the cache, so it has no old values to
 return. That is the check finding what it is for.
 
+## The cocotb-shaped variant, in progress
+
+The same testbench source carries a second timing shape, selected at build
+time:
+
+```sh
+cpptb test --project . --timing-backend verilator-direct --deferred-writes \
+    --build-dir build-deferred
+```
+
+Under the mode the drive anchor moves from `FallingEdge` to `RisingEdge`
+followed by `ReadWrite{}` -- the post-eval instant cocotb's `RisingEdge`
+callback delivers -- and every `set()` queues to the ReadWrite flush. Two
+helpers carry the whole difference: `drive_point()` advances anchor to
+anchor, and `settle_to_drive()` descends from just-after-a-rising-edge to the
+same cycle's anchor (using the full advance there held `branch_i` for two
+edges; the distinction cost 52 scoreboard failures to learn).
+
+**Status: not passing.** The baseline shape is byte-for-byte unaffected --
+all ten tests pass before and after the conversion -- but the deferred shape
+fails 52-56 checks out of ~50,000 per test, always with one signature: after
+a fetch that returns `err=1`, the scoreboard's implied next address (`+2`,
+from the zeroed data's compressed bit) disagrees with the fetch that actually
+arrives (`+4`). The divergence is confined to the error-path address
+advancement, where the driver's post-eval read of `err`/`rdata` and the
+monitor's pre-eval sample can straddle the edge differently than the
+falling-edge anchor did. Replay is deliberately baseline-only: it compares
+pins against UVM recordings made under falling-edge anchors, which the
+deferred shape moves by design.
+
 ## Files
 
 ```
