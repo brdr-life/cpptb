@@ -586,24 +586,53 @@ current gap.
 **Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>
 
 The build's hierarchy-discovery pass compiles the testbench under
-`CPPTB_HIERARCHY_DISCOVERY` and then **runs it** to record which signals the
-test code touches, which is what feeds the usage-pruned DPI transport and the
-clock configuration. Executing user code inside the build is the root of the
-worst failure mode a newcomer can hit: a testbench that hangs — an edge wait
-nothing drives, a loop before the first `co_await` — hangs the *build*, and the
-failure reads as a compiler problem. A timeout would rename the symptom;
-this milestone removes the cause.
+`CPPTB_HIERARCHY_DISCOVERY` and then **runs it**. Scoping measured what that
+execution actually contributes, and the answer halves the problem: the access
+set is already a static-initialization side effect of template instantiation —
+`nm` over the compile-only objects reproduces `access.json` byte-identically
+with no link and no run, verified on the examples and the Ibex core port. Only
+the **clock configuration** comes from execution, which runs each registered
+test's prologue up to its first suspension.
 
-Done means the discovery outputs — the access set and the clock configuration —
-are produced without executing user test code, the hang-the-build failure mode
-no longer exists, and a testbench that builds today builds identically with no
-source changes. The usage-pruned transport must keep its measured benefit:
-discovery exists so the generated bindings carry only the signals a test uses,
-and any replacement is judged against that same pruning quality. Scoping the
-candidate approaches — compile-time registration through the typed accessors,
-static analysis of the test translation units, a bounded instrumented dry run
-that cannot block, or an explicit declaration escape hatch — is under way; the
-scoping report will pick the approach and split the milestone into steps.
+Executing user code inside the build is still the defect. Measured, the
+failure is worse than the hang this section first described: a value-dependent
+loop before the first `co_await` does hang the build with a compiler command
+as the last log line, but an edge wait nothing drives does **not** hang — it
+suspends and yields a silently empty clock configuration, an undocumented
+wrong answer. A timeout would rename the first symptom and never see the
+second; this milestone removes the cause.
+
+Done means the discovery outputs are produced without executing user test
+code, both failure modes above are gone, and a testbench that builds today
+builds identically with no source changes. An earlier version of this section
+required keeping the transport's "measured pruning benefit"; scoping found no
+such measurement exists — ports were never value-pruned, and discovery prunes
+hierarchy exports and edge observers. The real bar is **output parity**:
+byte-identical `access.json` against the executed path, gated in CI until the
+executed path is deleted. The steps, from the scoping report:
+
+1. **Access set without execution.** Emit discovery records into a dedicated
+   object section, compile the testbench translation units with `-c` — no
+   generated main, no link — and scan the objects. Same schema, parity-gated
+   across GCC and Clang on the examples, benchmarks, and Ibex ports.
+2. **Clocks without execution.** Promote the already-implemented
+   `dynamic_clocks` mode to the default: the generated SV drivers query the
+   runtime's clock configuration at time zero over the existing DPI, and
+   `clocks.json` with its staleness checks disappears. The work is
+   re-qualifying the benchmarks under the `1.10x` guard; the fallback if a
+   guard fails is declared clocks through the existing `--clock` key. One
+   behavior change to call out: cross-test clock conflicts stop failing the
+   build and become legal per-test configurations.
+3. **Document the escape hatch.** Explicit declaration through the
+   pre-existing `--clock`, edge-observer, and access-manifest keys as the
+   override surface.
+
+Rejected with reasons recorded in the scoping report: external static
+analysis (the compiler's own instantiation is already the alias-robust
+oracle), a fuel-bounded dry run (still executes user code and contributes no
+access entries), and carrying every signal unpruned (hundreds of forced
+exports where the current builds need none, defeating simulator
+optimization).
 
 ## No-priority backlog
 
