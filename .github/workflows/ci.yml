@@ -200,3 +200,20 @@ jobs:
 
       - name: Run framework regression
         run: make test
+
+      # Cross-compiler parity for the discovery section records (roadmap
+      # milestone 10, step 1). The macOS leg already builds everything with
+      # Apple Clang against Mach-O section naming; this step adds upstream
+      # Linux clang, so both clang flavors and both object formats stay
+      # covered. fault_injection is the non-trivial case: nine hierarchy
+      # accesses and one observed edge recovered from compile-only objects,
+      # byte-compared against the executed plan inside the build.
+      - name: Access-set parity under Linux clang
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang
+          CXX=clang++ uv run --frozen cpptb test \
+            --project examples/counter --build-dir build/clang-parity/counter
+          CXX=clang++ uv run --frozen cpptb test \
+            --project examples/fault_injection \
+            --build-dir build/clang-parity/fault_injection
