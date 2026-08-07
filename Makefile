@@ -68,7 +68,7 @@ AUTHORING_CORE_CPP := \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/authoring_core.hpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 	$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp
-AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor process_pipeline analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component transaction_recording memory_model memory_model_direct register_prediction_validity register_backdoor register_hierarchy register_split register_wide register_enum register_memory register_sequences register_coverage register_maps register_user_effects structured_logging structured_log_history mixed_logging
+AUTHORING_CORE_KERNELS := control task_value clock_cycles timeout task_timeout wait_until event queue queue_sync all wide64 wide_echo_137 wide_slice fixed_mac array_index array_wide mem_rw hier_probe mem_backdoor mem_probe_read mem_probe_deposit mem_probe_read_deposit signal_edge array_multidim force_release packed_view force_direct hier_data timing_phases timing_phases_deferred test_lifecycle dynamic_spawn dynamic_task dynamic_spawn_scheduler dynamic_spawn_suspending dynamic_monitor process_pipeline analysis_fanout random_stimulus constrained_packet constraint_extensions coverage_sampling apb_component transaction_recording memory_model memory_model_direct register_prediction_validity register_backdoor register_hierarchy register_split register_wide register_enum register_memory register_sequences register_coverage register_maps register_user_effects structured_logging structured_log_history mixed_logging
 AUTHORING_CORE_KERNEL ?= control
 # Every measured benchmark binary is compiled the same way. Verilator applies
 # -Os by default to its generated model and no optimization at all to testbench
@@ -977,14 +977,14 @@ $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_DPI_GENERATED) $(CPPTB_PUBLIC_HEADERS) \
 		$(if $(filter mixed_logging,$(1)),$(CPPTB_SV_LOGGING_ASSETS)) \
 		$(CPPTB_CODEGEN_SOURCES) Makefile $(AUTHORING_CORE_BUILD_PROVENANCE) \
-		$(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
+		$(if $(filter timing_phases timing_phases_deferred,$(1)),src/verilator_timing_main.cpp)
 	mkdir -p $$(dir $$@)
-	verilator $(if $(filter timing_phases,$(1)),--cc --exe --build --vpi,--binary) --timing --no-sched-zero-delay \
+	verilator $(if $(filter timing_phases timing_phases_deferred,$(1)),--cc --exe --build --vpi,--binary) --timing --no-sched-zero-delay \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-BLKSEQ -Wno-BLKANDNBLK -Wno-UNUSEDSIGNAL \
 		-Wno-MULTIDRIVEN \
 		$(if $(filter mixed_logging,$(1)),-I$$(CURDIR)/include -DCPPTB_ENABLE_SV_LOGGING -DAUTHORING_CORE_MIXED_LOGGING) \
 		-MAKEFLAGS "OPT_FAST=$$(AUTHORING_CORE_OPT_FAST)" \
-		-CFLAGS "-std=c++20 $$(AUTHORING_CORE_OPT_FAST) -I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $(if $(filter timing_phases,$(1)),-DCPPTB_VERILATED_TOP=Vdpi_authoring_core -DCPPTB_VERILATOR_DIRECT_TIMING) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
+		-CFLAGS "-std=c++20 $$(AUTHORING_CORE_OPT_FAST) -I$$(CURDIR) -I$$(CURDIR)/include -DAUTHORING_CORE_KERNEL=$(2) $(if $(filter timing_phases timing_phases_deferred,$(1)),-DCPPTB_VERILATED_TOP=Vdpi_authoring_core -DCPPTB_VERILATOR_DIRECT_TIMING) $(if $(filter timing_phases_deferred,$(1)),-DCPPTB_DEFERRED_WRITES) $$(AUTHORING_CORE_EXTRA_CFLAGS)" \
 		$$(if $$(strip $$(AUTHORING_CORE_EXTRA_LDFLAGS)),-LDFLAGS "$$(AUTHORING_CORE_EXTRA_LDFLAGS)",) \
 		--Mdir $$(dir $$@) \
 		--top-module dpi_authoring_core \
@@ -994,7 +994,7 @@ $(AUTHORING_CORE_BUILD_DIR)/cpp_dpi_$(1)/Vdpi_authoring_core: \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/framework/dpi_transport.cpp \
 		$(AUTHORING_CORE_DIR)/testbenches/cpp_dpi/testbench.cpp \
 		$(if $(filter mixed_logging,$(1)),include/cpptb/sv/cpptb_sv_log_bridge.cpp) \
-		$(if $(filter timing_phases,$(1)),src/verilator_timing_main.cpp)
+		$(if $(filter timing_phases timing_phases_deferred,$(1)),src/verilator_timing_main.cpp)
 	python3 $(AUTHORING_CORE_BUILD_PROVENANCE) stamp --mode cpp_dpi \
 		--kernel $(1) --binary $$@ \
 		--opt-fast="$$(AUTHORING_CORE_OPT_FAST)" \
@@ -1034,6 +1034,7 @@ $(eval $(call AUTHORING_CORE_DPI_template,packed_view,24))
 $(eval $(call AUTHORING_CORE_DPI_template,force_direct,25))
 $(eval $(call AUTHORING_CORE_DPI_template,hier_data,26))
 $(eval $(call AUTHORING_CORE_DPI_template,timing_phases,27))
+$(eval $(call AUTHORING_CORE_DPI_template,timing_phases_deferred,27))
 $(eval $(call AUTHORING_CORE_DPI_template,queue_sync,28))
 $(eval $(call AUTHORING_CORE_DPI_template,test_lifecycle,29))
 $(eval $(call AUTHORING_CORE_DPI_template,dynamic_spawn,30))
