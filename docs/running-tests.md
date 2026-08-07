@@ -128,7 +128,6 @@ build/                               # generated and gitignored
             |   |-- dut.hpp          # stable public include
             |   |-- counter_dut.hpp
             |   |-- counter_binding.hpp
-            |   |-- discover_counter_clocks.cpp
             |   |-- dpi_counter.cpp
             |   `-- dpi_counter.sv
             |-- metadata/

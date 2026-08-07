@@ -259,8 +259,7 @@ CPPTB_$(2)_GENERATED := \
 	$$(CPPTB_$(2)_GENERATED_DIR)/dut.hpp \
 	$$(CPPTB_$(2)_GENERATED_DIR)/$(4)_binding.hpp \
 	$$(CPPTB_$(2)_GENERATED_DIR)/$(5).sv \
-	$$(CPPTB_$(2)_GENERATED_DIR)/$(5).cpp \
-	$$(CPPTB_$(2)_GENERATED_DIR)/discover_$(4)_clocks.cpp
+	$$(CPPTB_$(2)_GENERATED_DIR)/$(5).cpp
 CPPTB_$(2)_PROJECT_ARGS = \
 	--project $$(CPPTB_$(2)_DIR) \
 	--build-dir $$(abspath $$(BUILD_DIR)) \
