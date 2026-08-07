@@ -833,60 +833,60 @@ Three ways to close it, in increasing order of commitment. They are not
 alternatives so much as a sequence: each is useful on its own, and each makes
 the next smaller.
 
-1. **Name and validate the backend selection.** A `[build] timing_backend` key
-   threaded into code generation would replace a `--vpi` that does not deliver
-   the contract, emit the `--cc --exe --build` link both contract-complete
-   backends need, and reject the define combinations a project can currently
-   assemble by hand. Done means a project names a backend, `ReadWrite`,
-   `ReadOnly` and `NextTimeStep` either work or fail the build rather than the
-   run, and the timing conformance suite covers every selectable name. This is
-   plumbing over machinery that already exists and is already benchmarked in
-   [Performance](performance.md#timing-phase-dispatch).
-2. **Offer deferred writes.** A queued write applied at the next settle point,
-   alongside the immediate `set()`, would make a driver written the cocotb way
-   correct on any backend rather than only where phases are available. Done
-   means a driver that writes straight after an edge wait is correct in a
-   default build, with no phase waits and no drive-point convention, so a port
-   like the icache one needs neither the comment nor the edge-by-edge trace.
-   This is the one that makes a translated testbench correct rather than merely
-   expressible.
-3. **Make deferred the default after an edge wait.** The most familiar and the
-   largest change. It alters what existing testbenches do and costs a scheduler
-   round trip per write, so it needs a performance peer and a migration story
-   before it could be justified. It is the only option that removes the
-   difference entirely.
+1. **Name and validate the backend selection — done.** `[build]
+   timing_backend` accepts exactly two names, `"verilator-direct"` and
+   `"vpi"`, both contract-complete; the policy is two supported backends and
+   no more, because both sit at the privileged layer that sees the whole
+   event queue, which the SV-DPI experiments cannot. The key emits the
+   `--cc --exe --build --vpi` link against the framework host loop; a bare
+   `--vpi` in `verilator_args` and every hand-set timing define are rejected
+   at resolve time with the key named; the run-time diagnostic in a
+   backendless build names the key; and `make test` conformance-checks both
+   names on every run.
+2. **Offer deferred writes, as a project mode.** `deferred_writes = true` in
+   `cpptb.toml` makes `set()` itself carry cocotb's semantics -- queued,
+   flushed at the `ReadWrite` settle point the selected backend provides --
+   with `set_now()` as the marked escape hatch, mirroring cocotb's
+   `setimmediatevalue()`. There is no `set_deferred()` spelling: cocotb has
+   one write syntax and so does this. The mode requires `timing_backend`,
+   enforced at build time, which keeps one mechanism instead of a
+   default-build variant. Pinned semantics, matching cocotb exactly: a
+   `get()` between `set()` and the flush returns the simulator's current
+   value, not the queued one, and the conformance contract grows checks for
+   both that and write-lands-next-edge. Validation is outcome parity on one
+   Ibex port converted to the mode.
+3. **Flip the mode's default.** With 2 shaped as a project mode, full cocotb
+   parity out of the box is a change of default, not an API migration. It
+   still alters what existing testbenches do and costs a scheduler round trip
+   per write, so it waits for mileage on the opt-in and a `timing_phases`
+   benchmark peer under the `1.10x` guard.
 
-### What 1 and 2 would look like in use
+### What 1 looks like in use, and 2 will
 
-Neither exists. Both sketches below are proposals, and the spellings are
-placeholders.
-
-Option 1 replaces the `--vpi` stanza with a name the build understands, and
-rejects a combination it cannot honour instead of running it:
+Option 1 is implemented:
 
 ```toml
-# Not implemented.
 [build]
 timing_backend = "verilator-direct"   # or "vpi"
 ```
 
-Option 2 adds a queued write beside the immediate `set()`, so a driver written
-the cocotb way is correct with no phase wait and no drive-point convention:
+Option 2, under the mode, keeps one write spelling -- a driver written the
+cocotb way is correct with no drive-point convention:
 
 ```cpp
-// Not implemented.
+// Requires deferred_writes = true; not implemented yet.
 Task<void> driver(Dut dut) {
     while (true) {
         co_await RisingEdge{dut.clk};
-        dut.wdata.set_deferred(next_word());   // lands for the next edge
-        dut.wvalid.set_deferred(1);
+        dut.wdata.set(next_word());   // queued; lands for the next edge
+        dut.wvalid.set(1);
     }
 }
 ```
 
-Doing 1 and 2 would leave the framework familiar to a cocotb author without
-changing what any existing testbench does. 3 is a separate decision and should
-be taken on its own evidence.
+Doing 2 leaves the framework familiar to a cocotb author without changing
+what any existing testbench does. 3 is a separate decision and should be
+taken on its own evidence.
 
 ## Deliberate non-goals
 
