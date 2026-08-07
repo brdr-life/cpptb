@@ -39,6 +39,21 @@ The focused task-value run exercised the new confirmation path and passed at
 after the initial 16 pairs, so the saved `latest` artifact contains that newer
 measurement.
 
+## timing_phases_deferred certification (2026-08-07)
+
+The deferred-writes benchmark peer certified on its first admitted window:
+`0.8903x` independent median against the pure-SV twin (strata `0.8943` /
+`0.8997`, disagreement `0.44%`, CPU corroboration valid), with the immediate
+`timing_phases` kernel at `0.7383x` (strata `0.7326` / `0.7487`) in a
+comparable window minutes later. The deferred write model therefore costs
+about `1.21x` over immediate writes on this worst-case kernel -- every
+iteration is two writes plus ReadWrite/ReadOnly/NextTimeStep awaits and
+nothing else -- while still clearing the `hard_1_10` gate with room. Getting
+an admitted window took six attempts (deferred) and three (immediate); every
+veto was CPU corroboration flagging one or two spiked samples out of 32 on
+this shared host, never the wall-clock ratios, which never moved outside
+`0.85-0.95x`.
+
 ## register_coverage A/B against the coverage.hpp restructure (2026-08-07)
 
 The `register_coverage` kernel had no published ratio (the roadmap's "timing

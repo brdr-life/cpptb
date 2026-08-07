@@ -878,8 +878,14 @@ the next smaller.
 3. **Flip the mode's default.** With 2 shaped as a project mode, full cocotb
    parity out of the box is a change of default, not an API migration. It
    still alters what existing testbenches do and costs a scheduler round trip
-   per write, so it waits for mileage on the opt-in and a `timing_phases`
-   benchmark peer under the `1.10x` guard.
+   per write, so it waits for mileage on the opt-in. The benchmark peer it
+   also waited for exists and is certified: `timing_phases_deferred` -- the
+   same kernel and pure-SV reference, built with the mode on -- passes the
+   `1.10x` guard at `0.8903x` against the SV twin, with the immediate kernel
+   at `0.7383x` in a comparable admitted window. The write model's measured
+   cost on that worst case (two writes and three phase awaits per iteration,
+   nothing else) is therefore about `1.21x` over immediate writes, while
+   still beating the SV reference.
 
 ### What 1 and 2 look like in use
 
