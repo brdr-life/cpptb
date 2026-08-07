@@ -32,7 +32,7 @@ ports/<name>/    one directory per ported testbench
 
 [FINDINGS.md](FINDINGS.md) is the short version of what porting these
 testbenches found: eleven Verilator defects, fifteen in Ibex and lowRISC's DV
-library, seven in riscv-dv, one in Spike, and seven limitations of cpptb itself.
+library, seven in riscv-dv, one in Spike, and eight limitations of cpptb itself.
 Each entry links to the problematic code and says which feature it was hit
 through. It also carries an audit of every tool guard in the Ibex tree, tested
 rather than reasoned about — which is how the assertions came to be on by
