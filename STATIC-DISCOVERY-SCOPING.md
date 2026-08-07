@@ -1,6 +1,6 @@
 # Static hierarchy discovery — scoping report (roadmap milestone 10)
 
-Status: scoping complete. Untracked working document; not part of the docs tree.
+Status: scoping complete. Decision record for roadmap milestone 10; kept at the repository root rather than in the published docs tree.
 
 Everything below is labeled **[measured]** (reproduced on this machine during this
 scoping) or **[inferred]** (read from code, not executed). Prototype commands and
