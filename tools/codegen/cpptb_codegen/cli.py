@@ -60,6 +60,19 @@ def _add_project_options(parser: argparse.ArgumentParser) -> None:
         help="cpptb checkout, installation prefix, or include directory",
     )
     parser.add_argument(
+        "--timing-backend",
+        choices=("verilator-direct", "vpi"),
+        help="override build.timing_backend, so one project can be built "
+        "and compared under both supported phase backends",
+    )
+    parser.add_argument(
+        "--deferred-writes",
+        action="store_true",
+        default=None,
+        help="override build.deferred_writes: set() queues and flushes at "
+        "the ReadWrite phase (requires a timing backend)",
+    )
+    parser.add_argument(
         "--rebuild", action="store_true", help="ignore the build cache"
     )
     parser.add_argument(
@@ -118,6 +131,8 @@ def _resolve(args: argparse.Namespace) -> ProjectSpec:
         build_dir=args.build_dir,
         simulator=args.simulator,
         experimental_four_state=args.experimental_four_state,
+        timing_backend=args.timing_backend,
+        deferred_writes=args.deferred_writes,
         refresh_top=args.rebuild,
     )
 
