@@ -2811,11 +2811,44 @@ def render_cpp_hierarchy(
         for parameter in sorted(
             parameters_by_parent.get(path, []), key=lambda item: item.hdl_path
         ):
-            lines.append(
-                f"    static constexpr std::int64_t "
-                f"{cpp_identifier(parameter.cpp_path[-1])} = "
-                f"{parameter.value};"
-            )
+            name = cpp_identifier(parameter.cpp_path[-1])
+            value = parameter.value
+            if -(2**63) <= value < 2**63:
+                lines.append(
+                    f"    static constexpr std::int64_t {name} = {value};"
+                )
+            elif 0 <= value < 2**64:
+                lines.append(
+                    f"    static constexpr std::uint64_t {name} = "
+                    f"{value}ULL;"
+                )
+            elif value < 0:
+                raise CodegenError(
+                    f"parameter {parameter.hdl_path} has a negative value "
+                    f"wider than 64 bits ({value}); no encoding is defined "
+                    f"for it, and truncating silently is how the positive "
+                    f"case shipped wrong constants"
+                )
+            else:
+                # Wider than any C++ integer literal. Emitting the decimal as
+                # int64_t was a hard error on clang and a silently truncated
+                # -- wrong -- constant on GCC, which warned into an unread
+                # build log. Little-endian 64-bit words carry the exact value
+                # on both compilers.
+                words: list[str] = []
+                magnitude = value if value >= 0 else -value
+                while magnitude:
+                    words.append(f"0x{magnitude & (2**64 - 1):016x}ULL")
+                    magnitude >>= 64
+                rendered = ", ".join(words)
+                lines.append(
+                    f"    // {parameter.hdl_path} = {value} "
+                    f"(wider than 64 bits; little-endian words)"
+                )
+                lines.append(
+                    f"    static constexpr std::uint64_t {name}"
+                    f"[{len(words)}] = {{{rendered}}};"
+                )
         for signal in sorted(
             signals_by_parent.get(path, []), key=lambda item: item.hdl_path
         ):
@@ -2856,23 +2889,76 @@ def hierarchy_signal_member_expression(signal: HierarchySignal) -> str:
 def render_cpp_hierarchy_lookup(hierarchy: HierarchyCatalog) -> list[str]:
     if not hierarchy.signals:
         return []
+    # A flat dispatch, deliberately, and a cheap one. The obvious
+    # `else if constexpr` chain nests each arm inside the previous else, and
+    # at Ibex scale -- 7,216 signals -- that depth overflows clang's
+    # recursive parser and segfaults cc1 (GCC parses the same nesting
+    # iteratively). Flat `if constexpr` blocks parse at depth one, but the
+    # tail diagnostic then needs a condition of its own, so the paths live in
+    # an array and a consteval search names the arm. The array holds
+    # `const char*`, not string_view: constructing 7,216 string_views is
+    # 7,216 constexpr strlens inside one initializer, which blows clang's
+    # constexpr step budget. The search is binary over the sorted paths --
+    # thirteen comparisons instead of a linear scan -- so a lookup costs
+    # nothing measurable at any scale.
+    ordered = sorted(hierarchy.signals, key=lambda signal: signal.hdl_path)
     lines = [
-        "    template <cpptb::hierarchy::FixedString Path>",
-        "    [[nodiscard]] constexpr auto cpptb_signal() const {",
+        "    static constexpr const char* cpptb_hierarchy_paths[] = {",
     ]
-    for index, signal in enumerate(hierarchy.signals):
-        keyword = "if" if index == 0 else "else if"
+    for signal in ordered:
+        lines.append(f"        {json.dumps(signal.hdl_path)},")
+    lines.extend(
+        [
+            "    };",
+            "",
+            "    // Three-way compare against a NUL-terminated entry, written",
+            "    // out because std::char_traits::compare needs a length this",
+            "    // deliberately never computes.",
+            "    static consteval int cpptb_hierarchy_compare(",
+            "        const char* entry, std::string_view path) {",
+            "        std::size_t at = 0;",
+            "        for (; at < path.size(); ++at) {",
+            "            if (entry[at] == '\\0') return -1;",
+            "            if (entry[at] != path[at]) {",
+            "                return entry[at] < path[at] ? -1 : 1;",
+            "            }",
+            "        }",
+            "        return entry[at] == '\\0' ? 0 : 1;",
+            "    }",
+            "",
+            "    static consteval std::size_t cpptb_hierarchy_index(",
+            "        std::string_view path) {",
+            "        std::size_t low = 0;",
+            "        std::size_t high = std::size(cpptb_hierarchy_paths);",
+            "        while (low < high) {",
+            "            const std::size_t middle = low + (high - low) / 2;",
+            "            const int order = cpptb_hierarchy_compare(",
+            "                cpptb_hierarchy_paths[middle], path);",
+            "            if (order == 0) return middle;",
+            "            if (order < 0) low = middle + 1;",
+            "            else high = middle;",
+            "        }",
+            "        return std::size(cpptb_hierarchy_paths);",
+            "    }",
+            "",
+            "    template <cpptb::hierarchy::FixedString Path>",
+            "    [[nodiscard]] constexpr auto cpptb_signal() const {",
+            "        constexpr std::size_t cpptb_index =",
+            "            cpptb_hierarchy_index(Path.view());",
+        ]
+    )
+    for index, signal in enumerate(ordered):
         lines.extend(
             [
-                f"        {keyword} constexpr (Path.view() == "
-                f"{json.dumps(signal.hdl_path)}) {{",
+                f"        if constexpr (cpptb_index == {index}) {{",
                 f"            return {hierarchy_signal_member_expression(signal)};",
                 "        }",
             ]
         )
     lines.extend(
         [
-            "        else {",
+            f"        if constexpr (cpptb_index == "
+            f"{len(ordered)}) {{",
             "            static_assert(Path.view().empty(),",
             '                          "HDL path is not present in the generated DUT hierarchy");',
             "            return cpptb::hierarchy::UnsupportedSignal{};",
