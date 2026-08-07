@@ -73,12 +73,15 @@ for the detailed contracts.
 
 Stated here rather than discovered the hard way:
 
-- **Scheduler phase waits.** `co_await ReadWrite{}`, `ReadOnly{}`, and
-  `NextTimeStep{}` report an actionable error in a default build rather than
-  running: the default link owns clocks and timers but dispatches no simulator
-  phases. Sample after `RisingEdge`, drive after `FallingEdge` instead — that is
-  the supported pattern, and [scheduling](docs/scheduling.md) works through the
-  gap and the plan for closing it.
+- **Scheduler phase waits need one line of opt-in.** `co_await ReadWrite{}`,
+  `ReadOnly{}`, and `NextTimeStep{}` error out in a default build — the
+  default link dispatches no simulator phases — and work under
+  `timing_backend = "verilator-direct"` or `"vpi"` in `cpptb.toml`, both
+  contract-checked on every CI run. Projects that also set
+  `deferred_writes = true` get cocotb's write model: `set()` after an edge
+  wait lands on the next edge, with `set_now()` as the immediate escape
+  hatch. Without the opt-in, sample after `RisingEdge` and drive after
+  `FallingEdge`; [scheduling](docs/scheduling.md) covers both styles.
 - **Verilator is the only end-to-end simulator.** The generated transport is
   standard SV-DPI and elaboration is simulator-independent through Slang, but
   nothing else is exercised in CI yet.
