@@ -609,7 +609,7 @@ required keeping the transport's "measured pruning benefit"; scoping found no
 such measurement exists — ports were never value-pruned, and discovery prunes
 hierarchy exports and edge observers. The real bar is **output parity**:
 byte-identical `access.json` against the executed path, gated in CI until the
-executed path is deleted. The steps, from the scoping report:
+executed path is deleted. The steps, from the scoping report (`STATIC-DISCOVERY-SCOPING.md` at the repository root):
 
 1. **Access set without execution.** Emit discovery records into a dedicated
    object section, compile the testbench translation units with `-c` — no
