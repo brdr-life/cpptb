@@ -48,6 +48,7 @@ milestone blockers. The current development priority is the framework.
 | 7 | [Debugging and release tooling](#7-debugging-and-release-tooling) | <span class="roadmap-status roadmap-status--next">In progress</span> | Process-aware logging and scheduler wait diagnostics are done; waveforms and distributable packages remain |
 | 8 | [Coherent clock and reset control](#8-coherent-clock-and-reset-control) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Runtime clock ownership and explicit reusable reset components |
 | 9 | [Batched execution and run-ahead experiments](#9-batched-execution-and-run-ahead-experiments) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Reduce DPI scheduler resumptions across fine-grained timing boundaries |
+| 10 | [Static hierarchy discovery](#10-static-hierarchy-discovery) | <span class="roadmap-status roadmap-status--planned">Planned</span> | Produce the discovery outputs without executing user test code during the build |
 | - | [No-priority backlog](#no-priority-backlog) | <span class="roadmap-status roadmap-status--planned">No priority</span> | Deferred interoperability, protocol-component, synchronization, lookup, and harness work |
 
 Select a milestone to jump to its detailed scope below.
@@ -579,6 +580,30 @@ without regressing existing workloads beyond the repository's `1.10x` policy.
 Small register-handle and coroutine-wrapper changes are not priority
 experiments because controlled decomposition shows they cannot close the
 current gap.
+
+## 10. Static hierarchy discovery
+
+**Status:** <span class="roadmap-status roadmap-status--planned">Planned</span>
+
+The build's hierarchy-discovery pass compiles the testbench under
+`CPPTB_HIERARCHY_DISCOVERY` and then **runs it** to record which signals the
+test code touches, which is what feeds the usage-pruned DPI transport and the
+clock configuration. Executing user code inside the build is the root of the
+worst failure mode a newcomer can hit: a testbench that hangs — an edge wait
+nothing drives, a loop before the first `co_await` — hangs the *build*, and the
+failure reads as a compiler problem. A timeout would rename the symptom;
+this milestone removes the cause.
+
+Done means the discovery outputs — the access set and the clock configuration —
+are produced without executing user test code, the hang-the-build failure mode
+no longer exists, and a testbench that builds today builds identically with no
+source changes. The usage-pruned transport must keep its measured benefit:
+discovery exists so the generated bindings carry only the signals a test uses,
+and any replacement is judged against that same pruning quality. Scoping the
+candidate approaches — compile-time registration through the typed accessors,
+static analysis of the test translation units, a bounded instrumented dry run
+that cannot block, or an explicit declaration escape hatch — is under way; the
+scoping report will pick the approach and split the milestone into steps.
 
 ## No-priority backlog
 
