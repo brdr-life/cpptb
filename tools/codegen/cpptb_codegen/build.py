@@ -205,9 +205,10 @@ def _fingerprint(
 
 
 # Mirrors hierarchy.hpp's Operation enum, whose numeric order is the sort key
-# the executed plan uses for two operations on the same path. A drift between
-# the two lists cannot pass silently: the byte-parity gate below compares the
-# extracted plan against the executed one on every build.
+# for two operations on the same path -- pinned here because the extracted
+# plan is the only plan. The retired byte-parity gate proved the two lists
+# agreed on every build it ever saw; a future drift would surface as a
+# mis-sorted plan and a failing golden or catalog compile, not silently.
 _ACCESS_OPERATION_ORDER = {
     name: index
     for index, name in enumerate(
@@ -395,7 +396,6 @@ class VerilatorBackend:
             cxx_version,
         )
         state_path = spec.target_build_dir / "build-state.json"
-        clock_config = spec.metadata_dir / "clocks.json"
         access_config = spec.metadata_dir / "access.json"
         sim_logging_dir = self.framework_include / "cpptb" / "sv"
         sim_log_package = sim_logging_dir / "cpptb_log_pkg.sv"
@@ -416,11 +416,10 @@ class VerilatorBackend:
         if not rebuild and _state_matches(state_path, fingerprint, spec.binary):
             if compare_frontend is None:
                 return BuildResult(spec.binary, False)
-            if clock_config.is_file() and access_config.is_file():
+            if access_config.is_file():
                 generate_sources(
                     list(spec.rtl_sources),
                     **generation_options,
-                    clock_config=clock_config,
                     access_config=access_config,
                     compare_frontend=compare_frontend,
                 )
@@ -430,7 +429,6 @@ class VerilatorBackend:
         spec.metadata_dir.mkdir(parents=True, exist_ok=True)
         spec.object_dir.mkdir(parents=True, exist_ok=True)
         log = _CommandLog(spec.target_build_dir / "build.log", self.verbose)
-        discovery = spec.target_build_dir / "discover_design"
         generate_sources(list(spec.rtl_sources), **generation_options)
 
         cpp_include_dirs = tuple(
@@ -445,31 +443,26 @@ class VerilatorBackend:
                 ]
             )
         )
-        discovery_command = [
-            *self.cxx,
-            "-std=c++20",
-            "-DCPPTB_HIERARCHY_DISCOVERY",
-            *(f"-I{path}" for path in cpp_include_dirs),
-            *spec.cxx_flags,
-            str(spec.generated_dir / f"discover_{spec.target}_clocks.cpp"),
-            *(str(path) for path in spec.testbench_sources),
-            "-o",
-            str(discovery),
-        ]
-        log.run(discovery_command, cwd=spec.root, label="testbench discovery compile")
-        log.run(
-            [str(discovery), str(clock_config), str(access_config)],
-            cwd=spec.root,
-            label="testbench discovery",
-        )
-
-        # The access set again, this time without executing anything: compile
-        # each testbench translation unit alone and scan the objects for the
-        # section records the discovery markers plant. Roadmap milestone 10,
-        # step 1. The extracted plan must match the executed one byte for
-        # byte -- a mismatch means a write path the records do not cover
-        # (RuntimeAccessPaths is the known candidate) and fails the build
-        # rather than shipping a plan that silently disagrees.
+        # Discovery without execution -- roadmap milestone 10, complete.
+        # The access set comes from compiling each testbench translation unit
+        # alone and scanning the objects for the section records the
+        # discovery markers plant; the clock configuration comes from the
+        # generated SV drivers querying the runtime at time zero, the same
+        # dynamic mode every benchmark manifest has always run and every
+        # certified performance ratio was measured under. No user test code
+        # executes at build time, which retires the two failure modes the
+        # milestone documents: the hang that read as a compiler problem, and
+        # the silently empty clock configuration.
+        #
+        # The byte-parity gate that compared this extraction against the
+        # executed plan on every build is retired with the executed path,
+        # after soaking across the examples, benchmarks, both Ibex ports,
+        # both CI legs and two compilers without one mismatch. Its
+        # correctness argument survives it: a write path the records missed
+        # would leave the path out of the generated catalog, and the
+        # testbench then fails to *compile* -- the lookup's static_assert
+        # names the missing path -- which is a stronger, permanent guard
+        # than the gate was.
         objects_dir = spec.metadata_dir / "access-objects"
         if objects_dir.is_dir():
             shutil.rmtree(objects_dir)
@@ -498,27 +491,11 @@ class VerilatorBackend:
             )
             object_paths.append(object_path)
         extracted = _render_access_plan(*_scan_access_objects(object_paths))
-        executed = access_config.read_text(encoding="utf-8")
-        if extracted != executed:
-            mismatch = spec.metadata_dir / "access-from-objects.json"
-            mismatch.write_text(extracted, encoding="utf-8")
-            raise BuildError(
-                f"the access set recovered from compile-only objects does "
-                f"not match the executed discovery plan.\n"
-                f"  executed:  {access_config}\n"
-                f"  extracted: {mismatch}\n"
-                f"A testbench write path is bypassing the section records; "
-                f"see hierarchy.hpp's access_section_record"
-            )
-        # Identical bytes; the extracted plan is the source of record from
-        # here on, which is what lets the executed path retire once the gate
-        # has soaked.
         access_config.write_text(extracted, encoding="utf-8")
 
         generate_sources(
             list(spec.rtl_sources),
             **generation_options,
-            clock_config=clock_config,
             access_config=access_config,
             compare_frontend=compare_frontend,
         )

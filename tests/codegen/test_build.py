@@ -18,21 +18,9 @@ class FakeCommandLog:
 
     def run(self, command, *, cwd, label):
         self.commands.append((label, list(command)))
-        if label == "testbench discovery":
-            Path(command[1]).write_text(
-                '{"schema_version": 1, "clocks": []}\n'
-            )
-            # The exact serialization the real discovery binary emits, via
-            # the same renderer the object-scan path uses, so the byte-parity
-            # gate holds in the faked pipeline exactly as it does in a real
-            # build.
-            from cpptb_codegen.build import _render_access_plan
-
-            Path(command[2]).write_text(_render_access_plan([], []))
         if label == "access-set object compile":
             # A compile the fake pipeline never runs; the scanner reads the
-            # object, so give it an empty one -- no records, matching the
-            # empty executed plan above.
+            # object, so give it an empty one -- an empty access plan.
             Path(command[command.index("-o") + 1]).write_bytes(b"")
         if label == "Verilator build":
             object_dir = Path(command[command.index("--Mdir") + 1])
@@ -200,9 +188,14 @@ class BuildPipelineTests(unittest.TestCase):
             first_generation = generate.call_args_list[0].kwargs
             final_generation = generate.call_args_list[1].kwargs
             self.assertEqual(first_generation["top"], "counter")
+            # No generation ever receives a clock_config: the build passes
+            # none, so the generated drivers query the runtime at time zero
+            # (dynamic clocks), the same mode the benchmark manifests run.
             self.assertNotIn("clock_config", first_generation)
+            self.assertNotIn("clock_config", final_generation)
             self.assertEqual(
-                final_generation["clock_config"], spec.metadata_dir / "clocks.json"
+                final_generation["access_config"],
+                spec.metadata_dir / "access.json",
             )
             self.assertEqual(
                 generate.call_args_list[2].kwargs["compare_frontend"],

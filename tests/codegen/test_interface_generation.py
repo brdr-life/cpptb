@@ -271,6 +271,7 @@ class InterfaceRuntimeTests(unittest.TestCase):
                 target="interface_catalog",
                 output_dir=generated,
                 base_dir=REPO,
+                clock_discovery_source=True,
             )
             header = (generated / "interface_catalog_dut.hpp").read_text()
             wrapper = (generated / "dpi_interface_catalog.sv").read_text()

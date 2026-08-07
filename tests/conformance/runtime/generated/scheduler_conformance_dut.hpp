@@ -272,48 +272,96 @@ struct SchedulerConformanceDut {
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 10, "row", 32, true, cpptb::probe::Value<32>, false> row;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 11, "unused_predicate", 1, true, cpptb::probe::Value<1>, true> unused_predicate;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 12, "unused_stable", 1, true, cpptb::probe::Value<1>, true> unused_stable;
+    static constexpr const char* cpptb_hierarchy_paths[] = {
+        "column",
+        "force_counter",
+        "force_memory",
+        "force_variable_u64",
+        "force_variable_wide",
+        "index",
+        "internal_memory",
+        "internal_net",
+        "internal_u64",
+        "internal_wide",
+        "row",
+        "unused_predicate",
+        "unused_stable",
+    };
+
+    // Three-way compare against a NUL-terminated entry, written
+    // out because std::char_traits::compare needs a length this
+    // deliberately never computes.
+    static consteval int cpptb_hierarchy_compare(
+        const char* entry, std::string_view path) {
+        std::size_t at = 0;
+        for (; at < path.size(); ++at) {
+            if (entry[at] == '\0') return -1;
+            if (entry[at] != path[at]) {
+                return entry[at] < path[at] ? -1 : 1;
+            }
+        }
+        return entry[at] == '\0' ? 0 : 1;
+    }
+
+    static consteval std::size_t cpptb_hierarchy_index(
+        std::string_view path) {
+        std::size_t low = 0;
+        std::size_t high = std::size(cpptb_hierarchy_paths);
+        while (low < high) {
+            const std::size_t middle = low + (high - low) / 2;
+            const int order = cpptb_hierarchy_compare(
+                cpptb_hierarchy_paths[middle], path);
+            if (order == 0) return middle;
+            if (order < 0) low = middle + 1;
+            else high = middle;
+        }
+        return std::size(cpptb_hierarchy_paths);
+    }
+
     template <cpptb::hierarchy::FixedString Path>
     [[nodiscard]] constexpr auto cpptb_signal() const {
-        if constexpr (Path.view() == "column") {
+        constexpr std::size_t cpptb_index =
+            cpptb_hierarchy_index(Path.view());
+        if constexpr (cpptb_index == 0) {
             return (*this).column;
         }
-        else if constexpr (Path.view() == "force_counter") {
+        if constexpr (cpptb_index == 1) {
             return (*this).force_counter;
         }
-        else if constexpr (Path.view() == "force_memory") {
+        if constexpr (cpptb_index == 2) {
             return (*this).force_memory;
         }
-        else if constexpr (Path.view() == "force_variable_u64") {
+        if constexpr (cpptb_index == 3) {
             return (*this).force_variable_u64;
         }
-        else if constexpr (Path.view() == "force_variable_wide") {
+        if constexpr (cpptb_index == 4) {
             return (*this).force_variable_wide;
         }
-        else if constexpr (Path.view() == "index") {
+        if constexpr (cpptb_index == 5) {
             return (*this).index;
         }
-        else if constexpr (Path.view() == "internal_memory") {
+        if constexpr (cpptb_index == 6) {
             return (*this).internal_memory;
         }
-        else if constexpr (Path.view() == "internal_net") {
+        if constexpr (cpptb_index == 7) {
             return (*this).internal_net;
         }
-        else if constexpr (Path.view() == "internal_u64") {
+        if constexpr (cpptb_index == 8) {
             return (*this).internal_u64;
         }
-        else if constexpr (Path.view() == "internal_wide") {
+        if constexpr (cpptb_index == 9) {
             return (*this).internal_wide;
         }
-        else if constexpr (Path.view() == "row") {
+        if constexpr (cpptb_index == 10) {
             return (*this).row;
         }
-        else if constexpr (Path.view() == "unused_predicate") {
+        if constexpr (cpptb_index == 11) {
             return (*this).unused_predicate;
         }
-        else if constexpr (Path.view() == "unused_stable") {
+        if constexpr (cpptb_index == 12) {
             return (*this).unused_stable;
         }
-        else {
+        if constexpr (cpptb_index == 13) {
             static_assert(Path.view().empty(),
                           "HDL path is not present in the generated DUT hierarchy");
             return cpptb::hierarchy::UnsupportedSignal{};
