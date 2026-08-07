@@ -12,6 +12,7 @@ extra_javascript = ["_assets/code-tabs.js"]
 nav = [
   { "Home" = "index.md" },
   { "Getting started" = "getting-started.md" },
+  { "Coming from cocotb" = "coming-from-cocotb.md" },
   { "Guides" = [
     { "Testbench authoring" = "testbench-authoring.md" },
     { "Verification components" = [
