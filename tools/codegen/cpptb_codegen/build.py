@@ -204,6 +204,108 @@ def _fingerprint(
     return digest.hexdigest()
 
 
+# Mirrors hierarchy.hpp's Operation enum, whose numeric order is the sort key
+# the executed plan uses for two operations on the same path. A drift between
+# the two lists cannot pass silently: the byte-parity gate below compares the
+# extracted plan against the executed one on every build.
+_ACCESS_OPERATION_ORDER = {
+    name: index
+    for index, name in enumerate(
+        (
+            "get",
+            "deposit",
+            "force",
+            "release",
+            "rising_edge",
+            "falling_edge",
+            "any_edge",
+            "get_logic",
+            "deposit_logic",
+            "force_logic",
+        )
+    )
+}
+
+_ACCESS_RECORD = b"CPPTB-ACCESS-v1;"
+_EDGE_RECORD = b"CPPTB-EDGE-v1;"
+
+
+def _scan_access_objects(
+    objects: Sequence[Path],
+) -> tuple[list[tuple[str, str]], list[int]]:
+    """Recover the access set from compile-only objects.
+
+    Each discovery marker instantiation plants a NUL-terminated record in the
+    `cpptb_access` object section, so a raw byte scan is enough -- no object
+    format parsing, which keeps ELF and Mach-O identical here. Duplicates
+    across translation units collapse exactly as the executed plan collapses
+    them, because both ends sort and dedupe.
+    """
+    accesses: set[tuple[str, str]] = set()
+    edges: set[int] = set()
+    for path in objects:
+        data = path.read_bytes()
+        for prefix in (_ACCESS_RECORD, _EDGE_RECORD):
+            at = data.find(prefix)
+            while at != -1:
+                end = data.find(b"\0", at)
+                if end == -1:
+                    raise BuildError(
+                        f"unterminated discovery record in {path}; the "
+                        f"object is truncated or the record emission changed"
+                    )
+                record = data[at + len(prefix) : end].decode(
+                    "utf-8", errors="replace"
+                )
+                if prefix is _ACCESS_RECORD:
+                    operation, _, access_path = record.partition(";")
+                    if operation not in _ACCESS_OPERATION_ORDER:
+                        raise BuildError(
+                            f"unknown access operation {operation!r} in "
+                            f"{path}; hierarchy.hpp's Operation enum and "
+                            f"_ACCESS_OPERATION_ORDER have drifted"
+                        )
+                    accesses.add((access_path, operation))
+                else:
+                    edges.add(int(record))
+                at = data.find(prefix, end)
+    ordered = sorted(
+        accesses,
+        key=lambda item: (item[0], _ACCESS_OPERATION_ORDER[item[1]]),
+    )
+    return ordered, sorted(edges)
+
+
+def _json_escape(value: str) -> str:
+    # The exact escape set write_discovered_access_plan applies; anything
+    # wider would break the byte-parity gate, which is the point of the gate.
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+
+
+def _render_access_plan(
+    accesses: Sequence[tuple[str, str]], edges: Sequence[int]
+) -> str:
+    """Byte-for-byte the serialization of write_discovered_access_plan."""
+    out = ['{\n  "schema_version": 1,\n  "accesses": [']
+    for index, (path, operation) in enumerate(accesses):
+        out.append("\n" if index == 0 else ",\n")
+        out.append(
+            f'    {{"path": "{_json_escape(path)}", '
+            f'"operation": "{operation}"}}'
+        )
+    out.append("" if not accesses else "\n  ")
+    out.append('],\n  "port_edges": [')
+    out.append(", ".join(str(identifier) for identifier in edges))
+    out.append("]\n}\n")
+    return "".join(out)
+
+
 def _state_matches(path: Path, fingerprint: str, binary: Path) -> bool:
     if not binary.is_file():
         return False
@@ -360,6 +462,58 @@ class VerilatorBackend:
             cwd=spec.root,
             label="testbench discovery",
         )
+
+        # The access set again, this time without executing anything: compile
+        # each testbench translation unit alone and scan the objects for the
+        # section records the discovery markers plant. Roadmap milestone 10,
+        # step 1. The extracted plan must match the executed one byte for
+        # byte -- a mismatch means a write path the records do not cover
+        # (RuntimeAccessPaths is the known candidate) and fails the build
+        # rather than shipping a plan that silently disagrees.
+        objects_dir = spec.metadata_dir / "access-objects"
+        if objects_dir.is_dir():
+            shutil.rmtree(objects_dir)
+        objects_dir.mkdir(parents=True)
+        object_paths: list[Path] = []
+        for index, source in enumerate(spec.testbench_sources):
+            object_path = objects_dir / f"{index:03d}-{source.stem}.o"
+            log.run(
+                [
+                    *self.cxx,
+                    "-std=c++20",
+                    "-DCPPTB_HIERARCHY_DISCOVERY",
+                    # Bitcode objects would hide the section from a byte
+                    # scan; discovery objects are never linked, so this
+                    # costs nothing.
+                    "-fno-lto",
+                    *(f"-I{path}" for path in cpp_include_dirs),
+                    *spec.cxx_flags,
+                    "-c",
+                    str(source),
+                    "-o",
+                    str(object_path),
+                ],
+                cwd=spec.root,
+                label="access-set object compile",
+            )
+            object_paths.append(object_path)
+        extracted = _render_access_plan(*_scan_access_objects(object_paths))
+        executed = access_config.read_text(encoding="utf-8")
+        if extracted != executed:
+            mismatch = spec.metadata_dir / "access-from-objects.json"
+            mismatch.write_text(extracted, encoding="utf-8")
+            raise BuildError(
+                f"the access set recovered from compile-only objects does "
+                f"not match the executed discovery plan.\n"
+                f"  executed:  {access_config}\n"
+                f"  extracted: {mismatch}\n"
+                f"A testbench write path is bypassing the section records; "
+                f"see hierarchy.hpp's access_section_record"
+            )
+        # Identical bytes; the extracted plan is the source of record from
+        # here on, which is what lets the executed path retire once the gate
+        # has soaked.
+        access_config.write_text(extracted, encoding="utf-8")
 
         generate_sources(
             list(spec.rtl_sources),

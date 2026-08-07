@@ -22,9 +22,18 @@ class FakeCommandLog:
             Path(command[1]).write_text(
                 '{"schema_version": 1, "clocks": []}\n'
             )
-            Path(command[2]).write_text(
-                '{"schema_version": 1, "accesses": [], "port_edges": []}\n'
-            )
+            # The exact serialization the real discovery binary emits, via
+            # the same renderer the object-scan path uses, so the byte-parity
+            # gate holds in the faked pipeline exactly as it does in a real
+            # build.
+            from cpptb_codegen.build import _render_access_plan
+
+            Path(command[2]).write_text(_render_access_plan([], []))
+        if label == "access-set object compile":
+            # A compile the fake pipeline never runs; the scanner reads the
+            # object, so give it an empty one -- no records, matching the
+            # empty executed plan above.
+            Path(command[command.index("-o") + 1]).write_bytes(b"")
         if label == "Verilator build":
             object_dir = Path(command[command.index("--Mdir") + 1])
             top = command[command.index("--top-module") + 1]

@@ -157,9 +157,52 @@ struct AccessMarker {
     inline static Registration registration{};
 };
 
+#ifdef CPPTB_HIERARCHY_DISCOVERY
+// The same registrations, readable without running anything. Each marker
+// instantiation also plants a NUL-terminated record in a dedicated object
+// section, so compiling the testbench translation units with `-c` is enough
+// for the build to recover the access set: it scans the objects for the
+// records below, with no generated main, no link, and no execution of test
+// code. The executed path produces the identical plan -- the build compares
+// the two byte for byte until the executed path is retired.
+#ifdef __APPLE__
+#define CPPTB_DISCOVERY_SECTION "__DATA,cpptb_access"
+#else
+#define CPPTB_DISCOVERY_SECTION "cpptb_access"
+#endif
+
+template <std::size_t Size>
+struct SectionRecord {
+    char value[Size]{};
+};
+
+template <FixedString Path, Operation SelectedOperation>
+consteval auto make_access_record() {
+    constexpr std::string_view prefix = "CPPTB-ACCESS-v1;";
+    constexpr std::string_view operation = operation_name(SelectedOperation);
+    constexpr std::string_view path = Path.view();
+    SectionRecord<16 + operation.size() + 1 + path.size() + 1> record{};
+    std::size_t at = 0;
+    for (const char character : prefix) record.value[at++] = character;
+    for (const char character : operation) record.value[at++] = character;
+    record.value[at++] = ';';
+    for (const char character : path) record.value[at++] = character;
+    record.value[at] = '\0';
+    return record;
+}
+
+template <FixedString Path, Operation SelectedOperation>
+__attribute__((used, section(CPPTB_DISCOVERY_SECTION)))
+inline constexpr auto access_section_record =
+    make_access_record<Path, SelectedOperation>();
+#endif  // CPPTB_HIERARCHY_DISCOVERY
+
 template <FixedString Path, Operation SelectedOperation>
 inline void mark_access() {
     (void)&AccessMarker<Path, SelectedOperation>::registration;
+#ifdef CPPTB_HIERARCHY_DISCOVERY
+    (void)&access_section_record<Path, SelectedOperation>;
+#endif
 }
 
 inline void mark_access(std::string_view path, Operation operation) {
