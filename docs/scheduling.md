@@ -74,65 +74,54 @@ Generated DPI remains the signal and data transport in every mode. The timing
 backend only determines how the simulator resumes `ReadWrite`, `ReadOnly`, and
 `NextTimeStep` waiters.
 
+cpptb supports exactly two timing backends, selected by name in `cpptb.toml`:
+
+```toml
+[build]
+timing_backend = "verilator-direct"   # fastest; Verilator's scheduler, driven directly
+# or
+timing_backend = "vpi"                # standard VPI callbacks; the portable route
+```
+
 | Timing backend | Status | Timing contract | Portability |
 |---|---|---|---|
-| Direct Verilator dispatch | Supported; used by the repository's own conformance and benchmark flows | Complete | Verilator-specific |
-| Standard VPI callbacks | Supported; used by the repository's own conformance flow | Complete | Standard simulator API |
-| Generated SV-DPI calendar | Experimental | Complete for generated and observed events | Cross-simulator validation pending |
+| `verilator-direct` | Supported; conformance-checked by every `make test` | Complete | Verilator-specific |
+| `vpi` | Supported; conformance-checked by every `make test` | Complete | Standard simulator API; cross-simulator validation is roadmap milestone 6 |
+| Generated SV-DPI calendar | Experimental; not selectable through `timing_backend` | Complete for generated and observed events | Cross-simulator validation pending |
 
 The generated calendar owns framework clocks and timers and observes selected
 external signals, but standard DPI cannot query the simulator's complete event
 queue. Its `NextTimeStep` therefore cannot yet promise to wake for an arbitrary
 unobserved internal DUT event. Direct Verilator dispatch and standard VPI are
-the supported contract-complete choices. Both need cpptb to own the host loop,
-which means a `--cc --exe --build` link against `src/verilator_timing_main.cpp`
-rather than `--binary`. See [Performance](performance.md) for the exact backend
-comparison.
+the supported contract-complete choices. Both own the host loop through
+`src/verilator_timing_main.cpp`, and `timing_backend` emits that link; the two
+build identically apart from one define. See [Performance](performance.md) for
+the exact backend comparison.
 
-!!! warning "No supported `cpptb build` configuration provides the timing phases"
+!!! warning "Phase waits need a named backend"
 
-    There is no `cpptb.toml` timing-backend key. A default `cpptb build` links
-    Verilator's own `--binary` main, which owns clocks and timers but
-    dispatches no phases, so `ReadWrite`, `ReadOnly` and `NextTimeStep` fail at
-    run time in a project built that way. The run-time message names this
-    stanza:
+    A default `cpptb build` links Verilator's own `--binary` main, which owns
+    clocks and timers but dispatches no phases, so `ReadWrite`, `ReadOnly` and
+    `NextTimeStep` fail at run time with a message naming the
+    `timing_backend` key. Set the key and the same testbench passes; nothing
+    in the source changes between backends.
 
-    ```toml
-    [build]
-    verilator_args = ["--vpi"]
-    ```
-
-    That stanza stops the failure and the phase waits then run, and a write
-    issued after `co_await ReadWrite{}` reaches the next clock edge rather than
-    the one just awaited. It does not give the documented timing contract.
-    Verilator's `--binary` main does not re-evaluate the design between the
-    `ReadWrite` and `ReadOnly` callbacks, so a write issued in `ReadWrite` is
-    not settled when `ReadOnly` resumes. Two of the five checks in the
-    timing-phase conformance contract fail in such a build, with no diagnostic
-    beyond the checks themselves. Relinking the same generated wrapper as
-    `--cc --exe --build --vpi` against `src/verilator_timing_main.cpp` passes
-    all five, and `cpptb build` cannot emit that link.
-
-    The generated SV-DPI backends are reachable only by matching
-    `design.defines` against `build.cxx_flags` by hand, and nothing validates
-    the combination. Defining `CPPTB_SV_DPI_TIMING` on its own selects the
-    inline pump, which
-    [Performance](performance.md#portable-timing-experiments) records as
-    invalid: `ReadOnly` can run before the DUT settles, and a write issued
-    after `co_await ReadWrite{}` is captured a cycle early. A testbench built
-    that way reads unsettled values and reports no diagnostic. Adding
-    `CPPTB_SV_DPI_NBA_TIMING` (or additionally
-    `CPPTB_SV_DPI_CALENDAR_TIMING`) selects the NBA or calendar pump, which
-    passes the timing conformance contract for generated and observed events,
-    but its `NextTimeStep` cannot wake for a DUT-internal event nothing
-    observes, and the configuration remains unsupported and unvalidated.
+    Hand-assembled alternatives are rejected rather than left to answer
+    wrongly. `verilator_args = ["--vpi"]` used to build a bridge that placed
+    writes on the right edge while failing two of the five contract checks
+    silently -- `ReadOnly` did not observe a write settled in `ReadWrite` --
+    and the build tool now refuses it, naming the key. The timing defines
+    (`CPPTB_SV_DPI_TIMING` and friends) are likewise owned by the key: setting
+    them in `design.defines` or `build.cxx_flags` is an error, and the
+    remaining SV-DPI pump and calendar builds are reachable only through the
+    conformance runner, as experiments.
 
     The edge-phase convention in
     [Sample on the edge, drive off it](#sample-on-the-edge-drive-off-it) needs
-    no backend support and is correct in a default build. It is the only choice
-    a `cpptb build` project has today. [Roadmap](roadmap.md#candidate-directions)
-    records the worked examples behind the paragraphs above and what closing
-    the gap would take.
+    no backend and stays correct in a default build; it is what the ports in
+    `experiments/open_core_ports` use. [Roadmap](roadmap.md#candidate-directions)
+    records the worked examples behind this design and the deferred-write work
+    that builds on it.
 
 ## Composition
 

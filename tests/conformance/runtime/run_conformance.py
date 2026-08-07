@@ -42,7 +42,7 @@ def simulator_name(manifest: dict[str, Any], override: str | None) -> str:
 
 def build_dir(timing_backend: str) -> Path:
     suffixes = {
-        "direct": "conformance_obj",
+        "verilator-direct": "conformance_obj",
         "vpi": "conformance_vpi_obj",
         "sv-dpi-inline": "conformance_sv_dpi_inline_obj",
         "sv-dpi-nba": "conformance_sv_dpi_nba_obj",
@@ -87,7 +87,7 @@ def build_verilator(manifest: dict[str, Any], timing_backend: str) -> Path:
     sv_defines: list[str] = []
     if timing_bridge:
         cflags += f" -DCPPTB_VERILATED_TOP={top_class}"
-        if timing_backend == "direct":
+        if timing_backend == "verilator-direct":
             cflags += " -DCPPTB_VERILATOR_DIRECT_TIMING"
     if sv_dpi_timing:
         cflags += " -DCPPTB_SV_DPI_TIMING"
@@ -277,14 +277,14 @@ def main() -> int:
     parser.add_argument(
         "--timing-backend",
         choices=(
-            "direct",
+            "verilator-direct",
             "vpi",
             "sv-dpi-inline",
             "sv-dpi-nba",
             "sv-dpi-calendar",
         ),
-        default="direct",
-        help="Verilator timing dispatch backend (default: direct)",
+        default="verilator-direct",
+        help="Timing dispatch backend (default: verilator-direct)",
     )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--build-only", action="store_true")

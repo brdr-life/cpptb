@@ -164,6 +164,7 @@ def _fingerprint(
         # than silently reusing objects compiled at the previous setting.
         "optimization": spec.optimization,
         "verilator_args": list(spec.verilator_args),
+        "timing_backend": spec.timing_backend,
         "timeout_cycles": spec.timeout_cycles,
         "experimental_four_state": spec.experimental_four_state,
         "verilator_version": verilator_version,
@@ -367,6 +368,32 @@ class VerilatorBackend:
             compare_frontend=compare_frontend,
         )
 
+        # How the model is linked. Without a timing backend, Verilator's own
+        # --binary main owns the loop and dispatches no phases. With one, the
+        # framework host loop is linked instead, and one define picks whether
+        # it drives Verilator's scheduler directly or rides VPI callbacks --
+        # the same recipe the timing conformance suite builds and checks.
+        timing_cflags: list[str] = []
+        timing_sources: list[str] = []
+        if spec.timing_backend:
+            link_args = ["--cc", "--exe", "--build", "--vpi"]
+            timing_main = (
+                self.framework_include.parent / "src"
+                / "verilator_timing_main.cpp"
+            )
+            if not timing_main.is_file():
+                raise BuildError(
+                    f"build.timing_backend needs the framework host loop at "
+                    f"{timing_main}, which this cpptb installation does not "
+                    f"ship; use a repository checkout"
+                )
+            timing_sources.append(str(timing_main))
+            timing_cflags.append(f"-DCPPTB_VERILATED_TOP=V{spec.dpi_top}")
+            if spec.timing_backend == "verilator-direct":
+                timing_cflags.append("-DCPPTB_VERILATOR_DIRECT_TIMING")
+        else:
+            link_args = ["--binary"]
+
         cflags = shlex.join(
             [
                 # Verilator adds neither a -std nor an optimization flag of its
@@ -376,12 +403,13 @@ class VerilatorBackend:
                 "-std=c++20",
                 spec.optimization,
                 *(f"-I{path}" for path in cpp_include_dirs if path != self.verilator_root / "include" / "vltstd"),
+                *timing_cflags,
                 *spec.cxx_flags,
             ]
         )
         verilator_command = [
             *self.verilator,
-            "--binary",
+            *link_args,
             "--timing",
             "--no-sched-zero-delay",
             # OPT_FAST reaches only the model Verilator generates; the cflags
@@ -415,6 +443,7 @@ class VerilatorBackend:
             str(spec.generated_dir / f"dpi_{spec.target}.cpp"),
             str(sim_log_bridge),
             *(str(path) for path in spec.testbench_sources),
+            *timing_sources,
         ]
         log.run(verilator_command, cwd=spec.root, label="Verilator build")
         if not spec.binary.is_file():

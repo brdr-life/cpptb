@@ -444,7 +444,10 @@ python-test:
 
 codegen-test: cpptb-codegen-test cpptb-peakrdl-test cpptb-codegen-frontend-check
 
-conformance-test: cpptb-conformance-run
+# Both supported timing backends, contract-checked on every run. The
+# direct binary is the make-built default; the vpi variant builds via
+# the runner so the bridge link itself stays covered.
+conformance-test: cpptb-conformance-run cpptb-conformance-vpi-run
 
 examples-test: $(CPPTB_EXAMPLE_TEST_TARGETS)
 

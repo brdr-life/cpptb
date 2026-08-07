@@ -634,20 +634,23 @@ class Runtime {
         std::fprintf(
             stderr,
             "%s: ReadWrite, ReadOnly, and NextTimeStep need a timing backend "
-            "that dispatches simulator phases. This build has none: a default "
-            "`cpptb build` links Verilator's own --binary main, which owns "
-            "clocks and timers but dispatches no phases.\n"
-            "  Wait on a clock edge instead: sample after `co_await "
-            "RisingEdge{clk}`, drive after `co_await FallingEdge{clk}`. That "
-            "is the supported route and it is what the ports in "
-            "experiments/open_core_ports use.\n"
-            "\n"
-            "  Adding `verilator_args = [\"--vpi\"]` to cpptb.toml stops this "
-            "error and places writes on the right edge, but does NOT give a "
-            "complete phase contract: ReadOnly does not observe a write "
-            "settled in ReadWrite. Only a `--cc --exe --build` link against "
-            "src/verilator_timing_main.cpp holds the full contract, and "
-            "`cpptb build` cannot produce one. See docs/scheduling.md.\n",
+            "that dispatches simulator phases, and this build has none: the "
+            "default `cpptb build` links Verilator's own --binary main, which "
+            "owns clocks and timers but dispatches no phases.\n"
+            "  Select a backend in cpptb.toml -- both hold the complete "
+            "documented contract:\n"
+            "      [build]\n"
+            "      timing_backend = \"verilator-direct\"   # fastest; "
+            "Verilator's scheduler, driven directly\n"
+            "      timing_backend = \"vpi\"                # standard VPI "
+            "callbacks; the portable route\n"
+            "  Or wait on a clock edge instead: sample after `co_await "
+            "RisingEdge{clk}`, drive after `co_await FallingEdge{clk}` -- "
+            "what the ports in experiments/open_core_ports use.\n"
+            "  Do not hand-roll `--vpi` in verilator_args: it places writes "
+            "on the right edge but fails the contract silently (ReadOnly "
+            "does not observe a write settled in ReadWrite); the build tool "
+            "now rejects it. See docs/scheduling.md.\n",
             Adapter::result_name);
         return false;
 #endif

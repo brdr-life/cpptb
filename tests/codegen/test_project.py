@@ -206,6 +206,74 @@ experimental_four_state = true
             with self.assertRaisesRegex(ProjectError, "no C\\+\\+ testbench found"):
                 resolve_project(project=root)
 
+    def test_timing_backend_accepts_the_two_supported_names(self):
+        for name in ("verilator-direct", "vpi"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "counter.sv").write_text("module counter; endmodule\n")
+                (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+                (root / "cpptb.toml").write_text(
+                    f'[build]\ntiming_backend = "{name}"\n', encoding="utf-8"
+                )
+                spec = resolve_project(project=root)
+                self.assertEqual(spec.timing_backend, name)
+
+    def test_timing_backend_rejects_everything_else(self):
+        # The sv-dpi experiments stay reachable through the conformance
+        # runner, not through a project file.
+        for name in ("direct", "sv-dpi-nba", "sv-dpi-calendar", "DIRECT", 1):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "counter.sv").write_text("module counter; endmodule\n")
+                (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+                value = f'"{name}"' if isinstance(name, str) else str(name)
+                (root / "cpptb.toml").write_text(
+                    f"[build]\ntiming_backend = {value}\n", encoding="utf-8"
+                )
+                with self.assertRaisesRegex(
+                    ProjectError, "build.timing_backend"
+                ):
+                    resolve_project(project=root)
+
+    def test_bare_vpi_in_verilator_args_is_rejected(self):
+        # Measured: --vpi on the default main fails three of the five phase
+        # contract checks with no diagnostic. The build tool refuses it and
+        # names the key that emits the complete link.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\nverilator_args = ["--vpi"]\n', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ProjectError, "timing_backend"):
+                resolve_project(project=root)
+
+    def test_hand_rolled_timing_defines_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\ncxx_flags = ["-DCPPTB_SV_DPI_TIMING"]\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ProjectError, "timing_backend"):
+                resolve_project(project=root)
+
+    def test_binary_conflicts_with_a_selected_backend(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\ntiming_backend = "vpi"\n'
+                'verilator_args = ["--binary"]\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ProjectError, "--binary"):
+                resolve_project(project=root)
+
     def test_inferred_top_is_cached_by_project_content(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

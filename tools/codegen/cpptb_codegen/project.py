@@ -46,6 +46,14 @@ class ProjectSpec:
     timeout_cycles: int = 1_000_000
     experimental_four_state: bool = False
     simulator: str = "verilator"
+    # Which mechanism resumes ReadWrite{}, ReadOnly{}, and NextTimeStep{}.
+    # Empty means none: the default --binary build owns clocks and timers but
+    # dispatches no phases, and a phase wait reports an actionable error at
+    # run time. The two supported names both link the framework host loop and
+    # hold the complete documented timing contract:
+    #   "verilator-direct"  Verilator's scheduler driven directly; fastest.
+    #   "vpi"               standard VPI callbacks; the portable route.
+    timing_backend: str = ""
 
     @property
     def target_build_dir(self) -> Path:
@@ -117,6 +125,74 @@ def _optimization(value: Any, label: str, default: str) -> str:
             '"-O2" or "-O0"'
         )
     return value
+
+
+TIMING_BACKENDS = ("verilator-direct", "vpi")
+
+# The defines the timing machinery keys on. Setting any of them by hand can
+# assemble a build that runs and answers wrongly -- measured: `--vpi` on the
+# default main fails three of the five phase-contract checks with no
+# diagnostic -- so they are owned by build.timing_backend and rejected
+# everywhere else.
+_TIMING_DEFINES = (
+    "CPPTB_VERILATOR_DIRECT_TIMING",
+    "CPPTB_VERILATED_TOP",
+    "CPPTB_SV_DPI_TIMING",
+    "CPPTB_SV_DPI_NBA_TIMING",
+    "CPPTB_SV_DPI_CALENDAR_TIMING",
+    "CPPTB_ALLOW_INVALID_TIMING",
+)
+
+
+def _timing_backend(value: Any) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str) or value not in TIMING_BACKENDS:
+        names = ", ".join(f'"{name}"' for name in TIMING_BACKENDS)
+        raise ProjectError(
+            f"build.timing_backend must be one of {names}; got {value!r}. "
+            f"Both link the framework host loop and hold the complete phase "
+            f"contract; the sv-dpi experiments are not selectable here"
+        )
+    return value
+
+
+def _reject_hand_rolled_timing(
+    timing_backend: str,
+    verilator_args: Sequence[str],
+    defines: Sequence[str],
+    cxx_flags: Sequence[str],
+) -> None:
+    """Phase dispatch is selected by name or not at all.
+
+    A bare `--vpi` in verilator_args builds and runs, and fails three of the
+    five phase-contract checks silently: `ReadOnly` does not observe a write
+    settled in `ReadWrite`. The define combinations are guarded again at
+    compile time in dpi_runtime.hpp, but the build tool says it first and
+    names the key.
+    """
+    if timing_backend == "" and "--vpi" in verilator_args:
+        raise ProjectError(
+            "build.verilator_args must not pass --vpi: on the default main it "
+            "builds a bridge that fails the phase timing contract silently. "
+            'Set build.timing_backend = "vpi" (or "verilator-direct"), which '
+            "emits the complete link"
+        )
+    if timing_backend and "--binary" in verilator_args:
+        raise ProjectError(
+            "build.verilator_args must not pass --binary when "
+            "build.timing_backend is set; the backend owns the host loop and "
+            "emits its own link"
+        )
+    for label, values in (("design.defines", defines),
+                          ("build.cxx_flags", cxx_flags)):
+        for value in values:
+            if any(define in value for define in _TIMING_DEFINES):
+                raise ProjectError(
+                    f"{label} must not set {value!r}: the timing defines are "
+                    f"owned by build.timing_backend so that an incomplete "
+                    f"phase bridge cannot be assembled by hand"
+                )
 
 
 def _reject_optimization_in_verilator_args(values: Sequence[str]) -> None:
@@ -479,6 +555,10 @@ def resolve_project(
         _string_list(build.get("verilator_args"), "build.verilator_args")
     )
     _reject_optimization_in_verilator_args(verilator_args)
+    cxx_flags = tuple(_string_list(build.get("cxx_flags"), "build.cxx_flags"))
+    timing_backend = _timing_backend(build.get("timing_backend"))
+    _reject_hand_rolled_timing(timing_backend, verilator_args, defines,
+                               cxx_flags)
     if any(
         argument
         in {"--fourstate", "-fourstate", "--no-fourstate", "-no-fourstate"}
@@ -511,7 +591,7 @@ def resolve_project(
         defines=defines,
         parameters=parameter_values,
         testbench_include_dirs=testbench_include_dirs,
-        cxx_flags=tuple(_string_list(build.get("cxx_flags"), "build.cxx_flags")),
+        cxx_flags=cxx_flags,
         optimization=_optimization(
             build.get("optimization"), "build.optimization",
             ProjectSpec.optimization,
@@ -524,4 +604,5 @@ def resolve_project(
         ),
         experimental_four_state=selected_four_state,
         simulator=selected_simulator,
+        timing_backend=timing_backend,
     )
