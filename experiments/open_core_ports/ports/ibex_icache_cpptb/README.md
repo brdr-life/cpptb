@@ -537,15 +537,20 @@ anchor, and `settle_to_drive()` descends from just-after-a-rising-edge to the
 same cycle's anchor (using the full advance there held `branch_i` for two
 edges; the distinction cost 52 scoreboard failures to learn).
 
-**Status: not passing.** The baseline shape is byte-for-byte unaffected --
-all ten tests pass before and after the conversion -- but the deferred shape
-fails 52-56 checks out of ~50,000 per test, always with one signature: after
-a fetch that returns `err=1`, the scoreboard's implied next address (`+2`,
-from the zeroed data's compressed bit) disagrees with the fetch that actually
-arrives (`+4`). The divergence is confined to the error-path address
-advancement, where the driver's post-eval read of `err`/`rdata` and the
-monitor's pre-eval sample can straddle the edge differently than the
-falling-edge anchor did. Replay is deliberately baseline-only: it compares
+**Status: passing — all ten tests, on both backends, with identical check
+counts.** The conversion's one real bug is worth its paragraph: `read_insn`'s
+wait-for-valid loop exits at a rising edge and then settles to the drive
+anchor, but the first conversion classified that site as a full-cycle advance
+because the *textual* line before it is the loop's closing brace, not the
+`RisingEdge` that precedes it in control flow. The full advance held
+`ready_i` one extra edge, the DUT handed over one extra beat the driver never
+counted, and after an errored fetch that straggler was the `+4` the
+scoreboard's `+2` implication could not explain -- 52 to 56 failures out of
+roughly fifty thousand checks, every one with that signature. The lesson for
+converting a testbench: classify anchor sites by their predecessor *await*,
+never by the preceding line.
+
+Replay is deliberately baseline-only: it compares
 pins against UVM recordings made under falling-edge anchors, which the
 deferred shape moves by design.
 

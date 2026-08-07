@@ -995,7 +995,15 @@ Task<bool> read_insn(Dut dut, TestContext& test, Env& env) {
             break;
         }
     }
-    co_await drive_point(dut);
+    // The loop above exits at a rising edge, so this is a settle within the
+    // same cycle, not a full advance. The full advance held ready_i one extra
+    // edge in the deferred shape, and the DUT handed over one extra beat the
+    // driver never counted -- after an errored fetch, that straggler is the
+    // +4 the scoreboard's +2 implication could not explain (52-56 failures,
+    // all with that signature). The site was missed by the first conversion
+    // because the textual line before it is the loop's closing brace, not
+    // the RisingEdge await that actually precedes it in control flow.
+    co_await settle_to_drive(dut);
     dut.ready_i.set(0);
     co_return err;
 }
