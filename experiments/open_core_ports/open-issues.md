@@ -9,25 +9,22 @@ of them stopped the work. That is also why they are easy to forget.
 
 ## In cpptb
 
-### 5. The discovery pass runs the testbench
+### 5. The discovery pass runs the testbench — fixed
 
-`cpptb build` compiles the testbench a second time with
-`-DCPPTB_HIERARCHY_DISCOVERY` and executes it to learn which signals are clocks
-and which hierarchy paths need a transport. A testbench that returns early when
-its environment is empty, which it always is at build time, is discovered as one
-that never starts a clock. The generated SystemVerilog then has
-`CALENDAR_CLOCK_COUNT = 0`, nothing toggles the clock, and every run dies at
-time zero with `scheduler starvation`.
+`cpptb build` used to compile the testbench a second time with
+`-DCPPTB_HIERARCHY_DISCOVERY` and execute it to learn which signals are clocks
+and which hierarchy paths need a transport. A testbench that returned early
+when its environment was empty, which it always is at build time, was
+discovered as one that never starts a clock, and every run died at time zero
+with `scheduler starvation`.
 
-A build-time problem reported as a scheduler problem, at run time, with no
-mention of discovery.
-
-**Repro:** put an early `co_return` before `start_clock` on a condition that is
-false at build time.
-**Workaround:** no early returns before the clock and hierarchy accesses; see
-the header comment in `ports/riscv_arch_tests/testbench.cpp`.
-**Fix direction:** discovery could warn when a testbench it ran started no
-clock, or the starvation message could say that no clock driver was generated.
+Fixed: the build now recovers the access set from compile-only object sections
+(`cpptb_access`, written by `[[gnu::used, section(...)]]` records) and never
+executes the testbench. Clocks are registered at runtime by `start_clock` —
+the generated wrapper emits a driver task per writable one-bit signal
+(including unpacked-array elements, so interface-member clocks work) and asks
+the runtime after `PHASE_INIT` which of them were started. Early returns and
+environment-dependent control flow before `start_clock` are now harmless.
 
 ### 6. Rebuilds do not track sources added through `verilator_args`
 
@@ -55,18 +52,21 @@ as `dv/cosim/cosim_dpi.svh` does.
 **Fix direction:** accept `.svh` in the source list, or say in the error that
 copying is the intended workaround.
 
-### 8. Edge semantics and the missing timing backend
+### 8. Edge semantics and the missing timing backend — fixed
 
 `co_await RisingEdge` resumes before the design evaluates that edge, so it is
 right for sampling and wrong for driving: `set()` is immediate and a value
 written there is captured by the edge just awaited. `ReadOnly` and `ReadWrite`
-would express this directly but cannot be selected from a project.
+express this directly but could not be selected from a project.
 
-Written up in [Scheduling](../../docs/scheduling.md#coming-from-cocotb) and on
-the roadmap as
-[aligning the scheduling semantics with cocotb](../../docs/future-directions.md#align-the-scheduling-semantics-with-cocotb),
-with three options and a recommendation. This entry exists so it is not lost
-among the porting findings.
+Fixed: every cpptb-build project links a timing backend unconditionally
+(`verilator-direct` default, `vpi` via `timing_backend`/`--timing-backend`),
+and `deferred_writes = true` gives `set()` cocotb's writes-apply-in-ReadWrite
+semantics. The translation recipes live in
+[Coming from cocotb](../../docs/coming-from-cocotb.md).
+
+The original analysis is in
+[Scheduling](../../docs/scheduling.md#sample-on-the-edge-drive-off-it).
 
 ## In Verilator
 
