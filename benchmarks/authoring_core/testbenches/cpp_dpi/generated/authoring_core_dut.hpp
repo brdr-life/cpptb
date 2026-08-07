@@ -656,66 +656,120 @@ struct AuthoringCoreDut {
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 16, "pending", 1, true, cpptb::probe::Value<1>, true> pending;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 17, "pending_data", 32, true, cpptb::probe::Value<32>, true> pending_data;
     [[no_unique_address]] cpptb::hierarchy::Signal<HierarchyTransport, 18, "row", 32, true, cpptb::probe::Value<32>, false> row;
+    static constexpr const char* cpptb_hierarchy_paths[] = {
+        "apb_index",
+        "apb_memory",
+        "byte_index",
+        "column",
+        "cycle_count",
+        "delay_count",
+        "fixed_magnitude",
+        "fixed_product",
+        "fixed_quotient",
+        "fixed_remainder",
+        "fixed_rounded",
+        "force_target",
+        "hierarchy_logic",
+        "hierarchy_wide",
+        "index",
+        "memory",
+        "pending",
+        "pending_data",
+        "row",
+    };
+
+    // Three-way compare against a NUL-terminated entry, written
+    // out because std::char_traits::compare needs a length this
+    // deliberately never computes.
+    static consteval int cpptb_hierarchy_compare(
+        const char* entry, std::string_view path) {
+        std::size_t at = 0;
+        for (; at < path.size(); ++at) {
+            if (entry[at] == '\0') return -1;
+            if (entry[at] != path[at]) {
+                return entry[at] < path[at] ? -1 : 1;
+            }
+        }
+        return entry[at] == '\0' ? 0 : 1;
+    }
+
+    static consteval std::size_t cpptb_hierarchy_index(
+        std::string_view path) {
+        std::size_t low = 0;
+        std::size_t high = std::size(cpptb_hierarchy_paths);
+        while (low < high) {
+            const std::size_t middle = low + (high - low) / 2;
+            const int order = cpptb_hierarchy_compare(
+                cpptb_hierarchy_paths[middle], path);
+            if (order == 0) return middle;
+            if (order < 0) low = middle + 1;
+            else high = middle;
+        }
+        return std::size(cpptb_hierarchy_paths);
+    }
+
     template <cpptb::hierarchy::FixedString Path>
     [[nodiscard]] constexpr auto cpptb_signal() const {
-        if constexpr (Path.view() == "apb_index") {
+        constexpr std::size_t cpptb_index =
+            cpptb_hierarchy_index(Path.view());
+        if constexpr (cpptb_index == 0) {
             return (*this).apb_index;
         }
-        else if constexpr (Path.view() == "apb_memory") {
+        if constexpr (cpptb_index == 1) {
             return (*this).apb_memory;
         }
-        else if constexpr (Path.view() == "byte_index") {
+        if constexpr (cpptb_index == 2) {
             return (*this).byte_index;
         }
-        else if constexpr (Path.view() == "column") {
+        if constexpr (cpptb_index == 3) {
             return (*this).column;
         }
-        else if constexpr (Path.view() == "cycle_count") {
+        if constexpr (cpptb_index == 4) {
             return (*this).cycle_count;
         }
-        else if constexpr (Path.view() == "delay_count") {
+        if constexpr (cpptb_index == 5) {
             return (*this).delay_count;
         }
-        else if constexpr (Path.view() == "fixed_magnitude") {
+        if constexpr (cpptb_index == 6) {
             return (*this).fixed_magnitude;
         }
-        else if constexpr (Path.view() == "fixed_product") {
+        if constexpr (cpptb_index == 7) {
             return (*this).fixed_product;
         }
-        else if constexpr (Path.view() == "fixed_quotient") {
+        if constexpr (cpptb_index == 8) {
             return (*this).fixed_quotient;
         }
-        else if constexpr (Path.view() == "fixed_remainder") {
+        if constexpr (cpptb_index == 9) {
             return (*this).fixed_remainder;
         }
-        else if constexpr (Path.view() == "fixed_rounded") {
+        if constexpr (cpptb_index == 10) {
             return (*this).fixed_rounded;
         }
-        else if constexpr (Path.view() == "force_target") {
+        if constexpr (cpptb_index == 11) {
             return (*this).force_target;
         }
-        else if constexpr (Path.view() == "hierarchy_logic") {
+        if constexpr (cpptb_index == 12) {
             return (*this).hierarchy_logic;
         }
-        else if constexpr (Path.view() == "hierarchy_wide") {
+        if constexpr (cpptb_index == 13) {
             return (*this).hierarchy_wide;
         }
-        else if constexpr (Path.view() == "index") {
+        if constexpr (cpptb_index == 14) {
             return (*this).index;
         }
-        else if constexpr (Path.view() == "memory") {
+        if constexpr (cpptb_index == 15) {
             return (*this).memory;
         }
-        else if constexpr (Path.view() == "pending") {
+        if constexpr (cpptb_index == 16) {
             return (*this).pending;
         }
-        else if constexpr (Path.view() == "pending_data") {
+        if constexpr (cpptb_index == 17) {
             return (*this).pending_data;
         }
-        else if constexpr (Path.view() == "row") {
+        if constexpr (cpptb_index == 18) {
             return (*this).row;
         }
-        else {
+        if constexpr (cpptb_index == 19) {
             static_assert(Path.view().empty(),
                           "HDL path is not present in the generated DUT hierarchy");
             return cpptb::hierarchy::UnsupportedSignal{};

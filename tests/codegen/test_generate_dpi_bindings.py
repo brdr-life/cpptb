@@ -298,6 +298,81 @@ class CodegenTests(unittest.TestCase):
             self.assertNotIn("@(clk);", wrapper)
             self.assertNotIn("realtime next_edge", wrapper)
 
+    def test_dynamic_clock_registration_is_queried_after_phase_init(self):
+        # start_clock() runs inside the test prologues that PHASE_INIT
+        # executes, so a wrapper that reads clock_config() before PHASE_INIT
+        # sees no clocks and every driver stays idle.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            source = base / "clocked.sv"
+            source.write_text(
+                "module clocked(input logic clk, output logic q); "
+                "endmodule\n"
+            )
+            config = source_manifest(
+                [source], "clocked", output_dir=base / "generated"
+            )
+            ports = map_ports(
+                [Port("clk", "input", 1), Port("q", "output", 1)], config
+            )
+            wrapper = render_sv(ports, [], config, "clocked.sv")
+
+            init_at = wrapper.index("run_step(PHASE_INIT")
+            query_at = wrapper.index("registered_clock[SIGNAL_CLK] =")
+            active_at = wrapper.index("clock_drivers_active = 1'b1;")
+            self.assertLess(init_at, query_at)
+            self.assertLess(query_at, active_at)
+            # A registered clock toggles on the SV side, so awaited edges on
+            # it are only deliverable through run_step: the candidate needs
+            # the same sticky interest entry a configured clock gets.
+            self.assertIn(
+                "edge_interest[SIGNAL_CLK] |= "
+                "cpptb_clocked_dpi_edge_interest(SIGNAL_CLK);",
+                wrapper,
+            )
+
+    def test_dynamic_clock_candidates_cover_unpacked_array_elements(self):
+        # Interface-member clocks arrive as one-bit unpacked arrays over the
+        # interface instances; each element must get its own driver task,
+        # registration query, and apply_outputs guard.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base = Path(temp_dir)
+            source = base / "banked.sv"
+            source.write_text(
+                "module banked(input logic clks [0:1], output logic q); "
+                "endmodule\n"
+            )
+            config = source_manifest(
+                [source], "banked", output_dir=base / "generated"
+            )
+            ports = map_ports(
+                [
+                    Port(
+                        "clks", "input", 1,
+                        unpacked=(UnpackedRange(0, 1),),
+                    ),
+                    Port("q", "output", 1),
+                ],
+                config,
+            )
+            wrapper = render_sv(ports, [], config, "banked.sv")
+
+            self.assertIn("task automatic drive_registered_clock_0", wrapper)
+            self.assertIn("task automatic drive_registered_clock_1", wrapper)
+            self.assertIn("clks[0] = ~clks[0];", wrapper)
+            self.assertIn("clks[1] = ~clks[1];", wrapper)
+            self.assertIn("registered_clock[SIGNAL_CLKS + 1] =", wrapper)
+            self.assertIn(
+                "edge_interest[SIGNAL_CLKS + 1] |= "
+                "cpptb_banked_dpi_edge_interest(SIGNAL_CLKS + 1);",
+                wrapper,
+            )
+            self.assertIn(
+                "if (!clock_drivers_active || "
+                "!registered_clock[SIGNAL_CLKS + (",
+                wrapper,
+            )
+
     def test_source_overrides_and_target_namespaces_do_not_collide(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             base = Path(temp_dir)

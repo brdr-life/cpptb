@@ -157,6 +157,7 @@ def source_manifest(
     defines: list[str] | None = None,
     parameters: dict[str, str | int] | None = None,
     timeout_cycles: int | None = None,
+    clock_discovery_source: bool = False,
 ) -> dict[str, Any]:
     if not sources:
         raise CodegenError("source-driven generation requires at least one source")
@@ -217,15 +218,21 @@ def source_manifest(
             "cpp_adapter": str(
                 (output_dir / f"dpi_{stem}.cpp").resolve()
             ),
-            "cpp_clock_discovery": str(
-                (output_dir / f"discover_{stem}_clocks.cpp").resolve()
-            ),
             "sv_wrapper": str((output_dir / f"dpi_{stem}.sv").resolve()),
+            # The executed-discovery entry point is opt-in: cpptb-build
+            # recovers the access set from compile-only objects and never
+            # runs the testbench, so emitting this for every project would
+            # leave a dead source in every build directory. Manifest-driven
+            # flows declare cpp_clock_discovery themselves.
             "cpp_include": f"{stem}_dut.hpp",
             "cpp_binding_include": f"{stem}_binding.hpp",
             "cpp_public_include": str((output_dir / "dut.hpp").resolve()),
         },
     }
+    if clock_discovery_source:
+        manifest["outputs"]["cpp_clock_discovery"] = str(
+            (output_dir / f"discover_{stem}_clocks.cpp").resolve()
+        )
     if compatibility_root != root_type:
         manifest["compatibility_root_type"] = compatibility_root
     return manifest
@@ -4275,6 +4282,7 @@ def sv_output_assignments(
     port: Port,
     signal: str | None = None,
     skip_linear_indices: set[int] | None = None,
+    dynamic_clock_guard: str | None = None,
 ) -> list[str]:
     signal = signal or sv_signal_constant(port)
     skipped = skip_linear_indices or set()
@@ -4285,11 +4293,20 @@ def sv_output_assignments(
             lines.extend(loop_lines)
             body_indent = "    " + "  " * loop_count
             assignment_indent = body_indent
+            if dynamic_clock_guard is not None:
+                # One-bit elements map one-to-one onto signal IDs, so the
+                # element's registration flag lives at base + linear index.
+                lines.append(
+                    f"{assignment_indent}if (!clock_drivers_active || "
+                    f"!registered_clock[{dynamic_clock_guard} + ({linear})]) "
+                    "begin"
+                )
+                assignment_indent += "  "
             if skipped:
                 condition = " && ".join(
                     f"(({linear}) != {index})" for index in sorted(skipped)
                 )
-                lines.append(f"{body_indent}if ({condition}) begin")
+                lines.append(f"{assignment_indent}if ({condition}) begin")
                 assignment_indent += "  "
             offset = f"{linear} * {words}"
             if port.width > 32:
@@ -4316,7 +4333,11 @@ def sv_output_assignments(
                     source += f"[{port.width - 1}:0]"
                 lines.append(f"{assignment_indent}{target} = {source};")
             if skipped:
-                lines.append(f"{body_indent}end")
+                assignment_indent = assignment_indent[:-2]
+                lines.append(f"{assignment_indent}end")
+            if dynamic_clock_guard is not None:
+                assignment_indent = assignment_indent[:-2]
+                lines.append(f"{assignment_indent}end")
             for rank in reversed(range(loop_count)):
                 lines.append("    " + "  " * rank + "end")
         return lines
@@ -5286,6 +5307,27 @@ def render_sv(
         for port in driven_ports
         if port.width == 1 and not port.unpacked
     ]
+    # Every writable one-bit signal is a clock candidate, including elements
+    # of unpacked arrays (interface members arrive as arrays over instances).
+    # Each candidate is (port, linear index, SIGNAL constant expression, SV
+    # target reference); one-bit elements occupy one word each, so the
+    # element's signal ID is the port constant plus the linear index.
+    dynamic_clock_candidates: list[tuple[Port, int, str, str]] = [
+        (port, 0, sv_signal_constant(port), sv_scalar_port_reference(port))
+        for port in dynamic_clock_ports
+    ]
+    for port in driven_ports:
+        if port.width != 1 or not port.unpacked:
+            continue
+        base = sv_signal_constant(port)
+        for linear in range(port_element_count(port)):
+            indices = [
+                str(item) for item in _unflatten_port_index(port, linear)
+            ]
+            constant = f"{base} + {linear}" if linear else base
+            dynamic_clock_candidates.append(
+                (port, linear, constant, sv_port_reference(port, indices))
+            )
     selected_on_demand = on_demand_ports(ports)
     packed_observed_ports = packed_ports(observed_ports)
     packed_driven_ports = packed_ports(driven_ports)
@@ -5337,14 +5379,29 @@ def render_sv(
             for clock in clocks
         }
     )
-    calendar_dynamic_ports = [
-        port
-        for port in dynamic_clock_ports
+    if dynamic_clocks:
+        # Any candidate may be registered as a clock at PHASE_INIT, and a
+        # registered clock toggles on the SV side, so awaited edges on it
+        # can only be delivered through run_step. Give every candidate the
+        # same sticky interest entry a configured clock gets; without one,
+        # edge_observer_ports() drops driven ports (they are inputs) and an
+        # awaited FallingEdge on a started clock hangs forever.
+        edge_interest_entries.update(
+            {
+                constant: True
+                for _, _, constant, _ in dynamic_clock_candidates
+            }
+        )
+    calendar_dynamic_candidates = [
+        candidate
+        for candidate in dynamic_clock_candidates
         if dynamic_clocks
         and not calendar_clocks
-        and port.name not in calendar_clock_names
+        and candidate[0].name not in calendar_clock_names
     ]
-    calendar_clock_count = len(calendar_clocks) + len(calendar_dynamic_ports)
+    calendar_clock_count = len(calendar_clocks) + len(
+        calendar_dynamic_candidates
+    )
     init_function = run.get("init_function", "cpptb_dpi_init")
     step_function = run.get("step_function", "cpptb_dpi_step")
     pull_outputs_function = run.get(
@@ -5532,11 +5589,22 @@ def render_sv(
             sv_pack_assignments(port, f"INPUT_{sv_signal_constant(port)}")
         )
     lines.extend(["  endtask", "", "  task automatic apply_outputs();"])
+    dynamic_clock_array_names = {
+        candidate[0].name
+        for candidate in dynamic_clock_candidates
+        if candidate[0].unpacked
+    }
     for port in packed_driven_ports:
+        array_candidate = (
+            dynamic_clocks and port.name in dynamic_clock_array_names
+        )
         assignments = sv_output_assignments(
             port,
             f"OUTPUT_{sv_signal_constant(port)}",
             clock_owned.get(port.name),
+            dynamic_clock_guard=(
+                sv_signal_constant(port) if array_candidate else None
+            ),
         )
         if dynamic_clocks and port in dynamic_clock_ports:
             constant = sv_signal_constant(port)
@@ -5817,9 +5885,10 @@ def render_sv(
                 f"    calendar_clock_next_edge[{index}] = "
                 f"$time + calendar_clock_half_period[{index}];"
             )
-    for dynamic_index, port in enumerate(calendar_dynamic_ports):
+    for dynamic_index, (_, _, constant, _) in enumerate(
+        calendar_dynamic_candidates
+    ):
         index = len(calendar_clocks) + dynamic_index
-        constant = sv_signal_constant(port)
         lines.extend(
             [
                 f"    calendar_clock_half_period[{index}] =",
@@ -5915,10 +5984,10 @@ def render_sv(
                 "    end",
             ]
         )
-    for dynamic_index, port in enumerate(calendar_dynamic_ports):
+    for dynamic_index, (_, _, constant, clock_target) in enumerate(
+        calendar_dynamic_candidates
+    ):
         index = len(calendar_clocks) + dynamic_index
-        constant = sv_signal_constant(port)
-        clock_target = sv_scalar_port_reference(port)
         lines.extend(
             [
                 f"    if (calendar_clock_active[{index}] &&",
@@ -6115,9 +6184,9 @@ def render_sv(
         )
 
     if dynamic_clocks:
-        for index, port in enumerate(dynamic_clock_ports):
-            constant = sv_signal_constant(port)
-            clock_target = sv_scalar_port_reference(port)
+        for index, (_, _, constant, clock_target) in enumerate(
+            dynamic_clock_candidates
+        ):
             lines.extend(
                 [
                     f"  task automatic drive_registered_clock_{index}();",
@@ -6301,9 +6370,24 @@ def render_sv(
             "`endif",
         ]
     )
+    lines.extend(
+        [
+            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
+            "    calendar_initialize();",
+            "`endif",
+            "    run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);",
+            "    service_requests(initial_requests);",
+        ]
+    )
     if dynamic_clocks:
-        for port in dynamic_clock_ports:
-            constant = sv_signal_constant(port)
+        # After PHASE_INIT, deliberately: start_clock() runs inside the test
+        # prologues that PHASE_INIT executes, so querying before it -- the
+        # original order -- found nothing unless the manifest pre-declared
+        # its clocks, which the benchmark manifests do and a cpptb-build
+        # project does not. Every writable one-bit signal has a driver task
+        # below; whichever ones the runtime registered by the end of
+        # PHASE_INIT toggle, and the rest stay idle.
+        for _, _, constant, _ in dynamic_clock_candidates:
             lines.extend(
                 [
                     f"    registered_clock[{constant}] =",
@@ -6314,11 +6398,6 @@ def render_sv(
             )
     lines.extend(
         [
-            "`ifdef CPPTB_SV_DPI_CALENDAR_TIMING",
-            "    calendar_initialize();",
-            "`endif",
-            "    run_step(PHASE_INIT, NO_SIGNAL, EDGE_RISING, initial_requests);",
-            "    service_requests(initial_requests);",
             "    clock_drivers_active = 1'b1;",
         ]
     )
@@ -6339,7 +6418,7 @@ def render_sv(
         if clock_source(clock) in {"generated", "registered"}:
             lines.append(f"        drive_clock_{index}();")
     if dynamic_clocks:
-        for index, _ in enumerate(dynamic_clock_ports):
+        for index, _ in enumerate(dynamic_clock_candidates):
             lines.append(f"        drive_registered_clock_{index}();")
     lines.append("`endif")
     for index, clock in enumerate(clocks):
@@ -6765,6 +6844,7 @@ def generate_sources(
     defines: list[str] | None = None,
     parameters: dict[str, str | int] | None = None,
     timeout_cycles: int | None = None,
+    clock_discovery_source: bool = False,
 ) -> list[Path]:
     base_dir = (base_dir or Path.cwd()).resolve()
     resolved_sources = [
@@ -6838,6 +6918,7 @@ def generate_sources(
         output_dir=output_dir,
         clocks=parsed_clocks,
         edge_observers=edge_observers,
+        clock_discovery_source=clock_discovery_source,
         target=target,
         namespace=namespace,
         root_type=root_type,

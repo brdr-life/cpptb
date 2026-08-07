@@ -110,6 +110,7 @@ class HierarchyGenerationTests(unittest.TestCase):
                 target="hierarchy_catalog",
                 output_dir=generated,
                 base_dir=REPO,
+                clock_discovery_source=True,
             )
             header = (generated / "hierarchy_catalog_dut.hpp").read_text()
             wrapper = (generated / "dpi_hierarchy_catalog.sv").read_text()
