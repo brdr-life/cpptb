@@ -165,6 +165,7 @@ def _fingerprint(
         "optimization": spec.optimization,
         "verilator_args": list(spec.verilator_args),
         "timing_backend": spec.timing_backend,
+        "deferred_writes": spec.deferred_writes,
         "timeout_cycles": spec.timeout_cycles,
         "experimental_four_state": spec.experimental_four_state,
         "verilator_version": verilator_version,
@@ -377,20 +378,31 @@ class VerilatorBackend:
         timing_sources: list[str] = []
         if spec.timing_backend:
             link_args = ["--cc", "--exe", "--build", "--vpi"]
-            timing_main = (
+            # A repository checkout keeps it in src/ beside include/; an
+            # installed package ships it under share/cpptb/src (see the
+            # CMake install rules).
+            main_candidates = [
                 self.framework_include.parent / "src"
-                / "verilator_timing_main.cpp"
+                / "verilator_timing_main.cpp",
+                self.framework_include.parent / "share" / "cpptb" / "src"
+                / "verilator_timing_main.cpp",
+            ]
+            timing_main = next(
+                (path for path in main_candidates if path.is_file()), None
             )
-            if not timing_main.is_file():
+            if timing_main is None:
+                locations = ", ".join(str(path) for path in main_candidates)
                 raise BuildError(
-                    f"build.timing_backend needs the framework host loop at "
-                    f"{timing_main}, which this cpptb installation does not "
-                    f"ship; use a repository checkout"
+                    f"build.timing_backend needs the framework host loop "
+                    f"verilator_timing_main.cpp; looked in: {locations}. "
+                    f"Reinstall cpptb or use a repository checkout"
                 )
             timing_sources.append(str(timing_main))
             timing_cflags.append(f"-DCPPTB_VERILATED_TOP=V{spec.dpi_top}")
             if spec.timing_backend == "verilator-direct":
                 timing_cflags.append("-DCPPTB_VERILATOR_DIRECT_TIMING")
+            if spec.deferred_writes:
+                timing_cflags.append("-DCPPTB_DEFERRED_WRITES")
         else:
             link_args = ["--binary"]
 

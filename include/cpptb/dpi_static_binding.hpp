@@ -238,7 +238,9 @@ class StaticPackedRef {
         }
     }
 
-    void set(value_type value) const requires(Writable) {
+    // The immediate deposit -- cocotb's setimmediatevalue(). Under
+    // deferred_writes this is the escape hatch; otherwise set() is this.
+    void set_now(value_type value) const requires(Writable) {
         probe::detail::require_write_allowed(name, "set");
         if constexpr (Width <= 32) {
             context->set_packed_scalar(
@@ -252,6 +254,21 @@ class StaticPackedRef {
             }
             *context->outputs_dirty = *context->outputs_dirty || changed;
         }
+    }
+
+    void set(value_type value) const requires(Writable) {
+#ifdef CPPTB_DEFERRED_WRITES
+        // Queued, applied at the start of the ReadWrite phase: a write after
+        // `co_await RisingEdge{}` misses the edge just awaited and lands on
+        // the next one, which is the cocotb write model. Legality is checked
+        // here, at the call, so writing from ReadOnly still fails at the
+        // offending line.
+        probe::detail::require_write_allowed(name, "set");
+        context->scheduler->defer_write(
+            [self = *this, value] { self.set_now(value); });
+#else
+        set_now(value);
+#endif
     }
 
     template <typename Value>
@@ -294,7 +311,7 @@ class StaticOnDemandRef {
         }
     }
 
-    void set(value_type value) const requires(Writable) {
+    void set_now(value_type value) const requires(Writable) {
         probe::detail::require_write_allowed(name, "set");
         if constexpr (Width <= 32) {
             value = detail::normalize_scalar<Width>(value);
@@ -309,6 +326,16 @@ class StaticOnDemandRef {
             set_words_fn(word_offset, words.data(),
                          static_cast<uint32_t>(word_count));
         }
+    }
+
+    void set(value_type value) const requires(Writable) {
+#ifdef CPPTB_DEFERRED_WRITES
+        probe::detail::require_write_allowed(name, "set");
+        context->scheduler->defer_write(
+            [self = *this, value] { self.set_now(value); });
+#else
+        set_now(value);
+#endif
     }
 
     template <typename Value>
@@ -350,6 +377,11 @@ class StaticPackedSignal {
     void set(value_type value) const requires(Writable) {
         StaticPackedRef<Width, Writable, Driven>{
             context, Id, TransportOffset, name}.set(value);
+    }
+
+    void set_now(value_type value) const requires(Writable) {
+        StaticPackedRef<Width, Writable, Driven>{
+            context, Id, TransportOffset, name}.set_now(value);
     }
 
     template <typename Value>
@@ -396,6 +428,11 @@ class StaticOnDemandSignal {
     void set(value_type value) const requires(Writable) {
         StaticOnDemandRef<Width, Writable, Driven>{
             context, Id, 0, name, get_words_fn, set_words_fn}.set(value);
+    }
+
+    void set_now(value_type value) const requires(Writable) {
+        StaticOnDemandRef<Width, Writable, Driven>{
+            context, Id, 0, name, get_words_fn, set_words_fn}.set_now(value);
     }
 
     template <typename Value>

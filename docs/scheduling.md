@@ -237,6 +237,36 @@ testbench one. SystemVerilog testbenches avoid it by driving through
 non-blocking assignments from inside `always_ff`; there is no non-blocking
 assignment to reach for here, so the clock phase does the same job.
 
+#### Or: the cocotb write model, `deferred_writes = true`
+
+The convention exists because `set()` is immediate. Projects that select a
+timing backend can select cocotb's write model instead:
+
+```toml
+[build]
+timing_backend = "verilator-direct"   # or "vpi"; the mode requires one
+deferred_writes = true
+```
+
+Under the mode, `set()` queues and the queue flushes at the start of the
+ReadWrite phase -- after the awaited edge's own updates -- so the "wrong"
+example above becomes correct: the write lands on the next edge, exactly as a
+cocotb `dut.sig.value = x` does. The pinned semantics, checked on both
+backends by `tests/integration/deferred_writes`:
+
+- a `get()` between `set()` and the flush returns the simulator's value, not
+  the queued one, matching cocotb's caching;
+- by `ReadOnly` of the same timestep the write is applied and settled;
+- `set_now()` is the immediate deposit -- cocotb's `setimmediatevalue()` --
+  and keeps the old semantics for initialization and the rare intentional
+  same-edge write;
+- writing from `ReadOnly` still fails at the offending line, because write
+  legality is checked at the call, not at the flush.
+
+Queueing alone arms the phase: writes flush whether or not anything awaits
+`ReadWrite{}`. The mode is per-project and off by default, so existing
+testbenches keep the drive-point convention unchanged.
+
 #### Holding the convention across a whole testbench
 
 One driver is easy. A set of drivers that call each other has a second half to

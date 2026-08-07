@@ -71,6 +71,15 @@
     "timing backends and cannot both be defined. See docs/scheduling.md."
 #endif
 
+#if defined(CPPTB_DEFERRED_WRITES) && !defined(CPPTB_VERILATED_TOP)
+#error \
+    "CPPTB_DEFERRED_WRITES queues every set() until the ReadWrite phase, so " \
+    "it needs a timing backend that dispatches phases; without one the " \
+    "queue never flushes and every write is silently lost. Set " \
+    "build.timing_backend in cpptb.toml, which defines this consistently. " \
+    "See docs/scheduling.md."
+#endif
+
 namespace cpptb::dpi {
 
 enum class Phase : uint32_t {
