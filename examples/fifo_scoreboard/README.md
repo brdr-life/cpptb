@@ -14,8 +14,10 @@ make cpp-dpi-fifo-scoreboard-sv-run
 make feature-test FEATURE=dpi_fifo_scoreboard
 ```
 
-The two testbenches use the same deterministic data generator, ready pattern,
-sampling points, checks, and primary-clock cycle count. Both use the fixed
+The two testbenches use the same deterministic data generator, ready
+pattern, checks, and primary-clock cycle count. The C++ side is written in
+the cocotb shape under `deferred_writes = true`: drives land right after
+`RisingEdge` and apply after that edge's own updates. Both use the fixed
 semantic workload `kWordCount = 24`; this equivalence example has no benchmark
 iteration control. Build it with:
 
@@ -31,5 +33,4 @@ The C++ testbench initializes `dut.clk` and starts its 10 ns period.
 | `Event` | `event` |
 | `Queue<uint32_t>` | typed `mailbox` |
 | `Join{...}` | `fork ... join` |
-| `co_await FallingEdge{clk}` | `@(negedge clk)` |
-| `co_await Delay{1_ps}` | `#1ps` |
+| `co_await RisingEdge{clk}` then `set()` | `@(posedge clk)` then `<=` |

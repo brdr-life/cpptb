@@ -73,28 +73,27 @@ cycle to find.
        Read data: 4b639620    Expected rdata: 0
 
    This is the hazard `tb_cs_registers.sv` describes in its comment about
-   non-blocking assignments. cpptb has no NBA to reach for, so driving moves to
-   the falling edge, where it is stable well before the edge that commits it.
-
-   The cocotb-shaped alternative -- sample after `co_await ReadOnly{}`, drive
-   after `co_await ReadWrite{}` -- was tried first and fails at run time,
-   because no timing backend providing those phases can be selected from a
-   project. This is now written up in
+   non-blocking assignments. The port now uses `deferred_writes = true`, which
+   is cpptb's NBA: a `set()` right after the awaited edge queues and applies
+   after that edge's own updates, so the value commits at the next edge --
+   the same ordering upstream gets from `<=`. The original workaround, driving
+   at the falling edge, produced the identical 1,119-transaction run; the
+   history of why the cocotb shape was once impossible (no timing backend
+   selectable from a project) is preserved in
    [Scheduling](../../../../docs/scheduling.md#sample-on-the-edge-drive-off-it)
-   and on the roadmap.
+   and the mode itself in
+   [Coming from cocotb](../../../../docs/coming-from-cocotb.md).
 
 3. **The monitor needs upstream's gate.** `monitor_tick` in `reg_dpi.cc` only
    captures when `(csr_access && (csr_op_en || illegal_csr)) || !rst_n`. Without
    it, every idle cycle is captured as a read of CSR 0 and the model expects an
    illegal instruction for an undefined register.
 
-And one in cpptb: **sources listed in `verilator_args` do not reach the
-discovery build.** `cpptb build` compiles the testbench a second time,
-standalone, to discover its clocks, and that link sees only `[testbench]
-sources`. Putting the model there fails at discovery with undefined references
-before Verilator has run at all. The co-simulation port does not hit this only
-because its calls into extra C++ are behind `#ifdef CPPTB_COSIM`, which the
-discovery build does not define.
+And one that has since been fixed in cpptb: sources listed in
+`verilator_args` did not reach the clock-discovery build, which compiled and
+ran the testbench standalone. The build no longer executes the testbench at
+all -- the access set comes from compile-only object sections and clocks are
+registered at runtime -- so the failure mode is gone along with the pass.
 
 ## The control does not work on this Verilator
 

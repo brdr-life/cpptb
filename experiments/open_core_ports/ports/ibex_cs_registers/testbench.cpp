@@ -45,7 +45,6 @@ namespace cpptb::ports::csr {
 namespace {
 
 using cpptb::Dut;
-using coro::FallingEdge;
 using coro::RisingEdge;
 using coro::Task;
 using namespace coro;
@@ -90,7 +89,7 @@ Task<void> cs_registers(Dut dut, TestContext& test) {
     std::default_random_engine generator(seed_from_env());
     std::uniform_int_distribution<int> delay_dist(kDelayMin, kDelayMax);
 
-    dut.clk_i.set(0);
+    dut.clk_i.set_now(0);
     dut.rst_ni.set(0);
     dut.csr_access_i.set(0);
     dut.csr_op_en_i.set(0);
@@ -138,9 +137,9 @@ Task<void> cs_registers(Dut dut, TestContext& test) {
         //
         // That is the scheduling hazard tb_cs_registers.sv describes in the
         // comment explaining why it drives through non-blocking assignments.
-        // cpptb has no NBA to reach for, so the driving moves to the falling
-        // edge instead, where it is stable well before the edge that commits
-        // it. Same effect, and nothing to get wrong at the next edge.
+        // deferred_writes is cpptb's NBA: a set() here queues and applies
+        // after this edge's own updates, so the value commits at the next
+        // edge -- the same ordering upstream gets from `<=`.
         co_await RisingEdge{dut.clk_i};
 
         // The gate is upstream's, from monitor_tick in reg_dpi.cc:
@@ -166,8 +165,6 @@ Task<void> cs_registers(Dut dut, TestContext& test) {
             observed->csr_wdata = dut.csr_wdata_i.get();
             model.NewTransaction(std::move(observed));
         }
-
-        co_await FallingEdge{dut.clk_i};
 
         // Decide what to present next, as RegisterDriver::OnClock does.
         if (--delay == 0) {

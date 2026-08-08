@@ -10,7 +10,6 @@ namespace {
 using cpptb::Dut;
 using coro::Delay;
 using coro::Event;
-using coro::FallingEdge;
 using coro::Join;
 using coro::RisingEdge;
 using coro::Task;
@@ -31,7 +30,6 @@ Task<void> reset_dut(Dut dut, Event& reset_done) {
     dut.out_ready.set(0);
 
     co_await clock_cycles(dut.clk, 2);
-    co_await FallingEdge{dut.clk};
     dut.rst_n.set(1);
     reset_done.set();
 }
@@ -57,16 +55,15 @@ Task<void> output_ready_driver(Dut dut, Event& reset_done) {
     uint32_t cycle = 0;
     uint32_t accepted = 0;
     while (accepted < kWordCount) {
-        co_await FallingEdge{dut.clk};
+        co_await RisingEdge{dut.clk};
+        if (dut.out_ready.get() != 0 && dut.out_valid.get() != 0) ++accepted;
         const uint32_t ready = cycle % 5u == 0u ? 1u : 0u;
         dut.out_ready.set(ready);
-        co_await Delay{1_ps};
-        if (ready != 0 && dut.out_valid.get() != 0) ++accepted;
         ++cycle;
     }
-
+    // One more edge before dropping ready: the falling-edge monitor and the
+    // drained check both need the final accept to commit first.
     co_await RisingEdge{dut.clk};
-    co_await Delay{1_ps};
     dut.out_ready.set(0);
 }
 
@@ -90,7 +87,7 @@ Task<void> audit_stream(TestContext& test, GetPort<uint32_t> audit,
 }
 
 Task<void> component_fifo_test(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     Event reset_done;

@@ -9,7 +9,6 @@ namespace {
 using cpptb::Dut;
 using coro::Delay;
 using coro::Event;
-using coro::FallingEdge;
 using coro::Join;
 using coro::Queue;
 using coro::RisingEdge;
@@ -30,7 +29,6 @@ Task<void> reset_dut(Dut dut, Event& reset_done) {
     dut.out_ready.set(0);
 
     co_await clock_cycles(dut.clk, 2);
-    co_await FallingEdge{dut.clk};
     dut.rst_n.set(1);
     reset_done.set();
 }
@@ -40,26 +38,24 @@ Task<void> input_driver(Dut dut, Event& reset_done,
                         uint32_t& input_stalls) {
     co_await reset_done;
 
+    // The cocotb driver shape: RisingEdge resumes before the design
+    // evaluates that edge, so a get() here reads the value the DUT is
+    // about to sample, and a set() applies after this edge's updates --
+    // in time for the next one.
     uint32_t state = 0x3141'5926u;
+    co_await RisingEdge{dut.clk};
     for (uint32_t index = 0; index < kWordCount; ++index) {
         const uint32_t word = next_word(state);
+        dut.in_data.set(word);
+        dut.in_valid.set(1);
         while (true) {
-            co_await FallingEdge{dut.clk};
-            dut.in_data.set(word);
-            dut.in_valid.set(1);
-            co_await Delay{1_ps};
-
-            if (dut.in_ready.get() == 0) {
-                ++input_stalls;
-                continue;
-            }
-            expected_words.put_nowait(word);
             co_await RisingEdge{dut.clk};
-            co_await Delay{1_ps};
-            dut.in_valid.set(0);
-            break;
+            if (dut.in_ready.get() != 0) break;
+            ++input_stalls;
         }
+        expected_words.put_nowait(word);
     }
+    dut.in_valid.set(0);
 }
 
 Task<void> output_ready_driver(Dut dut, Event& reset_done) {
@@ -68,18 +64,13 @@ Task<void> output_ready_driver(Dut dut, Event& reset_done) {
     uint32_t cycle = 0;
     uint32_t accepted = 0;
     while (accepted < kWordCount) {
-        co_await FallingEdge{dut.clk};
+        co_await RisingEdge{dut.clk};
+        if (dut.out_ready.get() != 0 && dut.out_valid.get() != 0) ++accepted;
         const uint32_t ready =
             (cycle % 5u == 1u || cycle % 5u == 2u) ? 0u : 1u;
         dut.out_ready.set(ready);
-        co_await Delay{2_ps};
-
-        if (ready != 0 && dut.out_valid.get() != 0) ++accepted;
         ++cycle;
     }
-
-    co_await RisingEdge{dut.clk};
-    co_await Delay{1_ps};
     dut.out_ready.set(0);
 }
 
@@ -89,8 +80,7 @@ Task<void> output_monitor(Dut dut, Event& reset_done,
 
     uint32_t observed = 0;
     while (observed < kWordCount) {
-        co_await FallingEdge{dut.clk};
-        co_await Delay{1_ps};
+        co_await RisingEdge{dut.clk};
         if (dut.out_valid.get() == 0 || dut.out_ready.get() == 0) continue;
 
         observed_words.put_nowait(dut.out_data.get());
@@ -109,7 +99,7 @@ Task<void> scoreboard(TestContext& test,
 }
 
 Task<void> fifo_test(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     Event reset_done;

@@ -128,7 +128,11 @@ class OrdinaryExampleMigrationTests(unittest.TestCase):
         for directory in single_clock_examples:
             with self.subTest(example=directory):
                 testbench = (EXAMPLES / directory / "testbench.cpp").read_text()
-                self.assertIn("dut.clk.set(0);", testbench)
+                # set_now: the examples run deferred_writes = true, where
+                # pre-clock initialization uses the immediate escape hatch
+                # (cocotb's setimmediatevalue). Ownership is what matters:
+                # the clock pin is initialized and started from C++.
+                self.assertIn("dut.clk.set_now(0);", testbench)
                 self.assertIn("test.start_clock(dut.clk, 10_ns);", testbench)
 
         multiclock = (EXAMPLES / "multiclock" / "testbench.cpp").read_text()

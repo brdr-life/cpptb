@@ -8,13 +8,12 @@ namespace {
 
 using cpptb::Dut;
 using coro::Delay;
-using coro::FallingEdge;
 using coro::RisingEdge;
 using coro::Task;
 using namespace coro;
 
 Task<void> fault_injection_sequence(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     dut.rst_n.set(0);
@@ -24,7 +23,6 @@ Task<void> fault_injection_sequence(Dut dut, TestContext& test) {
     dut.memory_write_data.set(0);
 
     co_await clock_cycles(dut.clk, 2);
-    co_await FallingEdge{dut.clk};
     dut.rst_n.set(1);
 
     co_await RisingEdge{dut.clk};

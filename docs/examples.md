@@ -70,19 +70,21 @@ and every point where simulator time advances is visible as `co_await`:
 
 ```cpp
 Task<void> counter_sequence(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     dut.rst_n.set(0);
     dut.enable.set(0);
 
+    // The cocotb write model (deferred_writes = true): a set() right
+    // after the awaited edge applies after that edge's own updates, so
+    // the release is seen by the next rising edge.
     co_await clock_cycles(dut.clk, 2);
-    co_await FallingEdge{dut.clk};
     dut.rst_n.set(1);
     dut.enable.set(1);
 
     co_await RisingEdge{dut.clk};
-    co_await Delay{1_ps};
+    co_await ReadOnly{};
     test.expect_eq("enabled count", dut.count.get(), 1);
 }
 

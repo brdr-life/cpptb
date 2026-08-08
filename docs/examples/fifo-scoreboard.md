@@ -19,7 +19,7 @@ Task<void> scoreboard(TestContext& test,
 }
 
 Task<void> fifo_test(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     Event reset_done;

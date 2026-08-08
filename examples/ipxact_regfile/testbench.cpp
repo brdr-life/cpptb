@@ -13,7 +13,6 @@ namespace cpptb::examples::ipxact_regfile {
 namespace {
 
 using cpptb::Dut;
-using coro::FallingEdge;
 using coro::Task;
 using namespace coro;
 using namespace cpptb::vc;
@@ -47,12 +46,11 @@ Task<void> reset_dut(Dut dut) {
     dut.apb_write_data.set(0);
     dut.apb_strobe.set(0);
     co_await clock_cycles(dut.clk, 2);
-    co_await FallingEdge{dut.clk};
     dut.rst_n.set(1);
 }
 
 Task<void> ipxact_register_model_test(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
     co_await reset_dut(dut);
 

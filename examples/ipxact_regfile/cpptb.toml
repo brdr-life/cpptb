@@ -9,3 +9,5 @@ include_dirs = ["../../build/cpptb/ipxact_regfile/generated"]
 [build]
 name = "ipxact_regfile"
 target = "ipxact_regfile"
+timing_backend = "verilator-direct"
+deferred_writes = true
