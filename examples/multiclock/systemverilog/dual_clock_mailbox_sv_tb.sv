@@ -135,16 +135,19 @@ module dual_clock_mailbox_sv_tb;
     disable first_trigger;
     expect_eq("First chose read clock", winner, 0);
 
-    @(write_clk);
+    // Drive at the edge through a non-blocking assignment -- the same
+    // schedule the C++ testbench gets from deferred writes; the #1ps is
+    // SystemVerilog's mechanism for reading the settled result.
+    @(posedge write_clk);
+    probe_in <= 8'ha5;
     #1ps;
-    probe_in = 8'ha5;
-    #1ps;
-    expect_eq("delay settles combinational output", probe_echo,
+    expect_eq("ReadOnly settles combinational output", probe_echo,
               8'ha5);
 
-    probe_in = 8'h3c;
+    @(write_clk);
+    probe_in <= 8'h3c;
     #1ps;
-    expect_eq("successive delay settles next drive", probe_echo,
+    expect_eq("successive write settles by the next ReadOnly", probe_echo,
               8'h3c);
   endtask
 
@@ -198,6 +201,18 @@ module dual_clock_mailbox_sv_tb;
     #1ms;
     $fatal(1, "dual_clock_mailbox pure-SV testbench timed out");
   end
+
+
+// Wave dumping for the equivalence flow only: the wave build verilates
+// with --trace +define+CPPTB_TWIN_WAVE and runs from the directory the
+// dump belongs in. The normal twin build compiles this away, keeping the
+// workload knob-free.
+`ifdef CPPTB_TWIN_WAVE
+  initial begin
+    $dumpfile("twin.vcd");
+    $dumpvars(0, dual_clock_mailbox_sv_tb);
+  end
+`endif
 
   dual_clock_mailbox i_dut (
       .rst_n(rst_n),

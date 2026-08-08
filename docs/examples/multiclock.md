@@ -22,7 +22,6 @@ namespace {
 
 using cpptb::Dut;
 using coro::Delay;
-using coro::Edge;
 using coro::First;
 using coro::Join;
 using coro::NextTimeStep;
@@ -115,7 +114,14 @@ Task<void> trigger_and_phase_probe(Dut dut, TestContext& test) {
     const auto winner = co_await First{RisingEdge{dut.read_clk}, Delay{100_ns}};
     test.expect_eq("First chose read clock", static_cast<uint32_t>(winner), 0u);
 
-    co_await Edge{dut.write_clk};
+    // First resumed at t=10, where the read and write edges coincide. In
+    // cpptb an edge await registered mid-timestep catches a later dispatch
+    // in the same timestep -- defined behavior, but a pure-SV @(posedge)
+    // armed after the coincident toggle waits for the next one. Step to
+    // the next timestep first so the anchor edge is the same in both
+    // worlds.
+    co_await NextTimeStep{};
+    co_await RisingEdge{dut.write_clk};
     dut.probe_in.set(0xa5);
     co_await ReadOnly{};
     test.expect_eq("ReadOnly settles combinational output",
@@ -151,7 +157,7 @@ CPPTB_REGISTER_TEST(multiclock_test);
 }  // namespace cpptb::examples::dpi_multiclock
 ```
 
-`TestContext::now()` checks absolute time, while `First` and `Edge` make
+`TestContext::now()` checks absolute time, while `First` makes
 trigger selection visible; settle points are `ReadOnly`, the settled region
 of the current timestep, with no sub-cycle delays anywhere. The pure
 SV peer uses the same `kTransferCount = 16` workload. The example also awaits

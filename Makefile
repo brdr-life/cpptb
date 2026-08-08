@@ -388,7 +388,7 @@ cpp-dpi-mixed-logging-output-test: cpp-dpi-mixed-logging-build
 	python3 examples/mixed_logging/check_output.py \
 		$(CPPTB_MIXED_LOGGING_OBJ_DIR)/Vdpi_mixed_logging
 
-.PHONY: help all doctor z3-toolchain test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run deferred-writes-test wave-equivalence-test $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all doctor z3-toolchain test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run deferred-writes-test wave-equivalence-test wave-eq-counter wave-eq-fifo_scoreboard wave-eq-apb_regfile wave-eq-multiclock wave-eq-multiclock-read $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -450,33 +450,58 @@ conformance-test: cpptb-conformance-run cpptb-conformance-vpi-run
 
 # The deferred-write contract -- the cocotb write model -- pinned on both
 # supported timing backends against the same testbench.
-# Pure SV and cpptb dump the same run and a cycle-sampled comparator proves
-# the design saw the same state trajectory. The twin builds with --trace into
-# its own object directory so the untraced twin stays warm; the cpptb side is
-# an ordinary --wave vcd build of the example.
+# Pure SV and cpptb dump the same run of the same design, and a
+# cycle-sampled comparator proves the design saw the identical state
+# trajectory. Four pairs across different design classes keep the claim
+# honest: a plain sequential counter, a ready/valid FIFO with
+# backpressure, a register file behind the APB components, and a
+# dual-clock mailbox compared on both domains. Each twin builds with
+# --trace into its own object directory so the untraced twin stays warm;
+# the cpptb side is an ordinary --wave vcd build of the example under a
+# wave_eq_* build name so the regular example builds stay warm too.
 WAVE_EQ_DIR := $(BUILD_DIR)/wave-equivalence
-WAVE_EQ_SV_OBJ := $(WAVE_EQ_DIR)/twin_obj
 
-wave-equivalence-test:
-	mkdir -p $(WAVE_EQ_DIR)
+# $(1) example dir  $(2) cpptb top  $(3) test name  $(4) twin top
+# $(5) twin sources $(6) clock      $(7) min cycles
+define WAVE_EQ_template
+wave-eq-$(1):
+	mkdir -p $(WAVE_EQ_DIR)/$(1)
 	verilator --binary --timing --no-sched-zero-delay --trace \
 		+define+CPPTB_TWIN_WAVE \
 		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL -Wno-BLKANDNBLK \
 		-Wno-MULTIDRIVEN \
-		--Mdir $(WAVE_EQ_SV_OBJ) \
-		--top-module stream_fifo_sv_tb \
-		examples/fifo_scoreboard/stream_fifo.sv \
-		examples/fifo_scoreboard/systemverilog/stream_fifo_sv_tb.sv
-	cd $(WAVE_EQ_DIR) && $(abspath $(WAVE_EQ_SV_OBJ))/Vstream_fifo_sv_tb
-	$(CPPTB) test --project examples/fifo_scoreboard \
-		--build-dir $(abspath $(BUILD_DIR)) --build-name wave_eq_fifo \
-		--top stream_fifo --target stream_fifo --wave vcd
+		--Mdir $(WAVE_EQ_DIR)/$(1)/twin_obj \
+		--top-module $(4) \
+		$(5)
+	cd $(WAVE_EQ_DIR)/$(1) && $$(abspath $(WAVE_EQ_DIR)/$(1)/twin_obj)/V$(4)
+	$$(CPPTB) test --project examples/$(1) \
+		--build-dir $$(abspath $$(BUILD_DIR)) --build-name wave_eq_$(1) \
+		--top $(2) --target $(2) --wave vcd
 	python3 tools/wave_compare.py \
-		--a build/cpptb/wave_eq_fifo/results/fifo_test.vcd \
-		--a-scope dpi_stream_fifo.i_dut \
-		--b $(WAVE_EQ_DIR)/twin.vcd \
-		--b-scope stream_fifo_sv_tb.i_dut \
-		--clock-signal clk --min-cycles 30
+		--a build/cpptb/wave_eq_$(1)/results/$(3).vcd \
+		--a-scope dpi_$(2).i_dut \
+		--b $(WAVE_EQ_DIR)/$(1)/twin.vcd \
+		--b-scope $(4).i_dut \
+		--clock-signal $(6) --min-cycles $(7)
+endef
+
+$(eval $(call WAVE_EQ_template,counter,counter,counter_sequence,counter_sv_tb,examples/counter/counter.sv examples/counter/systemverilog/counter_sv_tb.sv,clk,9))
+$(eval $(call WAVE_EQ_template,fifo_scoreboard,stream_fifo,fifo_test,stream_fifo_sv_tb,examples/fifo_scoreboard/stream_fifo.sv examples/fifo_scoreboard/systemverilog/stream_fifo_sv_tb.sv,clk,30))
+$(eval $(call WAVE_EQ_template,apb_regfile,apb_regfile,component_apb_test,apb_regfile_sv_tb,examples/apb_regfile/apb_regfile.sv examples/apb_regfile/systemverilog/apb_regfile_sv_tb.sv,clk,60))
+$(eval $(call WAVE_EQ_template,multiclock,dual_clock_mailbox,multiclock_test,dual_clock_mailbox_sv_tb,examples/multiclock/dual_clock_mailbox.sv examples/multiclock/systemverilog/dual_clock_mailbox_sv_tb.sv,write_clk,25))
+
+# The mailbox crosses two domains; the second comparison samples the same
+# dumps on the read clock's grid.
+wave-eq-multiclock-read: wave-eq-multiclock
+	python3 tools/wave_compare.py \
+		--a build/cpptb/wave_eq_multiclock/results/multiclock_test.vcd \
+		--a-scope dpi_dual_clock_mailbox.i_dut \
+		--b $(WAVE_EQ_DIR)/multiclock/twin.vcd \
+		--b-scope dual_clock_mailbox_sv_tb.i_dut \
+		--clock-signal read_clk --min-cycles 15
+
+wave-equivalence-test: wave-eq-counter wave-eq-fifo_scoreboard \
+	wave-eq-apb_regfile wave-eq-multiclock wave-eq-multiclock-read
 
 deferred-writes-test:
 	UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb test --project tests/integration/deferred_writes
