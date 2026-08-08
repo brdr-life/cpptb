@@ -1,7 +1,8 @@
 # Clockless timers
 
-`Delay` does not depend on a DUT clock. The project needs no clock
-configuration:
+Not every design has a clock to wait on. `Delay` advances absolute simulation
+time on its own, so a combinational or purely time-driven model needs no clock
+registration at all:
 
 ```sh
 uv run --frozen cpptb build --project examples/timer_only --build-dir build

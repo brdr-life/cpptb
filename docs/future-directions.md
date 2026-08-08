@@ -12,6 +12,15 @@ corpus needed to judge whether it is actually better than the alternatives.
 
 ## Align the scheduling semantics with cocotb
 
+:::{note}
+**Largely resolved.** This section records the analysis as it stood before
+`timing_backend` and `deferred_writes` shipped. Both gaps described below are
+now closed by standard project configuration; see
+[The write model](scheduling.md#the-write-model) for what cpptb does today.
+Only item 3 at the end -- making the write model unconditional rather than a
+key -- is still open. Read what follows as history, not as current behavior.
+:::
+
 cocotb is the framework most people arriving here have used, and the trigger
 vocabulary already matches it deliberately: `RisingEdge`, `FallingEdge`,
 `ReadOnly`, `ReadWrite`, `NextTimeStep`, with drivers, monitors and scoreboards
@@ -65,9 +74,12 @@ actually makes a translated cocotb testbench correct. The third is the only one
 that removes the difference entirely, and is the one that needs the most
 evidence.
 
-Until then the portable answer is the edge-phase convention documented in
-[Scheduling](scheduling.md#sample-on-the-edge-drive-off-it): sample on the
-rising edge, drive on the falling one. cpptb's own FIFO example already uses it.
+Items 1 and 2 have since shipped: `timing_backend` names the backend and
+emits the link both contract-complete backends need, and
+`deferred_writes = true` supplies the cocotb write model. Both are now standard
+project configuration -- see
+[The write model](scheduling.md#the-write-model). Item 3, making that model
+unconditional rather than a per-project key, is what remains.
 
 This has a concrete use case, a runnable example and a performance peer, so it
 clears the promotion bar in [Roadmap](roadmap.md#no-priority-backlog) if it is

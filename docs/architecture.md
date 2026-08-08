@@ -1,5 +1,10 @@
 # Architecture
 
+This page is for contributors and for anyone embedding cpptb in their own build
+or regression system. It describes how the runtime is layered, where the
+simulator boundary sits, and which ownership rules the design depends on.
+Nothing here is needed to write a testbench.
+
 The repository contains a reusable framework and an optional reference
 harness. The framework has four separable layers:
 
@@ -85,3 +90,59 @@ The resulting backend policy is:
 The framework keeps clock-cycle waits and absolute delays separate. Any signal
 configured as an observable clock can drive edge waits, while the persistent
 timer owner supports clockless and arbitrary multi-clock designs.
+
+## Reusable DPI runtime
+
+`include/cpptb/dpi_runtime.hpp` owns the design-independent DPI host behavior:
+
+- compact directional input/output transport and driven-signal tracking;
+- typed signal `get()`/`set()` callbacks and dirty-output detection;
+- generated internal-probe `get()`/`deposit()` access for packed variables and
+  fixed memories;
+- scheduler construction, edge dispatch, and delay deadlines;
+- falling-edge interest and precision-aware time transport;
+- timeout invocation, elapsed wall time, completion, and result reporting;
+- the standard init, step, output-pull, deadline, and edge-interest C exports
+  expected by the generated wrapper.
+
+`include/cpptb/test_result.hpp` keeps status, check counts, timing, and
+structured failure records independent of DPI. `test_reporting.hpp` writes the
+versioned JSON result consumed by the optional launcher, so user-facing
+fixtures and embedding harnesses do not include simulator transport headers.
+
+A design supplies a small `DpiAdapter` containing its DUT and result types,
+generated signal metadata, binding call, testbench registration call, result
+name, and timeout policy. `CPPTB_DEFINE_DPI_RUNTIME(Adapter)` provides the C
+entry points. No design transport needs to copy open arrays, decode events, or
+format a result line.
+
+The hot scheduler step receives only the compact observed-word array. Driven
+words are fetched through a separate idempotent output-pull export on
+initialization or after `STEP_OUTPUTS_CHANGED`, so unchanged steps do not carry
+an output argument through the simulator ABI.
+
+`deposit()` performs the underlying SystemVerilog blocking assignment
+immediately. It does not insert a scheduler delay or observation phase;
+testbench code uses an explicit `co_await Delay{...}` when downstream RTL must
+evaluate before observation.
+
+## Current scope
+
+The end-to-end test suite currently targets Verilator. Scalar signal values use
+`uint32_t`; packed values use `uint64_t` through 64 bits and `Bits<W>` above 64
+bits. Generated DPI bindings support fixed multidimensional unpacked arrays,
+packed enum and struct views, wide values, fixed-point helpers, and generated
+hierarchical probes with read, deposit, force, and release operations.
+Four-state X/Z propagation remains deferred. The generated
+transport uses standard SystemVerilog DPI, but additional simulator backends
+have not yet passed the conformance suite.
+
+The Authoring Core sources currently present under
+`benchmarks/authoring_core/` exercise typed tasks, cycle waits, edge timeouts,
+predicate waits, events, bounded queues, locks, semaphores, wide packed
+signals, fixed-point arithmetic, fixed unpacked arrays, and a synchronous
+memory front door. Its C++ DPI testbench is
+`benchmarks/authoring_core/testbenches/cpp_dpi/testbench.cpp`, the corresponding pure-SV
+source is `benchmarks/authoring_core/testbenches/systemverilog/authoring_core_sv_tb.sv`, and the
+shared workload contract is `benchmarks/authoring_core/workload.py`. Runtime
+API tests are in `tests/unit/coro_runtime_test.cpp`.

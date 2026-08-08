@@ -14,18 +14,34 @@ testbench and counting its failures.
 | `await FallingEdge(dut.clk)` | `co_await FallingEdge{dut.clk}` | Same |
 | `await Timer(5, "ns")` | `co_await Delay{5_ns}` | Same |
 | `await ClockCycles(dut.clk, n)` | `co_await clock_cycles(dut.clk, n)` | Same |
-| `await ReadOnly()` | `co_await ReadOnly{}` | Needs a [timing backend](scheduling.md#timing-backend-support) |
-| `await ReadWrite()` | `co_await ReadWrite{}` | Needs a timing backend |
-| `await NextTimeStep()` | `co_await NextTimeStep{}` | Needs a timing backend |
+| `await ReadOnly()` | `co_await ReadOnly{}` | Same |
+| `await ReadWrite()` | `co_await ReadWrite{}` | Same |
+| `await NextTimeStep()` | `co_await NextTimeStep{}` | Same |
 | `cocotb.start_soon(coro())` | `test.spawn(task(...))` | Same model |
 | `await First(a, b)` | `co_await First{a, b}` | Same |
 | `Event`, `Queue`, `Lock` | `Event`, `Queue`, `Lock` | Same |
 
+The phase waits come from the timing backend, which every cpptb project
+selects -- see [The write model](#the-write-model) below for the two lines
+of `cpptb.toml` that every example sets.
+
+If you also maintain SystemVerilog benches, the same concepts line up three
+ways:
+
+| Concept | cocotb | cpptb | Pure-SV twin |
+|---|---|---|---|
+| Timed wait | `await Timer(1, unit="ns")` | `co_await Delay{1_ns}` | `#1ns` |
+| Signal edge | `await RisingEdge(dut.clk)` | `co_await RisingEdge{dut.clk}` | `@(posedge clk)` |
+| Concurrent work | `start_soon()` / task groups | `spawn()` or `Join{...}` | `fork ... join` |
+| FIFO communication | `Queue` | `Queue<T>` | `mailbox` |
+| Notification | `Event` | `Event` | `event` |
+| Deadline | `with_timeout()` | `with_timeout()` | explicit event/deadline race |
+
 ## The write model
 
 cocotb's `dut.sig.value = x` is a cached write, applied at the next ReadWrite
-region. cpptb's `set()` is an immediate deposit -- unless the project opts
-into the cocotb model:
+region. cpptb's write model is the same one, and it is the default — a new
+project gets it with no configuration. The examples state it explicitly:
 
 ```toml
 [build]
@@ -33,14 +49,18 @@ timing_backend = "verilator-direct"   # or "vpi"
 deferred_writes = true
 ```
 
-Under the mode, `set()` carries cocotb's semantics exactly: the write queues
+`set()` therefore carries cocotb's semantics exactly: the write queues
 and flushes at the ReadWrite settle point, a `get()` between the two returns
 the simulator's value (your own queued write is invisible to you, as in
 cocotb), and `set_now()` is the escape hatch, mirroring
 `setimmediatevalue()`. The contract is pinned by
 `tests/integration/deferred_writes` on both backends in every `make test`.
 
-Both supported backends are interchangeable: under the mode, the Ibex icache
+A build without `deferred_writes` falls back to an immediate deposit. That is
+legacy behavior, intended for deprecation, and not an authoring style cpptb
+documents.
+
+Both supported backends are interchangeable: with the model enabled, the Ibex icache
 testbench produces byte-identical per-test check counts on
 `verilator-direct` and `vpi` across all ten of its tests.
 
@@ -112,10 +132,10 @@ out of fifty thousand, all one signature, from one line.
 
 ## What has no cocotb equivalent, and the reverse
 
-- cpptb's default build has **no phases at all** -- the edge-phase convention
-  in [scheduling](scheduling.md#sample-on-the-edge-drive-off-it) is the
-  supported zero-backend style, and it has no cocotb counterpart because
-  cocotb always has a simulator callback layer beneath it.
+- `co_await RisingEdge{}` resumes *before* the design evaluates the edge,
+  which cocotb has no counterpart for -- cocotb's fires from a value-change
+  callback, after evaluation. That is trap 1 above, and it is the one genuine
+  semantic difference left once the standard configuration is in place.
 - `force()`/`release()` are immediate in both worlds; the deferred mode does
   not touch them.
 - Replay-style pin comparison against recordings is drive-point-sensitive;

@@ -1,8 +1,10 @@
-# SystemVerilog interfaces and bidirectional signals
+# Interfaces and inouts
 
-`cpptb build` elaborates top-level SystemVerilog interfaces with Slang and
-generates the same named shape in C++. No interface manifest, port list, or
-binding file is required.
+A DUT that presents SystemVerilog interfaces instead of flat ports needs no
+special handling: the generated `Dut` mirrors the interface's own shape, so
+`bus.valid` in RTL is `dut.bus.valid` in C++. Parameterized interfaces,
+modports, interface arrays, and bidirectional pins all carry across, and there
+is no manifest, port list, or binding file to maintain.
 
 ```systemverilog
 interface stream_if #(parameter int WIDTH = 8) (input logic clk);

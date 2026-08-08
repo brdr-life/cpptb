@@ -1,8 +1,12 @@
 # Code generation
 
-`cpptb build` is the user-facing entry point. Internally, `cpptb-codegen`
+You never write the glue between your testbench and the simulator — cpptb
+generates it from the RTL. This page explains what gets generated, so you can
+recognize the files under `build/` and know which ones are disposable.
+
+`cpptb build` is the entry point you call. Behind it, `cpptb-codegen`
 elaborates the configured SystemVerilog sources with Slang and renders the
-design-specific files needed by the simulator:
+design-specific files the simulator needs:
 
 - A typed C++ DUT hierarchy and stable `dut.hpp` include.
 - C++ binding metadata and access callbacks.
@@ -31,7 +35,7 @@ uv run --frozen cpptb-codegen rtl/design.sv
 Top-level interface instances, selected modports, interface parameters,
 constructor connections, fixed interface arrays, and `inout` drive intent are
 also derived from the elaborated source. See
-[SystemVerilog interfaces and bidirectional signals](interfaces.md).
+[Interfaces and inouts](interfaces.md).
 
 The generated hierarchy records whether each HDL object is two-state or
 four-state, but transport capability is a separate simulator property. The

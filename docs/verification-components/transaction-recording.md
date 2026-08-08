@@ -1,13 +1,5 @@
 # Transaction recording
 
-:::{note}
-Transaction recording is implemented in the optional `cpptb_vc` package. It
-does not add protocol knowledge or recording policy to the core scheduler.
-The shipped first slice covers typed completed observations, APB monitoring,
-in-memory retention, and JSON Lines output; explicitly deferred behavior is
-listed at the end of this page.
-:::
-
 Transaction recording presents protocol operations as timed, structured data.
 It complements signal waveforms rather than replacing them. For example, an
 APB waveform can be summarized as:
@@ -15,6 +7,16 @@ APB waveform can be summarized as:
 ```text
 120 ns - 150 ns  apb.write  address=0x24  data=0x08  status=okay
 ```
+
+Reading that line beats reading the waveform that produced it, and unlike a
+waveform it can be diffed, filtered, or fed to another tool.
+
+:::{note}
+Recording lives in the optional `cpptb_vc` package, so no protocol knowledge or
+recording policy reaches the core scheduler. The shipped first slice covers
+typed completed observations, APB monitoring, in-memory retention, and JSON
+Lines output; explicitly deferred behavior is listed at the end of this page.
+:::
 
 The central design decision is **where that record comes from**. The default is
 a passive protocol monitor that observes DUT signals and reconstructs

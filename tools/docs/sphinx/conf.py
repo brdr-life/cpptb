@@ -72,28 +72,59 @@ _ROOT_TOCTREE = """
 :caption: Start here
 
 getting-started
+core-ideas
+coming-from-cocotb
 ```
 
 ```{toctree}
 :hidden:
 :maxdepth: 2
-:caption: Guides
+:caption: Core concepts
 
 testbench-authoring
-verification-components
-random-stimulus
 test-lifecycle
+clocking
+scheduling
 logging
-running-tests
+waveforms
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Examples
+
+Overview <examples>
+Simple <examples/simple>
+Advanced <examples/advanced>
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Connect to your DUT
+
 hierarchy
 interfaces
 four-state
-examples
-clocking
-scheduling
-coming-from-cocotb
-waveforms
 code-generation
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 2
+:caption: Advanced Verification
+
+verification-components
+random-stimulus
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Reference
+
+running-tests
 ```
 
 ```{toctree}
@@ -112,31 +143,38 @@ performance
 
 roadmap
 future-directions
-documentation-hosting
 ```
 """
 
-_EXAMPLES_TOCTREE = """
+_SIMPLE_EXAMPLES_TOCTREE = """
 ```{toctree}
 :hidden:
 :maxdepth: 1
 
-examples/counter
-examples/timer-only
-examples/fifo-scoreboard
-examples/component-fifo
-examples/multiclock
-examples/apb-regfile
-examples/apb-trace
-examples/ipxact-regfile
-examples/watchdog-timeout
-examples/fault-injection
-examples/rich-data
-examples/interfaces
-examples/mixed-logging
-examples/heavy-benchmarks
-examples/open-source-cores
-examples/secworks-aes-regmodel
+counter
+timer-only
+fifo-scoreboard
+multiclock
+watchdog-timeout
+```
+"""
+
+_ADVANCED_EXAMPLES_TOCTREE = """
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+component-fifo
+apb-regfile
+apb-trace
+ipxact-regfile
+fault-injection
+rich-data
+interfaces
+mixed-logging
+heavy-benchmarks
+open-source-cores
+secworks-aes-regmodel
 ```
 """
 
@@ -170,7 +208,8 @@ verification-components/register-sequences
 
 _NAVIGATION_TOCTREES = {
     "index": _ROOT_TOCTREE,
-    "examples": _EXAMPLES_TOCTREE,
+    "examples/simple": _SIMPLE_EXAMPLES_TOCTREE,
+    "examples/advanced": _ADVANCED_EXAMPLES_TOCTREE,
     "random-stimulus": _RANDOMIZATION_TOCTREE,
     "verification-components": _VERIFICATION_COMPONENTS_TOCTREE,
 }
