@@ -113,9 +113,11 @@ module apb_regfile_sv_tb;
   endtask
 
   task automatic apb_idle();
-    apb_select = 1'b0;
-    apb_enable = 1'b0;
-    apb_write = 1'b0;
+    // Non-blocking: idle is issued right at the completing edge, and the
+    // design must sample the access phase before the deassert applies.
+    apb_select <= 1'b0;
+    apb_enable <= 1'b0;
+    apb_write <= 1'b0;
   endtask
 
   task automatic apb_write_word(
@@ -124,27 +126,29 @@ module apb_regfile_sv_tb;
       output logic error,
       output int unsigned wait_cycles
   );
-    @(negedge clk);
-    apb_address = address;
-    apb_write_data = data;
-    apb_write = 1'b1;
-    apb_select = 1'b1;
-    apb_enable = 1'b0;
+    // Drive at the rising edge through non-blocking assignments -- the
+    // same schedule the C++ master gets from deferred writes.
+    @(posedge clk);
+    apb_address <= address;
+    apb_write_data <= data;
+    apb_write <= 1'b1;
+    apb_select <= 1'b1;
+    apb_enable <= 1'b0;
 
     @(posedge clk);
-    @(negedge clk);
-    apb_enable = 1'b1;
+    apb_enable <= 1'b1;
 
     wait_cycles = 0;
+    // Read right at the edge, before non-blocking updates apply: the
+    // value the design presented for this edge -- the same pre-evaluation
+    // sample the C++ master takes under deferred writes.
     forever begin
       @(posedge clk);
-      #1ps;
       if (apb_ready) break;
       wait_cycles++;
     end
     error = apb_error;
 
-    @(negedge clk);
     apb_idle();
   endtask
 
@@ -154,27 +158,27 @@ module apb_regfile_sv_tb;
       output logic error,
       output int unsigned wait_cycles
   );
-    @(negedge clk);
-    apb_address = address;
-    apb_write = 1'b0;
-    apb_select = 1'b1;
-    apb_enable = 1'b0;
+    @(posedge clk);
+    apb_address <= address;
+    apb_write <= 1'b0;
+    apb_select <= 1'b1;
+    apb_enable <= 1'b0;
 
     @(posedge clk);
-    @(negedge clk);
-    apb_enable = 1'b1;
+    apb_enable <= 1'b1;
 
     wait_cycles = 0;
+    // Read right at the edge, before non-blocking updates apply: the
+    // value the design presented for this edge -- the same pre-evaluation
+    // sample the C++ master takes under deferred writes.
     forever begin
       @(posedge clk);
-      #1ps;
       if (apb_ready) break;
       wait_cycles++;
     end
     data = apb_read_data;
     error = apb_error;
 
-    @(negedge clk);
     apb_idle();
   endtask
 
@@ -199,8 +203,9 @@ module apb_regfile_sv_tb;
     active = 0;
     wait_cycles = 0;
     while (observed_transactions < kObservedTransactions) begin
+      // Sample right at the edge, before non-blocking updates apply --
+      // the values the design sampled, matching the C++ observers.
       @(posedge clk);
-      #1ps;
 
       if (!apb_select) begin
         active = 0;
@@ -241,8 +246,9 @@ module apb_regfile_sv_tb;
     setup_seen = 0;
     waiting = 0;
     forever begin
+      // Sample right at the edge, before non-blocking updates apply --
+      // the values the design sampled, matching the C++ observers.
       @(posedge clk);
-      #1ps;
 
       selected = apb_select;
       enabled = apb_enable;

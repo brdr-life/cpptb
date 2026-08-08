@@ -63,7 +63,10 @@ Task<void> trace_sequence(Master& apb, TestContext& test,
     for (uint32_t index = 0; index < kTransferPairs; ++index) {
         const uint32_t address = ((index * 13u) & 63u) * 4u;
         const uint32_t value = next_word(state);
-        const uint32_t expected_wait_cycles = (address & 4u) != 0 ? 1u : 0u;
+        // Wait states counted the pre-evaluation way: every access-phase
+        // cycle with PREADY low. The slow addresses hold PREADY low for two
+        // access cycles; the old post-edge sampling only ever saw one.
+        const uint32_t expected_wait_cycles = (address & 4u) != 0 ? 2u : 0u;
 
         const auto write = co_await apb.write(address, value);
         if (observed_wait_cycles) *observed_wait_cycles += write.wait_cycles;
@@ -116,7 +119,7 @@ Task<void> transaction_recording_test(Dut dut, TestContext& test) {
     test.expect_eq("APB scoreboard comparison count", scoreboard.compared(),
                    kTransactionCount);
     test.expect_eq("recorded APB wait-cycle count", observed_wait_cycles,
-                   uint64_t{128});
+                   uint64_t{256});
     test.expect_eq("recorded APB transaction count", records.size(),
                    kTransactionCount);
     test.expect_eq("first APB record sequence",

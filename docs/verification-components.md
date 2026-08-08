@@ -284,6 +284,20 @@ ApbMonitor monitor{test, bus, 1_ps};
 ApbProtocolChecker checker{test, bus, 1_ps};
 ```
 
+The components carry both write models. Under `deferred_writes = true`
+they take the cocotb shape: drives anchor on the rising edge and apply
+after that edge's own updates. The APB master's completion loop, the APB
+monitor, and the protocol checker then observe at the pre-evaluation
+resume -- the values the design sampled at the edge -- and do not await
+`sample_delay`; the ready-valid stream driver deliberately keeps its
+post-edge `sample_delay` ready check in both models, mirroring its pure-SV
+twin. Under immediate writes everything keeps the falling-edge drive
+points and post-edge sampling. One counting consequence is user-visible
+on the APB side: pre-evaluation observation reports a wait state for
+**every** access cycle with `PREADY` low, where post-edge sampling skipped
+the first one; calibrated wait-cycle expectations differ between the
+modes accordingly.
+
 Pass a tenth signal to `ApbBus` when `PSTRB` is present. Without it, requests
 still carry a byte-enable value so a generic sequence has one stable shape;
 an APB3-style master simply cannot apply partial writes.

@@ -190,14 +190,18 @@ def _fingerprint(
             for path in directory.rglob("*")
             if path.is_file() and path.suffix.lower() in cpp_header_suffixes
         )
-    files.extend(
-        sorted(
-            path
-            for path in (framework_include / "cpptb").rglob("*")
-            if path.is_file()
-            and path.suffix.lower() in {".hpp", ".sv", ".svh", ".cpp"}
+    # Both framework trees: the runtime and the component library. Missing
+    # either means an edit there reuses stale objects with a clean "up to
+    # date" message.
+    for framework_tree in ("cpptb", "cpptb_vc"):
+        files.extend(
+            sorted(
+                path
+                for path in (framework_include / framework_tree).rglob("*")
+                if path.is_file()
+                and path.suffix.lower() in {".hpp", ".sv", ".svh", ".cpp"}
+            )
         )
-    )
     files.extend(sorted(Path(__file__).resolve().parent.rglob("*.py")))
     for path in sorted(dict.fromkeys(files)):
         _hash_file(digest, path)

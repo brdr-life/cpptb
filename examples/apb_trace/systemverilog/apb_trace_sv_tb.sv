@@ -103,9 +103,11 @@ module apb_trace_sv_tb;
   endtask
 
   task automatic apb_idle();
-    apb_select = 1'b0;
-    apb_enable = 1'b0;
-    apb_write = 1'b0;
+    // Non-blocking: idle is issued right at the completing edge, and the
+    // design must sample the access phase before the deassert applies.
+    apb_select <= 1'b0;
+    apb_enable <= 1'b0;
+    apb_write <= 1'b0;
   endtask
 
   task automatic apb_write_word(
@@ -114,24 +116,26 @@ module apb_trace_sv_tb;
       output logic error,
       output int unsigned wait_cycles
   );
-    @(negedge clk);
-    apb_address = address;
-    apb_write_data = data;
-    apb_write = 1'b1;
-    apb_select = 1'b1;
-    apb_enable = 1'b0;
+    // Drive at the rising edge through non-blocking assignments -- the
+    // same schedule the C++ master gets from deferred writes.
     @(posedge clk);
-    @(negedge clk);
-    apb_enable = 1'b1;
+    apb_address <= address;
+    apb_write_data <= data;
+    apb_write <= 1'b1;
+    apb_select <= 1'b1;
+    apb_enable <= 1'b0;
+    @(posedge clk);
+    apb_enable <= 1'b1;
     wait_cycles = 0;
+    // Read right at the edge, before non-blocking updates apply: the
+    // value the design presented for this edge -- the same pre-evaluation
+    // sample the C++ master takes under deferred writes.
     forever begin
       @(posedge clk);
-      #1ps;
       if (apb_ready) break;
       wait_cycles++;
     end
     error = apb_error;
-    @(negedge clk);
     apb_idle();
   endtask
 
@@ -141,24 +145,24 @@ module apb_trace_sv_tb;
       output logic error,
       output int unsigned wait_cycles
   );
-    @(negedge clk);
-    apb_address = address;
-    apb_write = 1'b0;
-    apb_select = 1'b1;
-    apb_enable = 1'b0;
     @(posedge clk);
-    @(negedge clk);
-    apb_enable = 1'b1;
+    apb_address <= address;
+    apb_write <= 1'b0;
+    apb_select <= 1'b1;
+    apb_enable <= 1'b0;
+    @(posedge clk);
+    apb_enable <= 1'b1;
     wait_cycles = 0;
+    // Read right at the edge, before non-blocking updates apply: the
+    // value the design presented for this edge -- the same pre-evaluation
+    // sample the C++ master takes under deferred writes.
     forever begin
       @(posedge clk);
-      #1ps;
       if (apb_ready) break;
       wait_cycles++;
     end
     data = apb_read_data;
     error = apb_error;
-    @(negedge clk);
     apb_idle();
   endtask
 
@@ -179,7 +183,9 @@ module apb_trace_sv_tb;
       address = ((index * 13) & 63) * 4;
       state = next_word(state);
       value = state;
-      expected_waits = address[2] ? 1 : 0;
+      // Two wait states counted the pre-edge way: every access cycle the
+      // slow region holds PREADY low.
+      expected_waits = address[2] ? 2 : 0;
 
       apb_write_word(address, value, error, waits);
       total_wait_cycles += waits;
@@ -201,8 +207,10 @@ module apb_trace_sv_tb;
     monitor_active = 1'b0;
     monitor_waits = 0;
     while (observed_count < kTransactionCount) begin
+      // Sample right at the edge, before non-blocking updates: the values
+      // the design sampled at this edge, matching the C++ monitor's
+      // pre-evaluation reads.
       @(posedge clk);
-      #1ps;
       if (!apb_select) begin
         monitor_active = 1'b0;
         monitor_waits = 0;
@@ -250,7 +258,7 @@ module apb_trace_sv_tb;
                actual_transactions.size() == 0);
     check_true("APB scoreboard comparison count",
                compared == kTransactionCount);
-    check_true("recorded APB wait-cycle count", total_wait_cycles == 128);
+    check_true("recorded APB wait-cycle count", total_wait_cycles == 256);
     check_true("recorded APB transaction count",
                recorded_sequences.size() == kTransactionCount);
     check_true("first APB record sequence", recorded_sequences[0] == 0);
@@ -265,10 +273,9 @@ module apb_trace_sv_tb;
     if (failures != 0) $fatal(1, "APB trace failed: %0d failures", failures);
     $display(
         "PURE_SV_APB_TRACE_RESULT iterations=1 checks=%0d sim_cycles=%0d failures=0",
-        checks, // One cycle of reset overhead, not two: the release moved from
-        // the falling edge to a non-blocking assignment at the rising
-        // edge, so the first setup phase lands one cycle earlier.
-        kTransactionCount * 3 + 1 + total_wait_cycles);
+        checks, // Two cycles of overhead under the rising-edge drive cadence:
+        // one of reset, one from the first transaction's anchor edge.
+        kTransactionCount * 3 + 2 + total_wait_cycles);
     $finish;
   end
 endmodule

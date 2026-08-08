@@ -179,6 +179,25 @@ class ApbMaster {
         co_await lock_.acquire();
         apb_detail::LockGuard guard{lock_};
 
+#ifdef CPPTB_DEFERRED_WRITES
+        // The cocotb shape: anchor on the rising edge. A deferred set()
+        // applies after this edge's own updates and is first sampled by the
+        // next one -- the same protocol schedule the falling-edge anchors
+        // below give the immediate write model, one edge earlier per await.
+        co_await coro::RisingEdge{static_cast<coro::Signal>(bus_.clock)};
+        bus_.address.set(request.address);
+        bus_.write_data.set(request.data);
+        set_strobe(request.byte_enable);
+        bus_.write.set(1);
+        bus_.select.set(1);
+        bus_.enable.set(0);
+
+        co_await coro::RisingEdge{static_cast<coro::Signal>(bus_.clock)};
+        bus_.enable.set(1);
+
+        const auto completion = co_await wait_for_completion();
+        idle();
+#else
         co_await coro::FallingEdge{static_cast<coro::Signal>(bus_.clock)};
         bus_.address.set(request.address);
         bus_.write_data.set(request.data);
@@ -194,6 +213,7 @@ class ApbMaster {
         const auto completion = co_await wait_for_completion();
         co_await coro::FallingEdge{static_cast<coro::Signal>(bus_.clock)};
         idle();
+#endif
         co_return write_response_type{completion.status,
                                       completion.wait_cycles};
     }
@@ -208,6 +228,23 @@ class ApbMaster {
         co_await lock_.acquire();
         apb_detail::LockGuard guard{lock_};
 
+#ifdef CPPTB_DEFERRED_WRITES
+        co_await coro::RisingEdge{static_cast<coro::Signal>(bus_.clock)};
+        bus_.address.set(request.address);
+        set_strobe(byte_enable_type{});
+        bus_.write.set(0);
+        bus_.select.set(1);
+        bus_.enable.set(0);
+
+        co_await coro::RisingEdge{static_cast<coro::Signal>(bus_.clock)};
+        bus_.enable.set(1);
+
+        const auto completion = co_await wait_for_completion();
+        const data_type data = completion.status == MemoryStatus::Timeout
+                                   ? data_type{}
+                                   : bus_.read_data.get();
+        idle();
+#else
         co_await coro::FallingEdge{static_cast<coro::Signal>(bus_.clock)};
         bus_.address.set(request.address);
         set_strobe(byte_enable_type{});
@@ -225,6 +262,7 @@ class ApbMaster {
                                    : bus_.read_data.get();
         co_await coro::FallingEdge{static_cast<coro::Signal>(bus_.clock)};
         idle();
+#endif
         co_return read_response_type{data, completion.status,
                                      completion.wait_cycles};
     }
@@ -249,9 +287,11 @@ class ApbMaster {
         uint32_t wait_cycles = 0;
         while (true) {
             co_await coro::RisingEdge{static_cast<coro::Signal>(bus_.clock)};
+#ifndef CPPTB_DEFERRED_WRITES
             if (config_.sample_delay.in_femtoseconds() != 0) {
                 co_await coro::Delay{config_.sample_delay};
             }
+#endif
             if (bus_.ready.get() != 0) {
                 co_return Completion{
                     bus_.error.get() == 0 ? MemoryStatus::Okay
@@ -430,9 +470,15 @@ class ApbProtocolChecker<
    private:
     coro::Task<void> sample() {
         co_await coro::RisingEdge{static_cast<coro::Signal>(bus_.clock)};
+#ifndef CPPTB_DEFERRED_WRITES
+        // Under deferred writes the drive side flushes at this timestep's
+        // ReadWrite point, so a post-edge delay would read the values meant
+        // for the NEXT edge. The pre-evaluation resume observes exactly
+        // what the design sampled at this edge.
         if (sample_delay_.in_femtoseconds() != 0) {
             co_await coro::Delay{sample_delay_};
         }
+#endif
 
         const bool selected = bus_.select.get() != 0;
         const bool enabled = bus_.enable.get() != 0;
@@ -509,7 +555,7 @@ class ApbProtocolChecker<
 
     TestContext test_;
     bus_type bus_;
-    coro::SimTime sample_delay_;
+    [[maybe_unused]] coro::SimTime sample_delay_;
     address_type address_{};
     data_type write_data_{};
     byte_enable_type strobe_{};
