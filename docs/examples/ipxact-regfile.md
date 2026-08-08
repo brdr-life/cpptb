@@ -9,18 +9,18 @@ The complete source is under `examples/ipxact_regfile/`:
 
 ```text
 ipxact_regfile/
-|-- component.xml                  # authored IP-XACT contract
-|-- ipxact_regfile.sv              # authored APB4 RTL
-|-- testbench.cpp                  # generated-model APB test
-|-- model_contract.cpp             # simulator-free fake-master check
-|-- cpptb.toml
-`-- systemverilog/
-    `-- ipxact_regfile_sv_tb.sv    # matching direct-SV sequence
+├── component.xml                  # authored IP-XACT contract
+├── ipxact_regfile.sv              # authored APB4 RTL
+├── testbench.cpp                  # generated-model APB test
+├── model_contract.cpp             # simulator-free fake-master check
+├── cpptb.toml
+└── systemverilog/
+    └── ipxact_regfile_sv_tb.sv    # matching direct-SV sequence
 
 build/cpptb/ipxact_regfile/
-|-- generated/ipxact_regs.hpp      # generated typed model
-|-- obj/                           # C++ DPI simulator
-`-- systemverilog_obj/             # pure-SV simulator
+├── generated/ipxact_regs.hpp      # generated typed model
+├── obj/                           # C++ DPI simulator
+└── systemverilog_obj/             # pure-SV simulator
 ```
 
 ## Author the contract

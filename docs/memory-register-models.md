@@ -1,9 +1,15 @@
 # Register abstraction layer
 
-The cpptb register abstraction layer (RAL) is an optional verification
-component in `cpptb_vc`. It turns a register contract into typed C++ handles,
-tracks expected register state, and sends explicit accesses through a
-protocol-neutral master or a user-supplied backdoor.
+Driving a register map as raw bus writes — `co_await apb.write(0x04, 0x7)` —
+encodes offsets and bit positions into every sequence, and every one of them
+has to change when the map does. The register abstraction layer (RAL) replaces
+those literals with typed handles, so the same access reads as
+`co_await regs.control.enable.write(1)`: the handle knows its own offset,
+fields, and reset value, and tracks what the DUT's registers should hold.
+
+RAL is an optional component in `cpptb_vc`. It turns a register contract into
+typed C++ handles, tracks expected register state, and sends explicit accesses
+through a protocol-neutral master or a user-supplied backdoor.
 
 RAL is not part of the core scheduler or DUT signal API. A test that only needs
 `dut.path.signal.get()`, `set()`, clocks, and triggers does not include or pay

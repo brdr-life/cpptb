@@ -62,7 +62,8 @@ types.
   1.10 performance-ratio guard and one documented direct-force transport
   waiver.
 
-See [testbench authoring](docs/testbench-authoring.md),
+See [core ideas](docs/core-ideas.md),
+[tasks and concurrency](docs/testbench-authoring.md),
 [randomization and coverage](docs/random-stimulus.md),
 [running tests](docs/running-tests.md),
 [hierarchical DUT access](docs/hierarchy.md),

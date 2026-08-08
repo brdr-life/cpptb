@@ -1,7 +1,11 @@
 # Performance
 
-Performance comparisons use an equivalent C++ DPI and pure SystemVerilog
-testbench for every authoring feature. The peripheral suite additionally keeps
+The question this page answers is what a C++ coroutine testbench costs against
+one written directly in SystemVerilog — and it is answered with measurements
+rather than claims, including the cases where cpptb loses.
+
+Every authoring feature has an equivalent C++ DPI and pure SystemVerilog
+testbench running the same workload. The peripheral suite additionally keeps
 cocotb and C++ VPI implementations for four-mode comparisons.
 
 The hard framework guard rejects a final C++ DPI to SystemVerilog process-wall
@@ -1024,3 +1028,43 @@ per-access bus-master task layer at about 0.5%; almost all residual overhead is
 the simulator/DPI/C++ scheduler transition at each timing boundary. A fused
 timer-deadline ABI measured only a 0.6% paired gain and was removed. The full
 methodology and experiment table live in the benchmark's `PROFILE.md`.
+
+## Scheduler optimization history
+
+A macOS sampling profile first identified full coroutine-state scans and
+hash-table lookups as scheduler hot spots. The scheduler now uses reusable
+numeric state slots, direct signal-indexed wait queues, targeted child cleanup,
+conditional drains, and an active-coroutine counter.
+
+A second profile of the exact dual-clock C++ DPI/pure-SV comparison showed
+that the remaining cost was primarily in generated SystemVerilog timing
+processes rather than C++ queue management. Generated periodic clocks use one
+absolute-deadline process, falling-edge DPI calls are skipped unless the
+scheduler has a matching waiter, and physical delays are scheduled only when
+a coroutine awaits `Delay`.
+
+The performance guard uses an initial batch of 16 warmed, adjacent
+C++ DPI/pure-SV pairs and alternates execution order. It compares the median of
+the paired process-time ratios and hard-fails above `1.10x`. When the median
+passes but its one-sided 95% upper confidence bound is inconclusive, the guard
+collects one additional 16-pair batch and evaluates the combined samples; it
+does not rerun the complete benchmark. A still-inconclusive passing median is
+reported with a warning. Result artifacts include raw pairs and the
+environment/build metadata needed to interpret them. Close ratios are treated
+as noisy measurements, not evidence that either implementation is
+directionally faster.
+
+The raw runner applies this calculation to every feature. The registry has one
+visible, capped exception for the transport-only `force_direct` microbenchmark;
+see [Scoped direct-force waiver](performance.md#scoped-direct-force-waiver).
+
+## Cocotb comparison benchmark
+
+The cocotb comparison benchmark is in `experiments/cocotb_cpp_comparison/`:
+
+```sh
+python3 experiments/cocotb_cpp_comparison/run_benchmark.py --iters 1000 --runs 3
+```
+
+It runs the same APB event-unit traffic in cocotb and in the C++ coroutine
+model, then writes results to `experiments/cocotb_cpp_comparison/results/`.

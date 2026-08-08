@@ -1,8 +1,14 @@
 # Structured logging
 
-cpptb logging is a framework facility. It attaches simulation time, source
-location, and lifecycle process provenance to messages without requiring the
-reference command-line runner or storing every message in `TestResult`.
+When a test fails at simulation time 41,250 ns and three processes were running,
+a bare `printf` will not tell you which one spoke. cpptb's loggers stamp every
+message with the simulation time, the source location, and the process that
+emitted it, so a diagnostic stream stays readable as concurrency grows.
+
+Logging is part of the framework, not the command-line runner, so it works in
+any embedding. Messages go to a sink as they are emitted rather than into
+`TestResult`; retaining them for later inspection is opt-in via
+[`LogHistory`](#ordered-history).
 
 Create a logger from the current test context and give it a stable component
 or activity scope:

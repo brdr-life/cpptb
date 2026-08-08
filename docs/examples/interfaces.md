@@ -1,4 +1,4 @@
-# Interfaces and inouts
+# Interfaces and inouts example
 
 This runnable example contains a parameterized interface array, two C++-owned
 interface clocks, modport-directed input and output members, an interface

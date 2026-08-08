@@ -93,7 +93,8 @@ uv run --frozen cpptb list --project examples/counter --build-dir build
 uv run --frozen cpptb test --project examples/counter --build-dir build
 ```
 
-This example runs `deferred_writes = true` -- the cocotb write model. A
+Like every example here, this project sets `deferred_writes = true` -- the
+standard cocotb write model. A
 `set()` right after an awaited edge queues and applies after that edge's own
 updates, so it is first seen by the next rising edge; `set_now()` is the
 immediate escape hatch used to initialize the clock pin before

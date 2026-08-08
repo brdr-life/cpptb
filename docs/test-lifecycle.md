@@ -1,9 +1,14 @@
 # Framework test lifecycle
 
-The cpptb lifecycle API is part of the reusable C++ framework. It does not
-require the `cpptb` command, `cpptb-run`, a particular build system, or a
-particular regression harness. An embedding application can discover a
-compiled catalog, select one test, run it, and consume its result directly.
+This page covers everything that happens around your test: how a coroutine
+becomes a registered test, how checks record success and failure, who owns the
+processes it spawns, how a test ends, and what it reports when it does.
+
+All of this lives in the reusable C++ framework rather than in the `cpptb`
+command, so an embedding application can discover a compiled catalog, select
+one test, run it, and consume its result directly — no particular build system
+or regression harness required. If you just want to run tests from the command
+line, [Running tests](running-tests.md) is the shorter path.
 
 The framework owns:
 

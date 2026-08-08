@@ -1,7 +1,11 @@
 # Clocking
 
-Clock timing is declared in the C++ testbench. It is not supplied to code
-generation or driven with repeated C++ signal writes.
+The testbench owns clock timing. You declare a period once in C++ and the
+simulator drives the waveform from then on — there is nothing to configure at
+generation time, and no process of yours toggling the pin every half period.
+
+This page covers registering input clocks, running several domains at once,
+waiting on clocks the DUT produces, and how the scheduler dispatches edges.
 
 ## Input clocks
 

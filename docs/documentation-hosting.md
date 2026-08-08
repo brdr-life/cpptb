@@ -1,4 +1,14 @@
+---
+orphan: true
+---
+
 # Documentation hosting
+
+:::{note}
+This is a maintainer runbook, not user documentation, so it is deliberately
+kept out of the site navigation. The rest of the repository workflow is in
+`CONTRIBUTING.md`.
+:::
 
 The Sphinx documentation is published to Cloudflare Pages and gated by
 Cloudflare Access, so the rendered site stays private while the repository

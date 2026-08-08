@@ -1,8 +1,9 @@
 # Hierarchical DUT access
 
-`cpptb-codegen` elaborates the complete SystemVerilog design with Slang and
-generates a stateless C++ view of the resulting hierarchy. The testbench does
-not list probes in JSON and does not use a separate `internal` namespace:
+Verification often needs to reach past the ports: to check an internal counter,
+preload a memory, or force a net to inject a fault. In cpptb you reach these
+objects the same way you reach a port — by naming the path the RTL already
+uses:
 
 ```cpp
 const auto status = dut.block1.block2.status.get();
@@ -55,8 +56,9 @@ CPPTB_REGISTER_TEST(fault_injection_sequence);
 
 For adjacent typed access patterns, see [rich data](examples/rich-data.md) for
 wide packed values, fixed point, multidimensional arrays, packed structs, and
-enums. The [examples overview](examples.md) links every complete C++/pure-SV
-pair included in the standard regression.
+enums. [Fault injection](examples/fault-injection.md) is the smallest complete
+bench built around hierarchy access, and the [examples index](examples.md)
+routes to every complete C++/pure-SV pair in the standard regression.
 
 ## Operations
 
@@ -196,3 +198,15 @@ uv run --frozen cpptb-codegen rtl/design.sv \
 
 The JSON form is an optional review or CI snapshot of elaboration. It is
 generator output, never testbench input.
+
+## What can be forced
+
+`force()` is generated for hierarchical objects used by the compiled testbench,
+not for ordinary DUT ports. Registered input clocks stay owned by
+`start_clock()` and cannot safely be forced or paused through the public API.
+
+Calling `force()` or `release()` on an ordinary port produces an intentional
+compile-time diagnostic rather than a generic missing-member error. For a
+scheduler-owned clock, the diagnostic directs you back to
+`TestContext::start_clock()` and states that coherent clock pause and override
+are not yet supported.

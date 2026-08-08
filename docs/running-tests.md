@@ -1,8 +1,13 @@
-# Running tests with the reference harness
+# Running tests
 
-This page documents the optional `cpptb` command-line harness. The reusable
-C++ registration, checks, process ownership, terminal states, and result model
-are documented separately in [Framework test lifecycle](test-lifecycle.md).
+This page is the reference for the `cpptb` command: how to build a project,
+select and run tests, configure a build with `cpptb.toml`, and consume the
+structured JSON results.
+
+The command is optional. It is one harness over a reusable C++ framework, and
+[Framework test lifecycle](test-lifecycle.md) documents that framework's
+registration, checks, process ownership, terminal states, and result model for
+embedding in a build or regression system of your own.
 
 A compiled cpptb simulator may contain one or more registered tests. The
 reference harness selects exactly one test per simulator invocation so each
@@ -15,7 +20,7 @@ Register each root coroutine in the user-authored testbench translation unit:
 
 ```cpp
 Task<void> reset_defaults(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     dut.rst_n.set(0);
@@ -103,41 +108,41 @@ layout:
 
 ```text
 counter-project/
-|-- counter.sv                       # authored RTL
-`-- testbench.cpp                    # authored tests
+├── counter.sv                       # authored RTL
+└── testbench.cpp                    # authored tests
 ```
 
 or conventional source directories:
 
 ```text
 counter-project/
-|-- rtl/
-|   `-- counter.sv
-`-- tests/
-    |-- testbench.cpp
-    `-- drivers.cpp
+├── rtl/
+│   └── counter.sv
+└── tests/
+    ├── testbench.cpp
+    └── drivers.cpp
 ```
 
 Everything else stays under one ignored build directory:
 
 ```text
 build/                               # generated and gitignored
-    `-- cpptb/
-        `-- counter/
-            |-- generated/
-            |   |-- dut.hpp          # stable public include
-            |   |-- counter_dut.hpp
-            |   |-- counter_binding.hpp
-            |   |-- dpi_counter.cpp
-            |   `-- dpi_counter.sv
-            |-- metadata/
-            |   |-- access.json
-            |   `-- access-objects/
-            |-- obj/
-            |   `-- Vdpi_counter
-            |-- results/
-            |-- build.log
-            `-- build-state.json
+    └── cpptb/
+        └── counter/
+            ├── generated/
+            │   ├── dut.hpp          # stable public include
+            │   ├── counter_dut.hpp
+            │   ├── counter_binding.hpp
+            │   ├── dpi_counter.cpp
+            │   └── dpi_counter.sv
+            ├── metadata/
+            │   ├── access.json
+            │   └── access-objects/
+            ├── obj/
+            │   └── Vdpi_counter
+            ├── results/
+            ├── build.log
+            └── build-state.json
 ```
 
 This repository additionally keeps a pure-SystemVerilog comparison bench under
@@ -205,9 +210,33 @@ include_dirs = ["verification/include"]
 [build]
 directory = "build"
 simulator = "verilator"
+timing_backend = "verilator-direct"
+deferred_writes = true
 optimization = "-O2"
 cxx_flags = ["-Wall"]
 ```
+
+`timing_backend` and `deferred_writes` carry cpptb's timing semantics. Both
+have defaults, so a project that names neither still gets them; every example
+in this repository states them anyway, so the configuration is visible:
+
+| Key | Values | Default | Effect |
+|---|---|---|---|
+| `timing_backend` | `"verilator-direct"` or `"vpi"` | `"verilator-direct"` | Selects how the simulator delivers the `ReadWrite{}`, `ReadOnly{}`, and `NextTimeStep{}` phase waits — the hooks a testbench uses to act at a chosen point of any timestep |
+| `deferred_writes` | `true` or `false` | `true` | `true` selects cocotb's write model: `set()` queues and flushes at the ReadWrite point, so a write after an awaited edge lands on the next one |
+
+The two backends are held to identical results and byte-identical waveforms, so
+the choice between them is about speed and portability, not semantics. There is
+no way to build without a backend: `timing_backend` accepts only those two
+names, and `deferred_writes` depends on it because the queued write is applied
+at a simulator phase.
+
+`deferred_writes = false` restores immediate writes. That is legacy behavior,
+kept for projects written before the model existed and intended for
+deprecation; it is not a documented authoring style. See
+[The write model](scheduling.md#the-write-model) for the pinned semantics and
+[Timing backend support](scheduling.md#timing-backend-support) for the backend
+comparison.
 
 `optimization` governs both halves of the build: the C++ testbench and the model
 Verilator generates. Verilator optimizes neither by default, so this defaults to

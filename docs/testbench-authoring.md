@@ -1,74 +1,8 @@
-# Testbench authoring
+# Tasks and concurrency
 
-cpptb testbenches are C++20 coroutines connected to a generated, typed DUT.
-The public runtime is under `include/cpptb/`; generated SystemVerilog uses DPI
-to exchange signal batches and simulator events with that runtime.
-
-Start with the small counter, then move to the FIFO scoreboard or APB example:
-
-```sh
-make cpp-dpi-counter-run
-make cpp-dpi-fifo-scoreboard-run
-make cpp-dpi-apb-regfile-run
-```
-
-See [Running tests](running-tests.md) for the zero-config project command,
-multiple registered tests, selection, nonfatal and fatal checks, and structured
-results.
-
-The APB example keeps protocol timing in a reusable helper, leaving the test
-sequence register-oriented:
-
-```cpp
-Task<void> register_sequence(Dut dut, TestContext& test) {
-    dut.clk.set_now(0);
-    test.start_clock(dut.clk, 10_ns);
-
-    co_await reset_dut(dut);
-    const auto bus = ApbBus{
-        dut.clk,           dut.apb_select,    dut.apb_enable,
-        dut.apb_write,     dut.apb_address,   dut.apb_write_data,
-        dut.apb_read_data, dut.apb_ready,     dut.apb_error};
-    ApbMaster apb{bus};
-
-    const auto write = co_await apb.write(0x04, 0x1234'5678);
-    test.require_eq("register write", write.status, MemoryStatus::Okay);
-
-    const auto read = co_await apb.read(0x04);
-    test.expect_eq("register readback", read.data, 0x1234'5678u);
-}
-
-CPPTB_REGISTER_TEST(register_sequence);
-```
-
-`CPPTB_REGISTER_TEST` installs the test through a translation-unit initializer.
-Register one or more root tests in the same binary; each simulator invocation
-selects and runs exactly one of them in fresh simulation state.
-Link the testbench translation unit directly into the simulator executable. If
-it is packaged in a static archive, link that archive with whole-archive
-semantics (or force-link the object) so the linker does not discard its
-otherwise unreferenced initializer.
-
-The complete implementation, including `Task<uint32_t> read(...)`, is in
-`examples/apb_regfile/testbench.cpp`.
-
-The user-facing primitives are deliberately small:
-
-- `test.start_clock(dut.clk, 10_ns)` to register a periodic input clock before
-  the test's first await.
-- `test.spawn(task)` to attach concurrent reset, driver, sequence, and monitor
-  coroutines and return a process handle.
-- `co_await RisingEdge{dut.HCLK}` and `co_await FallingEdge{dut.HCLK}` for
-  simulator triggers.
-- `dut.signal.set(value)` and `dut.signal.get()` for explicit signal access.
-- `dut.block1.block2.name.get()`, `deposit(value)`, `force(value)`, and
-  `release()` for any supported object in the inferred RTL hierarchy.
-- `test.random()` for the current process's deterministic random stream.
-- `test.randomize(item)` and `test.randomize_with(item, constraint)` for
-  user-defined constrained-random transactions.
-- `coverage.sample(transaction)` for explicit in-process functional coverage.
-- `co_await helper_task(...)` for reusable bus operations such as APB writes
-  and read/check transactions.
+This is the reference for running more than one thing at a time: spawning
+concurrent processes, racing and joining them, passing data between them, and
+cancelling them cleanly.
 
 Every coroutine that does not return a value is declared `Task<void>`.
 `Task<T>` carries a typed result from `co_return` to `co_await`, including
@@ -77,72 +11,57 @@ rvalues; a completed result is moved to the awaiting coroutine. Scheduler
 roots passed to `spawn()` or `spawn_detached()` remain `Task<void>`, and every
 child passed to `Join` must also be a `Task<void>`.
 
-Random stimulus uses familiar value-oriented operations:
+If you have not written a cpptb test yet, start with
+[Getting started](getting-started.md) and [Core ideas](core-ideas.md).
 
-```cpp
-auto& random = test.random();
-const auto address = random.randint<uint32_t>(0x1000, 0x1fff);
-const auto opcode = random.choice(kOpcodes);
-const auto payload = random.randbits<256>();
-random.shuffle(transaction_order);
-```
+## The waits at a glance
 
-The result records the master seed needed for replay, and spawned processes
-receive independent deterministic streams. See
-[Randomization](random-stimulus.md) for generators, constrained transactions,
-solver policy, replay, and side-by-side framework examples.
+Everything a cpptb coroutine can wait on, in one place. **Simulator waits** can
+advance simulation time; **coordination waits** resume when another coroutine
+acts and add no delay of their own.
 
-Constrained transactions retain the same process stream and replay contract:
+| Simulator waits | | Coordination waits | |
+|---|---|---|---|
+| `RisingEdge{sig}` | low-to-high | `event` / `event.wait()` | another process calls `set()` |
+| `FallingEdge{sig}` | high-to-low | `queue.put(v)` / `queue.get()` | space, or an item, is available |
+| `Edge{sig}` | either transition | `lock.acquire()` / `semaphore.acquire()` | ownership is handed over |
+| `clock_cycles(clk, n)` | after `n` rising edges | `process` | that process finishes |
+| `Delay{10_ns}` | after a delay | `Join{a, b, c}` | all children finish |
+| `ReadWrite{}` | evaluation settled | `First{a, b}` | the first fires; returns its index |
+| `ReadOnly{}` | end of timestep | `with_timeout(x, 100_ns)` | `x` completes, or the deadline expires |
+| `NextTimeStep{}` | next timestep | `wait_until(sig, pred, clk)` | the predicate turns true |
 
-```cpp
-Packet packet;
-test.randomize(packet);
-test.randomize_with(packet, packet.length == 256);
-```
+Each is used directly with `co_await`. The phase waits — `ReadWrite`,
+`ReadOnly`, `NextTimeStep` — are supplied by the timing backend that every
+cpptb project selects; see
+[The write model](scheduling.md#the-write-model).
 
-The default adaptive backend is deterministic and dependency-free. It samples
-ordinary constraints and can invoke an application-configured Z3 fallback only
-after search exhaustion. Authored transaction classes remain unchanged. See
-[Solver backends](randomization/solvers-and-diagnostics.md) for direct and
-adaptive configuration.
+[Scheduling](scheduling.md) is the authoritative reference for the simulator
+waits: exactly when each resumes, and what state you are guaranteed to observe
+when it does. The rest of this page covers the coordination waits, which are
+what you use to make several processes cooperate.
 
-Functional coverage remains separate from stimulus and scheduling:
+## Racing, joining, and deadlines
 
-```cpp
-Covergroup<Packet> coverage{"packets"};
-auto& opcode = coverage.coverpoint("opcode", &Packet::opcode);
-opcode.bin("read", Opcode::Read).bin("write", Opcode::Write);
-
-coverage.sample(packet);
-```
-
-See [Functional coverage](randomization/functional-coverage.md) for ranges,
-illegal and ignore bins, transitions, crosses, merge, and JSON reporting.
-
-The coroutine scheduler also supports:
-
-- `co_await Edge{signal}` for either transition.
-- `co_await Delay{1_ps}` for a physical simulation-time delay. Integer
-  `fs`, `ps`, `ns`, `us`, and `ms` literals are supported and must be
-  positive and representable at the wrapper's configured `timeprecision`.
-- `co_await First{RisingEdge{signal}, Delay{100_ns}}`, which returns the index
-  of the trigger that fired first. `First` accepts two or more triggers.
-- `co_await Join{producer(tb), consumer(tb), scoreboard(tb)}` for two or more
-  concurrent `Task<void>` children.
-- `co_await clock_cycles(clock, count)` to wait for `count` rising edges.
-  A count of zero completes immediately without suspending.
-- `co_await with_timeout(RisingEdge{signal}, 100_ns)` to race a rising,
-  falling, or either-edge trigger against a `SimTime` delay. It returns
+- `co_await First{RisingEdge{signal}, Delay{100_ns}}` races two or more
+  triggers and returns the zero-based index of the one that fired first.
+- `co_await Join{producer(tb), consumer(tb), scoreboard(tb)}` runs two or more
+  concurrent `Task<void>` children and resumes once all have finished.
+- `co_await with_timeout(RisingEdge{signal}, 100_ns)` races a rising, falling,
+  or either-edge trigger against a `SimTime` deadline. It returns
   `TimeoutOutcome::Triggered` or `TimeoutOutcome::TimedOut`.
-- `co_await with_timeout(operation(), 100_ns)` to race any `Task<T>` against
-  a deadline. It returns `TimeoutResult<T>`; `has_value()`, `triggered()`, and
+- `co_await with_timeout(operation(), 100_ns)` races any `Task<T>` against a
+  deadline. It returns `TimeoutResult<T>`; `has_value()`, `triggered()`, and
   boolean conversion report completion, `timed_out()` reports timeout, and
   `value()`, `operator*`, and `operator->` access a completed value. The
   `Task<void>` specialization provides the same state queries and a checked
   no-op `value()` for completed operations.
-- `co_await wait_until(signal, predicate, clock)` to evaluate the predicate
-  immediately and, while it is false, poll it after each rising edge of
-  `clock`. The predicate receives the signal's `uint32_t` value.
+- `co_await wait_until(signal, predicate, clock)` evaluates the predicate
+  immediately and, while it is false, polls it after each rising edge of
+  `clock`. The predicate receives the signal's `uint32_t` value. Because it
+  polls on a clock, it is the one coordination wait that does advance time.
+
+## Events and queues
 
 `Event` is a sticky, manually reset notification. `set()` leaves it set and
 wakes all current waiters in FIFO registration order; later waits also finish
@@ -207,6 +126,8 @@ shared C++ state. Queue operations do not advance simulation time and do not
 model DUT protocol timing: the driver still writes signals and awaits edges or
 delays explicitly.
 
+## Locks and semaphores
+
 `Semaphore` controls a count of available permits. `try_acquire()` is the
 nonblocking operation, `co_await acquire()` waits in FIFO order, `release()`
 returns one or more permits, and `available()` reports permits that have not
@@ -252,6 +173,8 @@ wins when the task's result is present as the parent resumes. Zero and
 sub-precision timeout durations are rejected under the same rules as
 `Delay`.
 
+## Putting it together
+
 These pieces compose into ordinary driver, monitor, and scoreboard code. The
 following is the core of the runnable `fifo_scoreboard` example:
 
@@ -283,77 +206,7 @@ Task<void> fifo_test(Dut dut, TestContext& test) {
 CPPTB_REGISTER_TEST(fifo_test);
 ```
 
-## Reusable transaction components
-
-Use the optional `cpptb_vc` package when a sequence, driver, monitor, or
-scoreboard should depend on a typed endpoint instead of concrete storage.
-It is not included by `cpptb/cpptb.hpp`:
-
-```cpp
-#include "cpptb_vc/cpptb_vc.hpp"
-using namespace cpptb::vc;
-```
-
-`PutPort<T>` and `GetPort<T>` are borrowed views: constructing one allocates
-nothing, and the connected backend must outlive the port and its active calls.
-A `Queue<T>` works directly, and another backend can implement the same
-`put`/`put_nowait` or `get`/`get_nowait` methods. A custom blocking `put` must
-accept `T` by value so ownership remains in its coroutine frame; the
-`PutPort` constructor enforces that signature.
-
-```cpp
-Queue<Packet> storage{8};
-PutPort<Packet> input{storage};
-GetPort<Packet> output{storage};
-
-co_await input.put(packet);
-Packet next = co_await output.get();
-```
-
-`AnalysisPort<T>` publishes one const transaction synchronously to every live
-subscriber in connection order. `write()` is a zero-time C++ call: it neither
-suspends nor advances the simulator. Keep the returned move-only connection
-for as long as the subscription should remain active; destroying or explicitly
-disconnecting it removes that subscriber.
-
-```cpp
-AnalysisPort<Packet> observed;
-InOrderScoreboard<Packet> scoreboard{test, "packet"};
-AnalysisBuffer<Packet> audit{8, AnalysisOverflowPolicy::Error};
-
-auto score_connection = observed.connect(scoreboard.actual());
-auto audit_connection = observed.connect(audit);
-
-observed.write(packet);  // immediate fan-out; no hidden await or delay
-```
-
-Subscribers are borrowed and must outlive their connections. A subscriber's
-`write(const T&)` must not wait. Connect `AnalysisBuffer<T>` when a coroutine
-needs to consume observations asynchronously. Its required overflow policy is
-explicit: `DropNewest`, `DropOldest`, or `Error`. The two drop policies do not
-block or interrupt later subscribers. `Error` throws synchronously and stops
-that publication, so connect an Error-policy buffer after subscribers that
-must always observe the transaction. Other subscriber exceptions follow the
-same connection-order rule. `output()` exposes the buffer's consumer side as
-a `GetPort<T>`.
-
-`InOrderScoreboard<T>` accepts expected and actual transactions in either
-arrival order, compares pairs with nonfatal `expect_eq()`, and reports any
-unpaired values from `finalize()`. It is intentionally noncopyable and
-nonmovable because its typed inputs refer back to the owning scoreboard.
-`ReadyValidDriver` and
-`ReadyValidMonitor` translate transactions to pin activity. Their constructor
-requires the sampling delay, and the monitor also requires the sample edge;
-they do not reset signals, start clocks, or spawn themselves. `send()` drives
-one transfer and deasserts `valid` before returning; repeated calls therefore
-include an idle cycle rather than implying a maximum-throughput burst driver.
-
-The complete [component FIFO example](examples/component-fifo.md) shows these
-objects alongside the direct [FIFO scoreboard](examples/fifo-scoreboard.md).
-Both are runnable, and each has an exact pure-SystemVerilog twin.
-Protocol-neutral memory transactions, keyed scoreboards, reference models,
-and APB components are described in
-[Verification components](verification-components.md).
+## Spawning and cancelling processes
 
 A spawned process can be awaited or cancelled explicitly:
 
@@ -421,198 +274,7 @@ and a complete `spawn()`/`cancel()`/await lifecycle. Its deadlines are kept
 strictly separate from response times so the expected result is independent of
 same-timestamp ordering.
 
-## Cocotb concept map
-
-cpptb follows familiar cocotb testbench structure while keeping signal access
-and timing explicit:
-
-| Verification concept | cocotb | cpptb | Pure-SV twin |
-|---|---|---|---|
-| Timed wait | `await Timer(1, unit="ns")` | `co_await Delay{1_ns}` | `#1ns` |
-| Signal edge | `await RisingEdge(dut.clk)` | `co_await RisingEdge{dut.clk}` | `@(posedge clk)` |
-| Concurrent work | `start_soon()` / task groups | `spawn()` or `Join{...}` | `fork ... join` |
-| FIFO communication | `Queue` | `Queue<T>` | `mailbox` |
-| Notification | `Event` | `Event` | `event` |
-| Deadline | `with_timeout()` | `with_timeout()` | explicit event/deadline race |
-
-The mapping is informed by cocotb's official documentation for
-[testbench structure](https://docs.cocotb.org/en/stable/writing_testbenches.html),
-[coroutines and concurrency](https://docs.cocotb.org/en/stable/coroutines.html),
-and the [timing model](https://docs.cocotb.org/en/stable/timing_model.html).
-In particular, an edge wake does not by itself promise that downstream
-sequential or combinational logic has settled. The examples therefore show
-the sampling point explicitly with `Delay{1_ps}`, mirrored by `#1ps` in SV.
-
-The [fault-injection example](examples/fault-injection.md) and
-[hierarchy guide](hierarchy.md) show the backdoor
-operations on a resolved net, a clocked variable, and a memory element. These
-operations are immediate and add no implicit delay. `force()` applies until
-the matching `release()`; after release, normal RTL drivers can update the
-object again. Force is generated for hierarchical objects used by the compiled
-testbench, not ordinary DUT ports. In particular, registered input clocks remain owned
-by `start_clock()` and cannot safely be forced or paused through the public
-API.
-
-Calling `force()` or `release()` on an ordinary port produces an intentional
-compile-time diagnostic rather than a generic missing-member error. For a
-scheduler-owned clock, the diagnostic directs the user back to
-`TestContext::start_clock()` and states that coherent clock pause/override is
-not yet supported.
-
-The complete learning path is indexed in `examples/README.md`. Run individual
-pairs or all examples through the standard target:
-
-```sh
-make feature-test FEATURE=dpi_fifo_scoreboard
-make feature-test FEATURE=dpi_apb_regfile
-make feature-test FEATURE=dpi_watchdog_timeout
-make examples-test
-```
-
-## Scheduler ordering and cleanup
-
-Waiters registered on the same edge resume in registration order. Timers with
-the same deadline also resume FIFO by registration order. Registrations made
-stale by `First`, cancellation, or completion are removed without resuming the
-coroutine; this cleanup includes edge queues and falling-edge interest counts,
-not only the timer heap.
-
-C++-owned clocks are registered as static edge sources before the first wait.
-The first `start_clock()` call selects the primary cycle counter; later calls
-add independent domains and may specify a phase. Registered input-clock rising
-edges are delivered on every cycle; falling edges are delivered while the
-scheduler has a falling- or either-edge waiter. Waits on clock IDs do not
-publish dynamic edge-interest masks. DUT-produced and manually driven edges use
-interest-gated observers. See [clocking](clocking.md) for the concise user
-contract.
-
-Generated DPI wrappers use one persistent, clock-agnostic timer owner. The
-module-level `timer_deadline` is the source of truth, `timer_owner_target`
-describes only the owner's current positive sleep, and `timer_kick` wakes an
-idle owner. A generation-checked one-shot process is retained only when a
-non-owner callback inserts a deadline strictly earlier than the owner's stale
-sleep target. Clock drivers and observers remain independent, so
-`clock_cycles()` is still an edge primitive while `Delay` works with no clocks.
-
-The generated timer contract is:
-
-- **I1:** after `STEP_TIMER_CHANGED`, `timer_deadline` equals the scheduler's
-  earliest live deadline or `NO_TIMER`;
-- **I2:** the persistent owner and strict-earlier fallback deliver each live
-  deadline exactly once; generation checks prevent stale fallback delivery;
-- **I3:** timer dispatch uses no zero delay, delayed nonblocking assignment, or
-  `disable fork`;
-- **I4:** every live deadline has an owner or fallback wake no later than that
-  deadline;
-- **I5:** the fallback is unreachable in a clockless wrapper because no
-  non-owner step can insert an earlier deadline while the owner sleeps;
-- **I6:** there remains one next-deadline DPI query per timer-change request,
-  and steady-state timer arms allocate no SystemVerilog process. Only the
-  exceptional strict-earlier fallback allocates a one-shot process.
-
-Zero-duration delays and delays that cannot be represented at the configured
-simulation precision abort with a diagnostic. Awaiting a default-constructed,
-expired, or otherwise invalid `Process` also aborts instead of silently
-continuing.
-
-Scheduler-facing objects are simulation-thread confined. Do not access a
-`Testbench`, `TestContext`, signal handle, synchronization primitive, or
-`Process` from a worker OS thread. Authored coroutine processes remain
-concurrent in simulation time while executing through the one scheduler that
-owns deterministic ordering.
-
-## Scheduler performance
-
-A macOS sampling profile first identified full coroutine-state scans and
-hash-table lookups as scheduler hot spots. The scheduler now uses reusable
-numeric state slots, direct signal-indexed wait queues, targeted child cleanup,
-conditional drains, and an active-coroutine counter.
-
-A second profile of the exact dual-clock C++ DPI/pure-SV comparison showed
-that the remaining cost was primarily in generated SystemVerilog timing
-processes rather than C++ queue management. Generated periodic clocks use one
-absolute-deadline process, falling-edge DPI calls are skipped unless the
-scheduler has a matching waiter, and physical delays are scheduled only when
-a coroutine awaits `Delay`.
-
-The performance guard uses an initial batch of 16 warmed, adjacent
-C++ DPI/pure-SV pairs and alternates execution order. It compares the median of
-the paired process-time ratios and hard-fails above `1.10x`. When the median
-passes but its one-sided 95% upper confidence bound is inconclusive, the guard
-collects one additional 16-pair batch and evaluates the combined samples; it
-does not rerun the complete benchmark. A still-inconclusive passing median is
-reported with a warning. Result artifacts include raw pairs and the
-environment/build metadata needed to interpret them. Close ratios are treated
-as noisy measurements, not evidence that either implementation is
-directionally faster.
-
-The raw runner applies this calculation to every feature. The registry has one
-visible, capped exception for the transport-only `force_direct` microbenchmark;
-see [Scoped direct-force waiver](performance.md#scoped-direct-force-waiver).
-
-## Current scope
-
-The end-to-end test suite currently targets Verilator. Scalar signal values use
-`uint32_t`; packed values use `uint64_t` through 64 bits and `Bits<W>` above 64
-bits. Generated DPI bindings support fixed multidimensional unpacked arrays,
-packed enum and struct views, wide values, fixed-point helpers, and generated
-hierarchical probes with read, deposit, force, and release operations.
-Four-state X/Z propagation remains deferred. The generated
-transport uses standard SystemVerilog DPI, but additional simulator backends
-have not yet passed the conformance suite.
-
-The Authoring Core sources currently present under
-`benchmarks/authoring_core/` exercise typed tasks, cycle waits, edge timeouts,
-predicate waits, events, bounded queues, locks, semaphores, wide packed
-signals, fixed-point arithmetic, fixed unpacked arrays, and a synchronous
-memory front door. Its C++ DPI testbench is
-`benchmarks/authoring_core/testbenches/cpp_dpi/testbench.cpp`, the corresponding pure-SV
-source is `benchmarks/authoring_core/testbenches/systemverilog/authoring_core_sv_tb.sv`, and the
-shared workload contract is `benchmarks/authoring_core/workload.py`. Runtime
-API tests are in `tests/unit/coro_runtime_test.cpp`.
-
-## Reusable DPI runtime
-
-`include/cpptb/dpi_runtime.hpp` owns the design-independent DPI host behavior:
-
-- compact directional input/output transport and driven-signal tracking;
-- typed signal `get()`/`set()` callbacks and dirty-output detection;
-- generated internal-probe `get()`/`deposit()` access for packed variables and
-  fixed memories;
-- scheduler construction, edge dispatch, and delay deadlines;
-- falling-edge interest and precision-aware time transport;
-- timeout invocation, elapsed wall time, completion, and result reporting;
-- the standard init, step, output-pull, deadline, and edge-interest C exports
-  expected by the generated wrapper.
-
-`include/cpptb/test_result.hpp` keeps status, check counts, timing, and
-structured failure records independent of DPI. `test_reporting.hpp` writes the
-versioned JSON result consumed by the optional launcher, so user-facing
-fixtures and embedding harnesses do not include simulator transport headers.
-
-A design supplies a small `DpiAdapter` containing its DUT and result types,
-generated signal metadata, binding call, testbench registration call, result
-name, and timeout policy. `CPPTB_DEFINE_DPI_RUNTIME(Adapter)` provides the C
-entry points. No design transport needs to copy open arrays, decode events, or
-format a result line.
-
-The hot scheduler step receives only the compact observed-word array. Driven
-words are fetched through a separate idempotent output-pull export on
-initialization or after `STEP_OUTPUTS_CHANGED`, so unchanged steps do not carry
-an output argument through the simulator ABI.
-
-`deposit()` performs the underlying SystemVerilog blocking assignment
-immediately. It does not insert a scheduler delay or observation phase;
-testbench code uses an explicit `co_await Delay{...}` when downstream RTL must
-evaluate before observation.
-
-## Benchmark
-
-The cocotb comparison benchmark is in `experiments/cocotb_cpp_comparison/`:
-
-```sh
-python3 experiments/cocotb_cpp_comparison/run_benchmark.py --iters 1000 --runs 3
-```
-
-It runs the same APB event-unit traffic in cocotb and in the C++ coroutine
-model, then writes results to `experiments/cocotb_cpp_comparison/results/`.
+For typed transaction endpoints, analysis fan-out, and scoreboards built on
+these primitives, see
+[Verification components](verification-components.md). For exactly when each
+trigger resumes, see [Scheduling](scheduling.md).

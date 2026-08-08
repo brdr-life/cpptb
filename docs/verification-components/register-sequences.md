@@ -1,7 +1,12 @@
 # Standard register sequences
 
-The optional `cpptb_vc/register_sequences.hpp` layer provides three reusable
-whole-model checks without putting test policy into the core register handles:
+Three checks are worth running against almost any register map: that every
+register comes out of reset holding its documented value, that the frontdoor
+and backdoor paths agree with each other, and that every safe read/write bit
+can actually be flipped and observed. Rather than write them once per project,
+`cpptb_vc/register_sequences.hpp` provides them as reusable whole-model
+sequences — kept out of the core register handles so they stay test policy
+rather than model behavior:
 
 ```cpp
 #include "cpptb_vc/register_sequences.hpp"
