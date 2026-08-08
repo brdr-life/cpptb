@@ -184,8 +184,9 @@ module apb_regfile_sv_tb;
     apb_address = '0;
     apb_write_data = '0;
     repeat (2) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
+    // Release at the edge through a non-blocking assignment -- the same
+    // schedule the C++ testbench gets from deferred writes.
+    rst_n <= 1'b1;
     test_started = 1'b1;
   endtask
 

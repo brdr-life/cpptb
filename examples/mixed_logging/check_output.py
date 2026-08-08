@@ -60,7 +60,7 @@ def main() -> int:
     checks = {
         "five ordered records": sequences == [1, 2, 3, 4, 5],
         "two SystemVerilog records": len(sv_records) == 2,
-        "exact SystemVerilog timestamps": sv_times == [25_000_000, 35_000_000],
+        "exact SystemVerilog timestamps": sv_times == [35_000_000, 55_000_000],
         "SV source location": all("mixed_logging.sv:" in line for line in sv_records),
         "SV hierarchy": all(".i_dut]" in line for line in sv_records),
         "SV scope": all("[request_monitor]" in line for line in sv_records),

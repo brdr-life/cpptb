@@ -40,8 +40,9 @@ module stalling_responder_sv_tb;
     latency = '0;
     request_data = '0;
     repeat (2) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
+    // Drive at the edge through non-blocking assignments -- the same
+    // schedule the C++ testbench gets from deferred writes.
+    rst_n <= 1'b1;
   endtask
 
   task automatic drive_request(
@@ -49,14 +50,13 @@ module stalling_responder_sv_tb;
       input logic [7:0] request_latency,
       input logic should_stall
   );
-    @(negedge clk);
-    request_data = data;
-    latency = request_latency;
-    stall = should_stall;
-    request = 1'b1;
     @(posedge clk);
-    #1ps;
-    request = 1'b0;
+    request_data <= data;
+    latency <= request_latency;
+    stall <= should_stall;
+    request <= 1'b1;
+    @(posedge clk);
+    request <= 1'b0;
   endtask
 
   task automatic timed_transaction(

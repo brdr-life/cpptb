@@ -36,12 +36,10 @@ MHPMCounterNum = "8"
 MHPMCounterWidth = "40"
 
 [testbench]
-# Upstream's model, stimulus and pass/fail sink, listed here rather than in
-# verilator_args. They have to be in [testbench] sources because `cpptb build`
-# compiles the testbench a second time, standalone, to discover its clocks, and
-# that link sees only these. verilator_args reaches the Verilator build alone,
-# so putting them there fails at discovery with undefined references to the
-# model -- before Verilator has run at all.
+# Upstream's model, stimulus and pass/fail sink. Listed in [testbench]
+# sources rather than verilator_args because only these are fingerprinted:
+# a file passed through verilator_args is compiled but not tracked, so
+# editing it would not trigger a rebuild (FINDINGS C2).
 sources = [
   "testbench.cpp",
   "../../deps/ibex/dv/cs_registers/model/base_register.cc",
@@ -62,6 +60,10 @@ directory = "../../work/ibex_cs_registers"
 name = "ibex_cs_registers"
 target = "ibex_cs_registers"
 optimization = "-O2"
+# The upstream testbench drives through non-blocking assignments to dodge
+# its own read-after-write hazard; deferred writes are that NBA here.
+timing_backend = "verilator-direct"
+deferred_writes = true
 verilator_args = [
   "-Wno-fatal",
   # Upstream's own waivers for this testbench.

@@ -24,7 +24,7 @@ the subscriptions active, while `Join` makes all concurrent work explicit:
 
 ```cpp
 Task<void> component_fifo_test(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     Event reset_done;

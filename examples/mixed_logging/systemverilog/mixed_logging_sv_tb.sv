@@ -25,18 +25,20 @@ module mixed_logging_sv_tb;
 
   initial begin
     repeat (2) @(posedge clk);
-    rst_n = 1'b1;
+    rst_n <= 1'b1;
 
+    // Drive after the rising edge through non-blocking assignments -- the
+    // same schedule the C++ testbench gets from deferred writes.
     for (int unsigned index = 0; index < 2; index++) begin
-      @(negedge clk);
-      data = 32'h1234_0000 + index;
-      valid = 1'b1;
+      @(posedge clk);
+      data <= 32'h1234_0000 + index;
+      valid <= 1'b1;
       @(posedge clk);
       #1ps;
       expect_eq("accepted count", accepted_count, index + 1);
       $display("%s:%0d: observed accepted count=%0d", `__FILE__, `__LINE__,
                index + 1);
-      valid = 1'b0;
+      valid <= 1'b0;
     end
 
     $display("PURE_SV_MIXED_LOGGING_RESULT checks=%0d failures=%0d", checks,

@@ -12,7 +12,6 @@ namespace {
 
 using cpptb::Dut;
 using coro::Event;
-using coro::FallingEdge;
 using coro::Join;
 using coro::Task;
 using namespace coro;
@@ -73,7 +72,6 @@ Task<void> reset_dut(Dut dut) {
     dut.apb_write_data.set(0);
 
     co_await clock_cycles(dut.clk, 2);
-    co_await FallingEdge{dut.clk};
     dut.rst_n.set(1);
 }
 
@@ -132,7 +130,7 @@ class ApbMemoryPolicy : public MemoryAccessCallback {
 };
 
 Task<void> component_apb_test(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
     co_await reset_dut(dut);
 
@@ -176,7 +174,7 @@ Task<void> component_apb_test(Dut dut, TestContext& test) {
 CPPTB_REGISTER_TEST(component_apb_test);
 
 Task<void> memory_model_apb_test(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
     co_await reset_dut(dut);
 

@@ -235,8 +235,9 @@ module apb_trace_sv_tb;
     apb_address = '0;
     apb_write_data = '0;
     repeat (2) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
+    // Release at the edge through a non-blocking assignment -- the same
+    // schedule the C++ testbench gets from deferred writes.
+    rst_n <= 1'b1;
 
     fork
       trace_sequence();
@@ -264,7 +265,10 @@ module apb_trace_sv_tb;
     if (failures != 0) $fatal(1, "APB trace failed: %0d failures", failures);
     $display(
         "PURE_SV_APB_TRACE_RESULT iterations=1 checks=%0d sim_cycles=%0d failures=0",
-        checks, kTransactionCount * 3 + 2 + total_wait_cycles);
+        checks, // One cycle of reset overhead, not two: the release moved from
+        // the falling edge to a non-blocking assignment at the rising
+        // edge, so the first setup phase lands one cycle earlier.
+        kTransactionCount * 3 + 1 + total_wait_cycles);
     $finish;
   end
 endmodule

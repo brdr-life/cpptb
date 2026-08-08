@@ -66,7 +66,7 @@ its status and wait-cycle count; the user decides how to check it.
 
 ```cpp
 Task<void> component_apb_test(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
     co_await reset_dut(dut);
 

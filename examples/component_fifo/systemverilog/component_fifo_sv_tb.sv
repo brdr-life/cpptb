@@ -42,8 +42,9 @@ module component_fifo_sv_tb;
     in_data = '0;
     out_ready = 1'b0;
     repeat (2) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
+    // Release at the edge through a non-blocking assignment -- the same
+    // schedule the C++ testbench gets from deferred writes.
+    rst_n <= 1'b1;
     ->reset_done;
   endtask
 
@@ -77,23 +78,26 @@ module component_fifo_sv_tb;
   task automatic output_ready_driver();
     int unsigned cycle;
     int unsigned accepted;
-    logic ready;
+    logic pending;
     @reset_done;
     cycle = 0;
     accepted = 0;
+    pending = 1'b0;
 
+    // Drive ready at the rising edge through a non-blocking assignment --
+    // the same schedule the C++ testbench gets from deferred writes -- and
+    // count each handshake at the edge that commits it.
     while (accepted < kWordCount) begin
-      @(negedge clk);
-      ready = cycle % 5 == 0;
-      out_ready = ready;
-      #1ps;
-      if (ready && out_valid) accepted++;
+      @(posedge clk);
+      if (pending) accepted++;
+      out_ready <= cycle % 5 == 0;
       cycle++;
+      @(negedge clk);
+      pending = out_ready && out_valid;
     end
 
     @(posedge clk);
-    #1ps;
-    out_ready = 1'b0;
+    out_ready <= 1'b0;
   endtask
 
   task automatic output_monitor();

@@ -8,7 +8,7 @@ namespace {
 
 using cpptb::Dut;
 using coro::Delay;
-using coro::FallingEdge;
+using coro::ReadOnly;
 using coro::RisingEdge;
 using coro::Task;
 using coro::TimeoutOutcome;
@@ -30,20 +30,18 @@ Task<void> reset_dut(Dut dut) {
     dut.request_data.set(0);
 
     co_await clock_cycles(dut.clk, 2);
-    co_await FallingEdge{dut.clk};
     dut.rst_n.set(1);
 }
 
 Task<void> drive_request(Dut dut, uint32_t data, uint32_t latency,
                          bool stall) {
-    co_await FallingEdge{dut.clk};
+    co_await RisingEdge{dut.clk};
     dut.request_data.set(data);
     dut.latency.set(latency);
     dut.stall.set(stall ? 1u : 0u);
     dut.request.set(1);
 
     co_await RisingEdge{dut.clk};
-    co_await Delay{1_ps};
     dut.request.set(0);
 }
 
@@ -51,7 +49,7 @@ Task<uint32_t> transaction(Dut dut, uint32_t data, uint32_t latency,
                            bool stall) {
     co_await drive_request(dut, data, latency, stall);
     co_await RisingEdge{dut.response_valid};
-    co_await Delay{1_ps};
+    co_await ReadOnly{};
     co_return dut.response_data.get();
 }
 
@@ -60,7 +58,7 @@ Task<void> dormant_monitor(Dut dut) {
 }
 
 Task<void> watchdog_sequence(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     co_await reset_dut(dut);
@@ -83,7 +81,7 @@ Task<void> watchdog_sequence(Dut dut, TestContext& test) {
         co_await with_timeout(RisingEdge{dut.response_valid}, 100_ns);
     test.expect_eq("response edge beat deadline",
                    edge_outcome == TimeoutOutcome::Triggered, true);
-    co_await Delay{1_ps};
+    co_await ReadOnly{};
     test.expect_eq("response after edge timeout", dut.response_data.get(),
                    edge_word ^ kResponseMask);
 
