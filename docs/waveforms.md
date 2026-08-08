@@ -52,14 +52,22 @@ to the failure.
 ## Wave equivalence against pure SystemVerilog
 
 `make wave-equivalence-test` is the proof the dumps mean what they say: it
-runs the fifo_scoreboard example twice — once as the pure-SV twin
-(`--trace` + `$dumpvars`), once through `cpptb test --wave vcd` — and
-compares the two dumps with `tools/wave_compare.py`, which samples every
-signal under the DUT instance after each rising clock edge and requires
-the state trajectories to be identical, cycle for cycle:
+runs four examples twice each — once as the pure-SV twin (`--trace` +
+`$dumpvars` under a compile-time define), once through
+`cpptb test --wave vcd` — and compares each pair of dumps with
+`tools/wave_compare.py`, which samples every signal under the DUT
+instance after each rising clock edge and requires the state trajectories
+to be identical, cycle for cycle. The pairs cover different design
+classes: a plain sequential counter, a ready/valid FIFO with
+backpressure, a register file behind the APB components, and a dual-clock
+mailbox compared on both of its domains:
 
 ```
-WAVE_COMPARE status=equal cycles=44 signals=9 a_cycles=44 b_cycles=44
+WAVE_COMPARE status=equal cycles=11  signals=4  a_cycles=11  b_cycles=11
+WAVE_COMPARE status=equal cycles=44  signals=17 a_cycles=44  b_cycles=44
+WAVE_COMPARE status=equal cycles=80  signals=16 a_cycles=80  b_cycles=80
+WAVE_COMPARE status=equal cycles=172 signals=20 a_cycles=172 b_cycles=172
+WAVE_COMPARE status=equal cycles=115 signals=20 a_cycles=115 b_cycles=115
 ```
 
 This is a stronger check than the count-based equivalence gates: it
@@ -73,7 +81,7 @@ in each, and the clock:
 python3 tools/wave_compare.py \
     --a a.vcd --a-scope dpi_stream_fifo.i_dut \
     --b b.vcd --b-scope stream_fifo_sv_tb.i_dut \
-    --clock clk --min-cycles 30
+    --clock-signal clk --min-cycles 30
 ```
 
 Runtime start/stop windowing and scope selection remain on the

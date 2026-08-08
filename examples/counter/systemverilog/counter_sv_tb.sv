@@ -40,9 +40,10 @@ module counter_sv_tb;
     checks = 0;
     failures = 0;
     repeat (2) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
-    enable = 1'b1;
+    // Release at the edge through non-blocking assignments -- the same
+    // schedule the C++ testbench gets from deferred writes.
+    rst_n <= 1'b1;
+    enable <= 1'b1;
 
     for (int unsigned expected = 1; expected <= kCountCycles; expected++) begin
       @(posedge clk);
@@ -68,4 +69,16 @@ module counter_sv_tb;
   end
 
   counter i_dut (.*);
+
+// Wave dumping for the equivalence flow only: the wave build verilates
+// with --trace +define+CPPTB_TWIN_WAVE and runs from the directory the
+// dump belongs in. The normal twin build compiles this away, keeping the
+// workload knob-free.
+`ifdef CPPTB_TWIN_WAVE
+  initial begin
+    $dumpfile("twin.vcd");
+    $dumpvars(0, counter_sv_tb);
+  end
+`endif
+
 endmodule

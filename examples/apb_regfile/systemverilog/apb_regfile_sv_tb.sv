@@ -390,4 +390,16 @@ module apb_regfile_sv_tb;
   end
 
   apb_regfile i_dut (.*);
+
+// Wave dumping for the equivalence flow only: the wave build verilates
+// with --trace +define+CPPTB_TWIN_WAVE and runs from the directory the
+// dump belongs in. The normal twin build compiles this away, keeping the
+// workload knob-free.
+`ifdef CPPTB_TWIN_WAVE
+  initial begin
+    $dumpfile("twin.vcd");
+    $dumpvars(0, apb_regfile_sv_tb);
+  end
+`endif
+
 endmodule

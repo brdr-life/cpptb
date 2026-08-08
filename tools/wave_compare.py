@@ -25,8 +25,11 @@ from pathlib import Path
 
 @dataclass
 class Wave:
-    # id code -> full dotted signal name (first definition wins on aliases)
-    names: dict[str, str] = field(default_factory=dict)
+    # id code -> every full dotted name sharing that code. Verilator reuses
+    # one identifier for aliased nets (a DUT port and the wrapper net bound
+    # to it), so a single name per id would hide whichever alias is looked
+    # up second -- typically the whole port list under the DUT instance.
+    names: dict[str, list[str]] = field(default_factory=dict)
     # ordered (time, id, value) changes
     changes: list[tuple[int, str, str]] = field(default_factory=list)
     timescale: str = ""
@@ -58,7 +61,7 @@ def parse_vcd(path: Path) -> Wave:
                 identifier = parts[3]
                 name = parts[4]
                 full = ".".join([*scope, name])
-                wave.names.setdefault(identifier, full)
+                wave.names.setdefault(identifier, []).append(full)
             elif line.startswith("$timescale"):
                 wave.timescale = line.removeprefix("$timescale").removesuffix(
                     "$end"
@@ -93,15 +96,19 @@ def cycle_states(
     """Sample every in-scope signal after each rising clock edge."""
 
     prefix = scope_prefix.rstrip(".") + "."
-    in_scope = {
-        identifier: full[len(prefix):]
-        for identifier, full in wave.names.items()
-        if full.startswith(prefix)
-    }
+    in_scope: dict[str, str] = {}
+    for identifier, aliases in wave.names.items():
+        for full in aliases:
+            if full.startswith(prefix):
+                in_scope[identifier] = full[len(prefix):]
+                break
     clock_ids = {
         identifier
-        for identifier, full in wave.names.items()
-        if full == clock_name or full.endswith("." + clock_name)
+        for identifier, aliases in wave.names.items()
+        if any(
+            full == clock_name or full.endswith("." + clock_name)
+            for full in aliases
+        )
     }
     if not clock_ids:
         raise SystemExit(f"clock {clock_name!r} not found in the dump")
