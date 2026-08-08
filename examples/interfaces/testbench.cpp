@@ -9,8 +9,8 @@ using cpptb::coro::Task;
 using cpptb::coro::operator""_ns;
 
 Task<void> interface_test(Dut dut, TestContext& test) {
-    dut.links[0].clk.set(0);
-    dut.links[1].clk.set(0);
+    dut.links[0].clk.set_now(0);
+    dut.links[1].clk.set_now(0);
     test.start_clock(dut.links[0].clk, 10_ns);
     test.start_clock(dut.links[1].clk, 14_ns);
 

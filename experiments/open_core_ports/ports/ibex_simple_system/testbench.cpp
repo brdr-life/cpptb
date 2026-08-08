@@ -45,7 +45,7 @@ constexpr uint32_t kPrivLevelMachine = 3;
 // simulator_ctrl raises sim_finish and counts down to $finish. Watching that
 // register lets this report its own result instead of waiting to be killed.
 Task<void> coremark(Dut dut, TestContext& test) {
-    dut.IO_CLK.set(0);
+    dut.IO_CLK.set_now(0);
     // Start with reset released, as upstream's SimCtrl does, then assert it.
     // The core's flops reset on `negedge rst_ni`, so holding reset low from
     // time zero never produces that edge and the core boots in user mode,

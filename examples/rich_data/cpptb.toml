@@ -1,0 +1,3 @@
+[build]
+timing_backend = "verilator-direct"
+deferred_writes = true

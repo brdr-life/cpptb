@@ -213,7 +213,7 @@ Task<void> arch_test(Dut dut, TestContext& test) {
     // from time zero never produces that edge, and the core boots in user mode
     // where every machine-mode CSR access traps -- which surfaces thousands of
     // cycles later as an illegal instruction and looks nothing like its cause.
-    dut.IO_CLK.set(0);
+    dut.IO_CLK.set_now(0);
     dut.IO_RST_N.set(1);
     test.start_clock(dut.IO_CLK, kClockPeriod);
 

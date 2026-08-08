@@ -189,6 +189,17 @@ WritebackStage = "1"
 sources = ["testbench.cpp"]
 
 [build]
+timing_backend = "verilator-direct"
+# Pinned to the legacy write model until this port is converted.
+# The bench anchors 21 drive sites on FallingEdge and interleaves them
+# with 15 RisingEdge waits, so each site has to be classified as a full
+# advance (drive_point) or a settle to this cycle's anchor
+# (settle_to_drive) by its predecessor await -- see
+# ports/ibex_icache_cpptb/testbench.cpp for the converted shape.
+# Misclassifying one reproduces the 52-failure branch signature that
+# conversion already cost once, and it only surfaces tens of thousands
+# of checks later. Convert with the upstream RTL fetched and runnable.
+deferred_writes = false
 directory = "../../work/core_ibex_cpptb"
 name = "core_ibex_cpptb"
 target = "core_ibex_cpptb"
