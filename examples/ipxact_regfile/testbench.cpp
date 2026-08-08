@@ -55,7 +55,7 @@ Task<void> ipxact_register_model_test(Dut dut, TestContext& test) {
     co_await reset_dut(dut);
 
     const auto bus = make_apb_bus(dut);
-    Master master{bus, ApbConfig{.sample_delay = 1_ps}};
+    Master master{bus};
     ipxact_regs::RegModel regs{test, master};
 
     const auto reset_control = co_await regs.registers.control.read();

@@ -65,21 +65,20 @@ module dual_clock_mailbox_sv_tb;
   task automatic producer();
     wait_reset_write();
 
+    // Sample right at the edge (pre-NBA, the value the DUT sampled) and
+    // drive through non-blocking assignments -- the same schedule the C++
+    // testbench gets from deferred writes.
     for (int unsigned value = 0; value < kTransferCount; value++) begin
       forever begin
         @(posedge write_clk);
-        // The edge sample point is already safe for a read-only observation.
-        #1ps;
         if (write_ready != 1'b0) break;
       end
 
-      write_data = (8'h40 + value[7:0]);
-      write_valid = 1'b1;
+      write_data <= (8'h40 + value[7:0]);
+      write_valid <= 1'b1;
 
       @(posedge write_clk);
-      // Let the DUT consume valid before changing the next-cycle drive.
-      #1ps;
-      write_valid = 1'b0;
+      write_valid <= 1'b0;
     end
   endtask
 
@@ -91,17 +90,15 @@ module dual_clock_mailbox_sv_tb;
     for (int unsigned expected = 0; expected < kTransferCount; expected++) begin
       forever begin
         @(posedge read_clk);
-        #1ps;
         if (read_valid != 1'b0) break;
       end
 
       expected_data = 8'h40 + expected[7:0];
       expect_eq("mailbox payload", read_data, expected_data);
-      read_ready = 1'b1;
+      read_ready <= 1'b1;
 
       @(posedge read_clk);
-      #1ps;
-      read_ready = 1'b0;
+      read_ready <= 1'b0;
     end
   endtask
 
@@ -111,6 +108,9 @@ module dual_clock_mailbox_sv_tb;
       consumer();
     join
 
+    // The consumer returns right at its last commit edge; give the final
+    // counter increment its update region before reading.
+    #1ps;
     expect_eq("write count", write_count, kTransferCount);
     expect_eq("read count", read_count, kTransferCount);
   endtask

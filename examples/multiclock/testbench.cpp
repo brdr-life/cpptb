@@ -11,6 +11,8 @@ using coro::Delay;
 using coro::Edge;
 using coro::First;
 using coro::Join;
+using coro::NextTimeStep;
+using coro::ReadOnly;
 using coro::RisingEdge;
 using coro::Task;
 using namespace coro;
@@ -45,10 +47,13 @@ Task<void> wait_reset_read(Dut dut) {
 Task<void> producer(Dut dut) {
     co_await wait_reset_write(dut);
 
+    // The cocotb driver shape: RisingEdge resumes before the design
+    // evaluates that edge, so a get() reads the value the DUT is about to
+    // sample, and a set() applies after this edge's updates -- in time for
+    // the next one. No settling delays anywhere.
     for (uint32_t value = 0; value < kTransferCount; ++value) {
         while (true) {
             co_await RisingEdge{dut.write_clk};
-            co_await Delay{1_ps};
             if (dut.write_ready.get() != 0) break;
         }
 
@@ -56,7 +61,6 @@ Task<void> producer(Dut dut) {
         dut.write_valid.set(1);
 
         co_await RisingEdge{dut.write_clk};
-        co_await Delay{1_ps};
         dut.write_valid.set(0);
     }
 }
@@ -67,7 +71,6 @@ Task<void> consumer(Dut dut, TestContext& test) {
     for (uint32_t expected = 0; expected < kTransferCount; ++expected) {
         while (true) {
             co_await RisingEdge{dut.read_clk};
-            co_await Delay{1_ps};
             if (dut.read_valid.get() != 0) break;
         }
 
@@ -76,13 +79,16 @@ Task<void> consumer(Dut dut, TestContext& test) {
         dut.read_ready.set(1);
 
         co_await RisingEdge{dut.read_clk};
-        co_await Delay{1_ps};
         dut.read_ready.set(0);
     }
 }
 
 Task<void> traffic(Dut dut, TestContext& test) {
     co_await Join{producer(dut), consumer(dut, test)};
+    // The consumer returns at the pre-evaluation resume of its last commit
+    // edge; ReadOnly is that timestep's settled region, where the final
+    // counter increment is visible.
+    co_await ReadOnly{};
     test.expect_eq("write count", dut.write_count.get(), kTransferCount);
     test.expect_eq("read count", dut.read_count.get(), kTransferCount);
 }
@@ -96,15 +102,15 @@ Task<void> trigger_and_phase_probe(Dut dut, TestContext& test) {
     test.expect_eq("First chose read clock", static_cast<uint32_t>(winner), 0u);
 
     co_await Edge{dut.write_clk};
-    co_await Delay{1_ps};
     dut.probe_in.set(0xa5);
-    co_await Delay{1_ps};
-    test.expect_eq("delay settles combinational output", dut.probe_echo.get(),
-                   0xa5u);
+    co_await ReadOnly{};
+    test.expect_eq("ReadOnly settles combinational output",
+                   dut.probe_echo.get(), 0xa5u);
 
+    co_await NextTimeStep{};
     dut.probe_in.set(0x3c);
-    co_await Delay{1_ps};
-    test.expect_eq("successive delay settles next drive",
+    co_await ReadOnly{};
+    test.expect_eq("successive write settles by the next ReadOnly",
                    dut.probe_echo.get(), 0x3cu);
 }
 
@@ -115,8 +121,8 @@ Task<void> output_clock_probe(Dut dut, TestContext& test) {
 }
 
 Task<void> multiclock_test(Dut dut, TestContext& test) {
-    dut.write_clk.set(0);
-    dut.read_clk.set(0);
+    dut.write_clk.set_now(0);
+    dut.read_clk.set_now(0);
     test.start_clock(dut.write_clk, 4_ns);
     test.start_clock(dut.read_clk, 6_ns, 1_ns);
 

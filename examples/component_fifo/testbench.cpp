@@ -38,8 +38,11 @@ Task<void> input_sequence(Dut dut, Event& reset_done,
                           AnalysisPort<uint32_t>& expected,
                           uint32_t& input_stalls) {
     co_await reset_done;
+    // No sample delay: under deferred writes the driver reads the
+    // handshake at the pre-evaluation resume -- the values the design
+    // samples at that edge.
     ReadyValidDriver driver{dut.clk, dut.in_valid, dut.in_ready, dut.in_data,
-                            1_ps};
+                            {}};
 
     uint32_t state = 0x3141'5926u;
     for (uint32_t index = 0; index < kWordCount; ++index) {
@@ -72,7 +75,7 @@ Task<void> output_monitor(Dut dut, Event& reset_done,
     co_await reset_done;
     ReadyValidMonitor monitor{
         dut.clk, dut.out_valid, dut.out_ready, dut.out_data,
-        ReadyValidSampleEdge::Falling, 1_ps};
+        ReadyValidSampleEdge::Falling, {}};
     co_await monitor.run(observed, kWordCount);
 }
 

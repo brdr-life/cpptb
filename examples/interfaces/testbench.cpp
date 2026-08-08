@@ -31,6 +31,8 @@ Task<void> interface_test(Dut dut, TestContext& test) {
     dut.links[1].reset_n.set(1);
     dut.links[0].data.set(0x24);
     dut.links[1].data.set(0x35);
+    // Combinational pacing through absolute delays: each step gives the
+    // links a nanosecond to settle, the same shape a cocotb Timer gives.
     co_await Delay{1_ns};
     test.expect_eq("link zero observed", dut.links[0].observed.get(), 0x24u);
     test.expect_eq("link one observed", dut.links[1].observed.get(), 0x36u);

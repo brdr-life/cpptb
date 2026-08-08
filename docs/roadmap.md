@@ -875,11 +875,21 @@ the next smaller.
    ten on both backends with check counts identical to the immediate-mode
    run, after three drive-point corrections documented in
    [Coming from cocotb](coming-from-cocotb.md).
-3. **Flip the mode's default.** With 2 shaped as a project mode, full cocotb
-   parity out of the box is a change of default, not an API migration. It
-   still alters what existing testbenches do and costs a scheduler round trip
-   per write, so it waits for mileage on the opt-in. The benchmark peer it
-   also waited for exists and is certified: `timing_phases_deferred` -- the
+3. **Flip the mode's default, then retire the immediate branches.** With 2
+   shaped as a project mode, full cocotb parity out of the box is a change
+   of default, not an API migration. It still alters what existing
+   testbenches do and costs a scheduler round trip per write, so it waits
+   for mileage on the opt-in. Once the default flips, the component
+   library's dual shape stops earning its keep: `cpptb_vc` carries an
+   immediate-mode `#else` branch in every drive and observation path
+   (falling-edge anchors, post-edge `sample_delay` sampling) solely for
+   builds without the mode, and the `sample_delay` knobs exist only to
+   serve that branch. The end state is one shape -- rising-edge anchors,
+   deferred flushes, pre-evaluation observation -- with the immediate
+   branches and their calibrated post-edge counting deleted, and the
+   remaining immediate-mode consumers (the exact benchmark kernels and
+   their pure-SV twins) migrated or re-calibrated in the same change. The
+   benchmark peer the flip also waited for exists and is certified: `timing_phases_deferred` -- the
    same kernel and pure-SV reference, built with the mode on -- passes the
    `1.10x` guard at `0.8903x` against the SV twin, with the immediate kernel
    at `0.7383x` in a comparable admitted window. The write model's measured
