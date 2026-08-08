@@ -3,7 +3,10 @@
 This example validates absolute `Delay` scheduling without any configured DUT
 clock. Two independent coroutine cadences run at exact 7 ns and 11 ns ticks.
 Each drive is followed by an explicit 1 ps settling delay, with the next wait
-shortened by 1 ps so cadence deadlines do not drift. The pure-SystemVerilog
+shortened by 1 ps so cadence deadlines do not drift. In a clockless testbench
+absolute delays are the scheduling mechanism itself -- there is no next
+timestep to await a phase in -- so this is the design, not a workaround; the
+clocked examples use `ReadOnly`/`NextTimeStep` phases instead. The pure-SystemVerilog
 twin uses the same `#` schedule and checks.
 
 ```sh

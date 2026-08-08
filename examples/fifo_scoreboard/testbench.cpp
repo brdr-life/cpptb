@@ -7,10 +7,10 @@ namespace cpptb::examples::fifo_scoreboard {
 namespace {
 
 using cpptb::Dut;
-using coro::Delay;
 using coro::Event;
 using coro::Join;
 using coro::Queue;
+using coro::ReadOnly;
 using coro::RisingEdge;
 using coro::Task;
 using namespace coro;
@@ -113,7 +113,7 @@ Task<void> fifo_test(Dut dut, TestContext& test) {
                   output_monitor(dut, reset_done, observed_words),
                   scoreboard(test, expected_words, observed_words)};
 
-    co_await Delay{1_ps};
+    co_await ReadOnly{};
     test.expect_eq("FIFO drained", dut.out_valid.get(), 0u);
     test.expect_eq("FIFO accepts after drain", dut.in_ready.get(), 1u);
     test.expect_eq("input backpressure observed", input_stalls != 0, true);

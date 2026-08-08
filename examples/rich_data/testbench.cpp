@@ -58,6 +58,9 @@ Task<void> rich_data_sequence(Dut dut, TestContext& test) {
         .set_payload(Bits<3>::from_uint(2));
     dut.packet_i.set(packet.signal_value());
 
+    // This testbench is clockless, so absolute delays are the scheduling
+    // mechanism (cocotb's Timer), not a settling workaround: with no clock
+    // there is no next timestep to await a phase in.
     co_await Delay{1_ps};
 
     const auto expected_wide = xor_words<137>(

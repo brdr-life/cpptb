@@ -135,9 +135,9 @@ Task<void> component_apb_test(Dut dut, TestContext& test) {
     co_await reset_dut(dut);
 
     const auto bus = make_apb_bus(dut);
-    Master master{bus, ApbConfig{.sample_delay = 1_ps}};
-    ApbMonitor monitor{test, bus, 1_ps};
-    ApbProtocolChecker checker{test, bus, 1_ps};
+    Master master{bus};
+    ApbMonitor monitor{test, bus};
+    ApbProtocolChecker checker{test, bus};
     AnalysisPort<Transaction> expected;
     InOrderScoreboard<Transaction> scoreboard{test, "APB transaction"};
     Covergroup<Transaction> coverage{"apb_transactions"};
@@ -179,8 +179,8 @@ Task<void> memory_model_apb_test(Dut dut, TestContext& test) {
     co_await reset_dut(dut);
 
     const auto bus = make_apb_bus(dut);
-    Master master{bus, ApbConfig{.sample_delay = 1_ps}};
-    ApbMonitor monitor{test, bus, 1_ps};
+    Master master{bus};
+    ApbMonitor monitor{test, bus};
 
     ApbMemoryPolicy policy;
     SparseMemory memory{policy};

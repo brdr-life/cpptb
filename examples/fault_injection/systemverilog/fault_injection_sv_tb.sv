@@ -47,58 +47,71 @@ module fault_injection_sv_tb;
     failures = 0;
 
     repeat (2) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
+    // Release at the edge through a non-blocking assignment, and step
+    // between probes with @(clk) -- the twin of the C++ testbench's
+    // NextTimeStep. The #1ps settles are SystemVerilog's mechanism for
+    // reading a just-forced combinational net; the C++ side needs none.
+    rst_n <= 1'b1;
 
     @(posedge clk);
     #1ps;
     expect_eq("counter baseline", counter_o, 1);
+    @(clk);
 
     source_i = 8'h12;
     #1ps;
     expect_eq("resolved net baseline", resolved_o, 8'h48);
+    @(clk);
 
     force i_dut.resolved_value = 8'ha5;
     expect_eq("force is immediately readable", i_dut.resolved_value, 8'ha5);
     #1ps;
     expect_eq("forced net reaches output", resolved_o, 8'ha5);
+    @(clk);
 
     source_i = 8'h34;
     #1ps;
     expect_eq("force overrides changing driver", resolved_o, 8'ha5);
+    @(clk);
 
     release i_dut.resolved_value;
     #1ps;
     expect_eq("release restores resolved driver", resolved_o, 8'h6e);
+    @(clk);
 
     force i_dut.counter = 8'h55;
     repeat (2) @(posedge clk);
     #1ps;
     expect_eq("RTL writes do not override force", counter_o, 8'h55);
+    @(clk);
 
     release i_dut.counter;
     @(posedge clk);
     #1ps;
     expect_eq("RTL writes resume after release", counter_o, 8'h56);
+    @(clk);
 
     i_dut.memory[2] = 16'hbeef;
     expect_eq("deposit is immediately readable", i_dut.memory[2], 16'hbeef);
     memory_address = 2;
     #1ps;
     expect_eq("deposit reaches memory output", memory_read_data, 16'hbeef);
+    @(clk);
 
     force i_dut.memory[2] = 16'hcafe;
     expect_eq("memory force is immediately readable", i_dut.memory[2], 16'hcafe);
     #1ps;
     expect_eq("memory force reaches output", memory_read_data, 16'hcafe);
+    @(clk);
     release i_dut.memory[2];
 
     memory_write_data = 16'h1234;
     memory_write = 1'b1;
     @(posedge clk);
     #1ps;
-    memory_write = 1'b0;
     expect_eq("front-door write follows release", memory_read_data, 16'h1234);
+    @(clk);
+    memory_write = 1'b0;
 
     $display(
         "PURE_SV_FAULT_INJECTION_RESULT iterations=%0d checks=%0d sim_cycles=%0d failures=%0d",
