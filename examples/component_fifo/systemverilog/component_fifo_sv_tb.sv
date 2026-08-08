@@ -58,18 +58,20 @@ module component_fifo_sv_tb;
       state = state * 32'd1664525 + 32'd1013904223;
       word = state;
       expected_words.push_back(word);
+      // Assert after the rising edge through non-blocking assignments --
+      // the same schedule the C++ driver gets from deferred writes -- and
+      // hold valid through the stalls.
+      @(posedge clk);
+      in_data <= word;
+      in_valid <= 1'b1;
       forever begin
-        @(negedge clk);
-        in_data = word;
-        in_valid = 1'b1;
         @(posedge clk);
         #1ps;
         if (!in_ready) begin
           input_stalls++;
           continue;
         end
-        @(negedge clk);
-        in_valid = 1'b0;
+        in_valid <= 1'b0;
         break;
       end
     end

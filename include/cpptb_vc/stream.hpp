@@ -41,6 +41,26 @@ class ReadyValidDriver {
 
     coro::Task<uint32_t> send(value_type value) {
         uint32_t stalls = 0;
+#ifdef CPPTB_DEFERRED_WRITES
+        // The cocotb shape: assert after the rising edge (a deferred set()
+        // applies after this edge's own updates), then hold valid through
+        // the stalls and drop it right after the accepting edge -- the
+        // same handshake schedule the falling-edge anchors below give the
+        // immediate write model.
+        co_await coro::RisingEdge{static_cast<coro::Signal>(clock_)};
+        data_.set(value);
+        valid_.set(1);
+        while (true) {
+            co_await coro::RisingEdge{static_cast<coro::Signal>(clock_)};
+            if (sample_delay_.in_femtoseconds() != 0) {
+                co_await coro::Delay{sample_delay_};
+            }
+            if (ready_.get() != 0) break;
+            ++stalls;
+        }
+        valid_.set(0);
+        co_return stalls;
+#else
         while (true) {
             co_await coro::FallingEdge{static_cast<coro::Signal>(clock_)};
             data_.set(value);
@@ -57,6 +77,7 @@ class ReadyValidDriver {
             valid_.set(0);
             co_return stalls;
         }
+#endif
     }
 
    private:

@@ -531,9 +531,15 @@ class TransactionMonitor {
     template <typename ClockSignal>
     coro::Task<void> sample(ClockSignal clock) {
         co_await coro::RisingEdge{static_cast<coro::Signal>(clock)};
+#ifndef CPPTB_DEFERRED_WRITES
+        // Under deferred writes the drive side flushes at this timestep's
+        // ReadWrite point, so a post-edge delay would read the values meant
+        // for the NEXT edge. The pre-evaluation resume observes exactly
+        // what the design sampled at this edge.
         if (sample_delay_.in_femtoseconds() != 0) {
             co_await coro::Delay{sample_delay_};
         }
+#endif
     }
 
     template <typename ClockSignal, typename Predicate>
@@ -541,9 +547,11 @@ class TransactionMonitor {
     coro::Task<void> sample_until(ClockSignal clock, Predicate predicate) {
         do {
             co_await coro::RisingEdge{static_cast<coro::Signal>(clock)};
+#ifndef CPPTB_DEFERRED_WRITES
             if (sample_delay_.in_femtoseconds() != 0) {
                 co_await coro::Delay{sample_delay_};
             }
+#endif
         } while (!predicate());
     }
 

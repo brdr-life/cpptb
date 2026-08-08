@@ -1,3 +1,6 @@
 [build]
 timing_backend = "verilator-direct"
+# The testbench's wait-cycle expectations (2 per slow access, 256 total)
+# are calibrated to deferred pre-evaluation counting; do not flip this off
+# without recalibrating them.
 deferred_writes = true
