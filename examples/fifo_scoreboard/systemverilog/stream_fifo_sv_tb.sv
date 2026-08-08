@@ -39,8 +39,9 @@ module stream_fifo_sv_tb;
     in_data = '0;
     out_ready = 1'b0;
     repeat (2) @(posedge clk);
-    @(negedge clk);
-    rst_n = 1'b1;
+    // Release at the edge through a non-blocking assignment -- the same
+    // schedule the C++ testbench gets from deferred writes.
+    rst_n <= 1'b1;
     ->reset_done;
   endtask
 
@@ -50,25 +51,24 @@ module stream_fifo_sv_tb;
     @reset_done;
     state = 32'h3141_5926;
 
+    // Mirror of the C++ driver: assert after the rising edge through
+    // non-blocking assignments, hold valid through the stalls, and read the
+    // handshake right at the edge -- before non-blocking updates apply --
+    // which is the value the design samples there.
+    @(posedge clk);
     for (int unsigned index = 0; index < kWordCount; index++) begin
       state = state * 32'd1664525 + 32'd1013904223;
       word = state;
+      in_data <= word;
+      in_valid <= 1'b1;
       forever begin
-        @(negedge clk);
-        in_data = word;
-        in_valid = 1'b1;
-        #1ps;
-        if (!in_ready) begin
-          input_stalls++;
-          continue;
-        end
-        expected_words.put(word);
         @(posedge clk);
-        #1ps;
-        in_valid = 1'b0;
-        break;
+        if (in_ready) break;
+        input_stalls++;
       end
+      expected_words.put(word);
     end
+    in_valid <= 1'b0;
   endtask
 
   task automatic output_ready_driver();
@@ -80,17 +80,13 @@ module stream_fifo_sv_tb;
     accepted = 0;
 
     while (accepted < kWordCount) begin
-      @(negedge clk);
+      @(posedge clk);
+      if (out_ready && out_valid) accepted++;
       ready = !((cycle % 5 == 1) || (cycle % 5 == 2));
-      out_ready = ready;
-      #2ps;
-      if (ready && out_valid) accepted++;
+      out_ready <= ready;
       cycle++;
     end
-
-    @(posedge clk);
-    #1ps;
-    out_ready = 1'b0;
+    out_ready <= 1'b0;
   endtask
 
   task automatic output_monitor();
@@ -99,8 +95,7 @@ module stream_fifo_sv_tb;
     observed = 0;
 
     while (observed < kWordCount) begin
-      @(negedge clk);
-      #1ps;
+      @(posedge clk);
       if (!out_valid || !out_ready) continue;
       observed_words.put(out_data);
       observed++;
@@ -159,4 +154,15 @@ module stream_fifo_sv_tb;
   end
 
   stream_fifo i_dut (.*);
+
+// Wave dumping for the equivalence flow only: the wave build verilates
+// with --trace +define+CPPTB_TWIN_WAVE and runs from the directory the
+// dump belongs in. The normal twin build compiles this away, keeping the
+// workload knob-free.
+`ifdef CPPTB_TWIN_WAVE
+  initial begin
+    $dumpfile("twin.vcd");
+    $dumpvars(0, stream_fifo_sv_tb);
+  end
+`endif
 endmodule

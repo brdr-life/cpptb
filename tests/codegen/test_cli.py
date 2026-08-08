@@ -29,7 +29,7 @@ class PublicCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             binary = root / "Vdpi_counter"
-            spec = SimpleNamespace(result_dir=root / "results")
+            spec = SimpleNamespace(result_dir=root / "results", wave="")
             with mock.patch(
                 "cpptb_codegen.cli._resolve", return_value=spec
             ), mock.patch(
@@ -49,7 +49,7 @@ class PublicCliTests(unittest.TestCase):
             )
 
     def test_unknown_test_reports_the_compiled_catalog(self):
-        spec = SimpleNamespace(result_dir=Path("results"))
+        spec = SimpleNamespace(result_dir=Path("results"), wave="")
         errors = io.StringIO()
         with mock.patch(
             "cpptb_codegen.cli._resolve", return_value=spec

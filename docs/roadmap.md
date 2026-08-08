@@ -512,8 +512,14 @@ Remaining facilities needed to diagnose and distribute real regressions:
 - optional machine-readable export of structured log histories;
 - [transaction recording](verification-components/transaction-recording.md)
   with component and process provenance;
-- runtime waveform start/stop and scope selection;
-- waveform-on-failure support in the test runner;
+- <strong class="roadmap-status roadmap-status--done">Done:</strong>
+  waveform dumping as a build variant -- `--wave` (FST or VCD), one file
+  per test from the framework host loop on both timing backends, proven
+  against the pure-SV twin by a cycle-sampled wave-equivalence gate in
+  `make test`. Runtime start/stop windowing and scope selection remain
+  open ergonomics on top;
+- waveform-on-failure stays deliberately unautomated: waves are asked for,
+  not implied by a failure;
 - <strong class="roadmap-status roadmap-status--done">Done:</strong> a
   scheduler wait graph with process parentage, spawn sites, outstanding
   triggers, named synchronization resources, timeout capture, and conservative

@@ -83,6 +83,8 @@ delivery process behind each milestone.
   waveforms, multiple domains, and scheduler callbacks.
 - [Scheduling](scheduling.md) defines edge, delay, ordering, and composition
   semantics.
+- [Waveforms](waveforms.md) covers the `--wave` build variant, per-test dump
+  files, and the pure-SV wave-equivalence flow.
 - [Code generation](code-generation.md) explains typed DUT and DPI wrapper
   generation.
 - [Architecture](architecture.md) describes the runtime and simulator

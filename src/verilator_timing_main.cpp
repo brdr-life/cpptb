@@ -9,6 +9,22 @@
 #include "verilated.h"
 #include "verilated_vpi.h"
 
+// Wave builds (cpptb --wave) verilate with --trace-fst or --trace, which
+// set the VM_TRACE* macros. The host loop owns the dump: one sample per
+// timestep, after that timestep's phases settle, into the file CPPTB_WAVE
+// names. Without the environment variable an instrumented build runs
+// silently; without the instrumentation this whole block compiles away.
+#if VM_TRACE
+#include <cstdlib>
+#if VM_TRACE_FST
+#include "verilated_fst_c.h"
+using CpptbWave = VerilatedFstC;
+#else
+#include "verilated_vcd_c.h"
+using CpptbWave = VerilatedVcdC;
+#endif
+#endif
+
 #ifndef CPPTB_VERILATED_TOP
 #error "CPPTB_VERILATED_TOP must name the generated Verilator model class"
 #endif
@@ -51,6 +67,18 @@ int main(int argc, char** argv, char**) {
 
     const auto top =
         std::make_unique<CPPTB_VERILATED_TOP>(context.get(), "");
+
+#if VM_TRACE
+    std::unique_ptr<CpptbWave> wave;
+    if (const char* wave_path = std::getenv("CPPTB_WAVE");
+        wave_path && wave_path[0] != '\0') {
+        context->traceEverOn(true);
+        wave = std::make_unique<CpptbWave>();
+        top->trace(wave.get(), 99);
+        wave->open(wave_path);
+    }
+    uint64_t wave_samples = 0;
+#endif
 
     if (vlog_startup_routines) {
         for (auto routine = &vlog_startup_routines[0]; *routine; ++routine) {
@@ -132,6 +160,16 @@ int main(int argc, char** argv, char**) {
 #endif
 #endif
 
+#if VM_TRACE
+        if (wave) {
+            wave->dump(context->time());
+            // The trace classes register flush callbacks that fire on
+            // $stop/$fatal, so a dying test keeps its tail; the periodic
+            // flush below bounds what a hard abort could lose.
+            if ((++wave_samples & 0xfffu) == 0) wave->flush();
+        }
+#endif
+
         uint64_t next_time = std::numeric_limits<uint64_t>::max();
         if (top->eventsPending()) next_time = top->nextTimeSlot();
 #ifdef CPPTB_VERILATOR_FULL_VPI_LOOP
@@ -142,6 +180,12 @@ int main(int argc, char** argv, char**) {
     }
 
     top->final();
+#if VM_TRACE
+    if (wave) {
+        wave->dump(context->time());
+        wave->close();
+    }
+#endif
     VerilatedVpi::callCbs(cbEndOfSimulation);
 #ifdef CPPTB_VERILATOR_TIMING_PROFILE
     std::printf(

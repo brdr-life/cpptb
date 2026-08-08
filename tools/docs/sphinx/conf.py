@@ -91,6 +91,8 @@ four-state
 examples
 clocking
 scheduling
+coming-from-cocotb
+waveforms
 code-generation
 ```
 

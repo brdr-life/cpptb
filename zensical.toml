@@ -13,6 +13,7 @@ nav = [
   { "Home" = "index.md" },
   { "Getting started" = "getting-started.md" },
   { "Coming from cocotb" = "coming-from-cocotb.md" },
+  { "Waveforms" = "waveforms.md" },
   { "Guides" = [
     { "Testbench authoring" = "testbench-authoring.md" },
     { "Verification components" = [
