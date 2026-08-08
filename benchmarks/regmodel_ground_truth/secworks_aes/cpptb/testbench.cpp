@@ -374,7 +374,7 @@ Task<void> run_suite(AccessMode mode, RegModel& regs, AesMaster& master, Dut dut
 }
 
 Task<void> secworks_aes_regmodel(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     dut.reset_n.set(1);
     dut.cs.set(0);
     dut.we.set(0);

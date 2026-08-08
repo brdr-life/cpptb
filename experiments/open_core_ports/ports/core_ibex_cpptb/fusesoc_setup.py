@@ -382,6 +382,16 @@ def render(resolved: dict, config: str, parameters: dict[str, str],
     lines.append('sources = ["testbench.cpp"]')
     lines.append("")
     lines.append("[build]")
+    lines.append('timing_backend = "verilator-direct"')
+    # Pinned to the legacy write model until this port is converted. The bench
+    # anchors 21 drive sites on FallingEdge interleaved with 15 RisingEdge
+    # waits, so each site must be classified as a full advance or a settle to
+    # this cycle's anchor by its predecessor await -- see
+    # ports/ibex_icache_cpptb/testbench.cpp for the converted shape.
+    # Misclassifying one reproduces the 52-failure branch signature that
+    # conversion already cost once, and it surfaces tens of thousands of
+    # checks later. Convert with the upstream RTL fetched and runnable.
+    lines.append("deferred_writes = false")
     lines.append(f'directory = "../../work/core_ibex_cpptb"')
     lines.append('name = "core_ibex_cpptb"')
     lines.append('target = "core_ibex_cpptb"')

@@ -202,6 +202,8 @@ MHPMCounterWidth = "40"
 sources = ["testbench.cpp"]
 
 [build]
+timing_backend = "verilator-direct"
+deferred_writes = true
 directory = "../../work/riscv_arch_tests"
 name = "riscv_arch_tests"
 target = "riscv_arch_tests"

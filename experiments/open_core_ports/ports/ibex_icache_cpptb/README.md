@@ -519,17 +519,17 @@ which applies `ibex_icache_oldval_test::check_phase` to a sequence that
 invalidates nothing and never disables the cache, so it has no old values to
 return. That is the check finding what it is for.
 
-## The cocotb-shaped variant, in progress
+## The cocotb-shaped timing, now the default
 
-The same testbench source carries a second timing shape, selected at build
-time:
+This port's `cpptb.toml` sets `timing_backend = "verilator-direct"` and
+`deferred_writes = true`, so the cocotb-shaped anchors below are what an
+ordinary `cpptb test` builds. The falling-edge shape is still in the source as
+the `#else` branch of the `CPPTB_DEFERRED_WRITES` guards in `drive_point()`
+and `settle_to_drive()`, and is reachable only by explicitly building with
+`--deferred-writes` unset. It is legacy and is kept for the replay comparison
+described at the end of this section.
 
-```sh
-cpptb test --project . --timing-backend verilator-direct --deferred-writes \
-    --build-dir build-deferred
-```
-
-Under the mode the drive anchor moves from `FallingEdge` to `RisingEdge`
+Under the deferred model the drive anchor moves from `FallingEdge` to `RisingEdge`
 followed by `ReadWrite{}` -- the post-eval instant cocotb's `RisingEdge`
 callback delivers -- and every `set()` queues to the ReadWrite flush. Two
 helpers carry the whole difference: `drive_point()` advances anchor to

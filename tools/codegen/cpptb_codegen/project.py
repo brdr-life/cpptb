@@ -20,6 +20,14 @@ class ProjectError(RuntimeError):
     """A project cannot be resolved into an unambiguous build."""
 
 
+# Every project gets a timing backend. Phase waits and the cocotb write
+# model are the supported semantics, so a build without one is not an
+# authoring mode cpptb offers; "verilator-direct" is the fastest of the
+# two contract-complete backends and is what an unset project gets.
+DEFAULT_TIMING_BACKEND = "verilator-direct"
+DEFAULT_DEFERRED_WRITES = True
+
+
 @dataclass(frozen=True)
 class ProjectSpec:
     root: Path
@@ -53,12 +61,13 @@ class ProjectSpec:
     # hold the complete documented timing contract:
     #   "verilator-direct"  Verilator's scheduler driven directly; fastest.
     #   "vpi"               standard VPI callbacks; the portable route.
-    timing_backend: str = ""
+    timing_backend: str = DEFAULT_TIMING_BACKEND
     # The cocotb write model: set() queues and flushes at the ReadWrite settle
     # point, set_now() stays immediate, and a get() in between reads the
     # simulator's value. Requires timing_backend, because the flush point is
-    # the phase the backend dispatches.
-    deferred_writes: bool = False
+    # the phase the backend dispatches. On by default: it is the documented
+    # write model, and immediate writes are retained only for legacy projects.
+    deferred_writes: bool = DEFAULT_DEFERRED_WRITES
     # Waveform dumping: "" (off), "fst", or "vcd". A wave build instruments
     # the model (--trace-fst or --trace), which costs simulation speed even
     # when not dumping, so it is a build variant and never the default. The
@@ -589,7 +598,9 @@ def resolve_project(
     selected_timing_backend = (
         _timing_backend(timing_backend)
         if timing_backend is not None
-        else _timing_backend(build.get("timing_backend"))
+        else _timing_backend(
+            build.get("timing_backend", DEFAULT_TIMING_BACKEND)
+        )
     )
     _reject_hand_rolled_timing(selected_timing_backend, verilator_args,
                                defines, cxx_flags)
@@ -597,7 +608,9 @@ def resolve_project(
         deferred_writes
         if deferred_writes is not None
         else _boolean(
-            build.get("deferred_writes"), "cpptb.toml build.deferred_writes"
+            build.get("deferred_writes"),
+            "cpptb.toml build.deferred_writes",
+            default=DEFAULT_DEFERRED_WRITES,
         )
     )
     selected_wave = _wave(wave if wave is not None else build.get("wave"))

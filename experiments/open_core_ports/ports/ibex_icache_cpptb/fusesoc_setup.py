@@ -203,6 +203,8 @@ FOOTER = """
 sources = ["testbench.cpp"]
 
 [build]
+timing_backend = "verilator-direct"
+deferred_writes = true
 directory = "../../work/ibex_icache_cpptb"
 name = "ibex_icache_cpptb"
 target = "ibex_icache_cpptb"

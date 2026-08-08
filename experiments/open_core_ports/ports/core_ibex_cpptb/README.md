@@ -285,6 +285,17 @@ a testbench failure -- it is a statement about the covergroup, not about Ibex.
 
 ## Timing
 
+> **This port is pinned to the legacy write model.** Its `cpptb.toml` sets
+> `timing_backend = "verilator-direct"` with `deferred_writes = false`, so the
+> drive-point convention described below is still what it builds. Converting it
+> to cpptb's standard cocotb write model means reclassifying 21 `FallingEdge`
+> drive sites, interleaved with 15 `RisingEdge` waits, as either a full advance
+> or a settle to the same cycle's anchor — by each site's predecessor *await*,
+> never by the preceding line. `ports/ibex_icache_cpptb` is the converted
+> reference; getting one site wrong there cost 52 scoreboard failures that only
+> surfaced tens of thousands of checks later. Convert with the upstream RTL
+> fetched and the bench runnable.
+
 The design samples on the rising edge. `co_await RisingEdge` resumes before the
 design has evaluated that edge, so it yields the value `@(posedge clk)` reads in
 the Active region and is where every monitor here samples. Driving there would

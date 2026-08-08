@@ -10,6 +10,8 @@ sources = ["cpptb/testbench.cpp"]
 include_dirs = ["../../../build/benchmarks/regmodel_ground_truth/secworks_aes/generated"]
 
 [build]
+timing_backend = "verilator-direct"
+deferred_writes = true
 directory = "../../../build/benchmarks/regmodel_ground_truth/secworks_aes"
 name = "secworks_aes_regmodel"
 target = "secworks_aes_regmodel"

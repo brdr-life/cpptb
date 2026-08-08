@@ -199,6 +199,8 @@ SRAMInitFile = '"firmware/coremark.vmem"'
 sources = ["testbench.cpp"]
 
 [build]
+timing_backend = "verilator-direct"
+deferred_writes = true
 directory = "../../work/ibex_simple_system"
 name = "ibex_simple_system"
 target = "ibex_simple_system"
