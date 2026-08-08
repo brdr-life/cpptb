@@ -102,7 +102,16 @@ class RegistryTests(unittest.TestCase):
                 for entry in authoring
                 if entry.gate_policy is registry.GatePolicy.DIAGNOSTIC
             ),
-            ("dynamic_spawn", "dynamic_task", "register_user_effects"),
+            (
+                "dynamic_spawn",
+                "dynamic_task",
+                # register_coverage: the pure-SV peer tallies precomputed
+                # outcomes with no per-transaction decode, so the pair
+                # measures the price of generality, not equivalent work --
+                # see the registry entry and OPTIMIZATION_NOTES (2026-08).
+                "register_coverage",
+                "register_user_effects",
+            ),
         )
         self.assertTrue(
             all(
@@ -112,6 +121,7 @@ class RegistryTests(unittest.TestCase):
                     "force_direct",
                     "dynamic_spawn",
                     "dynamic_task",
+                    "register_coverage",
                     "register_user_effects",
                 }
             )

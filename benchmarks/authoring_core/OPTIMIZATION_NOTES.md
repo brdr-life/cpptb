@@ -39,6 +39,46 @@ The focused task-value run exercised the new confirmation path and passed at
 after the initial 16 pairs, so the saved `latest` artifact contains that newer
 measurement.
 
+## register_coverage optimization and reclassification (2026-08-08)
+
+Two independent reviews of the ~2.7x register_coverage measurement -- an
+empirical pass (standalone gprof harness plus call-group bisection) and a
+fresh-context adversarial review -- converged on the same hot spots, and
+four changes landed in `include/cpptb_vc/register_coverage.hpp`, all
+internal, all snapshot-identical by construction:
+
+1. unique-index tracking is a bitmap plus running cardinality (hash-set
+   fallback above 2^20 entries) instead of `unordered_set::insert` per
+   sample -- the probe was the single hottest operation and an
+   optimization barrier besides;
+2. the write-path field intersection is one byte-range mask test instead
+   of a bit-by-bit loop;
+3. address decode uses precomputed shift/mask for power-of-two transfer
+   sizes;
+4. counter bumps are predicated adds into `counts[write][backdoor]`,
+   removing the branch chain and the duplicated permission gates.
+
+Measured: the kernel went from ~128 ns to ~35 ns per iteration in situ --
+3.7x -- with unit tests and the exact semantic gate unchanged.
+
+The gate itself turned out to be structurally unwinnable, not
+under-optimized. A scaling test showed the pure-SV peer runs its loop at
+~3.7 ns/iteration: it tallies sixteen fixed-address counters and encodes
+the *outcome* of the address decode rather than performing it, and no
+linear implementation of the real decode semantics approaches that floor
+times 1.10. The historical "awaits a host-load window" was the same
+geometry from the other side: at the old 100k iterations the samples were
+milliseconds, where CPU-time quantization fails corroboration on every
+run, and at corroboratable durations the startup dilution vanishes and
+the honest ratio is ~10x. The entry is therefore reclassified
+`GatePolicy.DIAGNOSTIC` -- the same policy as the `dynamic_spawn*`
+controls whose peers are also not equivalent work -- at forty million
+iterations, where both sides' samples clear one hundred milliseconds.
+First admitted window: median `10.0642x`, order strata `10.005x` /
+`10.052x`, CPU corroboration valid. Read it as: the generality of the
+coverage engine costs ~33 ns per observed transaction over a hardcoded
+tally, after optimization.
+
 ## timing_phases_deferred certification (2026-08-07)
 
 The deferred-writes benchmark peer certified on its first admitted window:
