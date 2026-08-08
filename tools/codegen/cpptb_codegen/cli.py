@@ -73,6 +73,15 @@ def _add_project_options(parser: argparse.ArgumentParser) -> None:
         "the ReadWrite phase (requires a timing backend)",
     )
     parser.add_argument(
+        "--wave",
+        nargs="?",
+        const="fst",
+        choices=("fst", "vcd"),
+        default=None,
+        help="build with waveform tracing and dump one wave file per test "
+        "(FST by default; pass a format to override)",
+    )
+    parser.add_argument(
         "--rebuild", action="store_true", help="ignore the build cache"
     )
     parser.add_argument(
@@ -133,6 +142,7 @@ def _resolve(args: argparse.Namespace) -> ProjectSpec:
         experimental_four_state=args.experimental_four_state,
         timing_backend=args.timing_backend,
         deferred_writes=args.deferred_writes,
+        wave=args.wave,
         refresh_top=args.rebuild,
     )
 
@@ -188,7 +198,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.result_dir is not None
             else spec.result_dir
         )
-        return run_tests([str(binary)], selected, result_dir, args.timeout)
+        return run_tests(
+            [str(binary)], selected, result_dir, args.timeout,
+            wave=spec.wave or None,
+        )
     except (BuildError, CodegenError, ProjectError, RunnerError) as error:
         print(f"cpptb: {error}", file=sys.stderr)
         return 2

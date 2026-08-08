@@ -166,6 +166,7 @@ def _fingerprint(
         "verilator_args": list(spec.verilator_args),
         "timing_backend": spec.timing_backend,
         "deferred_writes": spec.deferred_writes,
+        "wave": spec.wave,
         "timeout_cycles": spec.timeout_cycles,
         "experimental_four_state": spec.experimental_four_state,
         "verilator_version": verilator_version,
@@ -563,9 +564,22 @@ class VerilatorBackend:
                 *spec.cxx_flags,
             ]
         )
+        # A wave build instruments the model; --trace-structs/--trace-params
+        # keep struct fields and parameters readable in the viewer. The host
+        # loop dumps only when CPPTB_WAVE names an output file, but the
+        # instrumentation itself costs speed, which is why this is a build
+        # variant selected by the fingerprint rather than a runtime switch.
+        wave_args: list[str] = []
+        if spec.wave:
+            wave_args = [
+                "--trace-fst" if spec.wave == "fst" else "--trace",
+                "--trace-structs",
+                "--trace-params",
+            ]
         verilator_command = [
             *self.verilator,
             *link_args,
+            *wave_args,
             "--timing",
             "--no-sched-zero-delay",
             # OPT_FAST reaches only the model Verilator generates; the cflags

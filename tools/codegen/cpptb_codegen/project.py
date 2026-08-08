@@ -59,6 +59,11 @@ class ProjectSpec:
     # simulator's value. Requires timing_backend, because the flush point is
     # the phase the backend dispatches.
     deferred_writes: bool = False
+    # Waveform dumping: "" (off), "fst", or "vcd". A wave build instruments
+    # the model (--trace-fst or --trace), which costs simulation speed even
+    # when not dumping, so it is a build variant and never the default. The
+    # host loop dumps when CPPTB_WAVE names an output file.
+    wave: str = ""
 
     @property
     def target_build_dir(self) -> Path:
@@ -133,6 +138,20 @@ def _optimization(value: Any, label: str, default: str) -> str:
 
 
 TIMING_BACKENDS = ("verilator-direct", "vpi")
+WAVE_FORMATS = ("fst", "vcd")
+
+
+def _wave(value: object) -> str:
+    if value is None or value == "" or value is False:
+        return ""
+    if value is True:
+        return "fst"
+    if isinstance(value, str) and value in WAVE_FORMATS:
+        return value
+    names = ", ".join(f'"{name}"' for name in WAVE_FORMATS)
+    raise ProjectError(
+        f"build.wave must be true or one of {names}; got {value!r}"
+    )
 
 # The defines the timing machinery keys on. Setting any of them by hand can
 # assemble a build that runs and answers wrongly -- measured: `--vpi` on the
@@ -457,6 +476,7 @@ def resolve_project(
     experimental_four_state: bool | None = None,
     timing_backend: str | None = None,
     deferred_writes: bool | None = None,
+    wave: str | None = None,
     refresh_top: bool = False,
 ) -> ProjectSpec:
     """Resolve CLI overrides, optional TOML, then filesystem conventions."""
@@ -580,6 +600,13 @@ def resolve_project(
             build.get("deferred_writes"), "cpptb.toml build.deferred_writes"
         )
     )
+    selected_wave = _wave(wave if wave is not None else build.get("wave"))
+    if selected_wave and not selected_timing_backend:
+        raise ProjectError(
+            "build.wave needs build.timing_backend: the framework host loop "
+            "owns the dump points, and only a timing backend links it. Set "
+            'timing_backend = "verilator-direct" or "vpi"'
+        )
     if selected_deferred and not selected_timing_backend:
         raise ProjectError(
             "build.deferred_writes needs build.timing_backend: the queued "
@@ -634,4 +661,5 @@ def resolve_project(
         simulator=selected_simulator,
         timing_backend=selected_timing_backend,
         deferred_writes=selected_deferred,
+        wave=selected_wave,
     )

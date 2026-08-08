@@ -235,6 +235,44 @@ experimental_four_state = true
                 ):
                     resolve_project(project=root)
 
+    def test_wave_accepts_true_and_the_two_formats(self):
+        for value, expected in (("true", "fst"), ('"fst"', "fst"),
+                                ('"vcd"', "vcd")):
+            with self.subTest(value=value), \
+                    tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "counter.sv").write_text("module counter; endmodule\n")
+                (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+                (root / "cpptb.toml").write_text(
+                    '[build]\ntiming_backend = "verilator-direct"\n'
+                    f"wave = {value}\n",
+                    encoding="utf-8",
+                )
+                spec = resolve_project(project=root)
+                self.assertEqual(spec.wave, expected)
+
+    def test_wave_needs_a_timing_backend_and_a_known_format(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                "[build]\nwave = true\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ProjectError, "build.wave needs"):
+                resolve_project(project=root)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\ntiming_backend = "verilator-direct"\n'
+                'wave = "ghw"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ProjectError, "build.wave"):
+                resolve_project(project=root)
+
     def test_bare_vpi_in_verilator_args_is_rejected(self):
         # Measured: --vpi on the default main fails three of the five phase
         # contract checks with no diagnostic. The build tool refuses it and

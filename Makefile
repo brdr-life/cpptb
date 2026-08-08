@@ -388,7 +388,7 @@ cpp-dpi-mixed-logging-output-test: cpp-dpi-mixed-logging-build
 	python3 examples/mixed_logging/check_output.py \
 		$(CPPTB_MIXED_LOGGING_OBJ_DIR)/Vdpi_mixed_logging
 
-.PHONY: help all doctor z3-toolchain test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run deferred-writes-test $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all doctor z3-toolchain test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run deferred-writes-test wave-equivalence-test $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -425,7 +425,7 @@ z3-toolchain:
 	python3 tools/z3_pkgconfig.py --site-dir $(CPPTB_Z3_DIR) \
 		--output-dir $(CPPTB_Z3_PKGCONFIG_DIR)
 
-test: unit-test python-test codegen-test conformance-test deferred-writes-test examples-test ground-truth-test registry-check
+test: unit-test python-test codegen-test conformance-test deferred-writes-test wave-equivalence-test examples-test ground-truth-test registry-check
 
 unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test \
 	cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test \
@@ -450,6 +450,34 @@ conformance-test: cpptb-conformance-run cpptb-conformance-vpi-run
 
 # The deferred-write contract -- the cocotb write model -- pinned on both
 # supported timing backends against the same testbench.
+# Pure SV and cpptb dump the same run and a cycle-sampled comparator proves
+# the design saw the same state trajectory. The twin builds with --trace into
+# its own object directory so the untraced twin stays warm; the cpptb side is
+# an ordinary --wave vcd build of the example.
+WAVE_EQ_DIR := $(BUILD_DIR)/wave-equivalence
+WAVE_EQ_SV_OBJ := $(WAVE_EQ_DIR)/twin_obj
+
+wave-equivalence-test:
+	mkdir -p $(WAVE_EQ_DIR)
+	verilator --binary --timing --no-sched-zero-delay --trace \
+		+define+CPPTB_TWIN_WAVE \
+		-Wno-TIMESCALEMOD -Wno-WIDTH -Wno-UNUSEDSIGNAL -Wno-BLKANDNBLK \
+		-Wno-MULTIDRIVEN \
+		--Mdir $(WAVE_EQ_SV_OBJ) \
+		--top-module stream_fifo_sv_tb \
+		examples/fifo_scoreboard/stream_fifo.sv \
+		examples/fifo_scoreboard/systemverilog/stream_fifo_sv_tb.sv
+	cd $(WAVE_EQ_DIR) && $(abspath $(WAVE_EQ_SV_OBJ))/Vstream_fifo_sv_tb
+	$(CPPTB) test --project examples/fifo_scoreboard \
+		--build-dir $(abspath $(BUILD_DIR)) --build-name wave_eq_fifo \
+		--top stream_fifo --target stream_fifo --wave vcd
+	python3 tools/wave_compare.py \
+		--a build/cpptb/wave_eq_fifo/results/fifo_test.vcd \
+		--a-scope dpi_stream_fifo.i_dut \
+		--b $(WAVE_EQ_DIR)/twin.vcd \
+		--b-scope stream_fifo_sv_tb.i_dut \
+		--clock-signal clk --min-cycles 30
+
 deferred-writes-test:
 	UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb test --project tests/integration/deferred_writes
 	UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb test --project tests/integration/deferred_writes_vpi

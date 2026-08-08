@@ -116,6 +116,7 @@ def run_tests(
     result_dir: Path,
     timeout: float | None,
     seed: int | None = None,
+    wave: str | None = None,
 ) -> int:
     result_dir.mkdir(parents=True, exist_ok=True)
     passed = 0
@@ -133,6 +134,11 @@ def run_tests(
         environment["CPPTB_RESULT_FILE"] = str(result_path.resolve())
         if seed is not None:
             environment["CPPTB_RANDOM_SEED"] = str(seed)
+        wave_path: Path | None = None
+        if wave:
+            wave_path = result_dir / f"{stem}.{wave}"
+            wave_path.unlink(missing_ok=True)
+            environment["CPPTB_WAVE"] = str(wave_path.resolve())
 
         try:
             invocation = _run_command(command, environment, timeout)
@@ -165,9 +171,14 @@ def run_tests(
             wall_ms = int(result.get("wall_time_ns", 0)) / 1_000_000.0
             random_seed = result.get("random_seed")
             seed_text = f" seed={random_seed}" if random_seed is not None else ""
+            wave_text = (
+                f" wave={wave_path}"
+                if wave_path is not None and wave_path.is_file()
+                else ""
+            )
             print(
                 f"{label:<5} {test_name} checks={checks}{seed_text} "
-                f"wall_ms={wall_ms:.3f}"
+                f"wall_ms={wall_ms:.3f}{wave_text}"
             )
         except RunnerError as error:
             errored += 1
