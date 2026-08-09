@@ -126,6 +126,7 @@ _AUTHORING_TEMPLATE_IDS = {
     "constrained_packet": 37,
     "constraint_extensions": 38,
     "coverage_sampling": 39,
+    "coverage_native": 59,
     "apb_component": 40,
     "transaction_recording": 58,
     "process_pipeline": 41,
@@ -301,6 +302,16 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring(
         "coverage_sampling",
         "Functional coverage sampling",
+    ),
+    _authoring(
+        "coverage_native",
+        "Coverage vs the language-native covergroup",
+        # The one pair whose pure-SV side uses a real SystemVerilog
+        # covergroup -- plain value bins and a cross, the subset Verilator
+        # 5.050 implements -- verified through get_inst_coverage(). The
+        # richer bin kinds stay in coverage_sampling, whose twin tallies by
+        # hand because Verilator discards or faults on them (see the
+        # upstream issue drafts under experiments/open_core_ports).
     ),
     _authoring(
         "apb_component",

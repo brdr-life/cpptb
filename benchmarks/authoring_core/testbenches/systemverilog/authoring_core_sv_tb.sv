@@ -985,6 +985,55 @@ module authoring_core_sv_tb;
     coverage_sampling_count++;
   endtask
 
+
+  // The language-native coverage pair: a real SystemVerilog covergroup on
+  // the subset Verilator 5.050 implements -- plain value bins and a cross,
+  // verified through get_inst_coverage(). The richer bin kinds (illegal,
+  // ignore, transition) stay in run_coverage_sampling's hand tally, since
+  // the simulator discards or faults on them; see the upstream issue
+  // drafts under experiments/open_core_ports.
+  int unsigned native_cov_opcode;
+  int unsigned native_cov_length;
+
+  covergroup native_value_cg;
+    cp_opcode: coverpoint native_cov_opcode {
+      bins op_read = {0};
+      bins op_write = {1};
+      bins op_atomic = {2};
+      bins op_reserved = {3};
+    }
+    cp_length: coverpoint native_cov_length {
+      bins len_zero = {0};
+      bins len_short = {[1:63]};
+      bins len_medium = {[64:511]};
+      bins len_long = {[512:1500]};
+      bins len_max = {[1501:1599]};
+    }
+    cross_op_len: cross cp_opcode, cp_length;
+  endgroup
+
+  native_value_cg native_cg = new();
+
+  task automatic run_coverage_native();
+    longint unsigned native_samples = 0;
+    for (int unsigned i = 0; i < iterations; i++) begin
+      native_cov_opcode = i & 3;
+      native_cov_length = (i * 37) % 1600;
+      native_cg.sample();
+      native_samples++;
+      coverage_sampling_count++;
+      transact(i, stimulus(i), 1'b0);
+    end
+    check64(native_samples, iterations, "native coverage samples");
+    // The same quantity the C++ side derives from its snapshot: hit bins
+    // over total bins, scaled to an integer.
+    // 26 of 29 bins: 37 is 1 mod 4, so the length residue tracks the
+    // opcode and zero length only co-occurs with opcode read -- three
+    // cross bins are unreachable by construction.
+    check64($rtoi(native_cg.get_inst_coverage() * 100.0), 8965,
+            "native coverage percent x100");
+  endtask
+
   task automatic run_coverage_sampling();
     longint unsigned opcode_accounted;
     longint unsigned length_accounted;
@@ -2994,6 +3043,7 @@ module authoring_core_sv_tb;
       "constrained_packet": run_constrained_packet();
       "constraint_extensions": run_constraint_extensions();
       "coverage_sampling": run_coverage_sampling();
+      "coverage_native": run_coverage_native();
       "apb_component": run_apb_component();
       "transaction_recording": run_transaction_recording();
       "memory_model": run_memory_model();

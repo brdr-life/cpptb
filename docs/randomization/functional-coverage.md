@@ -156,6 +156,44 @@ it rejects a different model instead of silently combining unrelated data.
 The schema-1 JSON contains model source identity, sample and illegal counts,
 every bin hit count, and cross tuples. UCIS import/export remains future work.
 
+## Why coverage lives in the testbench
+
+On commercial simulators, functional coverage is a language service:
+covergroups are compiled, sampled, and reported by the simulator itself.
+On Verilator -- this project's reference simulator -- that service is not
+dependably there yet. Basic covergroups with plain value bins and crosses
+compile and sample correctly on 5.050, but the porting record documents
+where the real-world shapes stand: enabling Ibex's functional-coverage
+file produced two internal compiler faults on transition bins over enum
+items and 456 silently discarded constructs, which is why upstream Ibex
+ships with every covergroup compiled out under Verilator (reduced
+reproducers and issue drafts live under `experiments/open_core_ports`).
+cocotb reached the same conclusion from the other direction: its
+coverage library is Python-side because a VPI testbench cannot own SV
+covergroups either.
+
+cpptb's engine is therefore testbench-side by necessity, with the API
+deliberately mirroring SystemVerilog covergroup semantics -- validated
+bin-for-bin against a UVM baseline's coverage on the Ibex port, with the
+deviations recorded rather than papered over.
+
+Two benchmark pairs keep the comparison honest from both directions:
+
+- `coverage_sampling` uses the full bin vocabulary (illegal, ignore,
+  transition, crosses) against a pure-SV twin that tallies by hand,
+  because the native constructs it exercises are exactly the ones
+  Verilator faults on or discards.
+- `coverage_native` restricts itself to the subset Verilator does
+  implement -- plain value bins and a cross -- and its twin is a **real
+  SystemVerilog covergroup**, verified through `get_inst_coverage()`
+  against the identical quantity derived from the cpptb snapshot. This is
+  the language-native comparison, on the ground where the language
+  currently stands.
+
+When a second, fully covergroup-capable simulator joins the conformance
+matrix, the native pair is the template that grows to cover the full
+vocabulary.
+
 ## Performance qualification
 
 The exact `coverage_sampling` pair samples one coverage transaction for every
@@ -165,9 +203,15 @@ timing is accepted:
 ```sh
 make feature-test FEATURE=coverage_sampling
 make feature-benchmark FEATURE=coverage_sampling
+make feature-test FEATURE=coverage_native
+make feature-benchmark FEATURE=coverage_native
 ```
 
 The valid July 17, 2026 run measured `0.705x` C++ DPI over pure SystemVerilog
 at 100,000 transactions, with `0.702x` DPI-first, `0.716x` SV-first, `0.706x`
-independent, and `0.08%` paired/independent disagreement. The repository still
-enforces the ordinary `1.10x` hard guard on future changes.
+independent, and `0.08%` paired/independent disagreement. The
+`coverage_native` pair -- whose twin is a real SystemVerilog covergroup --
+certified at `0.7848x` (strata `0.7738`/`0.7898`, CPU corroboration valid),
+so the engine is faster than the language-native construct on the subset
+Verilator implements, not only faster than hand tallies. The repository
+enforces the ordinary `1.10x` hard guard on future changes to both pairs.

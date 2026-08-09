@@ -2932,6 +2932,29 @@ Task<void> run(Context context) {
     uint64_t expected_coverage_cross_hits = 0;
 #endif
 
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_COVERAGE_NATIVE
+    // The language-native comparison pair: plain value bins and a cross,
+    // deliberately restricted to the covergroup subset Verilator 5.050
+    // implements so the pure-SV twin can use a real covergroup and verify
+    // through get_inst_coverage(). Both sides check the same things: the
+    // sample count and the exact group coverage percentage.
+    Covergroup<CoverageTransaction> native_coverage{"native"};
+    auto& native_opcode = native_coverage.coverpoint(
+        "opcode", &CoverageTransaction::opcode);
+    native_opcode.bin("read", uint8_t{0})
+        .bin("write", uint8_t{1})
+        .bin("atomic", uint8_t{2})
+        .bin("reserved", uint8_t{3});
+    auto& native_length = native_coverage.coverpoint(
+        "length", &CoverageTransaction::length);
+    native_length.bin("zero", uint16_t{0})
+        .bin("short", uint16_t{1}, uint16_t{63})
+        .bin("medium", uint16_t{64}, uint16_t{511})
+        .bin("long", uint16_t{512}, uint16_t{1500})
+        .bin("max", uint16_t{1501}, uint16_t{1599});
+    native_coverage.cross("opcode_x_length", native_opcode, native_length);
+#endif
+
 #if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEM_PROBE_READ || \
     AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEM_PROBE_DEPOSIT || \
     AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_MEM_PROBE_READ_DEPOSIT
@@ -2986,6 +3009,13 @@ Task<void> run(Context context) {
             coverage_length <= 1500u) {
             ++expected_coverage_cross_hits;
         }
+        ++context.result.features.coverage_sampling;
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_COVERAGE_NATIVE
+        static_cast<void>(native_coverage.sample(CoverageTransaction{
+            static_cast<uint8_t>(iteration & 3u),
+            static_cast<uint16_t>((iteration * 37u) % 1600u)}));
         ++context.result.features.coverage_sampling;
 #endif
 
@@ -3165,6 +3195,35 @@ Task<void> run(Context context) {
             (static_cast<uint64_t>(context.iterations) + 2u) / 4u);
     check64(context, "coverage cross hits", cross_hits,
             expected_coverage_cross_hits);
+#endif
+
+#if AUTHORING_CORE_KERNEL == AUTHORING_CORE_KERNEL_COVERAGE_NATIVE
+    {
+        const auto coverage = native_coverage.snapshot();
+        uint64_t total_bins = 0;
+        uint64_t hit_bins = 0;
+        for (const auto& point : coverage.points) {
+            for (const auto& bin : point.bins) {
+                ++total_bins;
+                hit_bins += bin.hits != 0;
+            }
+        }
+        for (const auto& cross : coverage.crosses) {
+            for (const auto& bin : cross.bins) {
+                ++total_bins;
+                hit_bins += bin.hits != 0;
+            }
+        }
+        check64(context, "native coverage samples", coverage.samples,
+                context.iterations);
+        // The same quantity the SV twin reads from get_inst_coverage(),
+        // scaled to an integer: hit bins over total bins, times 10000.
+        // 26 of 29: 37 is 1 mod 4, so the length residue tracks the
+        // opcode and zero length only ever co-occurs with opcode read --
+        // three cross bins are unreachable by construction.
+        check64(context, "native coverage percent x100",
+                hit_bins * 10000u / total_bins, 8965u);
+    }
 #endif
 
     co_await wait_for_response_count(context);
