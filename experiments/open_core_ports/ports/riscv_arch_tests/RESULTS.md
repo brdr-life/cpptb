@@ -57,6 +57,16 @@ about the port, and `run_suite.py` reports the two categories separately so a
 port that faithfully reproduces a core's behaviour cannot be made to look
 broken by it. Whether Ibex or the tests are at fault is not established here.
 
+### The portable timing backend
+
+The same port also builds and runs unmodified with `timing_backend = "vpi"`,
+the standard-VPI scheduler intended for simulators other than Verilator. The
+`small` configuration passes 98 of 98 under it at `1.153x` against upstream
+(the direct backend's `1.086x` plus the callback tax), with signature digests
+identical to the direct-backend runs. The co-simulation configuration was
+verified to build under vpi; its test programs are provisioned per-host and
+were not staged on this machine, so it was not re-run.
+
 ## Where the time goes
 
 `1.086x` on the small core and `0.997x` on the larger one is the interesting

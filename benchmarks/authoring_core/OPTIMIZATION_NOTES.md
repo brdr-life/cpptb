@@ -39,6 +39,33 @@ The focused task-value run exercised the new confirmation path and passed at
 after the initial 16 pairs, so the saved `latest` artifact contains that newer
 measurement.
 
+## Closing the pending guards (2026-08-08)
+
+Every benchmark entry now has a certified result; nothing is pending a
+host-load window anymore. Three lessons from the close-out:
+
+1. **Sample-size floor.** On this shared host, CPU corroboration reliably
+   passes only when each sample's child CPU time clears roughly 150 ms;
+   below that, a single scheduler hiccup exceeds the 25% deviation bound.
+   Several entries had iteration counts calibrated for semantics, not
+   measurability -- the logging pairs run below a nanosecond per
+   iteration by design and needed 2x10^8 iterations to be measurable at
+   all. Certified: structured_logging 0.5285x, structured_log_history
+   0.5044x, mixed_logging 0.7843x, all under the hard gate.
+
+2. **The wait-graph event guard** was pending only for want of a window:
+   event certified 0.8141x with the wait graph active.
+
+3. **Three more answer-key twins.** register_split (8.80x), register_wide
+   (43.82x), and register_enum (10.21x) reproduce register_coverage's
+   original geometry: the C++ side runs the typed register-model layer
+   (frontdoor master, split transfers, Bits<128> mirrors, enum-typed
+   access) while the pure-SV peer encodes the outcome in direct word
+   moves and compares. Reclassified as diagnostics with the numbers
+   published for what they measure -- the price of the abstraction --
+   and the register_coverage derived-work twin rewrite recorded as the
+   template for returning them to the hard gate.
+
 ## register_coverage part two: the action table and the honest twin (2026-08-08)
 
 The reclassification below lasted a few hours. Two pushes retired it:
