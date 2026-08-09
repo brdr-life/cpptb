@@ -414,12 +414,13 @@ including failed and unmapped transactions; models that do not instantiate it
 execute no coverage path. Its
 exact `register_memory` C++/pure-SV semantic pair performs the same four
 deposits, four reads, six checks, and checksum updates per iteration. Optional
-coverage has its own exact `register_coverage` peer, published as a
-diagnostic: the peer tallies precomputed outcomes while the C++ side
-performs generic per-transaction decode, so the pair measures the price of
-generality (`10.06x`, ~33 ns per observed transaction after the 2026-08
-optimization pass) rather than equivalent work. The reasoning is recorded
-in the registry entry and OPTIMIZATION_NOTES.
+coverage has its own exact `register_coverage` peer under the ordinary
+hard gate, certified at `0.2104x` -- the descriptor-driven C++ engine is
+~4.75x faster than the equivalent derived-tally collector written in
+SystemVerilog. Both sides precompute the register map's decode into a
+per-address action table at construction; the history of getting this
+pair honest (including the answer-key twin it replaced) is recorded in
+OPTIMIZATION_NOTES.
 
 ## 6. Interfaces, bidirectional signals, and portability
 
