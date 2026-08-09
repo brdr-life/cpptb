@@ -84,6 +84,29 @@ python3 tools/wave_compare.py \
     --clock-signal clk --min-cycles 30
 ```
 
+## Backend identity
+
+`make backend-equivalence-test` pins a stronger claim in the other
+direction: the two supported timing backends produce **identical**
+dumps, not merely equivalent ones. The same four examples build once
+per `timing_backend` — `verilator-direct` and `vpi` — with the same
+stimulus, and `tools/backend_compare.py` requires each pair of runs to
+match exactly:
+
+- the result records agree field for field, including
+  `simulation_time_fs` and every check count (`wall_time_ns`, which
+  measures the host, is the one exclusion);
+- `.vcd` dumps are byte-identical;
+- `.fst` dumps are byte-identical outside the format's header date
+  field, the one place the writer records wall-clock time. The counter
+  pair repeats in fst to keep both wave formats covered.
+
+Byte identity means the backends schedule the same evals at the same
+simulation times — a scheduling divergence cannot hide between clock
+edges the way it could under the cycle-sampled comparison above. A
+waveform debugged under the fast backend is the waveform the portable
+backend produces.
+
 Runtime start/stop windowing and scope selection remain on the
 [roadmap](roadmap.md#7-debugging-and-release-tooling); the whole-run dump
 is deliberately the only mode for now.

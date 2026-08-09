@@ -98,6 +98,17 @@ the supported contract-complete choices. Both own the host loop through
 build identically apart from one define. See [Performance](performance.md) for
 the exact backend comparison.
 
+The two backends are held to more than passing the same tests. Every
+`make test` runs three equivalence layers between them: the 292-check
+scheduler conformance contract on each; the deferred-write contract on
+each; and `make backend-equivalence-test`, which builds the same
+examples once per backend with `--wave` and requires the runs to come
+out **identical** — result records field for field (wall time excepted,
+simulation time included) and wave dumps byte for byte. Choosing a
+backend changes how fast the simulation runs and nothing else; see
+[Waveforms](waveforms.md#backend-identity) for what the dump comparison
+covers.
+
 !!! warning "Phase waits need a named backend"
 
     A default `cpptb build` links Verilator's own `--binary` main, which owns

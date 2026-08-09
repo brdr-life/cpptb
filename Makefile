@@ -388,7 +388,7 @@ cpp-dpi-mixed-logging-output-test: cpp-dpi-mixed-logging-build
 	python3 examples/mixed_logging/check_output.py \
 		$(CPPTB_MIXED_LOGGING_OBJ_DIR)/Vdpi_mixed_logging
 
-.PHONY: help all doctor z3-toolchain test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run deferred-writes-test wave-equivalence-test wave-eq-counter wave-eq-fifo_scoreboard wave-eq-apb_regfile wave-eq-multiclock wave-eq-multiclock-read $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
+.PHONY: help all doctor z3-toolchain test unit-test python-test codegen-test conformance-test examples-test ground-truth-test secworks-aes-regmodel-equivalence secworks-aes-regmodel-benchmark docs-build docs-check docs-sphinx-build docs-sphinx-serve docs-zensical-build docs-zensical-serve run vpi-run cpp-vpi-run cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test cpptb-hierarchy-test cpptb-peakrdl-test cpp-dpi-counter-suite-test cpp-apb-event-run cpp-apb-event-bench-build cpp-apb-event-bench-run cpptb-codegen-test cpptb-codegen-frontend-check cpptb-conformance-codegen cpptb-conformance-codegen-check cpptb-conformance-frontend-check cpptb-conformance-build cpptb-conformance-run cpptb-conformance-vpi-run deferred-writes-test wave-equivalence-test wave-eq-counter wave-eq-fifo_scoreboard wave-eq-apb_regfile wave-eq-multiclock wave-eq-multiclock-read backend-equivalence-test backend-eq-counter-vcd backend-eq-counter-fst backend-eq-fifo_scoreboard-vcd backend-eq-apb_regfile-vcd backend-eq-multiclock-vcd $(CPPTB_EXAMPLE_PHONY_TARGETS) peripheral-suite-build peripheral-suite-run peripheral-suite-sv-build peripheral-suite-sv-run peripheral-suite-dpi-codegen peripheral-suite-dpi-codegen-check peripheral-suite-dpi-build peripheral-suite-dpi-run authoring-core-dpi-codegen authoring-core-dpi-codegen-check authoring-core-dpi-build authoring-core-dpi-run authoring-core-sv-build authoring-core-sv-run authoring-core-build authoring-core-benchmark authoring-core-timing-experiments-build authoring-core-force-direct-sv-build framework-comparison-vpi-build framework-comparison-vpi-run framework-comparison-cocotb-build framework-comparison-build framework-comparison-benchmark feature-list feature-test feature-benchmark feature-regression registry-check clean
 
 help:
 	@printf '%s\n' \
@@ -425,7 +425,7 @@ z3-toolchain:
 	python3 tools/z3_pkgconfig.py --site-dir $(CPPTB_Z3_DIR) \
 		--output-dir $(CPPTB_Z3_PKGCONFIG_DIR)
 
-test: unit-test python-test codegen-test conformance-test deferred-writes-test wave-equivalence-test examples-test ground-truth-test registry-check
+test: unit-test python-test codegen-test conformance-test deferred-writes-test wave-equivalence-test backend-equivalence-test examples-test ground-truth-test registry-check
 
 unit-test: cpp-coro-runtime-test cpptb-packed-value-test cpptb-random-test cpptb-randomized-test cpptb-z3-random-test cpptb-coverage-test cpptb-test-api-test \
 	cpptb-components-test cpptb-transaction-recording-test cpptb-memory-model-test cpptb-register-model-test cpptb-register-sequences-test cpptb-register-coverage-test \
@@ -502,6 +502,44 @@ wave-eq-multiclock-read: wave-eq-multiclock
 
 wave-equivalence-test: wave-eq-counter wave-eq-fifo_scoreboard \
 	wave-eq-apb_regfile wave-eq-multiclock wave-eq-multiclock-read
+
+# The two supported timing backends must be indistinguishable from the
+# testbench's point of view: same example, same stimulus, one build per
+# backend, and the runs must come out *identical* -- result records
+# field for field (wall time excepted) and wave dumps byte for byte.
+# That is deliberately stronger than the cycle-sampled equivalence
+# above: the backends must schedule the same evals at the same
+# simulation times, or the dumps diverge. Same four design classes as
+# the pure-SV comparison; the counter repeats in fst to pin the second
+# wave format (fst compares outside the header's date field -- the one
+# spot the writer records wall-clock time).
+# $(1) example dir  $(2) top  $(3) wave format
+define BACKEND_EQ_template
+backend-eq-$(1)-$(3):
+	$$(CPPTB) test --project examples/$(1) \
+		--build-dir $$(abspath $$(BUILD_DIR)) \
+		--build-name backend_eq_$(1)_$(3)_direct \
+		--top $(2) --target $(2) \
+		--timing-backend verilator-direct --wave $(3)
+	$$(CPPTB) test --project examples/$(1) \
+		--build-dir $$(abspath $$(BUILD_DIR)) \
+		--build-name backend_eq_$(1)_$(3)_vpi \
+		--top $(2) --target $(2) \
+		--timing-backend vpi --wave $(3)
+	python3 tools/backend_compare.py \
+		build/cpptb/backend_eq_$(1)_$(3)_direct/results \
+		build/cpptb/backend_eq_$(1)_$(3)_vpi/results
+endef
+
+$(eval $(call BACKEND_EQ_template,counter,counter,vcd))
+$(eval $(call BACKEND_EQ_template,counter,counter,fst))
+$(eval $(call BACKEND_EQ_template,fifo_scoreboard,stream_fifo,vcd))
+$(eval $(call BACKEND_EQ_template,apb_regfile,apb_regfile,vcd))
+$(eval $(call BACKEND_EQ_template,multiclock,dual_clock_mailbox,vcd))
+
+backend-equivalence-test: backend-eq-counter-vcd backend-eq-counter-fst \
+	backend-eq-fifo_scoreboard-vcd backend-eq-apb_regfile-vcd \
+	backend-eq-multiclock-vcd
 
 deferred-writes-test:
 	UV_CACHE_DIR=$(UV_CACHE_DIR) uv run --frozen cpptb test --project tests/integration/deferred_writes

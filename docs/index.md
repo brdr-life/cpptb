@@ -103,7 +103,8 @@ with membership,
 distributions, soft constraints, adaptive optional solver fallback, composite
 fields, functional coverpoints, crosses, transitions, and source-inferred
 hierarchical access. Two timing backends carry the full phase contract --
-`verilator-direct` for speed and `vpi` for portability -- and
+`verilator-direct` for speed and `vpi` for portability, held to identical
+results and byte-identical waveforms on every `make test` -- and
 `deferred_writes = true` selects cocotb's write model: a `set()` right
 after an awaited edge applies after that edge's own updates. Compiled test
 catalogs, one-test-per-run selection, test-owned process cleanup, fatal and
