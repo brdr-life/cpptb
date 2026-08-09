@@ -68,7 +68,13 @@ testbench produces byte-identical per-test check counts on
 
 Each of these cost real debugging time converting the Ibex icache testbench
 (`experiments/open_core_ports/ports/ibex_icache_cpptb`); the failure counts
-below are what they produced.
+below are what they produced. All three are consequences of one deliberate
+difference — the edge resume point — so each trap below states the failure,
+then points at the reason the difference exists and at where its cost is
+headed. The full argument is in
+[Why the difference is kept](#why-the-difference-is-kept), and the planned
+resolution in
+[Future directions](future-directions.md#promote-the-anchor-pattern-into-the-trigger-vocabulary).
 
 ### 1. `RisingEdge` resumes *before* the edge evaluates
 
@@ -90,6 +96,16 @@ co_await ReadWrite{};   // post-eval: what cocotb's RisingEdge delivers
 A driver anchored on the bare edge read the *previous* cycle's requests and
 failed every scoreboard comparison downstream.
 
+This resume point is not an accident of the backend. It is the one
+deliberate departure from cocotb this framework keeps, because the earlier
+instant is the cheap one, the expressive one, and the one SystemVerilog
+itself gives `@(posedge clk)` —
+[the reasons in full](#why-the-difference-is-kept). The planned resolution
+is accordingly not to move the instant but to *name the other one too*: a
+settled-edge trigger that is the edge plus the settle as one wait, so a
+pin-reading driver awaits cocotb's instant in a single line. See
+[Future directions](future-directions.md#promote-the-anchor-pattern-into-the-trigger-vocabulary).
+
 ### 2. Advancing to the next anchor and settling to this cycle's anchor are different operations
 
 A driver mid-cycle (just after an edge wait) that needs the drive anchor of
@@ -108,6 +124,13 @@ Task<void> settle_to_drive(Dut dut) {  // mid-cycle to this cycle's anchor
     co_await ReadWrite{};
 }
 ```
+
+This trap exists because the pair is convention, not API — every converted
+bench re-derives and re-names it. That is precisely the gap the
+[settled-edge trigger](future-directions.md#promote-the-anchor-pattern-into-the-trigger-vocabulary)
+closes: `SettledRisingEdge{clk}` *is* `drive_point`, a bare `ReadWrite{}`
+remains the settle, and the distinction this trap turns on becomes visible
+in the vocabulary instead of resting on honest helper names.
 
 ### 3. Classify anchor sites by their predecessor *await*, never by the preceding line
 
@@ -129,6 +152,13 @@ advance, held `ready_i` one extra edge, and the DUT handed over one beat the
 driver never counted -- which surfaced 30,000 checks later as an
 unexplainable fetch address, only after errored fetches. Fifty-two failures
 out of fifty thousand, all one signature, from one line.
+
+The classification is manual because, today, only the bare edge has a name.
+Once the
+[settled-edge trigger](future-directions.md#promote-the-anchor-pattern-into-the-trigger-vocabulary)
+exists, a wait-for-condition loop awaits it directly, the site after the
+loop is already at the drive anchor, and this trap mostly dissolves — no
+drive site needs classifying because none is left at a bare edge.
 
 ## The traps in one worked example
 
