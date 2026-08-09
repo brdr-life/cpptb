@@ -61,6 +61,16 @@
 // send_grant appears to. Getting it wrong costs a cycle of grant latency on
 // every bus access, which is exactly the sort of thing replay.py exists to
 // catch.
+//
+// Under `deferred_writes = true` the same source runs the cocotb shape
+// instead: the drive point moves to the rising edge, and every set() queues
+// until the ReadWrite flush of that timestep -- after the edge's own updates
+// -- so a queued write is captured by the next rising edge, exactly what the
+// falling-edge anchor achieved by geometry. The drive_point/settle_to_drive
+// pair below carries the whole difference; the drivers and their task
+// contracts are otherwise identical. Replay stays a baseline-mode tool: it
+// compares pins against UVM recordings made under the falling-edge anchors,
+// which the deferred shape moves by design.
 
 #include <algorithm>
 #include <array>
@@ -114,6 +124,41 @@ namespace {
 using cpptb::Dut;
 using cpptb::TestContext;
 using namespace cpptb::coro;
+
+// The per-mode drive anchor, the same pair ports/ibex_icache_cpptb defines and
+// for the same reason. The baseline sits half a cycle off the sampling edge
+// because set() is immediate. The deferred shape anchors at the rising edge
+// *and then the ReadWrite settle point*: these drivers read protocol pins at
+// their anchor (the grant drivers sample req), and a bare RisingEdge resumes
+// before the design evaluates the edge, which would hand them the previous
+// cycle's requests. After ReadWrite the edge's updates have applied -- the
+// post-eval instant cocotb's RisingEdge callback actually delivers -- and a
+// set() issued there queues for the next flush round of the same timestep,
+// landing after this edge and before the next: the cocotb write. Advance one
+// full cycle, drive anchor to drive anchor.
+inline Task<void> drive_point(Dut dut) {
+#ifdef CPPTB_DEFERRED_WRITES
+    co_await RisingEdge{dut.clk_i};
+    co_await ReadWrite{};
+#else
+    co_await FallingEdge{dut.clk_i};
+#endif
+}
+
+// Settle from just after a rising edge to THIS cycle's drive anchor. The
+// baseline's FallingEdge does that by geometry; the deferred shape must not
+// consume another edge, only descend to the ReadWrite point of the cycle it
+// is already in. The icache port drew this distinction after drive_point at a
+// settle site held branch_i for two edges and cost 52 scoreboard failures.
+// Classify by each site's predecessor await in control flow, never by the
+// preceding line of text.
+inline Task<void> settle_to_drive(Dut dut) {
+#ifdef CPPTB_DEFERRED_WRITES
+    co_await ReadWrite{};
+#else
+    co_await FallingEdge{dut.clk_i};
+#endif
+}
 
 // ---------------------------------------------------------------------------
 // Constants that have to agree with the build
@@ -869,15 +914,15 @@ MemItem make_response(Env& env, Bus& bus, Random& random,
 Task<void> grant_driver(Dut dut, TestContext& test, Env& env, Bus& bus) {
     auto& random = test.random();
     while (true) {
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
         if (!bus_req(dut, bus)) continue;
 
         const uint32_t delay = draw_gnt_delay(random, bus.cfg);
         for (uint32_t index = 0; index <= delay; ++index) {
-            co_await FallingEdge{dut.clk_i};
+            co_await drive_point(dut);
         }
         set_bus_gnt(dut, bus, true);
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
         set_bus_gnt(dut, bus, false);
     }
 }
@@ -893,18 +938,18 @@ Task<void> grant_driver(Dut dut, TestContext& test, Env& env, Bus& bus) {
 Task<void> response_driver(Dut dut, Env& env, Bus& bus) {
     uint64_t responses_driven = 0;
     while (true) {
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
         set_bus_response(dut, bus, false, 0, false, false);
         bus.driving_spurious = false;
 
         while (bus.responses.empty()) {
-            co_await FallingEdge{dut.clk_i};
+            co_await drive_point(dut);
         }
         MemItem item = bus.responses.front();
         bus.responses.pop_front();
 
         for (uint32_t index = 0; index < item.rvalid_delay; ++index) {
-            co_await FallingEdge{dut.clk_i};
+            co_await drive_point(dut);
         }
 
         // Read responses only. A write response carries no data the core
@@ -1240,17 +1285,17 @@ Task<void> test_done_subscriber(Env& env, Queue<MemItemPtr>& fifo) {
 Task<void> response_driver_faithful(Dut dut, Env& env, Bus& bus) {
     uint64_t responses_driven = 0;
     while (true) {
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
         set_bus_response(dut, bus, false, 0, false, false);
         bus.driving_spurious = false;
 
         while (!bus.sequencer.has_item()) {
-            co_await FallingEdge{dut.clk_i};
+            co_await drive_point(dut);
         }
         MemItem item = *bus.sequencer.get_next_item();
 
         for (uint32_t index = 0; index < item.rvalid_delay; ++index) {
-            co_await FallingEdge{dut.clk_i};
+            co_await drive_point(dut);
         }
 
         if (!item.write && !item.spurious) ++responses_driven;
@@ -1398,21 +1443,24 @@ Task<void> fcov_sampler(Dut dut, Env& env, Uarch& coverage, bool enabled) {
 Task<void> key_device(Dut dut, TestContext& test, Env& env) {
     auto& random = test.random();
     while (true) {
-        co_await FallingEdge{dut.clk_i};
+        co_await drive_point(dut);
         if (dut.scramble_req_o.get() == 0) {
             dut.scramble_key_valid_i.set(0);
             continue;
         }
         const auto delay = random.randint<uint32_t>(0, 10);
         for (uint32_t index = 0; index < delay; ++index) {
-            co_await FallingEdge{dut.clk_i};
+            co_await drive_point(dut);
         }
         dut.scramble_key_i.set(random.randbits<128>());
         dut.scramble_nonce_i.set(random.next_u64());
         dut.scramble_key_valid_i.set(1);
         ++env.counters.key_answers;
+        // The RisingEdge above this settle is the site's predecessor await:
+        // key_valid drops at the drive anchor of the cycle whose edge just
+        // sampled it, not a full advance later.
         co_await RisingEdge{dut.clk_i};
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
         dut.scramble_key_valid_i.set(0);
     }
 }
@@ -1433,6 +1481,10 @@ Task<void> key_device(Dut dut, TestContext& test, Env& env) {
 Task<void> fetch_enable_stimulus(Dut dut, TestContext& test, Env& env) {
     auto& random = test.random();
     dut.fetch_enable_i.set(kIbexMuBiOn);
+    // Spawned just after clock_cycles(100)'s rising edge, so the first
+    // iteration starts above this cycle's anchor; every later one starts at
+    // the anchor the previous iteration's settle left it on.
+    bool at_anchor = false;
     while (true) {
         const bool zero_delays = random.randint<uint32_t>(0, 99) < 50;
         if (!zero_delays) {
@@ -1449,15 +1501,26 @@ Task<void> fetch_enable_stimulus(Dut dut, TestContext& test, Env& env) {
                 off = random.randint<uint32_t>(0, 15);
             } while (off == kIbexMuBiOn);
         }
-        co_await FallingEdge{dut.clk_i};
+        // One FallingEdge in the baseline, but its predecessor await differs
+        // by path: after the gap loop's RisingEdge (or on the first, spawned
+        // iteration) it settles to this cycle's anchor; with zero_delays from
+        // a previous iteration's anchor it is a full advance. Both arms are
+        // FallingEdge without CPPTB_DEFERRED_WRITES, so the baseline is
+        // unchanged.
+        if (zero_delays && at_anchor) {
+            co_await drive_point(dut);
+        } else {
+            co_await settle_to_drive(dut);
+        }
         dut.fetch_enable_i.set(off);
         ++env.counters.fetch_enable_pulses;
         const auto hold = random.randint<uint32_t>(1, 500);
         for (uint32_t index = 0; index < hold; ++index) {
             co_await RisingEdge{dut.clk_i};
         }
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
         dut.fetch_enable_i.set(kIbexMuBiOn);
+        at_anchor = true;
     }
 }
 
@@ -1706,12 +1769,14 @@ Task<void> wait_for_csr_write(Dut dut, uint32_t number) {
 }
 
 Task<void> mcounteren_lock_stimulus(Dut dut) {
+    // wait_for_csr_write returns just after the rising edge that saw the
+    // write, so both drives settle to that cycle's anchor.
     co_await wait_for_csr_write(dut, kCsrMcycle);
-    co_await FallingEdge{dut.clk_i};
+    co_await settle_to_drive(dut);
     dut.mcounteren_writable_i.set(kIbexMuBiOff);
     std::printf("cpptb-core-ibex: write to MCYCLE, locking mcounteren\n");
     co_await wait_for_csr_write(dut, kCsrMcycleH);
-    co_await FallingEdge{dut.clk_i};
+    co_await settle_to_drive(dut);
     dut.mcounteren_writable_i.set(kIbexMuBiOn);
     std::printf("cpptb-core-ibex: write to MCYCLEH, unlocking mcounteren\n");
 }
@@ -1957,7 +2022,7 @@ Task<void> replay_run(Dut dut, TestContext& test, Env& env,
             co_return;
         }
 
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
         if (index + 1 < trace.cycles.size()) {
             apply_cycle(dut, trace, index + 1);
         }
@@ -2183,8 +2248,11 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     // thing the hard way: clk_rst_if declares o_rst_n with no initialiser, and
     // on Verilator the assignment to zero is 0 -> 0, no edge, so the core boots
     // in User mode and the first CSR access of every program traps.
-    dut.clk_i.set(0);
-    dut.rst_ni.set(1);
+    // set_now, not set: under deferred writes a plain set() queues, and the
+    // clock must be at a known level before start_clock. The icache port
+    // initialises both pins the same way.
+    dut.clk_i.set_now(0);
+    dut.rst_ni.set_now(1);
     dut.fetch_enable_i.set(kIbexMuBiOff);
     // core_ibex_dut_probe_if has an initial block that sets
     //     debug_req = 1'b0; mcounteren_writable = ibex_pkg::IbexMuBiOn;
@@ -2215,7 +2283,7 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
         // cycles with rst_ni high first, so applying cycle 0 produces the real
         // falling edge the design's asynchronous resets need.
         co_await clock_cycles(dut.clk_i, 2);
-        co_await FallingEdge{dut.clk_i};
+        co_await settle_to_drive(dut);
 
         env.mem.write_byte(kBootAddr, 0);
         for (std::size_t offset = 0; offset < image.size(); ++offset) {
@@ -2296,10 +2364,10 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
     // clk_rst_if::apply_reset(.reset_width_clks(100)), which core_ibex_tb_top
     // forks from its initial block.
     co_await clock_cycles(dut.clk_i, 2);
-    co_await FallingEdge{dut.clk_i};
+    co_await settle_to_drive(dut);
     dut.rst_ni.set(0);
     co_await clock_cycles(dut.clk_i, 100);
-    co_await FallingEdge{dut.clk_i};
+    co_await settle_to_drive(dut);
     dut.rst_ni.set(1);
 
     CosimScoreboard scoreboard(test, env);
@@ -2417,7 +2485,7 @@ Task<void> run_core_ibex_test(Dut dut, TestContext& test, const char* name,
         co_await RisingEdge{dut.clk_i};
         ++cycles;
     }
-    co_await FallingEdge{dut.clk_i};
+    co_await settle_to_drive(dut);
     dut.fetch_enable_i.set(kIbexMuBiOff);
     for (uint32_t index = 0; index < 3000; ++index) {
         co_await RisingEdge{dut.clk_i};
