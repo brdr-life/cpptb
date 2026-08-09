@@ -48,6 +48,7 @@ KERNELS = (
     "constrained_packet",
     "constraint_extensions",
     "coverage_sampling",
+    "coverage_native",
     "apb_component",
     "transaction_recording",
     "memory_model",
@@ -456,6 +457,14 @@ def expected_counts(kernel: str, iterations: int) -> ExpectedCounts:
             iterations=iterations,
             transactions=iterations,
             checks=iterations + 7,
+            coverage_sampling=iterations,
+        )
+
+    if kernel == "coverage_native":
+        return ExpectedCounts(
+            iterations=iterations,
+            transactions=iterations,
+            checks=iterations + 4,
             coverage_sampling=iterations,
         )
 
