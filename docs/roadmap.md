@@ -530,8 +530,11 @@ Remaining facilities needed to diagnose and distribute real regressions:
   waveform dumping as a build variant -- `--wave` (FST or VCD), one file
   per test from the framework host loop on both timing backends, proven
   against the pure-SV twin by a cycle-sampled wave-equivalence gate in
-  `make test`. Runtime start/stop windowing and scope selection remain
-  open ergonomics on top;
+  `make test`, and proven across the two timing backends by a
+  byte-identity gate: the same examples built per backend must produce
+  identical result records and identical dumps
+  (`make backend-equivalence-test`). Runtime start/stop windowing and
+  scope selection remain open ergonomics on top;
 - waveform-on-failure stays deliberately unautomated: waves are asked for,
   not implied by a failure;
 - <strong class="roadmap-status roadmap-status--done">Done:</strong> a
