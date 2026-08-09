@@ -7,7 +7,7 @@ without exposing scheduler or transport plumbing.
 
 ```cpp
 Task<void> count_sequence(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     dut.rst_n.set(0);
@@ -102,11 +102,16 @@ multidimensional arrays, and deterministic and constrained-random stimulus
 with membership,
 distributions, soft constraints, adaptive optional solver fallback, composite
 fields, functional coverpoints, crosses, transitions, and source-inferred
-hierarchical access. Compiled test catalogs,
-one-test-per-run selection, test-owned process cleanup, fatal and nonfatal
-checks, process-aware structured logging, and JSON results are also supported.
-Optional `cpptb_vc` components add sparse expected memory, typed register
-models, and PeakRDL generation without extending the core scheduler API.
+hierarchical access. Two timing backends carry the full phase contract --
+`verilator-direct` for speed and `vpi` for portability -- and
+`deferred_writes = true` selects cocotb's write model: a `set()` right
+after an awaited edge applies after that edge's own updates. Compiled test
+catalogs, one-test-per-run selection, test-owned process cleanup, fatal and
+nonfatal checks, process-aware structured logging, per-test waveform dumps
+(`--wave`, FST or VCD), and JSON results are also supported. Optional
+`cpptb_vc` components add sparse expected memory, typed register models,
+register-access coverage, and PeakRDL generation without extending the
+core scheduler API.
 Verilator is the end-to-end reference simulator. Direct Verilator timing
 dispatch and the standard VPI fallback implement the complete scheduling
 contract; the faster generated SV-DPI calendar remains experimental. Broader

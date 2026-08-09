@@ -8,15 +8,19 @@ design-specific files needed by the simulator:
 - C++ binding metadata and access callbacks.
 - A SystemVerilog DPI wrapper containing the event hooks.
 - A C++ DPI adapter connecting the generated transport to the public test API.
-- A small C++ discovery translation unit used during the build.
 
 ```sh
 cpptb build
 ```
 
 The build backend invokes `cpptb-codegen` twice: once to create the typed
-interface used by testbench discovery, and again to finalize clock and
-hierarchy transport. This sequence is cached and does not belong in a user
+interface, and again to finalize the hierarchy transport from the access
+set. The access set is recovered by compiling the testbench translation
+units alone -- no link, and no user test code ever executes at build time
+-- and scanning the objects for the section records the framework headers
+plant. Clocks are not a build input: `start_clock()` registers them at run
+time and the generated wrapper drives whichever writable one-bit signals
+were registered. This sequence is cached and does not belong in a user
 Makefile. The low-level source-first command remains available for custom build
 integrations and writes to `build/cpptb/<target>/generated` by default:
 
@@ -41,8 +45,8 @@ cannot choose one root unambiguously. Code generation discovers port shape,
 but does not assign clock roles or timing. The C++ testbench does that:
 
 ```cpp
-dut.write_clk.set(0);
-dut.read_clk.set(0);
+dut.write_clk.set_now(0);
+dut.read_clk.set_now(0);
 test.start_clock(dut.write_clk, 4_ns);
 test.start_clock(dut.read_clk, 6_ns, 1_ns);
 ```
