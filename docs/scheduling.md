@@ -97,7 +97,10 @@ settle anything automatically.
 ## Simulator phases
 
 Use phase waits when a test needs a specific point within the current or next
-simulator timestep, rather than a particular signal transition.
+simulator timestep, rather than a particular signal transition. The time-slot
+model these points are named against — regions, their order, and the
+iteration inside one slot — is drawn out in
+[Simulator event regions](event-regions.md).
 
 `ReadWrite{}` is the drive anchor: the coroutine may read and drive there. A
 coroutine resuming at `ReadWrite{}` finds its own queued writes freshly

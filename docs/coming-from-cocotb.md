@@ -164,6 +164,50 @@ conversion at scale, both Ibex ports
 `.../core_ibex_cpptb`) carry the helper pair with rationale comments, and
 every one of their drive sites is classified per trap 3.
 
+## Why the difference is kept
+
+The divergence behind trap 1 is deliberate, and it is worth knowing the
+reasons, because they predict when the difference will bite and when it
+never can. Everywhere else this framework *erased* its differences from
+cocotb — the trigger vocabulary was matched from the start, and the write
+model shipped and became the default precisely so a cocotb driver
+translates line for line. The edge instant is the one place convergence
+would have cost more than it bought, three times over.
+
+**It is the hot path.** The generated calendar toggles a clock and
+dispatches the scheduler in the same Active-region statement sequence: one
+call per edge, before the design evaluates. Resuming where cocotb resumes
+would take a second, settle-region dispatch on every edge wait — or the
+NBA-barrier phase pump, which [Architecture](architecture.md) records as
+measured and slower than portable VPI. The performance identity against
+pure SystemVerilog — measured ratios between 0.76x and 1.08x of
+hand-written SV, with [Performance](performance.md) carrying the gated
+benchmarks behind them — rests on that single dispatch, and a bench full
+of monitors would pay for post-evaluation resumption on every edge
+whether it needed it or not.
+
+**The earlier instant is strictly more expressive.** From the
+pre-evaluation instant, cocotb's instant is one wait away:
+`co_await ReadWrite{}`. From cocotb's post-evaluation callback there is no
+way back. The bare edge also hands a monitor exactly what `always_ff` is
+about to sample, deterministically and with no extra wait — where cocotb
+needs `ReadOnly` before a read is guaranteed settled. Choosing the earlier
+rung of the ladder means both instants are reachable; choosing cocotb's
+would have made one of them unreachable.
+
+**It matches SystemVerilog.** A plain `@(posedge clk)` in an SV testbench
+process also resumes in the Active region, before that edge's nonblocking
+updates commit — the same instant as `co_await RisingEdge{}`. Every
+example and benchmark in this repository is held against a pure-SV twin,
+so matching cocotb here would have meant diverging from the language the
+twins are written in.
+
+[Simulator event regions](event-regions.md) locates all of these instants
+in the LRM's time-slot model. The helper-pair convention that manages the
+difference today is convention only;
+[Future directions](future-directions.md#promote-the-anchor-pattern-into-the-trigger-vocabulary)
+records the plan to fold it into the trigger vocabulary.
+
 ## What has no cocotb equivalent, and the reverse
 
 - `co_await RisingEdge{}` resumes *before* the design evaluates the edge,
@@ -180,4 +224,6 @@ every one of their drive sites is classified per trap 3.
 Pick a runnable [example](examples.md) shaped like the bench you are
 converting, or go to [Tasks and concurrency](testbench-authoring.md) for the
 coordination primitives the trigger table only names. The precise resume
-semantics behind trap 1 live in [Scheduling](scheduling.md).
+semantics behind trap 1 live in [Scheduling](scheduling.md), and the
+time-slot model they are stated against in
+[Simulator event regions](event-regions.md).

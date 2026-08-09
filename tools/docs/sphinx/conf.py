@@ -93,6 +93,7 @@ testbench-authoring
 test-lifecycle
 clocking
 scheduling
+event-regions
 logging
 waveforms
 ```
