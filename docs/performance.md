@@ -572,6 +572,16 @@ make feature-test FEATURE=coverage_sampling
 make feature-benchmark FEATURE=coverage_sampling
 ```
 
+The companion `coverage_native` pair restricts itself to the covergroup
+subset Verilator implements -- plain value bins and a cross -- and its
+pure-SV twin is a real SystemVerilog covergroup verified through
+`get_inst_coverage()` against the identical quantity derived from the
+cpptb snapshot. It certified at `0.7848x` (strata `0.7738`/`0.7898`, CPU
+corroboration valid), so the engine is faster than the language-native
+construct where the language works, not only faster than hand tallies.
+[Functional coverage](randomization/functional-coverage.md) explains the
+positioning of the two pairs.
+
 ## APB verification components
 
 The `apb_component` pair performs 100,000 APB writes and matching reads through
@@ -728,12 +738,18 @@ The 100,000-iteration semantic contract is `2,000,000` transactions and
 
 ## Register access coverage
 
-The exact `register_coverage` pair observes the same ten frontdoor register and
-memory transactions per iteration, including byte enables, legal field access,
-memory indices, one failed transfer, and one unmapped transfer. C++ uses the
-opt-in `RegisterAccessCoverage` subscriber; pure SV updates the equivalent
-coverage counters directly. Final snapshots compare every register, field,
-memory, path, and error counter in 12 checks.
+The exact `register_coverage` pair observes the same ten frontdoor register
+and memory transactions per iteration, including byte enables, legal field
+access, memory indices, one failed transfer, and one unmapped transfer.
+Both sides run a descriptor-driven collector that derives its tallies from
+the observed transactions through a per-address action table precomputed at
+construction: C++ uses the opt-in `RegisterAccessCoverage` subscriber, and
+the pure-SV twin instantiates an equivalent `register_access_coverage`
+class with the same register map as data. Final snapshots compare every
+register, field, memory, path, and error counter in 12 checks. The
+certified ratio is `0.2104x` -- the C++ engine is ~4.75x faster than the
+equivalent SystemVerilog collector -- with order strata `0.2108`/`0.2113`
+and CPU corroboration valid at ten million iterations.
 
 ```sh
 make feature-test FEATURE=register_coverage
@@ -815,6 +831,16 @@ additional TLS resolver work. The final 32-pair run passed at `0.834x`, with
 paired/independent disagreement. All 200,000 checks matched. This is a
 machine-specific result; the registry's `1.10x` hard guard remains the
 acceptance criterion.
+
+Two supported timing backends carry this contract in every cpptb-build
+project: `verilator-direct` (the scheduler driven directly; fastest) and
+`vpi` (standard callbacks; the portable route), both linking the same
+framework host loop. The deferred-write peer `timing_phases_deferred` --
+the same kernel built with `deferred_writes = true` -- certified at
+`0.8903x` against the same pure-SV twin, with the immediate kernel at
+`0.7383x` in a comparable admitted window, putting the cocotb write
+model's cost at about `1.21x` over immediate writes on a kernel that is
+nothing but writes and phase awaits.
 
 ### Portable timing experiments
 

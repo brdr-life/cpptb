@@ -21,7 +21,7 @@ sequence register-oriented:
 
 ```cpp
 Task<void> register_sequence(Dut dut, TestContext& test) {
-    dut.clk.set(0);
+    dut.clk.set_now(0);
     test.start_clock(dut.clk, 10_ns);
 
     co_await reset_dut(dut);

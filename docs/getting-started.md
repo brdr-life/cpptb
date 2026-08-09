@@ -42,7 +42,7 @@ Clock timing belongs to the C++ testbench. Initialize each input clock and
 register its period before the test's first `co_await`:
 
 ```cpp
-dut.clk.set(0);
+dut.clk.set_now(0);
 test.start_clock(dut.clk, 10_ns);
 ```
 

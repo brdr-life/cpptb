@@ -10,8 +10,8 @@ Initialize each DUT input clock and register its full period before the first
 
 ```cpp
 Task<void> test_sequence(Dut dut, TestContext& test) {
-    dut.core_clk.set(0);
-    dut.bus_clk.set(0);
+    dut.core_clk.set_now(0);
+    dut.bus_clk.set_now(0);
 
     test.start_clock(dut.core_clk, 4_ns);
     test.start_clock(dut.bus_clk, 10_ns, 1_ns);
@@ -26,10 +26,15 @@ half-period. Each clock has an independent period and phase. The first
 registered clock is the primary clock used for the result's cycle count; it
 does not restrict which clock a coroutine may await.
 
-`start_clock()` records the clock configuration during test initialization.
-The generated SystemVerilog wrapper then owns the periodic process and toggles
-the pin in simulator time. C++ does not cross DPI merely to write each clock
-level.
+`start_clock()` registers the clock with the runtime during test
+initialization; the generated SystemVerilog wrapper carries a driver task
+for every writable one-bit signal (including unpacked-array elements, which
+is how interface-member clocks arrive), asks the runtime after
+initialization which were registered, and those toggle in simulator time.
+C++ does not cross DPI merely to write each clock level, and nothing about
+the clocks is decided at build time. `set_now()` initializes the pin
+because it is cocotb's `setimmediatevalue()` -- correct under either write
+model, before the clock exists.
 
 ## Scheduler callbacks
 
