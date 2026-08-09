@@ -1639,6 +1639,214 @@ module authoring_core_sv_tb;
             "register sequence transactions");
   endtask
 
+
+  // A descriptor-driven register-access coverage collector: the reusable
+  // shape a pure-SV bench needs to DERIVE tallies from observed traffic
+  // rather than hand-solving them at authoring time. It mirrors the
+  // cpptb_vc engine: the register map arrives as data, the whole decode is
+  // precomputed into a per-address action table at construction, and
+  // observing a transaction is a bounds check, one table fetch, and a few
+  // predicated bumps.
+  class register_access_coverage;
+    // counters: frontdoor/backdoor x read/write, plus allow bits
+    longint unsigned fr[], fw[], br[], bw[];
+    bit c_read[], c_write[];
+    longint unsigned samples, failed, unmapped;
+
+    // register slots and flattened fields
+    int unsigned reg_counter[];
+    int unsigned reg_field_begin[], reg_field_count[];
+    int unsigned f_counter[];
+    longint unsigned f_write_mask[];
+
+    // memories: counter, element geometry, seen bitmaps + unique tallies
+    int unsigned mem_counter[];
+    longint unsigned mem_entries[];
+    bit rd_seen[], wr_seen[];
+    int unsigned mem_seen_begin[];
+    longint unsigned rd_unique[], wr_unique[];
+
+    // action table over the block span
+    longint unsigned table_base;
+    byte unsigned act_kind[];      // 0 none, 1 register, 2 memory
+    int unsigned act_id[];         // register slot or memory id
+    longint unsigned act_index[];  // memory element index
+
+    function new(
+        // registers: address, width bytes, access-width bytes
+        longint unsigned r_addr[], int unsigned r_bytes[],
+        int unsigned r_aw_bytes[],
+        // fields: owning register, lsb, width, readable, writable
+        int unsigned fd_reg[], int unsigned fd_lsb[], int unsigned fd_width[],
+        bit fd_r[], bit fd_w[],
+        // memories: address, entries, element bytes, readable, writable
+        longint unsigned m_addr[], longint unsigned m_entries[],
+        int unsigned m_bytes[], bit m_r[], bit m_w[]);
+      longint unsigned low, high;
+      int unsigned counter_count;
+      counter_count = r_addr.size() + fd_reg.size() + m_addr.size();
+      fr = new[counter_count]; fw = new[counter_count];
+      br = new[counter_count]; bw = new[counter_count];
+      c_read = new[counter_count]; c_write = new[counter_count];
+      foreach (fr[i]) begin
+        fr[i] = 0; fw[i] = 0; br[i] = 0; bw[i] = 0;
+      end
+      reg_counter = new[r_addr.size()];
+      reg_field_begin = new[r_addr.size()];
+      reg_field_count = new[r_addr.size()];
+      f_counter = new[fd_reg.size()];
+      f_write_mask = new[fd_reg.size()];
+      mem_counter = new[m_addr.size()];
+      mem_entries = new[m_entries.size()];
+      mem_seen_begin = new[m_addr.size()];
+      rd_unique = new[m_addr.size()];
+      wr_unique = new[m_addr.size()];
+      begin
+        int unsigned c = 0;
+        int unsigned f = 0;
+        foreach (r_addr[r]) begin
+          bit readable = 0, writable = 0;
+          reg_counter[r] = c;
+          reg_field_begin[r] = f;
+          reg_field_count[r] = 0;
+          foreach (fd_reg[k]) begin
+            if (fd_reg[k] != r) continue;
+            readable |= fd_r[k];
+            writable |= fd_w[k];
+          end
+          c_read[c] = readable; c_write[c] = writable;
+          c++;
+          foreach (fd_reg[k]) begin
+            if (fd_reg[k] != r) continue;
+            f_counter[f] = c;
+            c_read[c] = fd_r[k]; c_write[c] = fd_w[k];
+            // write byte mask over the transfer, derived from lsb/width
+            begin
+              int unsigned first_byte = fd_lsb[k] / 8;
+              int unsigned last_byte = (fd_lsb[k] + fd_width[k] - 1) / 8;
+              f_write_mask[f] = 0;
+              for (int unsigned b = first_byte; b <= last_byte; b++)
+                f_write_mask[f] |= (64'h1 << b);
+            end
+            c++; f++;
+            reg_field_count[r]++;
+          end
+        end
+        begin
+          int unsigned seen_total = 0;
+          foreach (m_addr[m]) begin
+            mem_counter[m] = c;
+            mem_entries[m] = m_entries[m];
+            c_read[c] = m_r[m]; c_write[c] = m_w[m];
+            mem_seen_begin[m] = seen_total;
+            seen_total += m_entries[m];
+            rd_unique[m] = 0; wr_unique[m] = 0;
+            c++;
+          end
+          rd_seen = new[seen_total];
+          wr_seen = new[seen_total];
+          foreach (rd_seen[i]) begin
+            rd_seen[i] = 1'b0; wr_seen[i] = 1'b0;
+          end
+        end
+      end
+      // action table
+      low = 64'hFFFF_FFFF_FFFF_FFFF; high = 0;
+      foreach (r_addr[r]) begin
+        if (r_addr[r] < low) low = r_addr[r];
+        if (r_addr[r] + r_bytes[r] > high) high = r_addr[r] + r_bytes[r];
+      end
+      foreach (m_addr[m]) begin
+        if (m_addr[m] < low) low = m_addr[m];
+        if (m_addr[m] + m_entries[m] * m_bytes[m] > high)
+          high = m_addr[m] + m_entries[m] * m_bytes[m];
+      end
+      table_base = low;
+      act_kind = new[high - low];
+      act_id = new[high - low];
+      act_index = new[high - low];
+      foreach (act_kind[i]) act_kind[i] = 0;
+      foreach (r_addr[r]) begin
+        for (longint unsigned off = 0; off < r_bytes[r];
+             off += r_aw_bytes[r]) begin
+          act_kind[r_addr[r] + off - table_base] = 1;
+          act_id[r_addr[r] + off - table_base] = r;
+        end
+      end
+      foreach (m_addr[m]) begin
+        for (longint unsigned e = 0; e < m_entries[m]; e++) begin
+          for (int unsigned b = 0; b < m_bytes[m]; b++) begin
+            act_kind[m_addr[m] + e * m_bytes[m] + b - table_base] = 2;
+            act_id[m_addr[m] + e * m_bytes[m] + b - table_base] = m;
+            act_index[m_addr[m] + e * m_bytes[m] + b - table_base] = e;
+          end
+        end
+      end
+      samples = 0; failed = 0; unmapped = 0;
+    endfunction
+
+    function void observe(bit write, longint unsigned addr,
+                          longint unsigned byte_enable, bit okay);
+      longint unsigned off;
+      if (!okay) begin failed++; return; end
+      off = addr - table_base;
+      if (off >= act_kind.size() || act_kind[off] == 0) begin
+        unmapped++;
+        return;
+      end
+      if (act_kind[off] == 1) begin
+        int unsigned r = act_id[off];
+        bump(reg_counter[r], write, 1'b0);
+        for (int unsigned k = 0; k < reg_field_count[r]; k++) begin
+          int unsigned f = reg_field_begin[r] + k;
+          if (write ? ((byte_enable & f_write_mask[f]) != 0) : 1'b1)
+            bump(f_counter[f], write, 1'b0);
+        end
+      end else begin
+        int unsigned m = act_id[off];
+        bump(mem_counter[m], write, 1'b0);
+        mark_seen(m, act_index[off], write);
+      end
+      samples++;
+    endfunction
+
+    function void sample_register_backdoor(int unsigned r, bit write);
+      bump(reg_counter[r], write, 1'b1);
+      for (int unsigned k = 0; k < reg_field_count[r]; k++)
+        bump(f_counter[reg_field_begin[r] + k], write, 1'b1);
+      samples++;
+    endfunction
+
+    function void sample_memory_backdoor(int unsigned m,
+                                         longint unsigned index, bit write);
+      bump(mem_counter[m], write, 1'b1);
+      mark_seen(m, index, write);
+      samples++;
+    endfunction
+
+    function void bump(int unsigned c, bit write, bit backdoor);
+      // predicated add, mirroring the C++ engine's allow gating
+      longint unsigned allowed = (write ? c_write[c] : c_read[c]) ? 1 : 0;
+      if (backdoor) begin
+        if (write) bw[c] += allowed; else br[c] += allowed;
+      end else begin
+        if (write) fw[c] += allowed; else fr[c] += allowed;
+      end
+    endfunction
+
+    function void mark_seen(int unsigned m, longint unsigned index,
+                            bit write);
+      int unsigned at = mem_seen_begin[m] + index;
+      if (write) begin
+        wr_unique[m] += wr_seen[at] ? 0 : 1;
+        wr_seen[at] = 1'b1;
+      end else begin
+        rd_unique[m] += rd_seen[at] ? 0 : 1;
+        rd_seen[at] = 1'b1;
+      end
+    endfunction
+  endclass
+
   task automatic run_register_coverage();
     longint unsigned samples = 0;
     longint unsigned failed = 0;
@@ -1657,40 +1865,45 @@ module authoring_core_sv_tb;
     bit memory_written_indices [0:3];
     longint unsigned unique_indices = 0;
 
+    // The same register map the C++ side declares, as data: control@0
+    // (16-bit, fields command[7:0] RW and status[15:8] RO) and a 4x32
+    // memory at 0x100. The engine derives every tally from the observed
+    // transactions -- nothing below is hand-solved.
+    register_access_coverage cov = new(
+        '{64'h0}, '{2}, '{2},
+        '{0, 0}, '{0, 8}, '{8, 8}, '{1'b1, 1'b1}, '{1'b1, 1'b0},
+        '{64'h100}, '{64'd4}, '{4}, '{1'b1}, '{1'b1});
+
     for (int unsigned i = 0; i < iterations; i++) begin
       int unsigned index = i & 3;
-      control_frontdoor_writes++;
-      command_frontdoor_writes++;
-      samples++;
-      control_frontdoor_reads++;
-      status_frontdoor_reads++;
-      samples++;
-      memory_frontdoor_writes++;
-      memory_written_indices[index] = 1'b1;
-      samples++;
-      memory_frontdoor_reads++;
-      memory_read_indices[index] = 1'b1;
-      samples++;
-      unmapped++;
-      failed++;
-      control_backdoor_writes++;
-      samples++;
-      control_backdoor_reads++;
-      samples++;
-      memory_backdoor_writes++;
-      memory_written_indices[index] = 1'b1;
-      samples++;
-      memory_backdoor_reads++;
-      memory_read_indices[index] = 1'b1;
-      samples++;
+      cov.observe(1'b1, 64'h0, 64'h1, 1'b1);
+      cov.observe(1'b0, 64'h0, 64'hF, 1'b1);
+      cov.observe(1'b1, 64'h100 + index * 4, 64'hF, 1'b1);
+      cov.observe(1'b0, 64'h100 + index * 4, 64'hF, 1'b1);
+      cov.observe(1'b0, 64'h1000, 64'hF, 1'b1);
+      cov.observe(1'b0, 64'h0, 64'hF, 1'b0);
+      cov.sample_register_backdoor(0, 1'b1);
+      cov.sample_register_backdoor(0, 1'b0);
+      cov.sample_memory_backdoor(0, index, 1'b1);
+      cov.sample_memory_backdoor(0, index, 1'b0);
       transactions += 10;
       coverage_sampling_count++;
     end
 
-    for (int unsigned index = 0; index < 4; index++) begin
-      unique_indices += memory_read_indices[index];
-      unique_indices += memory_written_indices[index];
-    end
+    samples = cov.samples;
+    failed = cov.failed;
+    unmapped = cov.unmapped;
+    control_frontdoor_reads = cov.fr[cov.reg_counter[0]];
+    control_frontdoor_writes = cov.fw[cov.reg_counter[0]];
+    control_backdoor_reads = cov.br[cov.reg_counter[0]];
+    control_backdoor_writes = cov.bw[cov.reg_counter[0]];
+    command_frontdoor_writes = cov.fw[cov.f_counter[0]];
+    status_frontdoor_reads = cov.fr[cov.f_counter[1]];
+    memory_frontdoor_reads = cov.fr[cov.mem_counter[0]];
+    memory_frontdoor_writes = cov.fw[cov.mem_counter[0]];
+    memory_backdoor_reads = cov.br[cov.mem_counter[0]];
+    memory_backdoor_writes = cov.bw[cov.mem_counter[0]];
+    unique_indices = cov.rd_unique[0] + cov.wr_unique[0];
     check64(samples, 8 * iterations, "register coverage samples");
     check64(failed, iterations, "register coverage failed");
     check64(unmapped, iterations, "register coverage unmapped");

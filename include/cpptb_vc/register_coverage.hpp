@@ -124,6 +124,44 @@ class RegisterAccessCoverage {
             ++unmapped_;
             return;
         }
+        if (!actions_.empty()) {
+            const uint64_t offset = *address - table_base_;
+            if (offset < actions_.size()) {
+                const Action& action = actions_[offset];
+                if (action.kind == Action::Kind::Register) {
+                    sample_counter(action.counter, transaction.operation,
+                                   AccessPath::Frontdoor);
+                    const bool write =
+                        transaction.operation != MemoryOperation::Read;
+                    for (uint8_t f = 0; f < action.field_count; ++f) {
+                        const FieldAction& field =
+                            field_actions_[action.field_begin + f];
+                        const bool touched =
+                            write ? (static_cast<uint64_t>(
+                                         transaction.byte_enable) &
+                                     field.write_byte_mask) != 0
+                                  : field.read_touched;
+                        if (touched) {
+                            sample_counter(field.counter,
+                                           transaction.operation,
+                                           AccessPath::Frontdoor);
+                        }
+                    }
+                    ++samples_;
+                    return;
+                }
+                if (action.kind == Action::Kind::Memory) {
+                    sample_counter(action.counter, transaction.operation,
+                                   AccessPath::Frontdoor);
+                    sample_index(memories_[action.memory_entry],
+                                 action.memory_index, transaction.operation);
+                    ++samples_;
+                    return;
+                }
+            }
+            ++unmapped_;
+            return;
+        }
         if (sample_register_transfer(*address, transaction.operation,
                                      static_cast<uint64_t>(
                                          transaction.byte_enable))) {
@@ -219,16 +257,17 @@ class RegisterAccessCoverage {
             .unmapped = unmapped_,
         };
         result.entries.reserve(counters_.size());
-        for (const auto& counter : counters_) {
+        for (std::size_t index = 0; index < counters_.size(); ++index) {
+            const auto& counter = counters_[index];
             result.entries.push_back(RegisterAccessCoverageEntrySnapshot{
                 .path = std::string{counter.path},
                 .kind = counter.kind,
                 .readable = counter.readable,
                 .writable = counter.writable,
-                .frontdoor_reads = counter.counts[0][0],
-                .frontdoor_writes = counter.counts[1][0],
-                .backdoor_reads = counter.counts[0][1],
-                .backdoor_writes = counter.counts[1][1],
+                .frontdoor_reads = cells_[index].counts[0][0],
+                .frontdoor_writes = cells_[index].counts[1][0],
+                .backdoor_reads = cells_[index].counts[0][1],
+                .backdoor_writes = cells_[index].counts[1][1],
                 .unique_read_indices = counter.read_indices.size(),
                 .unique_written_indices = counter.written_indices.size(),
             });
@@ -270,13 +309,20 @@ class RegisterAccessCoverage {
         [[nodiscard]] uint64_t size() const noexcept { return unique; }
     };
 
+    // Hot tallies live in a parallel contiguous array (32 bytes per
+    // counter) so a sampling burst touches a couple of cache lines, not
+    // one line per counter struct. Counter keeps the cold metadata and
+    // the per-memory index sets.
+    struct CountCells {
+        // [operation is write][path is backdoor]
+        uint64_t counts[2][2] = {{0, 0}, {0, 0}};
+    };
+
     struct Counter {
         std::string_view path;
         RegisterCoverageKind kind = RegisterCoverageKind::Register;
         bool readable = false;
         bool writable = false;
-        // counts[operation is write][path is backdoor]
-        uint64_t counts[2][2] = {{0, 0}, {0, 0}};
         IndexSet read_indices;
         IndexSet written_indices;
     };
@@ -337,6 +383,7 @@ class RegisterAccessCoverage {
                                     .kind = kind,
                                     .readable = readable,
                                     .writable = writable});
+        cells_.push_back(CountCells{});
         return counters_.size() - 1;
     }
 
@@ -407,6 +454,7 @@ class RegisterAccessCoverage {
                   [](const auto& left, const auto& right) {
                       return left.address < right.address;
                   });
+        build_action_table();
     }
 
     bool sample_register_transfer(uint64_t address, MemoryOperation operation,
@@ -492,18 +540,13 @@ class RegisterAccessCoverage {
 
     void sample_counter(std::size_t index, MemoryOperation operation,
                         AccessPath path) {
-        sample_counter(counters_[index], operation, path);
-    }
-
-    static void sample_counter(Counter& counter, MemoryOperation operation,
-                               AccessPath path) {
         // A predicated add: bumping by zero when the operation is not
         // allowed is identical to the old early return, without the
         // branch chain.
         const bool write = operation != MemoryOperation::Read;
         const bool backdoor = path != AccessPath::Frontdoor;
-        counter.counts[write][backdoor] +=
-            static_cast<uint64_t>(operation_allowed(counter, operation));
+        cells_[index].counts[write][backdoor] += static_cast<uint64_t>(
+            operation_allowed(counters_[index], operation));
     }
 
     void sample_index(MemoryEntry& entry, uint64_t index,
@@ -513,6 +556,108 @@ class RegisterAccessCoverage {
             counter.read_indices.insert(index);
         } else {
             counter.written_indices.insert(index);
+        }
+    }
+
+    // The register map is fixed at construction, so the whole frontdoor
+    // decode is precomputable: one action per byte address of the block's
+    // span, holding the counter set a hit bumps. Observing a transaction
+    // is then a bounds check, one table fetch, and one to three predicated
+    // bumps -- the same work a hand-written tally does, derived instead of
+    // hand-solved. Spans too large for a dense table (or nothing mapped)
+    // fall back to the scan path, which stays the source of truth.
+    struct FieldAction {
+        std::size_t counter;
+        uint64_t write_byte_mask;
+        bool read_touched;
+    };
+
+    struct Action {
+        enum class Kind : uint8_t { None, Register, Memory };
+        Kind kind = Kind::None;
+        std::size_t counter = 0;
+        uint64_t memory_index = 0;
+        std::size_t memory_entry = 0;
+        uint8_t field_begin = 0;
+        uint8_t field_count = 0;
+    };
+
+    static constexpr uint64_t kActionTableLimit = uint64_t{1} << 20;
+
+    void build_action_table() {
+        uint64_t low = std::numeric_limits<uint64_t>::max();
+        uint64_t high = 0;
+        for (const auto& entry : registers_) {
+            low = std::min(low, entry.address);
+            high = std::max(high, entry.end_address);
+        }
+        for (const auto& entry : memories_) {
+            low = std::min(low, entry.address);
+            high = std::max(high, entry.end_address);
+        }
+        if (high <= low || high - low > kActionTableLimit) return;
+        table_base_ = low;
+        actions_.assign(high - low, Action{});
+        for (const auto& entry : registers_) {
+            const auto& descriptor = *entry.descriptor;
+            if (entry.transfer_bytes == 0) continue;
+            for (uint64_t offset = 0;
+                 entry.address + offset < entry.end_address;
+                 offset += entry.transfer_bytes) {
+                const uint64_t transfer = offset / entry.transfer_bytes;
+                const uint64_t bit_lsb =
+                    descriptor.endianness == RegisterEndianness::Little
+                        ? transfer * descriptor.access_width
+                        : descriptor.width -
+                              (transfer + 1u) * descriptor.access_width;
+                Action action{.kind = Action::Kind::Register,
+                              .counter = entry.counter,
+                              .field_begin = static_cast<uint8_t>(
+                                  field_actions_.size()),
+                              .field_count = 0};
+                for (const auto& field : entry.fields) {
+                    const auto& fd = *field.descriptor;
+                    const uint64_t field_end = fd.lsb + fd.width;
+                    const uint64_t transfer_end =
+                        bit_lsb + descriptor.access_width;
+                    const uint64_t begin = std::max<uint64_t>(fd.lsb, bit_lsb);
+                    const uint64_t end = std::min(field_end, transfer_end);
+                    if (begin >= end) continue;
+                    const uint64_t first_byte = (begin - bit_lsb) / 8u;
+                    const uint64_t last_byte = (end - 1u - bit_lsb) / 8u;
+                    const uint64_t span = last_byte - first_byte + 1u;
+                    const uint64_t mask =
+                        (span >= 64u
+                             ? ~uint64_t{0}
+                             : ((uint64_t{1} << span) - 1u) << first_byte);
+                    field_actions_.push_back(FieldAction{
+                        .counter = field.counter,
+                        .write_byte_mask = mask,
+                        .read_touched = true,
+                    });
+                    ++action.field_count;
+                }
+                actions_[entry.address + offset - table_base_] = action;
+            }
+        }
+        for (std::size_t m = 0; m < memories_.size(); ++m) {
+            const auto& entry = memories_[m];
+            if (entry.element_bytes == 0) continue;
+            uint64_t index = 0;
+            for (uint64_t offset = 0;
+                 entry.address + offset < entry.end_address;
+                 offset += entry.element_bytes, ++index) {
+                for (uint64_t byte = 0; byte < entry.element_bytes &&
+                                        entry.address + offset + byte <
+                                            entry.end_address;
+                     ++byte) {
+                    actions_[entry.address + offset + byte - table_base_] =
+                        Action{.kind = Action::Kind::Memory,
+                               .counter = entry.counter,
+                               .memory_index = index,
+                               .memory_entry = m};
+                }
+            }
         }
     }
 
@@ -569,7 +714,11 @@ class RegisterAccessCoverage {
 
     const RegisterBlockDescriptor* descriptor_;
     std::string name_;
+    uint64_t table_base_ = 0;
+    std::vector<Action> actions_;
+    std::vector<FieldAction> field_actions_;
     std::vector<Counter> counters_;
+    std::vector<CountCells> cells_;
     std::vector<RegisterEntry> registers_;
     std::vector<MemoryEntry> memories_;
     uint64_t samples_ = 0;

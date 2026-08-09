@@ -39,6 +39,38 @@ The focused task-value run exercised the new confirmation path and passed at
 after the initial 16 pairs, so the saved `latest` artifact contains that newer
 measurement.
 
+## register_coverage part two: the action table and the honest twin (2026-08-08)
+
+The reclassification below lasted a few hours. Two pushes retired it:
+
+1. **The map is static, so decode is precomputable.** The register block's
+   descriptors are fixed at construction, so the entire frontdoor decode
+   -- which counters a hit at each address bumps, per operation, with
+   per-field write byte-masks -- now compiles into a dense per-address
+   action table when the coverage object is built (spans over 2^20 bytes
+   fall back to the scan path, which remains the source of truth).
+   Observing a transaction is a bounds check, one table fetch, and one to
+   three predicated bumps. With the hot tallies split into a contiguous
+   cells array, the kernel runs ~22 ns per ten-sample iteration, down
+   from ~128 ns at the start of the day.
+
+2. **The twin now does the job instead of memorizing the answers.** The
+   pure-SV peer was a hand-solved answer key: a human had pre-computed
+   which counters each hardcoded observation hits and typed the
+   increments in. It has been rewritten as a descriptor-driven
+   `register_access_coverage` class -- register map in as data, the same
+   action-table construction, tallies derived from the observed
+   transactions -- making it the same category of artifact as every other
+   twin in the suite. The semantic gate passes with bit-identical
+   checksums, which is the proof the derivation is correct.
+
+With both sides doing equivalent work the ratio inverted: certified under
+the ordinary hard gate at `0.2104x` -- the C++ engine is ~4.75x FASTER
+than the Verilator-compiled SV class implementation (strata `0.2108` /
+`0.2113`, CPU corroboration valid, ten million iterations). The 10.06x
+diagnostic below stands as what it always was: the measured price of
+computing answers versus reading them out of a table a human filled in.
+
 ## register_coverage optimization and reclassification (2026-08-08)
 
 Two independent reviews of the ~2.7x register_coverage measurement -- an
