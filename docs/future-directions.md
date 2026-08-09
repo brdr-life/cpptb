@@ -102,6 +102,52 @@ would move first if a driver were mistimed.
 
 ## Framework capabilities
 
+### Promote the anchor pattern into the trigger vocabulary
+
+[Coming from cocotb](coming-from-cocotb.md#the-three-traps) records three
+translation traps, and the difference behind them is kept
+[for cause](coming-from-cocotb.md#why-the-difference-is-kept). What is not
+settled is how the fix is carried. Today it is a convention: every
+converted bench re-derives the same two helpers (`drive_point`,
+`settle_to_drive`), carries the rationale as comments, and classifies each
+anchor site by hand against its control-flow predecessor. Nothing states
+or checks either half — the icache port section above already records what
+that discipline costs at scale.
+
+The direction is to name cocotb's instant in the vocabulary itself: a
+settled-edge awaitable — working name `SettledRisingEdge{clk}` — that is
+the edge wait and the `ReadWrite` settle as one trigger. With it:
+
+1. Trap 1 becomes a choice between two documented triggers rather than a
+   convention: `RisingEdge` is the sampling instant, `SettledRisingEdge`
+   the cocotb-equivalent drive instant. Both rungs of the ladder keep a
+   name, so nothing the pre-evaluation resume makes possible is lost.
+2. Trap 2's advance/settle distinction becomes the difference between
+   `SettledRisingEdge{clk}` and a bare `ReadWrite{}` — carried by the API,
+   not by a helper pair each project must re-derive and name honestly.
+3. Trap 3 mostly dissolves: a wait-for-condition loop awaits the settled
+   trigger directly, so the site after the loop is already at the drive
+   anchor and needs no classification.
+
+What it does not remove: choosing the right trigger per role — monitor on
+the bare edge, pin-reading driver on the settled one — remains the
+author's job. The claim worth testing is that a per-role trigger choice is
+visible in review where a per-site classification was not.
+
+Promotion has to clear the usual [bar](roadmap.md#no-priority-backlog):
+
+- semantics of the composite under `First{}`, `with_timeout()`, and
+  cancellation — a wait that suspends twice must observably behave as one
+  trigger, including which instant a `First{}` loser is cancelled at;
+- a re-port of one Ibex bench with every drive site converted, gated to
+  identical per-test check counts against the helper-pair version;
+- conformance coverage on both timing backends, which the
+  [identity gate](coming-from-cocotb.md#the-write-model) then holds to
+  byte-identical results;
+- the performance evidence that the second phase dispatch costs only where
+  the new trigger is used, so monitor-heavy benches keep the single
+  dispatch per edge.
+
 ### Temporal assertions
 
 The largest gap that no milestone currently covers. Every check today is

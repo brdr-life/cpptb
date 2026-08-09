@@ -32,6 +32,14 @@ stopping to explain. Each entry links to the page that treats it fully.
   cycle earlier, at the falling edge, achieving the same DUT-visible timing
   by geometry. See [Scheduling](scheduling.md#the-write-model).
 
+**Event region**
+: One of the ordered divisions of a SystemVerilog time slot — Preponed,
+  the Active set, Observed, the Reactive set, Postponed — that determines
+  what has already executed when a piece of code runs, and therefore what
+  a read there is guaranteed to see. Every wait in the trigger vocabulary
+  is a name for a point in this order. See
+  [Simulator event regions](event-regions.md).
+
 **Full advance vs. settle**
 : The two moves a driver makes between anchors. A *full advance* consumes a
   clock edge and lands at the next cycle's anchor. A *settle* descends to
