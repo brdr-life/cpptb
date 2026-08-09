@@ -125,6 +125,9 @@ random-stimulus
 :caption: Reference
 
 running-tests
+cli
+cpptb-toml
+glossary
 ```
 
 ```{toctree}
@@ -132,6 +135,7 @@ running-tests
 :maxdepth: 1
 :caption: Internals
 
+how-it-works
 architecture
 performance
 ```

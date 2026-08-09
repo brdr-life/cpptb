@@ -10,7 +10,7 @@ testbench and counting its failures.
 
 | cocotb | cpptb | Notes |
 |---|---|---|
-| `await RisingEdge(dut.clk)` | `co_await RisingEdge{dut.clk}` | **Resume point differs -- see trap 1** |
+| `await RisingEdge(dut.clk)` | `co_await RisingEdge{dut.clk}` | [resume point differs](#1-risingedge-resumes-before-the-edge-evaluates) |
 | `await FallingEdge(dut.clk)` | `co_await FallingEdge{dut.clk}` | Same |
 | `await Timer(5, "ns")` | `co_await Delay{5_ns}` | Same |
 | `await ClockCycles(dut.clk, n)` | `co_await clock_cycles(dut.clk, n)` | Same |
@@ -130,6 +130,40 @@ driver never counted -- which surfaced 30,000 checks later as an
 unexplainable fetch address, only after errored fetches. Fifty-two failures
 out of fifty thousand, all one signature, from one line.
 
+## The traps in one worked example
+
+A *reactive* agent — a grant driver sampling a request line, a ready/valid
+responder — is where trap 1 bites in practice, because it reads DUT outputs
+at the edge before deciding what to drive:
+
+```python
+# cocotb: reads req AFTER the edge evaluated, then queues gnt for the next edge
+async def grant_driver(dut):
+    while True:
+        await RisingEdge(dut.clk)
+        if dut.req.value:
+            dut.gnt.value = 1
+```
+
+```cpp
+// cpptb: RisingEdge alone would read the PREVIOUS cycle's req (trap 1).
+Task<void> grant_driver(Dut dut) {
+    while (true) {
+        co_await drive_point(dut);       // RisingEdge + ReadWrite, trap 2's helper
+        if (dut.req.get() != 0) {
+            dut.gnt.set(1);              // queues; lands for the next edge
+        }
+    }
+}
+```
+
+If your driver never reads DUT outputs, the plain `RisingEdge` + `set()`
+shape is already correct and the extra settle buys nothing. For a full
+conversion at scale, both Ibex ports
+(`experiments/open_core_ports/ports/ibex_icache_cpptb` and
+`.../core_ibex_cpptb`) carry the helper pair with rationale comments, and
+every one of their drive sites is classified per trap 3.
+
 ## What has no cocotb equivalent, and the reverse
 
 - `co_await RisingEdge{}` resumes *before* the design evaluates the edge,
@@ -140,3 +174,10 @@ out of fifty thousand, all one signature, from one line.
   not touch them.
 - Replay-style pin comparison against recordings is drive-point-sensitive;
   recordings made under one anchor convention do not replay under the other.
+
+## Next
+
+Pick a runnable [example](examples.md) shaped like the bench you are
+converting, or go to [Tasks and concurrency](testbench-authoring.md) for the
+coordination primitives the trigger table only names. The precise resume
+semantics behind trap 1 live in [Scheduling](scheduling.md).

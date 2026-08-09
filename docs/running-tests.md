@@ -60,46 +60,18 @@ second and subsequent commands reuse the compiled binary until RTL, C++,
 framework headers, options, or tool versions change. Use `--rebuild` to bypass
 the cache and `--verbose` to display the normally hidden compiler commands.
 
-## CLI reference
+## The command
 
-The installed command is self-documenting:
+Three subcommands cover the workflow:
 
 ```sh
-cpptb --help
-cpptb build --help
-cpptb list --help
-cpptb test --help
+cpptb build     # generate the typed DUT and compile the simulator
+cpptb list      # show the registered tests
+cpptb test      # run them all, each in a fresh simulator process
 ```
 
-| Command | Purpose |
-|---|---|
-| `cpptb build` | Resolve the project, generate DUT bindings, and build the simulator executable |
-| `cpptb list` | Build if needed, then list the compiled test catalog |
-| `cpptb test [TEST ...]` | Build if needed, then run all tests or the named tests serially |
-
-All three commands accept the same project and build selectors:
-
-| Option | Purpose |
-|---|---|
-| `--project PATH` | Project directory; defaults to the current directory |
-| `--source PATH_OR_GLOB` | RTL source, directory, or glob; repeat for multiple inputs |
-| `--testbench PATH_OR_GLOB` | C++ testbench source, directory, or glob; repeat as needed |
-| `--top MODULE` | Select the SystemVerilog DUT top module |
-| `--target NAME` | Override the generated simulator target name |
-| `--build-dir PATH` | Select the build root, relative to the project unless absolute |
-| `--simulator verilator` | Select the simulator backend; currently Verilator |
-| `--framework-root PATH` | Locate a cpptb checkout, install prefix, or include directory |
-| `--rebuild` | Ignore the content cache and rebuild |
-| `--verbose` | Show normally hidden generation and compiler commands |
-
-`cpptb list --timeout SECONDS` limits catalog discovery wall time.
-`cpptb test --timeout SECONDS` applies the wall-time limit independently to
-each test process, and `--result-dir PATH` overrides the default
-`build/cpptb/TARGET/results` directory.
-
-This `--top` selects the HDL DUT and is separate from PeakRDL's register-map
-`--top`. Register generation and all of its naming options are documented in
-[Generate a register model](verification-components/register-generation.md).
+Every option — project selectors, backend overrides, waveform tracing,
+timeouts — is documented in [cpptb command line](cli.md).
 
 ## Project layout and build ownership
 
@@ -197,73 +169,18 @@ For persistent project options, add the optional compact configuration:
 
 ```toml
 [design]
-sources = ["rtl/packages/*.sv", "rtl/**/*.sv"]
 top = "processor"
-include_dirs = ["rtl/include"]
-defines = ["SIMULATION=1"]
 parameters = { DATA_WIDTH = 64 }
 
-[testbench]
-sources = ["verification/testbench.cpp", "verification/drivers/*.cpp"]
-include_dirs = ["verification/include"]
-
 [build]
-directory = "build"
-simulator = "verilator"
-timing_backend = "verilator-direct"
+timing_backend = "verilator-direct"   # or "vpi"
 deferred_writes = true
-optimization = "-O2"
-cxx_flags = ["-Wall"]
 ```
 
-`timing_backend` and `deferred_writes` carry cpptb's timing semantics. Both
-have defaults, so a project that names neither still gets them; every example
-in this repository states them anyway, so the configuration is visible:
-
-| Key | Values | Default | Effect |
-|---|---|---|---|
-| `timing_backend` | `"verilator-direct"` or `"vpi"` | `"verilator-direct"` | Selects how the simulator delivers the `ReadWrite{}`, `ReadOnly{}`, and `NextTimeStep{}` phase waits — the hooks a testbench uses to act at a chosen point of any timestep |
-| `deferred_writes` | `true` or `false` | `true` | `true` selects cocotb's write model: `set()` queues and flushes at the ReadWrite point, so a write after an awaited edge lands on the next one |
-
-The two backends are held to identical results and byte-identical waveforms, so
-the choice between them is about speed and portability, not semantics. There is
-no way to build without a backend: `timing_backend` accepts only those two
-names, and `deferred_writes` depends on it because the queued write is applied
-at a simulator phase.
-
-`deferred_writes = false` restores immediate writes. That is legacy behavior,
-kept for projects written before the model existed and intended for
-deprecation; it is not a documented authoring style. See
-[The write model](scheduling.md#the-write-model) for the pinned semantics and
-[Timing backend support](scheduling.md#timing-backend-support) for the backend
-comparison.
-
-`optimization` governs both halves of the build: the C++ testbench and the model
-Verilator generates. Verilator optimizes neither by default, so this defaults to
-`-O2` rather than leaving a coroutine-heavy testbench unoptimized. Lower it for
-a debug build, which makes breakpoints and stack traces behave:
-
-```toml
-[build]
-optimization = "-O0"
-cxx_flags = ["-g"]
-```
-
-Changing it re-fingerprints the build, so the next `cpptb build` recompiles
-instead of reusing objects from the previous setting.
-
-Four-state Verilator work is guarded separately from raw simulator arguments:
-
-```toml
-[build]
-experimental_four_state = true
-```
-
-The option currently runs a semantic capability probe and reports that
-Verilator does not preserve the required X/Z behavior. Do not add
-`--fourstate` to `verilator_args`; that bypass is rejected because accepting
-the upstream flag does not imply correct four-state execution. See
-[four-state values](four-state.md) for details.
+Every section and key — sources and globs, defines and parameters, the
+timing keys, optimization and debug builds, waveform tracing, Verilator
+arguments, and the `run.timeout_cycles` watchdog — is documented with its
+default in the [cpptb.toml reference](cpptb-toml.md).
 
 Source patterns are expanded in listed order, with each pattern sorted
 deterministically. `cpptb build` reports ambiguous top modules with the exact

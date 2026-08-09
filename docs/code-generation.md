@@ -17,6 +17,8 @@ design-specific files the simulator needs:
 cpptb build
 ```
 
+## The two-pass build
+
 The build backend invokes `cpptb-codegen` twice: once to create the typed
 interface, and again to finalize the hierarchy transport from the access
 set. The access set is recovered by compiling the testbench translation
@@ -31,6 +33,8 @@ integrations and writes to `build/cpptb/<target>/generated` by default:
 ```sh
 uv run --frozen cpptb-codegen rtl/design.sv
 ```
+
+## What elaboration derives
 
 Top-level interface instances, selected modports, interface parameters,
 constructor connections, fixed interface arrays, and `inout` drive intent are
@@ -55,16 +59,22 @@ test.start_clock(dut.write_clk, 4_ns);
 test.start_clock(dut.read_clk, 6_ns, 1_ns);
 ```
 
+## Edge observation
+
 The generated wrapper provides interest-gated edge observation for scalar
 one-bit outputs. Input clocks registered by the C++ test use a simulator-side
 periodic process. DUT-produced clocks and handshake outputs can be awaited
 directly without an edge-observer option.
+
+## Generated output and its lifetime
 
 Source-driven generation writes to
 `build/cpptb/<target>/generated` by default. The directory is disposable and
 should remain ignored by version control. Generated files begin with a
 `Do not edit by hand` notice. Internal conformance fixtures may still commit
 generated snapshots when a regression specifically needs to compare them.
+
+## Lower-level surfaces
 
 The public project CLI is the normal user workflow. `cpptb-codegen` and
 version-1 manifests remain supported as lower-level compatibility surfaces;
