@@ -1,3 +1,7 @@
+# DEPRECATED SOON: this Zensical site and generator are being retired in
+# favor of the Sphinx site (tools/docs/sphinx/), which is the published one.
+# The nav below has already drifted from the Sphinx toctrees and is not being
+# kept in sync; do not extend it.
 [project]
 site_name = "cpptb"
 site_description = "A C++20 coroutine testbench framework for SystemVerilog simulators."

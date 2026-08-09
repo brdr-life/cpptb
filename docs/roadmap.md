@@ -897,11 +897,16 @@ the next smaller.
    ten on both backends with check counts identical to the immediate-mode
    run, after three drive-point corrections documented in
    [Coming from cocotb](coming-from-cocotb.md).
-3. **Flip the mode's default, then retire the immediate branches.** With 2
-   shaped as a project mode, full cocotb parity out of the box is a change
-   of default, not an API migration. It still alters what existing
-   testbenches do and costs a scheduler round trip per write, so it waits
-   for mileage on the opt-in. Once the default flips, the component
+3. **Flip the mode's default, then retire the immediate branches — flip
+   done, retirement open.** The default flipped: `timing_backend` defaults
+   to `"verilator-direct"` and `deferred_writes` to `true`, applied at the
+   resolution site so a backendless build cannot exist. Every project in
+   the repository now builds on the mode — the 14 examples match their
+   pure-SV twins on checks and cycle count, and the last pinned holdout,
+   `core_ibex_cpptb`, converted with all 93 directed outcomes identical to
+   its legacy-model run. What remains is the retirement:
+   `deferred_writes = false` is now legacy behavior on a deprecation path,
+   not a supported long-term mode. Once it goes, the component
    library's dual shape stops earning its keep: `cpptb_vc` carries an
    immediate-mode `#else` branch in every drive and observation path
    (falling-edge anchors, post-edge `sample_delay` sampling) solely for

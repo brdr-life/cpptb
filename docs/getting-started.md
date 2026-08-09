@@ -121,7 +121,8 @@ edge rather than the one just awaited. See
 ## 3. Break it on purpose
 
 A test you have never seen fail is a test you should not trust yet. In
-`examples/counter/testbench.cpp` line 35, ask for a count that is one too high:
+`examples/counter/testbench.cpp`, find the `expect_eq` inside the counting
+loop and ask for a count that is one too high:
 
 ```cpp
 test.expect_eq("enabled count", dut.count.get(), expected + 1);
@@ -188,7 +189,8 @@ transaction-based bench.
 | The model behind every cpptb test | [Core ideas](core-ideas.md) |
 | Concurrency, timeouts, events, queues, process control | [Tasks and concurrency](testbench-authoring.md) |
 | Exactly when each `co_await` resumes | [Scheduling](scheduling.md) |
-| Build options, `cpptb.toml`, and structured results | [Running tests](running-tests.md) |
+| The test workflow and structured results | [Running tests](running-tests.md) |
+| Every command-line option and `cpptb.toml` key | [cpptb command line](cli.md) · [cpptb.toml](cpptb-toml.md) |
 | Reading and driving internal signals, not just ports | [Hierarchical DUT access](hierarchy.md) |
 | Working code for a DUT shaped like yours | [Examples](examples.md) |
 

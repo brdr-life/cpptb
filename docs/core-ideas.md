@@ -5,6 +5,53 @@ the model underneath it, so the rest of the documentation reads as variations
 on a few ideas rather than a list of features. It should take about ten
 minutes and assumes nothing beyond the counter you already ran.
 
+## The picture to keep in mind
+
+Two diagrams cover most of what is actually going on. At build time, `cpptb
+build` turns your files into one self-contained executable:
+
+```
+ counter.sv     testbench.cpp     cpptb.toml (optional)
+     └──────────────┼──────────────┘
+                    ▼
+              cpptb build          elaborate → generate → compile
+                    │              (details: How a build works)
+                    ▼
+              Vdpi_counter         one process: simulator, scheduler,
+                                   and every registered test
+```
+
+There is no separate simulator process and no interpreter between your test
+and the design. At run time, that one process contains three cooperating
+parts:
+
+```
+ ┌────────────────────────── one OS process ──────────────────────────┐
+ │                                                                    │
+ │   your tests                 cpptb runtime          generated SV   │
+ │   (coroutines)               (C++ scheduler)        wrapper        │
+ │                                                       │            │
+ │   co_await RisingEdge ──▶ suspends the task     ┌─────┴─────┐      │
+ │   co_await ReadWrite  ──▶ until the wrapper     │ clocks    │      │
+ │                           reports the event ◀── │ phases    │      │
+ │   dut.count.get()     ──▶ reads a word the      │ edges     │      │
+ │                           wrapper batched in    └─────┬─────┘      │
+ │   dut.enable.set(1)   ──▶ queues a write;             │            │
+ │                           flushed at ReadWrite     ┌──┴──┐         │
+ │                           after the edge ────────▶ │ DUT │         │
+ │                                                    └─────┘         │
+ └────────────────────────────────────────────────────────────────────┘
+```
+
+The wrapper owns simulation time — clocks, edges, and the `ReadWrite` /
+`ReadOnly` / `NextTimeStep` phase points. The scheduler owns your
+coroutines — which are suspended, which resume on the event that just
+fired. Signal values cross between them as batched words with generated
+IDs, never by hierarchical name lookup. The full pipeline that produces the
+wrapper is walked through in [How a build works](how-it-works.md).
+
+Everything below is a consequence of this picture.
+
 ## A test is a registered coroutine
 
 There is no test class to inherit and no framework object to construct. A test
