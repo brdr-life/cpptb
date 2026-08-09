@@ -41,6 +41,16 @@ Individual runs spread by about 13% on this host, so the medians are worth more
 than any single run. This is one host and one workload: a real measurement, not
 a claim about the framework in general, and not repeated on other hardware.
 
+### The portable timing backend
+
+The port also runs unmodified with `timing_backend = "vpi"`: same
+`Total ticks`, same score, same 40,711,814-cycle count, deterministically. One
+caveat found while re-checking the upstream side of this comparison: the
+upstream binary as currently built runs the 10-iteration CoreMark firmware,
+not the 100-iteration one this table was measured with, so reproducing the
+upstream row requires rebuilding upstream's harness against
+`firmware/coremark.vmem` first. The cpptb rows are unaffected.
+
 ## What the number does and does not include
 
 Both sides run with `+ibex_tracer_enable=0`. Left enabled, Ibex's tracer writes

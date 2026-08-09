@@ -343,15 +343,45 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     ),
     _authoring(
         "register_split",
-        "Split-width register frontdoor",
+        "Split transfers and endianness (diagnostic control)",
+        # The pure-SV peer encodes the register-model outcome -- direct
+        # word moves and compares -- while the C++ side runs the typed
+        # model itself: frontdoor master, split transfers, mirrors. The
+        # pair therefore measures the price of the abstraction layer, not
+        # equivalent work; register_coverage's derived-work twin rewrite
+        # (2026-08) is the template for returning this row to the hard
+        # gate. Iterations sized so both sides' samples clear the CPU
+        # corroboration noise floor.
+        default_iterations=2_000_000,
+        gate_policy=GatePolicy.DIAGNOSTIC,
     ),
     _authoring(
         "register_wide",
-        "Arbitrary-width register frontdoor",
+        "Arbitrary-width register frontdoor (diagnostic control)",
+        # The pure-SV peer encodes the register-model outcome -- direct
+        # word moves and compares -- while the C++ side runs the typed
+        # model itself: frontdoor master, split transfers, mirrors. The
+        # pair therefore measures the price of the abstraction layer, not
+        # equivalent work; register_coverage's derived-work twin rewrite
+        # (2026-08) is the template for returning this row to the hard
+        # gate. Iterations sized so both sides' samples clear the CPU
+        # corroboration noise floor.
+        default_iterations=1_500_000,
+        gate_policy=GatePolicy.DIAGNOSTIC,
     ),
     _authoring(
         "register_enum",
-        "Typed register field enumeration",
+        "Typed register field enumeration (diagnostic control)",
+        # The pure-SV peer encodes the register-model outcome -- direct
+        # word moves and compares -- while the C++ side runs the typed
+        # model itself: frontdoor master, split transfers, mirrors. The
+        # pair therefore measures the price of the abstraction layer, not
+        # equivalent work; register_coverage's derived-work twin rewrite
+        # (2026-08) is the template for returning this row to the hard
+        # gate. Iterations sized so both sides' samples clear the CPU
+        # corroboration noise floor.
+        default_iterations=5_000_000,
+        gate_policy=GatePolicy.DIAGNOSTIC,
     ),
     _authoring(
         "register_memory",
@@ -388,12 +418,15 @@ BENCHMARKS: tuple[Benchmark, ...] = (
     _authoring(
         "structured_logging",
         "Structured process-aware logging",
-        default_iterations=5_000_000,
+        # Below-threshold logging is nearly free by design, so samples
+        # need two hundred million iterations to rise above the CPU
+        # corroboration noise floor.
+        default_iterations=200_000_000,
     ),
     _authoring(
         "structured_log_history",
         "Ordered structured log history",
-        default_iterations=5_000_000,
+        default_iterations=20_000_000,
     ),
     _authoring(
         "mixed_logging",

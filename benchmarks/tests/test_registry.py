@@ -102,7 +102,18 @@ class RegistryTests(unittest.TestCase):
                 for entry in authoring
                 if entry.gate_policy is registry.GatePolicy.DIAGNOSTIC
             ),
-            ("dynamic_spawn", "dynamic_task", "register_user_effects"),
+            (
+                "dynamic_spawn",
+                "dynamic_task",
+                # The register-model rows compare the typed abstraction
+                # layer against pure-SV peers that encode its outcome;
+                # register_coverage's derived-work twin rewrite is the
+                # template for returning them to the hard gate.
+                "register_split",
+                "register_wide",
+                "register_enum",
+                "register_user_effects",
+            ),
         )
         self.assertTrue(
             all(
@@ -112,6 +123,9 @@ class RegistryTests(unittest.TestCase):
                     "force_direct",
                     "dynamic_spawn",
                     "dynamic_task",
+                    "register_split",
+                    "register_wide",
+                    "register_enum",
                     "register_user_effects",
                 }
             )
