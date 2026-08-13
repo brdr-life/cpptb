@@ -35,3 +35,6 @@ benchmarks/results/
 experiments/open_core_ports/ports/riscv_arch_tests_*/
 tests/integration/*/build/
 experiments/open_core_ports/ports/*/build-deferred*/
+
+# Claude Code local session state
+.claude/
