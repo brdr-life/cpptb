@@ -70,6 +70,218 @@ This packaging follows the same useful boundary described by Cocotb's
 simulation framework remains small while reusable verification IP can be
 installed, documented, and versioned separately.
 
+## Transaction endpoints and analysis fan-out
+
+Use the optional `cpptb_vc` package when a sequence, driver, monitor, or
+scoreboard should depend on a typed endpoint instead of concrete storage.
+It is not included by `cpptb/cpptb.hpp`:
+
+```cpp
+#include "cpptb_vc/cpptb_vc.hpp"
+using namespace cpptb::vc;
+```
+
+`PutPort<T>` and `GetPort<T>` are borrowed views: constructing one allocates
+nothing, and the connected backend must outlive the port and its active calls.
+A `Queue<T>` works directly, and another backend can implement the same
+`put`/`put_nowait` or `get`/`get_nowait` methods. A custom blocking `put` must
+accept `T` by value so ownership remains in its coroutine frame; the
+`PutPort` constructor enforces that signature.
+
+```cpp
+Queue<Packet> storage{8};
+PutPort<Packet> input{storage};
+GetPort<Packet> output{storage};
+
+co_await input.put(packet);
+Packet next = co_await output.get();
+```
+
+`AnalysisPort<T>` publishes one const transaction synchronously to every live
+subscriber in connection order. `write()` is a zero-time C++ call: it neither
+suspends nor advances the simulator. Keep the returned move-only connection
+for as long as the subscription should remain active; destroying or explicitly
+disconnecting it removes that subscriber.
+
+```cpp
+AnalysisPort<Packet> observed;
+InOrderScoreboard<Packet> scoreboard{test, "packet"};
+AnalysisBuffer<Packet> audit{8, AnalysisOverflowPolicy::Error};
+
+auto score_connection = observed.connect(scoreboard.actual());
+auto audit_connection = observed.connect(audit);
+
+observed.write(packet);  // immediate fan-out; no hidden await or delay
+```
+
+Subscribers are borrowed and must outlive their connections. A subscriber's
+`write(const T&)` must not wait. Connect `AnalysisBuffer<T>` when a coroutine
+needs to consume observations asynchronously. Its required overflow policy is
+explicit: `DropNewest`, `DropOldest`, or `Error`. The two drop policies do not
+block or interrupt later subscribers. `Error` throws synchronously and stops
+that publication, so connect an Error-policy buffer after subscribers that
+must always observe the transaction. Other subscriber exceptions follow the
+same connection-order rule. `output()` exposes the buffer's consumer side as
+a `GetPort<T>`.
+
+`InOrderScoreboard<T>` accepts expected and actual transactions in either
+arrival order, compares pairs with nonfatal `expect_eq()`, and reports any
+unpaired values from `finalize()`. It is intentionally noncopyable and
+nonmovable because its typed inputs refer back to the owning scoreboard.
+`ReadyValidDriver` and
+`ReadyValidMonitor` translate transactions to pin activity. Their constructor
+requires the sampling delay, and the monitor also requires the sample edge;
+they do not reset signals, start clocks, or spawn themselves. `send()` drives
+one transfer and deasserts `valid` before returning; repeated calls therefore
+include an idle cycle rather than implying a maximum-throughput burst driver.
+
+The complete [component FIFO example](examples/component-fifo.md) shows these
+objects alongside the direct [FIFO scoreboard](examples/fifo-scoreboard.md).
+Both are runnable, and each has an exact pure-SystemVerilog twin.
+Protocol-neutral memory transactions, keyed scoreboards, reference models,
+and APB components are described below.
+
+## Protocol-neutral transactions
+
+A sequence can depend on the `MemoryMappedMaster` concept instead of APB:
+
+```cpp
+template <MemoryMappedMaster Master>
+Task<void> program_control(Master& bus, TestContext& test) {
+    const auto write = co_await bus.write(0x10u, 0x0000'0003u);
+    test.require_eq("control write", write.status, MemoryStatus::Okay);
+
+    const auto read = co_await bus.read(0x10u);
+    test.expect_eq("control readback", read.data, 0x0000'0003u);
+}
+```
+
+The concrete master supplies its address, data, byte-enable, request, and
+response types. `MemoryWriteResponse` and `MemoryReadResponse<T>` retain the
+protocol-independent status and number of wait cycles. A timeout is returned
+as `MemoryStatus::Timeout`; it is not silently converted into a test failure.
+The calling sequence decides whether that response is expected, nonfatal, or
+fatal.
+
+`StreamSource` and `StreamSink` provide the corresponding compile-time
+contracts for packet and word streams. `ReadyValidDriver` and
+`ReadyValidSink` implement those contracts, while `ReadyValidMonitor` remains
+passive and publishes accepted transfers through an `AnalysisPort`.
+
+## APB components
+
+Create a typed bus from generated signals and pass it to each component:
+
+```cpp
+const auto bus = ApbBus{
+    dut.clk,           dut.apb_select,    dut.apb_enable,
+    dut.apb_write,     dut.apb_address,   dut.apb_write_data,
+    dut.apb_read_data, dut.apb_ready,     dut.apb_error};
+
+ApbMaster master{bus};
+ApbMonitor monitor{test, bus};
+ApbProtocolChecker checker{test, bus};
+```
+
+The APB components carry both write models, though `deferred_writes = true`
+is the documented configuration and the one the examples use. Under it they
+take the cocotb shape: drives anchor on the rising edge and apply after that
+edge's own updates, and the master's completion loop, the monitor, and the
+protocol checker observe at the pre-evaluation resume -- the values the
+design sampled at the edge. Their `sample_delay` knob is compiled out in this
+mode -- pass nothing, as above and as every example does; the knob only
+affects legacy immediate-write builds, where the components keep falling-edge
+drive points and post-edge sampling. The ready-valid stream components are
+different: the driver, sink, and monitor keep their explicit sample-edge and
+post-edge `sample_delay` shapes in **both** models, mirroring their pure-SV
+twins. One counting consequence is user-visible on the APB side:
+pre-evaluation observation reports a wait state for **every** access cycle
+with `PREADY` low, where post-edge sampling skipped the first one; calibrated
+wait-cycle expectations differ between the modes accordingly.
+
+Pass a tenth signal to `ApbBus` when `PSTRB` is present. Without it, requests
+still carry a byte-enable value so a generic sequence has one stable shape;
+an APB3-style master simply cannot apply partial writes.
+
+For APB4, `ApbMaster::all_bytes()` derives the full-write mask from the HDL
+width of `PSTRB`, even when the generated C++ storage type is wider. The master
+drives `PSTRB` to zero during reads as required by APB. Monitored read
+transactions remain protocol-neutral and report `all_bytes()`; the physical
+read strobe is a bus control rule, not a partial-read request.
+
+`ApbMaster` serializes concurrent callers with a cancellation-safe lock. Its
+coroutines explicitly drive setup, drive access, wait on `PREADY`, sample the
+response, and return the bus to idle. It does not start a clock, reset the
+DUT, spawn itself, or add an unrequested sampling delay.
+
+`ApbMonitor` never drives a signal. Its `observed()` analysis port publishes
+completed reads and writes as timed `TransactionObservation<MemoryTransaction>`
+values, including byte enables, response status, and wait cycles. Scoreboards,
+predictors, and register coverage accept completed observations directly.
+`ApbProtocolChecker` independently reports malformed setup/access
+transitions, a nonzero read `PSTRB`, and control changes while waiting for
+`PREADY`. `PWDATA` stability is checked only for writes because it is not a
+read control signal.
+
+Connect a recorder when a persistent or in-memory transaction timeline is
+useful. The monitor performs protocol decoding once and fans the same typed
+observation out to every consumer:
+
+```cpp
+TransactionRecorder recorder;
+InMemoryTransactionSink trace;
+auto trace_sink = recorder.connect(trace);
+auto& stream = recorder.stream<Transaction>("apb0.observed");
+
+auto checking = monitor.observed().connect(scoreboard.actual());
+auto recording = monitor.observed().connect(stream);
+co_await monitor.run(expected_transfer_count);
+```
+
+See [Transaction recording](verification-components/transaction-recording.md)
+and the runnable [APB trace example](examples/apb-trace.md).
+
+## Prediction and checking
+
+Use an in-order scoreboard when responses preserve request order. Use a keyed
+scoreboard when transactions can return in another order:
+
+```cpp
+const auto transaction_id = [](const Response& response) {
+    return response.id;
+};
+KeyedScoreboard<Response, decltype(transaction_id)> scoreboard{
+    test, "response", transaction_id};
+
+auto expected_connection = predicted.connect(scoreboard.expected());
+auto actual_connection = observed.connect(scoreboard.actual());
+```
+
+Duplicate keys are retained in FIFO order. `finalize()` reports unmatched
+expected and actual values as nonfatal checks. Transaction text is formatted
+only after a mismatch, so successful comparisons do not allocate diagnostic
+strings.
+
+`ReferenceModelAdapter<Input>` turns an ordinary callable into an analysis
+subscriber and publishes its return value:
+
+```cpp
+auto predictor = make_reference_model<Request>(
+    [](const Request& request) { return model(request); });
+auto connection = predictor.predicted.connect(scoreboard.expected());
+auto request_connection = requests.connect(predictor);
+```
+
+The complete [APB register-file example](examples/apb-regfile.md) connects a
+master, monitor, checker, scoreboard, and coverage model. The
+[component FIFO](examples/component-fifo.md) demonstrates the stream and
+analysis components.
+
+The same APB monitor can feed a protocol-independent
+[sparse memory predictor](verification-components/memory-model.md). Use the
+[register abstraction layer](memory-register-models.md) when the environment
+also needs typed fields, desired/mirrored state, or generated SystemRDL access.
+
 ## One component in four frameworks
 
 The following tabs show the same component boundary in four familiar styles.
@@ -89,15 +301,20 @@ class ReadyValidMonitor {
     using value_type = typename Data::value_type;
 
     ReadyValidMonitor(Clock clock, Valid valid, Ready ready, Data data,
+                      ReadyValidSampleEdge sample_edge,
                       coro::SimTime sample_delay)
         : clock_(clock), valid_(valid), ready_(ready), data_(data),
-          sample_delay_(sample_delay) {}
+          sample_edge_(sample_edge), sample_delay_(sample_delay) {}
 
     coro::Task<void> run(AnalysisPort<value_type>& observed,
                          std::size_t transaction_count) {
         std::size_t received = 0;
         while (received < transaction_count) {
-            co_await coro::RisingEdge{static_cast<coro::Signal>(clock_)};
+            if (sample_edge_ == ReadyValidSampleEdge::Rising) {
+                co_await coro::RisingEdge{static_cast<coro::Signal>(clock_)};
+            } else {
+                co_await coro::FallingEdge{static_cast<coro::Signal>(clock_)};
+            }
             if (sample_delay_.in_femtoseconds() != 0) {
                 co_await coro::Delay{sample_delay_};
             }
@@ -113,6 +330,7 @@ class ReadyValidMonitor {
     Valid valid_;
     Ready ready_;
     Data data_;
+    ReadyValidSampleEdge sample_edge_;
     coro::SimTime sample_delay_;
 };
 ```
@@ -246,218 +464,6 @@ in the [component FIFO example](examples/component-fifo.md). The Cocotb and UVM
 tabs above are concise architectural references, not additional performance
 measurements.
 
-## Transaction endpoints and analysis fan-out
-
-Use the optional `cpptb_vc` package when a sequence, driver, monitor, or
-scoreboard should depend on a typed endpoint instead of concrete storage.
-It is not included by `cpptb/cpptb.hpp`:
-
-```cpp
-#include "cpptb_vc/cpptb_vc.hpp"
-using namespace cpptb::vc;
-```
-
-`PutPort<T>` and `GetPort<T>` are borrowed views: constructing one allocates
-nothing, and the connected backend must outlive the port and its active calls.
-A `Queue<T>` works directly, and another backend can implement the same
-`put`/`put_nowait` or `get`/`get_nowait` methods. A custom blocking `put` must
-accept `T` by value so ownership remains in its coroutine frame; the
-`PutPort` constructor enforces that signature.
-
-```cpp
-Queue<Packet> storage{8};
-PutPort<Packet> input{storage};
-GetPort<Packet> output{storage};
-
-co_await input.put(packet);
-Packet next = co_await output.get();
-```
-
-`AnalysisPort<T>` publishes one const transaction synchronously to every live
-subscriber in connection order. `write()` is a zero-time C++ call: it neither
-suspends nor advances the simulator. Keep the returned move-only connection
-for as long as the subscription should remain active; destroying or explicitly
-disconnecting it removes that subscriber.
-
-```cpp
-AnalysisPort<Packet> observed;
-InOrderScoreboard<Packet> scoreboard{test, "packet"};
-AnalysisBuffer<Packet> audit{8, AnalysisOverflowPolicy::Error};
-
-auto score_connection = observed.connect(scoreboard.actual());
-auto audit_connection = observed.connect(audit);
-
-observed.write(packet);  // immediate fan-out; no hidden await or delay
-```
-
-Subscribers are borrowed and must outlive their connections. A subscriber's
-`write(const T&)` must not wait. Connect `AnalysisBuffer<T>` when a coroutine
-needs to consume observations asynchronously. Its required overflow policy is
-explicit: `DropNewest`, `DropOldest`, or `Error`. The two drop policies do not
-block or interrupt later subscribers. `Error` throws synchronously and stops
-that publication, so connect an Error-policy buffer after subscribers that
-must always observe the transaction. Other subscriber exceptions follow the
-same connection-order rule. `output()` exposes the buffer's consumer side as
-a `GetPort<T>`.
-
-`InOrderScoreboard<T>` accepts expected and actual transactions in either
-arrival order, compares pairs with nonfatal `expect_eq()`, and reports any
-unpaired values from `finalize()`. It is intentionally noncopyable and
-nonmovable because its typed inputs refer back to the owning scoreboard.
-`ReadyValidDriver` and
-`ReadyValidMonitor` translate transactions to pin activity. Their constructor
-requires the sampling delay, and the monitor also requires the sample edge;
-they do not reset signals, start clocks, or spawn themselves. `send()` drives
-one transfer and deasserts `valid` before returning; repeated calls therefore
-include an idle cycle rather than implying a maximum-throughput burst driver.
-
-The complete [component FIFO example](examples/component-fifo.md) shows these
-objects alongside the direct [FIFO scoreboard](examples/fifo-scoreboard.md).
-Both are runnable, and each has an exact pure-SystemVerilog twin.
-Protocol-neutral memory transactions, keyed scoreboards, reference models,
-and APB components are described below.
-
-## Protocol-neutral transactions
-
-A sequence can depend on the `MemoryMappedMaster` concept instead of APB:
-
-```cpp
-template <MemoryMappedMaster Master>
-Task<void> program_control(Master& bus, TestContext& test) {
-    const auto write = co_await bus.write(0x10u, 0x0000'0003u);
-    test.require_eq("control write", write.status, MemoryStatus::Okay);
-
-    const auto read = co_await bus.read(0x10u);
-    test.expect_eq("control readback", read.data, 0x0000'0003u);
-}
-```
-
-The concrete master supplies its address, data, byte-enable, request, and
-response types. `MemoryWriteResponse` and `MemoryReadResponse<T>` retain the
-protocol-independent status and number of wait cycles. A timeout is returned
-as `MemoryStatus::Timeout`; it is not silently converted into a test failure.
-The calling sequence decides whether that response is expected, nonfatal, or
-fatal.
-
-`StreamSource` and `StreamSink` provide the corresponding compile-time
-contracts for packet and word streams. `ReadyValidDriver` and
-`ReadyValidSink` implement those contracts, while `ReadyValidMonitor` remains
-passive and publishes accepted transfers through an `AnalysisPort`.
-
-## APB components
-
-Create a typed bus from generated signals and pass it to each component:
-
-```cpp
-const auto bus = ApbBus{
-    dut.clk,           dut.apb_select,    dut.apb_enable,
-    dut.apb_write,     dut.apb_address,   dut.apb_write_data,
-    dut.apb_read_data, dut.apb_ready,     dut.apb_error};
-
-ApbMaster master{bus, ApbConfig{.sample_delay = 1_ps,
-                                .max_wait_cycles = 32}};
-ApbMonitor monitor{test, bus, 1_ps};
-ApbProtocolChecker checker{test, bus, 1_ps};
-```
-
-The components carry both write models, though `deferred_writes = true` is
-the documented configuration and the one the examples use. Under it
-they take the cocotb shape: drives anchor on the rising edge and apply
-after that edge's own updates. The APB master's completion loop, the APB
-monitor, and the protocol checker then observe at the pre-evaluation
-resume -- the values the design sampled at the edge -- and do not await
-`sample_delay`; the ready-valid stream driver deliberately keeps its
-post-edge `sample_delay` ready check in both models, mirroring its pure-SV
-twin. Under immediate writes everything keeps the falling-edge drive
-points and post-edge sampling. One counting consequence is user-visible
-on the APB side: pre-evaluation observation reports a wait state for
-**every** access cycle with `PREADY` low, where post-edge sampling skipped
-the first one; calibrated wait-cycle expectations differ between the
-modes accordingly.
-
-Pass a tenth signal to `ApbBus` when `PSTRB` is present. Without it, requests
-still carry a byte-enable value so a generic sequence has one stable shape;
-an APB3-style master simply cannot apply partial writes.
-
-For APB4, `ApbMaster::all_bytes()` derives the full-write mask from the HDL
-width of `PSTRB`, even when the generated C++ storage type is wider. The master
-drives `PSTRB` to zero during reads as required by APB. Monitored read
-transactions remain protocol-neutral and report `all_bytes()`; the physical
-read strobe is a bus control rule, not a partial-read request.
-
-`ApbMaster` serializes concurrent callers with a cancellation-safe lock. Its
-coroutines explicitly drive setup, drive access, wait on `PREADY`, sample the
-response, and return the bus to idle. It does not start a clock, reset the
-DUT, spawn itself, or add an unrequested sampling delay.
-
-`ApbMonitor` never drives a signal. Its `observed()` analysis port publishes
-completed reads and writes as timed `TransactionObservation<MemoryTransaction>`
-values, including byte enables, response status, and wait cycles. Scoreboards,
-predictors, and register coverage accept completed observations directly.
-`ApbProtocolChecker` independently reports malformed setup/access
-transitions, a nonzero read `PSTRB`, and control changes while waiting for
-`PREADY`. `PWDATA` stability is checked only for writes because it is not a
-read control signal.
-
-Connect a recorder when a persistent or in-memory transaction timeline is
-useful. The monitor performs protocol decoding once and fans the same typed
-observation out to every consumer:
-
-```cpp
-TransactionRecorder recorder;
-InMemoryTransactionSink trace;
-auto trace_sink = recorder.connect(trace);
-auto& stream = recorder.stream<Transaction>("apb0.observed");
-
-auto checking = monitor.observed().connect(scoreboard.actual());
-auto recording = monitor.observed().connect(stream);
-co_await monitor.run(expected_transfer_count);
-```
-
-See [Transaction recording](verification-components/transaction-recording.md)
-and the runnable [APB trace example](examples/apb-trace.md).
-
-## Prediction and checking
-
-Use an in-order scoreboard when responses preserve request order. Use a keyed
-scoreboard when transactions can return in another order:
-
-```cpp
-const auto transaction_id = [](const Response& response) {
-    return response.id;
-};
-KeyedScoreboard<Response, decltype(transaction_id)> scoreboard{
-    test, "response", transaction_id};
-
-auto expected_connection = predicted.connect(scoreboard.expected());
-auto actual_connection = observed.connect(scoreboard.actual());
-```
-
-Duplicate keys are retained in FIFO order. `finalize()` reports unmatched
-expected and actual values as nonfatal checks. Transaction text is formatted
-only after a mismatch, so successful comparisons do not allocate diagnostic
-strings.
-
-`ReferenceModelAdapter<Input>` turns an ordinary callable into an analysis
-subscriber and publishes its return value:
-
-```cpp
-auto predictor = make_reference_model<Request>(
-    [](const Request& request) { return model(request); });
-auto connection = predictor.predicted.connect(scoreboard.expected());
-auto request_connection = requests.connect(predictor);
-```
-
-The complete [APB register-file example](examples/apb-regfile.md) connects a
-master, monitor, checker, scoreboard, and coverage model. The
-[component FIFO](examples/component-fifo.md) demonstrates the stream and
-analysis components.
-
-The same APB monitor can feed a protocol-independent
-[sparse memory predictor](verification-components/memory-model.md). Use the
-[register abstraction layer](memory-register-models.md) when the environment
-also needs typed fields, desired/mirrored state, or generated SystemRDL access.
-
 ## Performance qualification
 
 The exact `apb_component` benchmark performs the same APB pin sequence,
@@ -469,7 +475,7 @@ make feature-test FEATURE=apb_component
 make feature-benchmark FEATURE=apb_component
 ```
 
-The valid July 17, 2026 run measured `0.916x` C++ DPI over pure SystemVerilog
-at 100,000 write/read pairs, with `0.925x` DPI-first, `0.899x` SV-first,
-`0.920x` independent, and `0.45%` paired/independent disagreement. It passes
-the standard `1.10x` hard guard.
+The August 8, 2026 admitted run certified the pair under the standard `1.10x`
+hard guard at `1.0412x` C++ DPI over pure SystemVerilog at 100,000 write/read
+pairs. [Performance](performance.md#apb-verification-components) records the run
+history, including the superseded July 17 baseline.

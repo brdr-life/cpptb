@@ -31,14 +31,21 @@ dut.links[0].sideband.drive(1);
 dut.links[0].sideband.high_z();
 ```
 
+One timing note up front: `set()` on a port or modport input **queues** and
+flushes at the timestep's ReadWrite point, like every port drive under
+[the write model](scheduling.md#the-write-model). The inout operations
+`drive()` and `high_z()` are **immediate** — they express drive intent, not a
+value queued for the next edge. The
+[timing summary](library/signals.md#timing-summary) lists every operation.
+
 ## Naming and direction rules
 
 | SystemVerilog object | Generated C++ form | Operations |
 |---|---|---|
-| Top-level `input request` | `dut.request` | `set()`, `get()` |
+| Top-level `input request` | `dut.request` | `set()`, `set_now()`, `get()` |
 | Top-level `output response` | `dut.response` | `get()` |
 | Top-level `inout gpio` | `dut.gpio` | `drive()`, `high_z()`, `get()` |
-| Modport input `bus.valid` | `dut.bus.valid` | `set()`, `get()` |
+| Modport input `bus.valid` | `dut.bus.valid` | `set()`, `set_now()`, `get()` |
 | Modport output `bus.ready` | `dut.bus.ready` | `get()` |
 | Modport inout `bus.pin` | `dut.bus.pin` | `drive()`, `high_z()`, `get()` |
 | Interface array member | `dut.links[index].member` | Follows the modport direction |
@@ -76,7 +83,7 @@ The first two indices select an interface instance. The final index selects a
 member-array element:
 
 ```cpp
-dut.grids[1][3].clk.set(0);
+dut.grids[1][3].clk.set_now(0);
 dut.grids[1][3].payload[0].set(0xa);
 dut.grids[1][3].payload[1].set(0x5);
 
@@ -101,11 +108,15 @@ Interface clocks are ordinary named members. The C++ testbench owns input
 clocks exactly as it does top-level input clocks:
 
 ```cpp
-dut.links[0].clk.set(0);
-dut.links[1].clk.set(0);
+dut.links[0].clk.set_now(0);
+dut.links[1].clk.set_now(0);
 test.start_clock(dut.links[0].clk, 10_ns);
 test.start_clock(dut.links[1].clk, 14_ns);
 ```
+
+Initialization uses `set_now()` — the immediate write — because the pin must
+hold its level before the clock exists, exactly as with a top-level clock;
+see [Clocking](clocking.md).
 
 Clock discovery records the generated signal identity as well as its display
 path. Two elements can therefore both be displayed as `links.clk` while
@@ -113,11 +124,12 @@ retaining independent periods, phases, values, and edge queues. A clock
 produced by the DUT is sampled with `RisingEdge`, `FallingEdge`, or `Edge` and
 is not passed to `start_clock()`.
 
-Clock ownership is per element, not per interface-member array. It is valid to
-start clocks on `links[0].clk` and `links[1].clk` while continuing to drive
-`links[2].clk.set(...)` directly. The generated transport samples the
-scheduler-owned elements and applies ordinary testbench writes only to the
-unscheduled elements.
+Clock ownership is per element, not per interface-member array. In a wider
+array — say `links [4]` — it is valid to start clocks on `links[0].clk` and
+`links[1].clk` while continuing to drive `links[2].clk` and `links[3].clk`
+with ordinary writes. The generated transport samples the scheduler-owned
+elements and applies ordinary testbench writes only to the unscheduled
+elements.
 
 ## Inout drive intent
 
@@ -135,8 +147,9 @@ co_await Delay{1_ns};
 test.expect_eq("released bus", dut.gpio.get(), expected_from_dut);
 ```
 
-Neither operation advances time. The delays above are explicit requests for
-dependent RTL to settle, not behavior hidden inside the inout API.
+Both operations are immediate — unlike `set()`, nothing queues — and neither
+advances time. The delays above are explicit requests for dependent RTL to
+settle, not behavior hidden inside the inout API.
 
 ## Simulator capabilities
 

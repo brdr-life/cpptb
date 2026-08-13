@@ -22,18 +22,18 @@ acts and add no delay of their own.
 
 | Simulator waits | | Coordination waits | |
 |---|---|---|---|
-| `RisingEdge{sig}` | low-to-high | `event` / `event.wait()` | another process calls `set()` |
+| `RisingEdge{sig}` | low-to-high | `event` / `event.wait()` | another process calls `event.set()` |
 | `FallingEdge{sig}` | high-to-low | `queue.put(v)` / `queue.get()` | space, or an item, is available |
 | `Edge{sig}` | either transition | `lock.acquire()` / `semaphore.acquire()` | ownership is handed over |
 | `clock_cycles(clk, n)` | after `n` rising edges | `process` | that process finishes |
 | `Delay{10_ns}` | after a delay | `Join{a, b, c}` | all children finish |
-| `ReadWrite{}` | evaluation settled | `First{a, b}` | the first fires; returns its index |
+| `ReadWrite{}` | queued writes flush here | `First{a, b}` | the first fires; returns its index |
 | `ReadOnly{}` | end of timestep | `with_timeout(x, 100_ns)` | `x` completes, or the deadline expires |
 | `NextTimeStep{}` | next timestep | `wait_until(sig, pred, clk)` | the predicate turns true |
 
 Each is used directly with `co_await`. The phase waits — `ReadWrite`,
 `ReadOnly`, `NextTimeStep` — are supplied by the timing backend that every
-cpptb project selects; see
+cpptb project gets by default; see
 [The write model](scheduling.md#the-write-model).
 
 [Scheduling](scheduling.md) is the authoritative reference for the simulator
@@ -192,6 +192,9 @@ Task<void> scoreboard(TestContext& test,
 }
 
 Task<void> fifo_test(Dut dut, TestContext& test) {
+    dut.clk.set_now(0);
+    test.start_clock(dut.clk, 10_ns);
+
     Event reset_done;
     Queue<uint32_t> expected_words;
     Queue<uint32_t> observed_words;
@@ -231,6 +234,7 @@ detached child:
 ```cpp
 Task<void> detached_monitor(Dut dut, TestContext test) {
     co_await RisingEdge{dut.alert};
+    co_await ReadOnly{};
     test.expect_eq("alert payload", dut.payload.get(), 0x42u);
 }
 

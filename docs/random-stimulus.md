@@ -22,6 +22,8 @@ start a clock, wait for an edge, or advance simulation time.
 For most sequences, ordinary value generation is the smallest useful API:
 
 ```cpp
+enum : uint8_t { Read, Write, Flush, Fence };
+
 Task<void> packet_sequence(Dut dut, TestContext& test) {
     auto& random = test.random();
     constexpr std::array<uint8_t, 4> opcodes{Read, Write, Flush, Fence};

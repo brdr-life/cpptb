@@ -127,17 +127,20 @@ reaches the same verdict on the same 944 tests.
   runs Spike in lockstep, which answers the question the other two cannot: they
   show the harnesses agree, this shows the core is right.
 
-- **[`ibex_icache_cpptb`](ports/ibex_icache_cpptb/RESULTS.md)** — three of the
-  ten tests in Ibex's `dv/uvm/icache`, run against
+- **[`ibex_icache_cpptb`](ports/ibex_icache_cpptb/RESULTS.md)** — all ten
+  tests in Ibex's `dv/uvm/icache`, run against
   [`ports/ibex_icache_uvm`](ports/ibex_icache_uvm/README.md), which runs the
   UVM environment unmodified and passes all ten.
 
-  18 of 18 runs pass on both harnesses, and a further 120 cpptb runs across 40
-  seeds. Every rate the two can be compared on agrees within a few per cent
-  except one, and that one is a Verilator defect the comparison found: a
-  constrained `randomize()` over an `inside` range is not uniform over it, so
-  the baseline runs about 25% more instruction fetches per transaction than its
-  own constraints ask for.
+  Ten tests, ten seeds each, on both harnesses: 200 of 200 runs pass, and a
+  further 400 cpptb runs across 40 seeds. Replay closes the loop the rate
+  comparison could not: the baseline's recorded stimulus drives the port, 180
+  of 180 replays pass, and the DUT's outputs match cycle for cycle over
+  4,699,689 cycles. Every rate the two can be compared on agrees within a few
+  per cent except one, and that one is a Verilator defect the comparison
+  found: a constrained `randomize()` over an `inside` range is not uniform
+  over it, so the baseline runs about 25% more instruction fetches per
+  transaction than its own constraints ask for.
 
   This is the only port whose reference is a scoreboard rather than a
   signature or a reference model. Every returned fetch is checked against every

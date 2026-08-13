@@ -39,15 +39,15 @@ Task<void> fault_injection_sequence(Dut dut, TestContext& test) {
 
     dut.rst_n.set(0);
     co_await clock_cycles(dut.clk, 2);
-    co_await FallingEdge{dut.clk};
     dut.rst_n.set(1);
 
     dut.resolved_value.force(0xa5);
     test.expect_eq("force is immediately readable",
                    dut.resolved_value.get(), 0xa5u);
 
-    co_await Delay{1_ps};
+    co_await ReadOnly{};
     test.expect_eq("forced net reaches output", dut.resolved_o.get(), 0xa5u);
+    co_await NextTimeStep{};
     dut.resolved_value.release();
 }
 
@@ -62,7 +62,9 @@ routes to every complete C++/pure-SV pair in the standard regression.
 
 ## Operations
 
-Top-level input ports use `set()` because they are normal testbench drives:
+Top-level input ports use `set()` because they are normal testbench drives.
+Like every port drive under [the write model](scheduling.md#the-write-model),
+`set()` **queues** and flushes at the timestep's ReadWrite point:
 
 ```cpp
 dut.request.set(1);
@@ -84,15 +86,24 @@ dut.core.pending.release();
 - `force(value)` overrides normal HDL drivers immediately and remains active.
 - `release()` removes that force immediately.
 
+Unlike a port `set()`, none of these queues: hierarchy operations apply the
+instant they are called, which is what makes them backdoors. `deposit()` is
+available on storage the simulator can assign directly; a resolved net
+accepts `force()` and `release()` but not `deposit()`. The
+[timing summary](library/signals.md#timing-summary) puts the port and
+hierarchy operations side by side.
+
 None of these operations advances simulation time or adds an evaluation
-phase. An immediate `get()` of the same object sees a deposit or force. Await
-an edge or `Delay` only when dependent RTL must execute before it is sampled:
+phase. An immediate `get()` of the same object sees a deposit or force. When
+dependent RTL must execute before a check, settle first — `co_await
+ReadOnly{}` in a clocked bench, or an explicit `Delay` where nothing else
+creates timesteps:
 
 ```cpp
 dut.core.pending.deposit(0x2a);
 test.expect_eq("immediate backdoor read", dut.core.pending.get(), 0x2au);
 
-co_await Delay{1_ps};
+co_await ReadOnly{};
 test.expect_eq("dependent output", dut.pending_o.get(), 0x2au);
 ```
 

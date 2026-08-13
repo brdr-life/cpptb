@@ -17,7 +17,7 @@ testbench and counting its failures.
 | `await ReadOnly()` | `co_await ReadOnly{}` | Same |
 | `await ReadWrite()` | `co_await ReadWrite{}` | Same |
 | `await NextTimeStep()` | `co_await NextTimeStep{}` | Same |
-| `cocotb.start_soon(coro())` | `test.spawn(task(...))` | Same model |
+| `cocotb.start_soon(coro())` | `test.spawn(task(...))` | Same |
 | `await First(a, b)` | `co_await First{a, b}` | Same |
 | `Event`, `Queue`, `Lock` | `Event`, `Queue`, `Lock` | Same |
 
@@ -56,9 +56,9 @@ cocotb), and `set_now()` is the escape hatch, mirroring
 `setimmediatevalue()`. The contract is pinned by
 `tests/integration/deferred_writes` on both backends in every `make test`.
 
-A build without `deferred_writes` falls back to an immediate deposit. That is
-legacy behavior, intended for deprecation, and not an authoring style cpptb
-documents.
+A build with `deferred_writes = false` falls back to an immediate deposit.
+That is legacy behavior, intended for deprecation, and not an authoring style
+cpptb documents.
 
 Both supported backends are interchangeable: with the model enabled, the Ibex icache
 testbench produces byte-identical per-test check counts on

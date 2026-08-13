@@ -61,10 +61,10 @@ in the most significant word:
 ```cpp
 const Bits<17> flags = test.random().randbits<17>();
 const Bits<256> payload = test.random().randbits<256>();
-
-dut.flags_i.set(flags);
-dut.payload_i.set(payload);
 ```
+
+The results drive ports like any other packed value — anchored on an awaited
+edge, per [the write model](../scheduling.md#the-write-model).
 
 For a packed value that participates in constraints with other randomized
 fields, use [`RandBits<Width>`](policies-and-composition.md#fixed-arrays-and-packed-values)

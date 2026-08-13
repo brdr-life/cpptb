@@ -84,7 +84,119 @@ contract and bus comparison. The
 [secworks AES oracle](examples/secworks-aes-regmodel.md) is the complete
 end-to-end generated-model integration against an open-source core.
 
-## Three values to keep straight
+## Frontdoor and backdoor operations
+
+Assume `regs` was constructed with both a bus master and the
+[generated backdoor adapter](#hierarchical-backdoor-access). Each operation
+selects its own access path; the model does not have a global "frontdoor mode"
+or "backdoor mode." The desired and mirrored vocabulary used below is defined
+in [Register model semantics](#register-model-semantics).
+
+### Register frontdoor
+
+`write()` sends the exact register value over the bus. `read()` samples it
+through the same bus and returns the complete logical register value:
+
+```cpp
+co_await regs.control.write(0x0000'0007);
+const auto control = co_await regs.control.read();
+test.expect_eq("control", control.data, 0x0000'0007u);
+```
+
+Use desired state when the model should encode access policy such as W1C,
+W1S, or toggle fields before conditionally writing the register:
+
+```cpp
+regs.status.pending.set_desired(0x03);
+co_await regs.status.update();
+```
+
+### Field frontdoor
+
+A field can be written and read directly. `write()` applies desired state
+through the parent register's `update()` and issues a whole-register bus write
+when needed. `read()` performs a whole-register bus read and extracts the named
+field:
+
+```cpp
+co_await regs.control.enable.write(0);
+const auto enable = co_await regs.control.enable.read();
+test.expect_eq("enable", enable.data, 0u);
+```
+
+Set several fields first and call the parent register's `update()` once to
+combine them into one conditional register write:
+
+```cpp
+regs.control.enable.set_desired(1);
+regs.control.mode.set_desired(generated_registers::mode_e::ACTIVE);
+co_await regs.control.update();
+```
+
+A field read is a whole-register frontdoor read followed by field extraction.
+It therefore predicts read side effects on readable sibling fields as well:
+
+```cpp
+const auto enabled = co_await regs.control.enable.read();
+// Any read-clear siblings in regs.control have now been predicted as cleared.
+```
+
+### Register and field backdoor
+
+`peek()` and `poke()` inspect or deposit the complete register through its HDL
+path without a bus transaction or implicit delay:
+
+```cpp
+regs.control.poke(0x0000'0007);
+test.expect_eq("control storage", regs.control.peek(), 0x0000'0007u);
+```
+
+Field backdoor access is an explicit read-modify-write of the parent register.
+This keeps one clear storage operation and preserves adjacent fields:
+
+```cpp
+constexpr uint64_t kPendingMask = 0xffull;
+auto status = regs.status.peek();
+status = (status & ~kPendingMask) | 0x03ull;
+regs.status.poke(status);
+test.expect_eq("pending mirror", regs.status.pending.mirrored(), 3u);
+```
+
+### Mix frontdoor and backdoor operations
+
+The same model can choose a different path for every operation. This is useful
+for configuring through the real bus, checking storage directly, or preparing
+an otherwise expensive DUT state before returning to normal bus traffic:
+
+```cpp
+co_await regs.control.write(0x0000'0007);                 // Frontdoor setup.
+test.expect_eq("stored control", regs.control.peek(), 7u); // Backdoor check.
+
+regs.status.poke(0x0000'0080);                            // Backdoor setup.
+const auto status = co_await regs.status.read();           // Frontdoor sample.
+test.expect_eq("visible status", status.data, 0x80u);
+```
+
+`read()`, `write()`, `update()`, and `mirror()` are frontdoor operations.
+`peek()` and `poke()` are backdoor operations. `set_desired()`, `predict()`,
+and `reset()` only change model state. Successful frontdoor and backdoor
+operations update the same desired and mirrored state, so they may be
+interleaved without maintaining separate models.
+
+The two paths also have different simulation timing. A frontdoor operation
+drives bus pins, and those drives queue and flush at the ReadWrite point like
+every port `set()` under [the write model](scheduling.md#the-write-model). A
+backdoor `peek()` or `poke()` is an immediate hierarchy deposit — it takes
+effect the instant it is called, with no queue and no phase. The interleave
+above is safe because each frontdoor `co_await` completes the whole bus
+transaction before the next line runs.
+
+## Register model semantics
+
+The operations above update model state as well as the DUT. This section
+defines that state and the rules the model applies to it.
+
+### Three values to keep straight
 
 The RAL follows the useful distinction in the
 [Accellera UVM register layer](https://accellera.org/images/downloads/standards/uvm/uvm_users_guide_1.2.pdf)
@@ -104,7 +216,7 @@ encodes the write needed by each field policy and performs a frontdoor write.
 then updates prediction. This is the same conceptual separation described by
 UVM RAL, but cpptb uses explicit `desired()` and `mirrored()` names.
 
-### Known and unknown model bits
+#### Known and unknown model bits
 
 A numeric model value is accompanied by a validity mask. A `1` means that bit
 has a known predicted value; a `0` means the model has not established its
@@ -138,9 +250,9 @@ bits as valid. `update()` rejects a full-register transaction if another
 writable bit still has unknown desired state, with a path-qualified diagnostic;
 read, predict, or set the complete writable value first.
 
-## Register semantics
+### Choosing an operation
 
-Choose an operation by the intent of the test:
+The right operation follows from the intent of the test:
 
 | Intent | Operation | DUT access | Model effect |
 |---|---|---:|---|
@@ -160,96 +272,6 @@ the first failed transfer when present. `okay()` is true only when every
 required transfer completed. The test decides whether a timeout or bus error
 is fatal, nonfatal, or expected. Model-only operations do not advance
 simulation time.
-
-### Compact register and field operations
-
-Assume `regs` was constructed with both a bus master and the
-[generated backdoor adapter](#hierarchical-backdoor-access). Each operation
-selects its own access path; the model does not have a global "frontdoor mode"
-or "backdoor mode."
-
-#### Register frontdoor
-
-`write()` sends the exact register value over the bus. `read()` samples it
-through the same bus and returns the complete logical register value:
-
-```cpp
-co_await regs.control.write(0x0000'0007);
-const auto control = co_await regs.control.read();
-test.expect_eq("control", control.data, 0x0000'0007u);
-```
-
-Use desired state when the model should encode access policy such as W1C,
-W1S, or toggle fields before conditionally writing the register:
-
-```cpp
-regs.status.pending.set_desired(0x03);
-co_await regs.status.update();
-```
-
-#### Field frontdoor
-
-A field can be written and read directly. `write()` applies desired state
-through the parent register's `update()` and issues a whole-register bus write
-when needed. `read()` performs a whole-register bus read and extracts the named
-field:
-
-```cpp
-co_await regs.control.enable.write(0);
-const auto enable = co_await regs.control.enable.read();
-test.expect_eq("enable", enable.data, 0u);
-```
-
-Set several fields first and call the parent register's `update()` once to
-combine them into one conditional register write:
-
-```cpp
-regs.control.enable.set_desired(1);
-regs.control.mode.set_desired(generated_registers::mode_e::ACTIVE);
-co_await regs.control.update();
-```
-
-#### Register and field backdoor
-
-`peek()` and `poke()` inspect or deposit the complete register through its HDL
-path without a bus transaction or implicit delay:
-
-```cpp
-regs.control.poke(0x0000'0007);
-test.expect_eq("control storage", regs.control.peek(), 0x0000'0007u);
-```
-
-Field backdoor access is an explicit read-modify-write of the parent register.
-This keeps one clear storage operation and preserves adjacent fields:
-
-```cpp
-constexpr uint64_t kPendingMask = 0xffull;
-auto status = regs.status.peek();
-status = (status & ~kPendingMask) | 0x03ull;
-regs.status.poke(status);
-test.expect_eq("pending mirror", regs.status.pending.mirrored(), 3u);
-```
-
-#### Mix frontdoor and backdoor operations
-
-The same model can choose a different path for every operation. This is useful
-for configuring through the real bus, checking storage directly, or preparing
-an otherwise expensive DUT state before returning to normal bus traffic:
-
-```cpp
-co_await regs.control.write(0x0000'0007);                 // Frontdoor setup.
-test.expect_eq("stored control", regs.control.peek(), 7u); // Backdoor check.
-
-regs.status.poke(0x0000'0080);                            // Backdoor setup.
-const auto status = co_await regs.status.read();           // Frontdoor sample.
-test.expect_eq("visible status", status.data, 0x80u);
-```
-
-`read()`, `write()`, `update()`, and `mirror()` are frontdoor operations.
-`peek()` and `poke()` are backdoor operations. `set_desired()`, `predict()`,
-and `reset()` only change model state. Successful frontdoor and backdoor
-operations update the same desired and mirrored state, so they may be
-interleaved without maintaining separate models.
 
 ### Register policy examples
 
@@ -287,6 +309,18 @@ test.expect_eq("events cleared", regs.status.events.mirrored(), 0u);
 // A second successful write to this rw1 field is rejected with its full path.
 co_await regs.unlock.key.write(0x51f1'5eadu);
 ```
+
+The model tracks `desired()` and `mirrored()` values and validity, reset values,
+volatile fields, read-clear/read-set behavior, write-one/zero set, clear, and
+toggle behavior, and write-once access. Concurrent frontdoor accesses to one
+register are serialized. `mirror()` compares known, readable, nonvolatile
+fields before applying read side effects; write-only fields are neither sampled
+nor compared.
+
+`update()` warns when a requested state cannot be reached through a field's
+write policy. For example, a write-one-set field cannot clear an already-set
+bit. The transaction still occurs, and desired state converges to the predicted
+hardware state so repeated `update()` calls do not loop forever.
 
 Encoded fields use generated C++ enums, split registers issue ordered
 frontdoor transfers, and registers wider than 64 bits use `Bits<Width>`. See
@@ -518,17 +552,45 @@ Ordinary fields do not invoke the virtual policy. If a generated user effect
 has no policy, its affected bits become explicitly unknown instead of silently
 assuming hardware behavior.
 
-The model tracks `desired()` and `mirrored()` values and validity, reset values,
-volatile fields, read-clear/read-set behavior, write-one/zero set, clear, and
-toggle behavior, and write-once access. Concurrent frontdoor accesses to one
-register are serialized. `mirror()` compares known, readable, nonvolatile
-fields before applying read side effects; write-only fields are neither sampled
-nor compared.
+### Hierarchical backdoor access
 
-`update()` warns when a requested state cannot be reached through a field's
-write policy. For example, a write-one-set field cannot clear an already-set
-bit. The transaction still occurs, and desired state converges to the predicted
-hardware state so repeated `update()` calls do not loop forever.
+When the SystemRDL contract supplies standard `hdl_path` or
+`hdl_path_slice` properties, the exporter emits an optional typed adapter:
+
+```cpp
+auto backdoor = peripheral_regs::make_backdoor<decltype(master)>(dut);
+peripheral_regs::RegModel regs{test, master, base_address, &backdoor};
+
+regs.control.poke(0xa5a5'5a5a);
+test.expect_eq("control storage", regs.control.peek(), 0xa5a5'5a5au);
+```
+
+The adapter calls the generated `Dut::cpptb_signal<"path">()` lookup at compile
+time. There is no runtime string search, and hierarchy discovery emits only the
+`get` and `deposit` operations instantiated by the adapter. A frontdoor-only
+test that does not use the adapter adds no backdoor transport hooks.
+
+`peek()` and `poke()` do not add a delay. `poke()` is an HDL deposit, not a
+persistent force; RTL may overwrite it on a later evaluation. Both operations
+immediately predict the returned or deposited value. Tests that need to
+observe subsequent RTL behavior must author the corresponding `ReadOnly{}`,
+edge, or `Delay{...}` explicitly.
+
+A register-level path maps the whole register. Field-level slices are assembled
+into their logical bit positions. One `hdl_path_slice` entry maps an entire
+field; multiple entries must provide exactly one path per field bit in
+MSB-to-LSB order. Ambiguous lists fail generation. Missing adapters and
+incomplete paths produce diagnostics containing the full logical register
+path.
+
+`RegisterBackdoor<Data>` remains replaceable for projects that need a custom
+simulator mechanism or nonstandard storage policy.
+
+## Passive prediction and access coverage
+
+Both facilities below consume the same passive bus monitor: a predictor keeps
+the model coherent under traffic the handles did not issue, and an opt-in
+subscriber records access coverage.
 
 ### Passive bus prediction
 
@@ -537,8 +599,6 @@ passive predictor keeps the same model coherent when another processor, DMA
 engine, debug port, or testbench component accesses the bus:
 
 ```cpp
-using Transaction = typename decltype(apb)::transaction_type;
-
 ApbMonitor monitor{test, bus};
 RegisterPredictor predictor{test, regs.register_handles()};
 regs.set_auto_predict(false);
@@ -574,7 +634,14 @@ debug.route(regs.control.descriptor(), 0x40);
 predictor.add_alias(regs.control, debug);
 ```
 
-### Optional register access coverage
+Write byte enables are applied per byte. Disabled bytes preserve their prior
+value and validity, including W1C/W1S and toggle fields. Strobe bits outside the
+selected register width are ignored and produce a warning containing the full
+register path; `invalid_byte_enables()` counts those transactions. The
+predictor is synchronous and does not advance simulation time. The monitor owns
+sampling phase and publication timing.
+
+### Register access coverage
 
 `RegisterAccessCoverage` is an opt-in analysis subscriber. Connect the same
 passive bus monitor used by prediction, then snapshot coverage for registers,
@@ -604,56 +671,7 @@ Backdoor sampling is explicit because a raw hierarchy access emits no bus
 transaction. Snapshot allocation occurs only when requested; a testbench that
 does not construct `RegisterAccessCoverage` executes no coverage code.
 
-Write byte enables are applied per byte. Disabled bytes preserve their prior
-value and validity, including W1C/W1S and toggle fields. Strobe bits outside the
-selected register width are ignored and produce a warning containing the full
-register path; `invalid_byte_enables()` counts those transactions. The
-predictor is synchronous and does not advance simulation time. The monitor owns
-sampling phase and publication timing.
-
-A field read is a whole-register frontdoor read followed by field extraction.
-It therefore predicts read side effects on readable sibling fields as well:
-
-```cpp
-const auto enabled = co_await regs.control.enable.read();
-// Any read-clear siblings in regs.control have now been predicted as cleared.
-```
-
-### Hierarchical backdoor access
-
-When the SystemRDL contract supplies standard `hdl_path` or
-`hdl_path_slice` properties, the exporter emits an optional typed adapter:
-
-```cpp
-auto backdoor = peripheral_regs::make_backdoor<decltype(master)>(dut);
-peripheral_regs::RegModel regs{test, master, base_address, &backdoor};
-
-regs.control.poke(0xa5a5'5a5a);
-test.expect_eq("control storage", regs.control.peek(), 0xa5a5'5a5au);
-```
-
-The adapter calls the generated `Dut::cpptb_signal<"path">()` lookup at compile
-time. There is no runtime string search, and hierarchy discovery emits only the
-`get` and `deposit` operations instantiated by the adapter. A frontdoor-only
-test that does not use the adapter adds no backdoor transport hooks.
-
-`peek()` and `poke()` do not add a delay. `poke()` is an HDL deposit, not a
-persistent force; RTL may overwrite it on a later evaluation. Both operations
-immediately predict the returned or deposited value. Tests that need to
-observe subsequent RTL behavior must author the corresponding `ReadOnly{}`,
-edge, or `Delay{...}` explicitly.
-
-A register-level path maps the whole register. Field-level slices are assembled
-into their logical bit positions. One `hdl_path_slice` entry maps an entire
-field; multiple entries must provide exactly one path per field bit in
-MSB-to-LSB order. Ambiguous lists fail generation. Missing adapters and
-incomplete paths produce diagnostics containing the full logical register
-path.
-
-`RegisterBackdoor<Data>` remains replaceable for projects that need a custom
-simulator mechanism or nonstandard storage policy.
-
-### Register-backed memories
+## Register-backed memories
 
 A generated memory handle uses a logical entry index. In
 `regs.buffer.read(7)`, `7` means entry seven; it is not a byte address. The
@@ -666,7 +684,7 @@ model base + SystemRDL memory offset + index * element bytes
 For a 32-bit `buffer @ 0x100` in a model based at `0x4000'0000`, entry `7`
 therefore accesses byte address `0x4000'011c`.
 
-#### Entry, offset, and absolute coordinates
+### Entry, offset, and absolute coordinates
 
 The handle names all three useful coordinate systems explicitly:
 
@@ -716,7 +734,7 @@ const auto response = co_await master.read(
     decltype(master)::read_request_type{absolute_address});
 ```
 
-#### Scalar frontdoor and backdoor
+### Scalar frontdoor and backdoor
 
 `Frontdoor` is the default. A test can select `Backdoor` for any individual
 operation without constructing a second model:
@@ -764,7 +782,7 @@ co_await regs.buffer.write_absolute(
     0x4000'0120, words, AccessPath::Backdoor);
 ```
 
-#### Raw hierarchy access
+### Raw hierarchy access
 
 `peek()` and `poke()` are synchronous, unconditional HDL operations. They
 bypass the `sw` policy and are appropriate for initialization, fault setup,
@@ -787,7 +805,7 @@ const auto opcode = dut.u_core.instruction_ram[12].get();
 The generated handle adds logical SystemRDL mapping, bounds checks,
 access-path selection, and contextual diagnostics around the same storage.
 
-#### Bulk operations
+### Bulk operations
 
 Span operations consume caller-owned storage and do not allocate. They fit
 packet buffers, descriptor rings, lookup tables, and parsed firmware words:
@@ -881,7 +899,7 @@ This batching is generated only when the compiled testbench accesses that
 memory with `get` or `deposit`. A design that does not use the memory gets no
 wrapper functions or runtime cost.
 
-#### SystemRDL memory contracts
+### SystemRDL memory contracts
 
 Different element widths and software policies generate the same API using the
 master's unsigned integral `data_type`:
@@ -962,67 +980,25 @@ string search. Available metadata is summarized below:
 | Memory | `name()`, `path()`, `hdl_path()`, `address(index)`, `size()`, `width()` |
 | Memory slice | parent paths plus `first_index()`, `size()`, and first `address()` |
 
-### Complete generated-handle surface
+### Generated-handle surface at a glance
 
-The tables below collect the public vocabulary in one place. Operations named
-`read`, `write`, `update`, or `mirror` are semantic model operations. `peek`
-and `poke` are raw synchronous hierarchy operations. Metadata and model-state
-operations do not access the DUT or advance simulation time.
+The public vocabulary groups by handle kind. Operations named `read`, `write`,
+`update`, or `mirror` are semantic model operations. `peek` and `poke` are raw
+synchronous hierarchy operations. Model-state and metadata operations do not
+access the DUT or advance simulation time.
 
-| Model operation | Purpose |
-|---|---|
-| `reset_all()` | Restore generated desired and mirrored reset state without driving the DUT |
-| `set_auto_predict(enabled)` | Select direct-handle or passive-monitor prediction ownership for every register |
-| `update_all()` | Frontdoor-write registers whose desired state differs from the mirror |
-| `mirror_all(check)` | Frontdoor-read readable registers and optionally compare their mirrors |
-| `for_each_register`, `for_each_memory` | Visit generated handles in deterministic address order |
-| `descriptor()` | Inspect allocation-free address-map metadata |
-| `RegisterAddressMap` | Select a named master/base, aliases, and optional custom frontdoors |
-| `RegisterAccessCoverage` | Opt-in frontdoor/backdoor access coverage and immutable snapshots |
-
-| Register operation | Purpose |
-|---|---|
-| `read([map])`, `write(value[, map])` | Exact frontdoor transfer through the default or selected map |
-| `set_desired(value)`, `update([map])` | Request and conditionally apply writable state |
-| `mirror([map,] check)`, `predict(value, kind)` | Check through a selected map or update predicted state |
-| `set_auto_predict(enabled)` | Disable handle prediction when a passive predictor owns observed traffic |
-| `peek()`, `poke(value)` | Raw register backdoor with immediate prediction |
-| `reset()` | Restore generated model reset state only |
-| `desired()`, `mirrored()`, validity masks | Inspect model state |
-| `name()`, `path()`, `hdl_path()`, `hdl_slices()`, `address()`, `width()` | Inspect mapping metadata |
-
-| Field operation | Purpose |
-|---|---|
-| `read([map])`, `write(value[, map])` | Parent-register frontdoor operation with field extraction/policy |
-| `set_desired(value)` | Change the field's desired writable bits |
-| `desired()`, `mirrored()`, validity masks | Inspect field model state |
-| `raw()` | Access the raw value behind a generated enum field |
-| `name()`, `path()`, `hdl_path()`, `hdl_slices()`, `address()`, `lsb()`, `width()` | Inspect mapping metadata |
-
-| Memory operation | Entry-relative | Byte-relative | Absolute |
+| Handle | Semantic operations | Raw backdoor | Model state and metadata |
 |---|---|---|---|
-| Semantic scalar read/write | `read`, `write` | `read_offset`, `write_offset` | `read_absolute`, `write_absolute` |
-| Semantic chunk read/write | `read`, `write` | `read_offset`, `write_offset` | `read_absolute`, `write_absolute` |
-| Raw scalar read/write | `peek`, `poke` | `peek_offset`, `poke_offset` | `peek_absolute`, `poke_absolute` |
-| Raw chunk read/write | `peek_into`, `poke` | `peek_offset_into`, `poke_offset` | `peek_absolute_into`, `poke_absolute` |
+| Model | `update_all()`, `mirror_all(check)` | — | `reset_all()`, `set_auto_predict(enabled)`, `descriptor()`, `for_each_register`, `for_each_memory` |
+| Register | `read`, `write`, `update`, `mirror`, `predict` | `peek()`, `poke(value)` | `set_desired()`, `reset()`, `desired()`, `mirrored()`, validity masks, mapping metadata |
+| Field | `read` and `write` through the parent register | explicit parent read-modify-write | `set_desired()`, `desired()`, `mirrored()`, validity masks, `raw()`, mapping metadata plus `lsb()` |
+| Memory | scalar and chunk `read`/`write` in entry, offset, and absolute coordinates | `peek`/`poke` families in the same coordinates | `slice(first, count)`, `address(index)`, `base_address()`, `end_address()`, `element_bytes()`, `size()`, `width()`, index conversions |
 
-`read_into()` remains a descriptive compatibility spelling for entry-relative
-chunk reads. `slice(first_index, count)` creates a reusable entry-relative
-window. All chunk APIs consume caller-owned contiguous storage and allocate
-nothing. Semantic frontdoor operations and `address(index)` also accept a final
-`RegisterAddressMap&`; raw `peek/poke` operations always use physical HDL
-storage and therefore do not accept a software map.
-
-| Memory utility | Purpose |
-|---|---|
-| `address(index)` | Convert an entry index to its effective bus byte address |
-| `base_address()`, `end_address()` | Return the memory's inclusive start and exclusive end addresses |
-| `element_bytes()`, `size()`, `width()` | Report element stride, entry count, and element width |
-| `index_from_offset(offset)` | Convert an aligned byte offset to a checked entry index |
-| `index_from_absolute(address)` | Convert an aligned in-range bus address to an entry index |
-| `contains_absolute(address)` | Test whether an aligned address names an entry in this memory |
-| `slice(first_index, count)` | Create a reusable checked entry-relative window |
-| `name()`, `path()`, `hdl_path()` | Inspect generated logical and HDL mapping metadata |
+Semantic frontdoor operations and `address(index)` also accept a final
+`RegisterAddressMap&`; raw `peek`/`poke` operations always use physical HDL
+storage and therefore do not accept a software map. Full signatures and
+response types are documented in the
+[library reference](library/components.md#register-abstraction).
 
 Typed traversal keeps generated members and enum field types intact:
 
@@ -1067,12 +1043,6 @@ Generated register-file hierarchy follows the SystemRDL structure:
 ```cpp
 regs.security.key.key.set_desired(0x1234);
 regs.bank.at<1>().control.value.set_desired(0xa55a);
-
-regs.lane_control.for_each([](auto& reg) { reg.reset(); });
-regs.for_each_register([](auto& reg) {
-    // Ascending-address traversal across every generated register.
-    inspect(reg.descriptor());
-});
 ```
 
 `at<Index>()` is compile-time indexed so each element retains its concrete
@@ -1109,66 +1079,34 @@ width limit.
 
 ## Generate from SystemRDL, IP-XACT, or RgGen
 
-The complete [generation guide](verification-components/register-generation.md)
-explains the source/build/generated-file boundary, SystemRDL naming, IP-XACT
-import, reproducible build dependencies, validation, and current limitations.
-The shortest native SystemRDL flow is:
-
-Install the optional exporter and generate from SystemRDL:
+The typed model used throughout this page is generated, not handwritten. The
+complete [generation guide](verification-components/register-generation.md)
+covers the source/build/generated-file boundary, naming controls, the CLI
+reference, IP-XACT import, native RgGen input, build integration, validation,
+and current limitations. The shortest native SystemRDL flow is:
 
 ```sh
 uv sync --extra peakrdl
-uv run --extra peakrdl peakrdl cpptb registers.rdl \
+uv run --frozen --extra peakrdl peakrdl cpptb registers.rdl \
   -o build/generated/registers.hpp \
   --namespace generated_registers
 ```
 
-The exporter is a normal PeakRDL plugin. The input may instead be an IP-XACT
-component:
-
-```sh
-uv run --extra peakrdl peakrdl cpptb component.xml \
-  -o build/generated/registers.hpp
-```
-
-Native RgGen YAML, JSON, and TOML use the direct importer and do not require an
-IP-XACT conversion:
-
-```sh
-uv run --frozen cpptb-rggen uart_csr.yml \
-  -o build/generated/uart_regs.hpp --namespace uart_regs
-```
+The exporter is a normal PeakRDL plugin, so the input may instead be an
+IP-XACT component. Native RgGen YAML, JSON, and TOML contracts use the
+companion `cpptb-rggen` command directly, without an IP-XACT conversion. Both
+flows, including every naming and endianness option, are documented in the
+generation guide.
 
 Generated models expose typed registers, named fields, memories, complete
 logical paths, `regwidth` and `accesswidth`, access policies, reset metadata,
-and a relocatable base. Generated headers carry a tool-version banner and use
-fully-qualified framework names rather than importing names into the user's
-namespace:
+and a relocatable base. SystemRDL is the lossless semantic source; retain the
+original RDL when an IP-XACT round-trip would drop properties such as nested
+`mem` nodes.
 
-```cpp
-#include "generated/registers.hpp"
-
-generated_registers::RegModel<Master> regs{
-    test, master, 0x4000'0000, &backdoor};
-
-regs.control.enable.set_desired(1);
-regs.control.mode.set_desired(3);
-co_await regs.control.update();
-```
-
-SystemRDL is the lossless semantic source. IP-XACT import follows PeakRDL's
-documented best-effort property mapping. PeakRDL's current IP-XACT exporter
-also warns and drops nested SystemRDL `mem` nodes, so retain the original RDL
-when that conversion would lose memory declarations. The regression suite
-compiles a native SystemRDL model, round-trips its supported register contract
-through IP-XACT, syntax-checks the generated C++, and executes a generated
-model against a fake frontdoor master. Unsupported reset references and widths
-produce diagnostics containing the complete SystemRDL node path.
-
-The runnable APB example includes `examples/apb_regfile/registers.rdl`
-as a small real contract.
-
-The [secworks AES register-model oracle](examples/secworks-aes-regmodel.md)
+The runnable [APB register-file example](examples/apb-regfile.md) includes
+`examples/apb_regfile/registers.rdl` as a small real contract. The
+[secworks AES register-model oracle](examples/secworks-aes-regmodel.md)
 provides the larger ground-truth workflow. It generates named handles from a
 SystemRDL description, programs pinned open-source RTL, and requires its full
 720-event register-bus transcript and all result words to match the unchanged
@@ -1539,5 +1477,8 @@ from simulator-boundary scheduling rather than lookup or register prediction.
 See [Performance](performance.md) and the benchmark's `PROFILE.md` for the
 current result and profiling method.
 
+The `memory_model` feature pair extends the APB component benchmark workload
+with sparse byte storage and passive read/write prediction; the August 8,
+2026 admitted run certified the pair under the `1.10x` hard gate at `1.0247x`.
 Sparse expected-memory benchmarks are documented separately in
 [Sparse expected memory](verification-components/memory-model.md).

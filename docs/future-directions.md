@@ -162,6 +162,56 @@ conversion, tag filtering, and reproduction-command presentation; individually
 small, together they are the difference between running tests and running a
 regression.
 
+### Simulation snapshot and restore
+
+Long simulations pay their full cost on every run. A failure two million
+cycles into a boot sequence is debugged by replaying those two million cycles
+for every hypothesis, and a suite whose tests share one expensive
+initialization repeats it per test. The capability wanted is a snapshot of
+simulation state taken at a chosen point, and a later run that restores it
+and continues from there instead of starting at time zero.
+
+The design half is tractable. Verilator generates save/restore support under
+`--savable`: `VerilatedSave` and `VerilatedRestore` round-trip the complete
+model state, and a cpptb simulator is one process built around one Verilated
+model, so design state, simulation time, and the generated wrapper's calendar
+state all sit behind that one mechanism.
+
+The testbench half is the real problem, and it is what shapes any honest
+design. A suspended C++ coroutine is a heap frame holding arbitrary locals,
+pointers, and a resumption address; there is no portable way to serialize
+one, so a snapshot cannot capture "the whole test, mid-await". Two shapes
+survive that constraint:
+
+- **Declared snapshot points.** A test reaches a quiescent point — a settle
+  point, where the deferred-write queue is empty by construction — and asks
+  for a named snapshot alongside whatever testbench state it explicitly
+  saves. A restore run reloads the design exactly and starts a *fresh*
+  registered continuation coroutine there; suspended user coroutines do not
+  come back. The contract is "the design resumes exactly, the testbench
+  restarts deliberately", which is also what vendor `$save`-style checkpoints
+  deliver to UVM in practice. Most framework-owned state already serializes
+  by construction: a random stream is a seed and derivation counters,
+  coverage has a schema-1 JSON model, register-model mirrors and
+  `SparseMemory` would need explicit save hooks. Clocks re-register through
+  the existing time-zero query path.
+- **Process-level checkpointing.** `fork()` at the snapshot point captures
+  everything, coroutine frames included: the parent holds the warmed state
+  and forks one child per variant or hypothesis. This is cheap to prototype
+  precisely because one process owns the whole simulation, and it covers the
+  same-run cases — failure bisection, N seeds branching from one warmed
+  reset — without any serialization design. It does not persist across runs;
+  cross-run persistence via CRIU is Linux-specific and fragile against
+  ASLR and library changes, and should not be the load-bearing mechanism.
+
+The two compose: fork for exploration within a run, declared snapshots for
+resuming across runs. Promotion needs a concrete workload that hurts today —
+a long soak that fails late, or a directed suite replaying one boot per
+test — and the acceptance gate writes itself from machinery the repository
+already has: an identity gate, in the mold of `make backend-equivalence-test`,
+requiring that a restored run produce results and waveform identical to the
+uninterrupted run from the snapshot time onward.
+
 ### Not recommended
 
 Further scheduler performance work. Measured ratios sit between `0.76x` and

@@ -108,19 +108,55 @@ disabled-factory count.
 The `structured_logging` C++ path constructs no disabled messages and retains
 no log records. The pure-SV peer performs the same runtime level comparisons
 and sparse sink updates. Exact semantic parity passes at 5,000,000 iterations.
-The first formal timing attempt was rejected before sampling because normalized
-one-minute host load was `0.644`, above the `0.300` admission limit; no
-performance ratio is published from that run.
+Timing certification needed 200,000,000 iterations — below-threshold logging
+costs under a nanosecond per iteration, so smaller samples sit inside the
+measurement noise floor — and passed the `1.10x` hard guard at `0.5285x` on
+August 8, 2026.
+
+<div class="cpptb-code-tabs" data-tabs="2" data-tab-group="structured-logging" data-tab-label="Structured logging benchmark"></div>
+
+<div class="cpptb-code-tab-label">cpptb (C++ DPI)</div>
+
+```cpp
+auto log = test.logger("scoreboard");
+for (uint32_t iteration = 0; iteration < iterations; ++iteration) {
+    log.debug([&] {
+        ++disabled_factories;
+        return "transaction " + std::to_string(iteration);
+    });
+    if ((iteration & 1023u) == 0)
+        log.info("transaction checkpoint");
+}
+```
+
+<div class="cpptb-code-tab-label">Pure SystemVerilog</div>
+
+```systemverilog
+int minimum_log_level = 2;
+string disabled_message;
+void'($value$plusargs("AUTHORING_CORE_LOG_LEVEL=%d", minimum_log_level));
+
+for (int unsigned i = 0; i < iterations; i++) begin
+  if (1 >= minimum_log_level) begin
+    disabled_factories++;
+    disabled_message = $sformatf("transaction %0d", i);
+  end
+  if ((i & 1023) == 0 && 2 >= minimum_log_level) begin
+    records++;
+    attributed_records++;
+    complete_records++;
+  end
+end
+```
 
 The separate `structured_log_history` pair retains each enabled record rather
 than hiding storage cost inside the baseline. Both implementations own the
 level, message, scope, test name, source and process provenance, sequence, and
 simulation time. Six checks compare output count, output metadata, retained
 count, chronological order, retained metadata, and disabled lazy formatting.
-The exact 5,000,000-iteration semantic workload passes. Its first formal timing
-attempt was rejected during environment settling: normalized one-minute load
-started at `0.526`, above the `0.300` admission limit, and did not settle before
-the runner timeout. No retained-history ratio is published from that run.
+The exact 5,000,000-iteration semantic workload passes, and the
+200,000,000-iteration timing run is certified at `0.5044x` under the same
+`1.10x` hard guard.
 
 The `mixed_logging` pair exercises the complete cross-language path. Every
 transaction attempts one disabled C++ debug message and one disabled RTL debug
@@ -128,11 +164,9 @@ message. Every 1,024 transactions, C++ and RTL each emit one retained info
 record. Both sides validate the same request/response traffic, record count,
 language origin, source metadata, and chronological ordering. This keeps the
 DPI callback frequency and retained metadata visible instead of timing an
-empty bridge. Its 5,000,000-transaction semantic pair passes exactly. The
-first formal timing attempt was rejected before sampling after normalized
-one-minute load remained above the `0.300` admission limit for 60 seconds
-(`0.480` initially and `0.882` at timeout), so no mixed-language ratio is
-published from that run.
+empty bridge. Its 5,000,000-transaction semantic pair passes exactly, and the
+200,000,000-transaction timing pair is certified at `0.7843x` under the
+`1.10x` hard guard.
 
 ```sh
 make feature-test FEATURE=structured_logging
@@ -550,9 +584,10 @@ same DUT, and require exact response and checksum agreement.
 
 The July 17, 2026 run measured `0.816x` C++ DPI over pure SV, with `0.813x`
 DPI-first, `0.824x` SV-first, `0.824x` independent, and `0.88%`
-paired/independent disagreement. It passed the ratio guard, but is published as
-load-inconclusive because normalized one-minute host load reached `1.211`. An
-admitted rerun remains pending under the current `0.30` admission policy.
+paired/independent disagreement. It passed the ratio guard but was published
+as load-inconclusive because normalized one-minute host load reached `1.211`;
+the August 8, 2026 admitted rerun certified the pair at `0.8704x` under the
+standard hard guard.
 
 ```sh
 make feature-test FEATURE=constraint_extensions
@@ -595,12 +630,11 @@ scoreboard comparisons, response checks, and checksum updates. The C++ side
 uses the public `cpptb_vc` master, monitor, checker, analysis port, and
 scoreboard rather than benchmark-local helpers.
 
-The July 17, 2026 baseline measured `0.916x` C++ DPI over pure SV, but it
-predates the monitor-owned observation envelope introduced with transaction
-recording. The current semantic pair passes at 100,000 iterations with exact
-work. A July 20 remeasurement was rejected as `invalid_environment`, so no
-current ratio is published and the standard `1.10x` hard guard remains pending
-for the next admitted serial run.
+The current semantic pair passes at 100,000 iterations with exact work, and
+the August 8, 2026 admitted run certified the pair under the standard `1.10x`
+hard guard at `1.0412x`. The earlier July 17 baseline of `0.916x` predates
+the monitor-owned observation envelope introduced with transaction recording
+and is superseded by that run.
 
 ```sh
 make feature-test FEATURE=apb_component
@@ -616,10 +650,9 @@ sink. At the default 100,000 iterations, each implementation completes
 same stream name, transaction type, sequence, begin/end times, completion
 disposition, and formatted JSON payload.
 
-The semantic pair passes with exact counts and checksum. The July 20, 2026
-timing attempt was rejected as `invalid_environment` because normalized host
-load exceeded the `0.30` limit, so no ratio is published from that run. The
-standard `1.10x` hard guard remains active for the next admitted serial run.
+The semantic pair passes with exact counts and checksum, and the August 8,
+2026 admitted run certified the pair under the standard `1.10x` hard guard at
+`1.0414x`.
 
 ```sh
 make feature-test FEATURE=transaction_recording
@@ -634,10 +667,9 @@ component workload. It replaces the hand-authored expected transaction queue
 with sparse byte storage, region decoding, byte-enable updates, and passive
 read/write prediction in both C++ and pure SystemVerilog.
 
-The 100,000-iteration semantic run passes with exact counts and checksum. The
-July 18, 2026 timing attempt was rejected as `invalid_environment` after the
-host-load settle window timed out, so no ratio is published from that run.
-The `1.10x` hard gate remains active for the next admitted serial run.
+The 100,000-iteration semantic run passes with exact counts and checksum, and
+the August 8, 2026 admitted run certified the pair under the `1.10x` hard
+gate at `1.0247x`.
 
 ```sh
 make feature-test FEATURE=memory_model

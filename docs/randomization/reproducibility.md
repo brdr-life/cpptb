@@ -61,8 +61,8 @@ Task<void> writer(Dut dut, TestContext test) {
 Task<void> backpressure(Dut dut, TestContext test) {
     auto& random = test.random();
     for (uint32_t index = 0; index < 100; ++index) {
+        co_await RisingEdge{dut.clk_i};
         dut.ready_i.set(random.randint<uint8_t>(0, 1));
-        co_await RisingEdge(dut.clk_i);
     }
 }
 

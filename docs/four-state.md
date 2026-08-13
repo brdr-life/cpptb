@@ -13,6 +13,18 @@ capability**. `LogicBits<W>` can represent, compare, format, and inspect any
 width of `0`, `1`, `X`, and `Z`. Whether those values may be written to and
 propagated through RTL depends on the selected simulator backend.
 
+What that split means on Verilator today:
+
+| Works now | Does not work yet |
+|---|---|
+| `LogicBits<W>` construction, comparison, formatting, and inspection — any mix of `0/1/X/Z` | X/Z **storage in RTL**: the simulator holds two-state values |
+| `get_logic()` on hierarchy objects | Net resolution of Z and conflicting drivers |
+| `deposit_logic()` / `force_logic()` with **known** `0/1` values | `deposit_logic()` / `force_logic()` containing X or Z (rejected with a diagnostic, never coerced) |
+| `expect_eq` failure output that preserves X/Z from the expected value | DPI `bval` transport; port and interface `_logic` APIs |
+
+The rest of this page covers the value model first, then the capability gate
+that decides the right column.
+
 ## Constructing values
 
 `LogicBits<W>` stores the SystemVerilog A and B planes used by DPI. The mapping
@@ -98,8 +110,10 @@ test.expect_eq("forced control", dut.core.control.get_logic(), known);
 dut.core.control.release();
 ```
 
-These calls do not advance simulation time. Add `Delay`, an edge trigger, or a
-scheduling phase only when the testbench needs RTL to react or settle.
+These calls are immediate, like every hierarchy operation — nothing queues,
+unlike a port `set()` — and they do not advance simulation time. Add `Delay`,
+an edge trigger, or a scheduling phase only when the testbench needs RTL to
+react or settle.
 
 The ordinary `get()`, `deposit()`, and `force()` methods are the explicit
 two-state path. On the current Verilator backend, `get_logic()` and logic writes

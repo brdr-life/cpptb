@@ -287,66 +287,17 @@ the test lifecycle state and owns its scope string, while the harness remains
 responsible for sink policy. A retained logger must not outlive the scheduler
 and `TestResult` used by the running test.
 
-## Matched performance workload
+## Performance
 
-The `structured_logging` authoring benchmark models sparse logging in a hot
-scoreboard loop. Debug formatting is disabled on every iteration, and one
-constant info checkpoint is emitted through a counting sink every 1,024
-iterations. `structured_log_history` repeats that workload while both C++ and
-pure SV retain the complete enabled-record metadata and validate chronological
-sequence order. `mixed_logging` adds one sparse C++ checkpoint and one sparse
-RTL checkpoint to the normal request/response workload, then compares that
-against a pure-SV implementation retaining equivalent metadata.
-
-<div class="cpptb-code-tabs" data-tabs="2" data-tab-group="structured-logging" data-tab-label="Structured logging benchmark"></div>
-
-<div class="cpptb-code-tab-label">cpptb (C++ DPI)</div>
-
-```cpp
-auto log = test.logger("scoreboard");
-for (uint32_t iteration = 0; iteration < iterations; ++iteration) {
-    log.debug([&] {
-        ++disabled_factories;
-        return "transaction " + std::to_string(iteration);
-    });
-    if ((iteration & 1023u) == 0)
-        log.info("transaction checkpoint");
-}
-```
-
-<div class="cpptb-code-tab-label">Pure SystemVerilog</div>
-
-```systemverilog
-int minimum_log_level = 2;
-string disabled_message;
-void'($value$plusargs("AUTHORING_CORE_LOG_LEVEL=%d", minimum_log_level));
-
-for (int unsigned i = 0; i < iterations; i++) begin
-  if (1 >= minimum_log_level) begin
-    disabled_factories++;
-    disabled_message = $sformatf("transaction %0d", i);
-  end
-  if ((i & 1023) == 0 && 2 >= minimum_log_level) begin
-    records++;
-    attributed_records++;
-    complete_records++;
-  end
-end
-```
-
-Run semantic parity and the individually gated benchmark with:
-
-```sh
-make feature-test FEATURE=structured_logging
-make feature-benchmark FEATURE=structured_logging
-make feature-test FEATURE=structured_log_history
-make feature-benchmark FEATURE=structured_log_history
-make feature-test FEATURE=mixed_logging
-make feature-benchmark FEATURE=mixed_logging
-```
-
-The exact semantic pairs pass. Formal timing publication remains pending a
-host-load window admitted by the standard `1.10x` performance policy.
+Logging has three matched C++/pure-SV benchmark pairs — sparse hot-loop
+logging (`structured_logging`), retained history
+(`structured_log_history`), and the mixed C++/RTL path (`mixed_logging`) —
+all certified under the standard `1.10x` hard guard at `0.5285x`, `0.5044x`,
+and `0.7843x` respectively. Below-threshold logging costs so little that the
+timing runs needed 200,000,000 iterations to rise above the measurement
+noise floor. [Performance](performance.md#structured-logging) has each
+workload's description, the tabbed side-by-side implementations, and the
+`make feature-*` commands to reproduce them.
 
 ## Related APIs
 
