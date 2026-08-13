@@ -25,13 +25,12 @@ cpptb test --wave vcd ...
 
 ```toml
 [build]
-timing_backend = "verilator-direct"
 wave = true        # or "fst" / "vcd"
 ```
 
-`wave` requires a `timing_backend`: the framework host loop owns the dump
-points — one sample per timestep, after that timestep's phases settle — and
-only a timing backend links it. Both backends dump identically.
+The framework host loop — linked into every build by the default
+`timing_backend` — owns the dump points: one sample per timestep, after that
+timestep's phases settle. Both backends dump identically.
 
 Running a built binary by hand works without the runner: the host loop
 reads `CPPTB_WAVE`:
@@ -49,6 +48,13 @@ Structs and parameters are traced readably (`--trace-structs`
 periodically plus on `$stop`/`$fatal`, so a failing test keeps its wave up
 to the failure.
 
+Open the file in any FST/VCD viewer — GTKWave and Surfer both read FST
+directly. One deliberate non-feature: a failure does not dump a wave by
+itself. Waves are asked for, never implied by a result — rerunning the
+failing test with `--wave` (the seed is in the result JSON) is the intended
+workflow, and automating that rerun is
+[deliberately parked](roadmap.md#7-debugging-and-release-tooling).
+
 ## Wave equivalence against pure SystemVerilog
 
 `make wave-equivalence-test` is the proof the dumps mean what they say: it
@@ -57,8 +63,8 @@ runs four examples twice each — once as the pure-SV twin (`--trace` +
 `cpptb test --wave vcd` — and compares each pair of dumps with
 `tools/wave_compare.py`, which samples every signal under the DUT
 instance after each rising clock edge and requires the state trajectories
-to be identical, cycle for cycle. The pairs cover different design
-classes: a plain sequential counter, a ready/valid FIFO with
+to be identical, cycle for cycle. The five compared pairs cover different
+design classes: a plain sequential counter, a ready/valid FIFO with
 backpressure, a register file behind the APB components, and a dual-clock
 mailbox compared on both of its domains:
 

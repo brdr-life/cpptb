@@ -55,10 +55,10 @@ Task<void> packet_sequence(Dut dut, TestContext& test) {
     for (uint32_t index = 0; index < 1000; ++index) {
         test.randomize(packet);
 
+        co_await RisingEdge{dut.clk_i};
         dut.opcode_i.set(static_cast<uint8_t>(packet.opcode.get()));
         dut.length_i.set(packet.length.get());
         dut.address_i.set(packet.address.get());
-        co_await RisingEdge(dut.clk_i);
     }
 }
 ```

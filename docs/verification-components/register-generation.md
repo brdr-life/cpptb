@@ -435,8 +435,10 @@ property for a frontdoor-only memory. Backdoor use then fails with the complete
 logical memory path instead of falling back to runtime string lookup.
 
 The generated adapter uses deposits. It does not force storage and does not
-advance simulation time. `peek()` and `poke()` immediately update model state;
-any wait needed for RTL to react remains explicit in the testbench. Hierarchy
+advance simulation time. `peek()` and `poke()` apply **immediately** — unlike
+a frontdoor operation, whose pin drives queue to the ReadWrite point like any
+port `set()` — and any wait needed for RTL to react remains explicit in the
+testbench. Hierarchy
 discovery adds only the typed `get` and `deposit` hooks actually instantiated
 by the testbench, so frontdoor-only users pay no backdoor transport cost.
 

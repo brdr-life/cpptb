@@ -135,7 +135,7 @@ diagnostics and tests.
 
 ## Result metadata
 
-Structured test result schema 4 records:
+Structured test result schema 5 records:
 
 ```json
 {

@@ -166,6 +166,7 @@ performance
 
 roadmap
 future-directions
+Ibex ports & co-simulation <open-core-ports>
 ```
 """
 

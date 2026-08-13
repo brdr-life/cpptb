@@ -1,8 +1,10 @@
 # Running tests
 
-This page is the reference for the `cpptb` command: how to build a project,
-select and run tests, configure a build with `cpptb.toml`, and consume the
-structured JSON results.
+This page covers the run workflow around the `cpptb` command: registering
+tests, how a project is laid out, the lower-level runner protocol, and the
+structured JSON results a CI system consumes. The command's options are
+specified in [cpptb command line](cli.md), and every configuration key in
+the [cpptb.toml reference](cpptb-toml.md).
 
 The command is optional. It is one harness over a reusable C++ framework, and
 [Framework test lifecycle](test-lifecycle.md) documents that framework's
@@ -25,7 +27,7 @@ Task<void> reset_defaults(Dut dut, TestContext& test) {
 
     dut.rst_n.set(0);
     co_await RisingEdge{dut.clk};
-    co_await Delay{1_ps};
+    co_await ReadOnly{};
     test.expect_eq("reset count", dut.count.get(), 0u);
 }
 
@@ -47,31 +49,19 @@ error before simulation work is scheduled.
 Build the simulator, list its catalog, run all tests, or select one test:
 
 ```sh
-cpptb build
-cpptb list
-cpptb test
-cpptb test counter_reset_defaults
+cpptb build             # generate the typed DUT and compile the simulator
+cpptb list              # show the registered tests
+cpptb test              # run them all, each in a fresh simulator process
+cpptb test reset_defaults
 ```
 
-`--timeout` is a wall-time limit for each process. Tests run serially, one
-fresh process at a time, which keeps simulator global state isolated and
-benchmark load predictable. Build inputs are content-fingerprinted, so the
-second and subsequent commands reuse the compiled binary until RTL, C++,
-framework headers, options, or tool versions change. Use `--rebuild` to bypass
-the cache and `--verbose` to display the normally hidden compiler commands.
-
-## The command
-
-Three subcommands cover the workflow:
-
-```sh
-cpptb build     # generate the typed DUT and compile the simulator
-cpptb list      # show the registered tests
-cpptb test      # run them all, each in a fresh simulator process
-```
-
-Every option — project selectors, backend overrides, waveform tracing,
-timeouts — is documented in [cpptb command line](cli.md).
+Tests run serially, one fresh process at a time, which keeps simulator
+global state isolated and benchmark load predictable. Build inputs are
+content-fingerprinted, so the second and subsequent commands reuse the
+compiled binary until RTL, C++, framework headers, options, or tool versions
+change. Every option — project selectors, backend overrides, waveform
+tracing, timeouts, cache bypass — is documented in
+[cpptb command line](cli.md).
 
 ## Project layout and build ownership
 
@@ -149,43 +139,14 @@ make -C examples/counter run TEST=counter_reset_defaults
 ## Project discovery and configuration
 
 Configuration precedence is command-line options, then `cpptb.toml`, then
-filesystem conventions. The zero-config conventions are:
-
-- RTL from `rtl/**/*.sv` and `rtl/**/*.v`, or root-level `.sv` and `.v` files.
-- C++ from `tests/**/*.cpp`, or root-level `testbench.cpp`.
-- One inferred top module and a `build/` artifact root.
-
-Point at nonstandard files directly when that is enough:
-
-```sh
-cpptb test \
-  --source hardware/core.sv \
-  --source hardware/peripheral.sv \
-  --testbench verification/core_test.cpp \
-  --top core
-```
-
-For persistent project options, add the optional compact configuration:
-
-```toml
-[design]
-top = "processor"
-parameters = { DATA_WIDTH = 64 }
-
-[build]
-timing_backend = "verilator-direct"   # or "vpi"
-deferred_writes = true
-```
-
-Every section and key — sources and globs, defines and parameters, the
-timing keys, optimization and debug builds, waveform tracing, Verilator
-arguments, and the `run.timeout_cycles` watchdog — is documented with its
-default in the [cpptb.toml reference](cpptb-toml.md).
-
-Source patterns are expanded in listed order, with each pattern sorted
-deterministically. `cpptb build` reports ambiguous top modules with the exact
-`--top` remedy. Missing tools, sources, tests, include directories, and invalid
-configuration produce project-level diagnostics before compilation starts.
+filesystem conventions — a project with neither options nor a `cpptb.toml`
+still builds from the conventional layout above. One-off overrides
+(`--source`, `--testbench`, `--top`) are specified in
+[cpptb command line](cli.md); persistent configuration lives in the
+[cpptb.toml reference](cpptb-toml.md), which documents every section and key
+with its default. Missing tools, sources, tests, include directories,
+ambiguous top modules, and invalid configuration all produce project-level
+diagnostics before compilation starts.
 
 ## Lower-level runner protocol
 
@@ -197,17 +158,19 @@ cpptb-run list -- path/to/simulator
 cpptb-run run --all --result-dir results -- path/to/simulator
 ```
 
-`--` separates runner options from the simulator command. The underlying
-environment protocol remains intentionally small:
+`--` separates runner options from the simulator command. `run` also accepts
+`--timeout` (a wall-time limit per process) and `--seed`; `--result-dir`
+defaults to `cpptb-results`. The underlying environment protocol remains
+intentionally small:
 
 - `CPPTB_LIST_TESTS=1` prints one `CPPTB_TEST name` line per registered test.
 - `CPPTB_TEST=name` selects one test.
 - `CPPTB_RESULT_FILE=path.json` requests the structured result file.
 
-The C++ API also exposes `registered_tests<Dut>()`, `RunRequest`, the
-`run_registered_test(...)` selection overload, and an optional `ResultSink`.
-An embedding harness can therefore consume lifecycle callbacks directly and
-does not have to adopt either command-line runner.
+An embedding harness can also skip both command-line runners and consume the
+C++ embedding API directly — [Embedding and results](library/embedding.md)
+documents `registered_tests<Dut>()`, `RunRequest`, the
+`run_registered_test(...)` selection overload, and `ResultSink`.
 
 ## Framework lifecycle behavior
 

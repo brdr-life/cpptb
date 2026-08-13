@@ -8,6 +8,15 @@ checksums.
 The C++ DPI testbench remains ordinary explicit signal access and scheduling.
 Generated bindings and DPI transport are outside the user-facing file.
 
+:::{note}
+These benchmark testbenches predate the standard write model and run as
+legacy immediate-write builds, matched to their cocotb and VPI peers — which
+is why they drive off `FallingEdge` and settle with explicit delays. They are
+measurement peers, not authoring templates: for the shape to copy, see the
+[counter example](counter.md) and
+[the write model](../scheduling.md#the-write-model).
+:::
+
 Run the semantic smoke matrix or reproduce the scaled measurements with:
 
 ```sh

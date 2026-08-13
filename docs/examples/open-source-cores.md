@@ -1,5 +1,14 @@
 # Open-source core benchmarks
 
+:::{note}
+This page times *framework-authored* testbenches over vendored open-source
+cores. It is distinct from the
+[ports of real testbenches](../open-core-ports.md), where upstream's own
+verification environments — Ibex's 944-test directed suite with Spike
+co-simulation, the icache UVM environment, the riscv-arch-test suite — run
+ported to cpptb and compared result for result against the originals.
+:::
+
 The open-core suite applies the four-mode comparison to unmodified,
 production-style RTL rather than project-authored benchmark DUTs. Each core
 is pinned with its upstream license, and each mode performs the same signal
@@ -14,6 +23,15 @@ updates, waits, checks, and checksum folding.
 The upstream sources are vendored under
 `benchmarks/framework_comparison/open_cores/third_party/`. cpptb-specific
 wrappers do not modify the core RTL.
+
+:::{note}
+These benchmark testbenches predate the standard write model and run as
+legacy immediate-write builds, matched to their cocotb peers — which is why
+they drive off `FallingEdge` and settle with explicit delays. They are
+measurement peers, not authoring templates: for the shape to copy, see the
+[counter example](counter.md) and
+[the write model](../scheduling.md#the-write-model).
+:::
 
 ## PicoRV32 firmware
 

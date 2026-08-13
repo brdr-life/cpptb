@@ -40,7 +40,7 @@ Task<void> reset_defaults(Dut dut, TestContext& test) {
 
     dut.rst_n.set(0);
     co_await RisingEdge{dut.clk};
-    co_await Delay{1_ps};
+    co_await ReadOnly{};
     test.expect_eq("reset count", dut.count.get(), 0u);
 }
 

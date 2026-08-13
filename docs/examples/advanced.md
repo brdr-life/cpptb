@@ -10,7 +10,7 @@ complete, runnable project with a pure-SystemVerilog twin.
 | [APB register file](apb-regfile.md) | Optional protocol component package | Generic sequence, master, monitor, checker, scoreboard, and coverage |
 | [APB transaction trace](apb-trace.md) | Timed typed transaction recording | 256-operation monitor, scoreboard, in-memory trace, and JSON Lines output |
 | [IP-XACT register model](ipxact-regfile.md) | A standard IP-XACT contract with registers and native memory | Generated hierarchy, fake-master check, APB sequence, and pure-SV peer |
-| [Fault injection](fault-injection.md) | Internal access and controlled fault injection | Deposit, force, release, and explicit settling |
+| [Fault injection](fault-injection.md) | Internal access and controlled fault injection | Deposit, force, release, and `ReadOnly` settling |
 | [Rich data](rich-data.md) | Wide, fixed-point, array, struct, and enum ports | Typed construction and checking |
 | [Interfaces and inouts](interfaces.md) | Parameterized interfaces, modports, interface arrays, and bidirectional pins | Named member access, independent clocks, drive, and release |
 | [Mixed-language logging](mixed-logging.md) | One ordered C++ and RTL diagnostic stream | C++ loggers, SV macros, source provenance, and hierarchy |

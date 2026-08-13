@@ -168,9 +168,7 @@ protocol checker, structured transactions, runnable example, scoreboard, and
 coverage composition are implemented. The same sequence is reusable through
 the generic memory-mapped interface. The exact `apb_component` C++/pure-SV
 pair exercises the active and passive components under the standard `1.10x`
-performance guard. Its current semantic run passes; the post-envelope timing
-remeasurement is pending because the July 20, 2026 run was rejected by host
-load admission.
+performance guard, certified at `1.0412x` in the August 8, 2026 admitted run.
 
 Typed transaction recording is also implemented in `cpptb_vc`. Timed
 `TransactionObservation<T>` envelopes, monitor-owned analysis output, static
@@ -180,9 +178,38 @@ JSON Lines sink keep protocol decoding separate from persistence. The runnable
 operations in C++ and pure SystemVerilog. The existing `apb_component` pair is
 the disabled-recorder overhead guard. The `transaction_recording` authoring
 pair retains 200,000 equivalent records in C++ and pure SystemVerilog and is
-the enabled-recorder `1.10x` hard gate. Its semantic run passes; the July 20,
-2026 timing attempt was rejected by the host-load admission check, so a timing
-ratio remains pending a valid serial run.
+the enabled-recorder `1.10x` hard gate, certified at `1.0414x` in the
+August 8, 2026 admitted run.
+
+The recording design decisions are recorded here rather than in the user
+guide. The monitor owns its typed analysis output and the recorder subscribes
+to it like any other passive consumer; a `record_to(recorder)` configuration
+call on the monitor was rejected because it would create a second connection
+model beside analysis ports and make recording look more privileged than
+scoreboarding or coverage. A string-based dynamic field builder was rejected
+as the documented API because it is typo-prone and hard to refactor; the typed
+explicit stream write remains available as the implementation-level primitive.
+Observed transactions are the verification ground truth and stimulus intent is
+separate diagnostic context; the API keeps them as separately named streams
+and deliberately excludes recorder-side address, data, or timing-window
+matching, which would be ambiguous under multiple initiators, retries, or
+third-party traffic. The monitor API also changed before 1.0 so that callers
+no longer create and pass an `AnalysisPort<T>&` into `run(...)`.
+
+Deliberately deferred until concrete use cases arrive: driver-side intent
+recording (a proposed `record_intent_to(...)` API in which one intent record
+spans driver acceptance through the returned response and reuses the core
+logging layer's process provenance); an explicit typed correlator that
+publishes a parent stream-and-sequence reference from intent to observation;
+live begin/end event streaming and simulator waveform-database sink adapters;
+automatic monitor flush and aborted-record emission during coroutine
+cancellation (the envelope's `Aborted` and `Incomplete` dispositions reserve
+the shape); migrating the ready/valid monitor from its bare payload to an
+observation envelope or a transfer payload carrying stall counts; AXI
+burst-beat parent/child visualization; and a dynamic string-to-value
+transaction schema. The completed-record envelope, named streams, and
+per-stream sequence numbers reserve a path to these features without making
+them part of the current public contract.
 
 The implementation lives under the separate `cpptb_vc` include tree,
 namespace, and CMake target. It depends only on public core APIs and generated
@@ -318,10 +345,11 @@ mirrored values, every standard SystemRDL write effect, write-once policy,
 passive memory prediction, generated-model execution against a fake master,
 the APB-backed example, and a first-class IP-XACT register-and-memory example
 with a matching pure-SystemVerilog sequence are covered by regression. The
-exact `memory_model` C++/pure-SV semantic pair passes at 100,000 operations;
-the bus-free `memory_model_direct` pair also matches at 200,000 model
-operations, 300,002 checks, and zero simulated cycles. Formal timing remains
-pending an admitted low-load run under the `1.10x` hard guard.
+exact `memory_model` C++/pure-SV semantic pair passes at 100,000 operations
+and is certified at `1.0247x` under the `1.10x` hard guard in the August 8,
+2026 admitted run; the bus-free `memory_model_direct` pair also matches at
+200,000 model operations, 300,002 checks, and zero simulated cycles, with its
+formal timing still pending an admitted low-load run.
 
 The scalable AES ground-truth workload has a historical diagnostic measurement
 of `1.587x` pure SV for 3,600 cases. That run exceeded the current host-load
@@ -684,6 +712,11 @@ numbered milestones:
   streaming components;
 - `Barrier`, unless a concrete multi-process example needs semantics that
   cannot be expressed clearly with `Join`, `Event`, or `Semaphore`;
+- simulation state snapshot and restore, so a long run can branch or resume
+  from a saved point instead of replaying from time zero — the
+  [analysis](future-directions.md#simulation-snapshot-and-restore) records
+  the two viable shapes and the coroutine-frame constraint that rules out
+  "checkpoint everything, mid-await";
 - dynamic string-based hierarchy lookup; and
 - reference-harness enhancements including JUnit conversion, tag filtering,
   waveform-on-failure reruns, and reproduction-command presentation.
@@ -964,7 +997,7 @@ beside the gaps above so the trade is visible in one place. Ibex's icache
 testbench exists in both forms against the same DUT elaborated from the same 77
 sources: upstream's UVM environment in
 `experiments/open_core_ports/ports/ibex_icache_uvm`, where all ten tests pass,
-and a cpptb port of three of them in
+and a cpptb port of all ten in
 `experiments/open_core_ports/ports/ibex_icache_cpptb`. The port needs no
 factory, no configuration database, no phasing and no sequencer arbitration,
 and its scoreboard is a plain class the monitor calls synchronously, which is
@@ -974,11 +1007,15 @@ between them document six Verilator defects with reduced cases, five of them in
 constrained randomization, and the cpptb port draws every field from
 `test.random()` with no solver involved, so none of the five has anywhere to
 occur. cpptb's own optional constraint layer would put a solver back on the
-path, but nothing obliges a testbench to use one. Wall time
-is about 230 times lower, with the caveats recorded in the port's `RESULTS.md`:
-the baseline runs about 18% more cycles for an unrelated reason, and it
+path, but nothing obliges a testbench to use one. Wall time per test
+is one to two hundred times lower, with the caveats recorded in the port's
+`RESULTS.md`: the baseline runs about 6% more cycles, logs at UVM_HIGH, and
 elaborates the UVM environment and two protocol-checker modules that the port
-does not, so it compares two harnesses rather than two simulators.
+does not, so it compares two harnesses rather than two simulators. The same
+comparison now also exists at core level, where Ibex's full directed testlist
+reaches the identical 912-of-944 outcome on both harnesses;
+[Ports of real testbenches](open-core-ports.md) documents the whole program,
+including its Spike co-simulation.
 
 The first component library also does not require a heavyweight sequencer,
 mandatory agent hierarchy, or implicit component startup. Direct coroutine

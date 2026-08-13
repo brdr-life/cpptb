@@ -13,43 +13,19 @@ waveform it can be diffed, filtered, or fed to another tool.
 
 :::{note}
 Recording lives in the optional `cpptb_vc` package, so no protocol knowledge or
-recording policy reaches the core scheduler. The shipped first slice covers
-typed completed observations, APB monitoring, in-memory retention, and JSON
-Lines output; explicitly deferred behavior is listed at the end of this page.
+recording policy reaches the core scheduler. The shipped slice covers typed
+completed observations, APB monitoring, in-memory retention, and JSON Lines
+output. The design-decision record and the deliberately deferred extensions are
+tracked on the [roadmap](../roadmap.md#3-reusable-verification-components).
 :::
 
-The central design decision is **where that record comes from**. The default is
-a passive protocol monitor that observes DUT signals and reconstructs
-what actually completed. A recorder subscribes to the monitor's typed output.
-The test does not manually repeat transaction or field names.
-
-## Intent and observation are different
-
-| Record | Produced by | Answers |
-|---|---|---|
-| Stimulus intent | Sequence or active driver | What did the test ask the driver to do? |
-| Observed transaction | Passive signal monitor | What operation actually appeared and completed on the interface? |
-
-Observed transactions are the verification ground truth. Intent recording is
-optional diagnostic context. Keeping both can explain whether a failure came
-from stimulus generation, a driver, the DUT, or the response path.
-
-For example, a driver may accept an APB write at `100 ns`, wait for ownership of
-the bus, start the setup phase at `120 ns`, and complete at `150 ns`. Recording
-only the request would hide that distinction. Recording only the pins would not
-show which test process requested the transfer. The architecture keeps these
-as separate streams without claiming it can infer their relationship:
-
-```text
-100 ns - 150 ns  apb0.intent    seq=42  write address=0x24 data=0x08
-120 ns - 150 ns  apb0.observed  seq=57  write address=0x24 data=0x08
-```
-
-A passive monitor cannot reliably attribute observed traffic to one driver
-request when there are multiple initiators, retries, or third-party traffic.
-Protocol IDs can assist correlation where they exist. An explicit future
-correlator may add a parent reference, but automatic intent-to-observation
-matching is not part of the current API.
+The record comes from a passive protocol monitor that observes DUT signals and
+reconstructs what actually completed. A recorder subscribes to the monitor's
+typed output; the test does not manually repeat transaction or field names.
+Observed transactions are the verification ground truth. Driver-side intent
+recording — what the test asked a driver to do, kept as a separately named
+stream — is a deferred extension, and the current API records observed traffic
+only and does not correlate streams.
 
 ## Architecture at a glance
 
@@ -60,8 +36,17 @@ output sinks.](../_assets/transaction-recording-architecture.svg)
 The solid path is the default: the passive monitor reconstructs completed
 transactions from DUT signals and publishes one typed observation. Scoreboards,
 coverage, models, and recording consume that same publication. The dashed path
-is optional driver intent; it reaches the recorder through a separately named
-stream and is not automatically correlated with the observed traffic.
+is optional driver intent; it would reach the recorder through a separately
+named stream and is not automatically correlated with the observed traffic.
+
+| Layer | Responsibility |
+|---|---|
+| Protocol monitor | Observe signals, identify boundaries, and construct typed transactions |
+| `AnalysisPort<TransactionObservation<T>>` | Fan one observation out to checking, coverage, models, and recording |
+| Transaction metadata | Begin/end sample time, completion disposition, named stream, per-stream sequence, and available provenance |
+| Typed recording stream | Establish type erasure and explicit component identity once at connection time |
+| Recorder | Apply global or per-stream enable policy and route records to sinks |
+| Sink | Serialize JSON, retain an in-memory trace, or integrate with a simulator database |
 
 ## User experience
 
@@ -75,7 +60,7 @@ const auto bus = ApbBus{
     dut.apb_write,     dut.apb_address,   dut.apb_write_data,
     dut.apb_read_data, dut.apb_ready,     dut.apb_error};
 
-ApbMonitor monitor{test, bus, 1_ps};
+ApbMonitor monitor{test, bus};
 using Transaction = typename decltype(monitor)::transaction_type;
 
 TransactionRecorder recorder;
@@ -107,29 +92,165 @@ The important properties are:
 - the explicit stream string names a component instance for debug output; it
   does not define transaction fields or protocol behavior.
 
-The recorder owns each stream label, rejects every duplicate label even when
-the value type matches, and copies the label once at stream creation. Code that
-needs the endpoint more than once stores the returned reference. A misspelling
-changes a debug label; it cannot change the decoded fields or protocol
-behavior.
+The runnable [APB transaction trace example](../examples/apb-trace.md) records
+and checks the same 256 operations in C++ and pure SystemVerilog with this
+setup.
 
-The recorder can write to one or more optional sinks:
+## The observation envelope
+
+The user should not define APB fields repeatedly. `cpptb_vc` already has the
+protocol-neutral shape needed for APB observations:
 
 ```cpp
-JsonLinesTransactionSink json{"transactions.jsonl"};
-auto json_output = recorder.connect(json);
-
-// A future simulator adapter could use the same typed records.
-// auto waveform_output = recorder.connect(simulator_transaction_database);
+template <typename Address, typename Data, typename ByteEnable>
+struct MemoryTransaction {
+    MemoryOperation operation;
+    Address address;
+    Data data;
+    ByteEnable byte_enable;
+    MemoryStatus status;
+    uint32_t wait_cycles;
+};
 ```
 
-Connections follow the existing RAII analysis-port convention. A sink must
-outlive its connection, and dropping the returned connection disconnects it.
-`finalize()` flushes output and reports errors on a normal test exit; the sink
-destructor performs only best-effort cleanup. JSON Lines keeps every completed
-line independently readable if simulation terminates before finalization.
+The monitor publishes an envelope whose type is fixed by the API:
 
-## Recording API
+```cpp
+enum class TransactionDisposition {
+    Completed,
+    Aborted,
+    Incomplete,
+};
+
+template <typename T>
+struct TransactionObservation {
+    coro::SimTime begin_time{};
+    coro::SimTime end_time{};
+    TransactionDisposition disposition =
+        TransactionDisposition::Completed;
+    T value{};
+};
+```
+
+`ApbMonitor::observed()` therefore returns an
+`AnalysisPort<TransactionObservation<transaction_type>>&`. Scoreboard,
+reference-model, and coverage inputs gain constrained `write(observation)`
+overloads that forward `observation.value` to their existing `write(value)`
+implementation, so one monitor port serves recording and checking alike.
+Those compatibility overloads forward only `Completed` observations. An
+`Aborted` or `Incomplete` observation remains available to recorders and
+diagnostic subscribers but is not silently compared as a completed value.
+
+### Timestamps
+
+At completion, `ApbMonitor` publishes one observation equivalent to:
+
+```cpp
+this->publish(setup_time_, transaction_type{
+    .operation = write ? MemoryOperation::Write
+                       : MemoryOperation::Read,
+    .address = bus_.address.get(),
+    .data = write ? bus_.write_data.get() : bus_.read_data.get(),
+    .byte_enable = write ? strobe() : all_bytes(),
+    .status = error ? MemoryStatus::SlaveError : MemoryStatus::Okay,
+    .wait_cycles = wait_cycles_,
+});
+```
+
+Times represent the instants at which the monitor sampled the protocol.
+Under the [standard write model](../scheduling.md) that is the awaited clock
+edge itself — the pre-evaluation resume, where the monitor reads the values the
+design sampled at that edge. In a legacy immediate-write build the times fall
+after the monitor's explicit sampling delay instead.
+
+### Completed records and ordering
+
+Publishing a completed record with explicit begin and end times avoids keeping
+an open recorder handle. It also has an important limitation: a transfer that
+never completes produces no completed observation, so a slave that never
+asserts `PREADY`, a reset in the middle of a transfer, or monitor cancellation
+can hide the operation most relevant to a hang. The current APB monitor
+publishes completed records only and emits only `Completed`. If `PSEL` drops
+before completion, it discards the unfinished setup and resynchronizes at the
+next setup phase; it never combines fields from two transfers. `Aborted` and
+`Incomplete` are valid envelope dispositions for custom publishers and sinks;
+automatic monitor flush and cancellation emission are deferred.
+
+Monitors publish records in completion order. Overlapping and out-of-order
+transactions remain self-contained, so their begin times need not be
+monotonic. The recorder preserves publication order and assigns a monotonically
+increasing sequence number within each named stream. Sinks receive that
+sequence unchanged. A viewer may sort by begin time, but consumers must not
+assume the sink has done so.
+
+## The monitor base
+
+Generated DUT bindings can discover hierarchy, signal names, dimensions, and
+types, but they cannot infer protocol semantics: which fields form one
+operation, when a transfer completes, or how phases, wait states, and responses
+relate. The recorder therefore never subscribes to arbitrary signals. A
+protocol monitor decodes signals into typed transactions, and the recorder
+subscribes to that typed output. Known VCs make this automatic; a custom
+protocol requires a custom monitor or decoder.
+
+`TransactionMonitor<T>` is the reusable plumbing beneath every such monitor,
+not a second protocol layer. It owns `observed()`, anchors the sampling loop,
+and provides four protected operations:
+
+| Operation | Meaning |
+|---|---|
+| `sample(clock)` | Wait for the next rising edge — the pre-evaluation observation point under the standard write model. In a legacy immediate-write build it additionally awaits the configured sampling delay |
+| `sample_until(clock, predicate)` | Repeat `sample(clock)` until the typed predicate is true |
+| `now()` | Return the current simulation time |
+| `publish(started, value)` | Add the completion time and publish one typed observation |
+
+The protocol rules stay visible in the derived monitor: the APB setup, access,
+wait-state, response, and error handling remain explicit in `ApbMonitor` (shown
+in full in the [comparison below](#the-same-apb-observation-in-other-frameworks)).
+The base only removes timestamps, output-port ownership, and the sampling loop
+that every passive synchronous monitor otherwise repeats. It uses static
+templates rather than virtual dispatch.
+
+### Custom protocol monitors
+
+Custom components use the same typed API, not a string field builder:
+
+```cpp
+struct CommandTransaction {
+    uint8_t opcode;
+    Bits<48> payload;
+    bool accepted;
+};
+
+class CommandMonitor : public TransactionMonitor<CommandTransaction> {
+  public:
+    CommandMonitor(TestContext test, CommandBus bus)
+        : TransactionMonitor{std::move(test)}, bus_{bus} {}
+
+    Task<void> run() {
+    while (true) {
+        co_await this->sample(bus_.clock);
+        if (bus_.valid.get() == 0 || bus_.ready.get() == 0) continue;
+
+        const auto sampled = this->now();
+        this->publish(sampled, CommandTransaction{
+            .opcode = bus_.opcode.get(),
+            .payload = bus_.payload.get(),
+            .accepted = true,
+        });
+    }
+    }
+
+  private:
+    CommandBus bus_;
+};
+```
+
+Serialization for `CommandTransaction` is taught once by a static descriptor
+authored beside the component, described under
+[the JSON Lines schema](#the-json-lines-schema) below.
+
+## Recorder, streams, and sinks
 
 | API | Purpose |
 |---|---|
@@ -147,6 +268,88 @@ remain valid for the recorder's lifetime, and connections, streams, and sinks
 must all remain alive while observations are published. `stream_count()` and
 `sink_count()` are available for setup diagnostics; they are not simulation
 work counters.
+
+The recorder owns each stream label, rejects every duplicate label even when
+the value type matches, and copies the label once at stream creation. Code that
+needs the endpoint more than once stores the returned reference. A misspelling
+changes a debug label; it cannot change the decoded fields or protocol
+behavior. Because the publishing process identifies the passive monitor rather
+than the stimulus process that caused the traffic, a named stream such as
+`"apb0.observed"` is the primary component identity in recorded output.
+
+The recorder can write to one or more optional sinks:
+
+```cpp
+JsonLinesTransactionSink json{"transactions.jsonl"};
+auto json_output = recorder.connect(json);
+
+// A future simulator adapter could use the same typed records.
+// auto waveform_output = recorder.connect(simulator_transaction_database);
+```
+
+Connections follow the existing RAII analysis-port convention. A sink must
+outlive its connection, and dropping the returned connection disconnects it.
+`finalize()` flushes output and reports errors on a normal test exit; the sink
+destructor performs only best-effort cleanup. JSON Lines keeps every completed
+line independently readable if simulation terminates before finalization.
+
+Filtering that depends on `T` belongs in a typed analysis subscriber adapter,
+not behind the recorder's erased interface; the recorder itself provides only
+cheap global and per-stream enables. A filtered adapter must be stored in a
+named variable for at least as long as its analysis connection; connecting a
+temporary would violate the existing raw-subscriber lifetime contract.
+
+## The JSON Lines schema
+
+The recorder associates each C++ value type with a static descriptor. Export
+names such as `operation`, `address`, and `status` exist once in that
+descriptor; they are not passed through test code as free-form strings.
+`cpptb_vc` supplies a partial descriptor specialization for templated
+`MemoryTransaction<Address, Data, ByteEnable>` values, so APB recording needs
+no descriptor authoring at all.
+
+C++20 cannot reflect aggregate member names, so a custom type such as the
+`CommandTransaction` above needs one static descriptor beside its definition.
+Member pointers keep fields typed and refactorable; strings are export labels
+only:
+
+```cpp
+CPPTB_VC_DESCRIBE_TRANSACTION(
+    CommandTransaction, "command",
+    transaction_field<&CommandTransaction::opcode>("opcode"),
+    transaction_field<&CommandTransaction::payload>("payload"),
+    transaction_field<&CommandTransaction::accepted>("accepted"));
+```
+
+The macro defines an argument-dependent descriptor function. The equivalent
+explicit form is available when a component does not want to use a macro:
+
+```cpp
+constexpr auto cpptb_transaction_descriptor(
+    std::type_identity<CommandTransaction>) {
+    return describe_transaction<CommandTransaction>(
+        "command",
+        transaction_field<&CommandTransaction::opcode>("opcode"),
+        transaction_field<&CommandTransaction::payload>("payload"),
+        transaction_field<&CommandTransaction::accepted>("accepted"));
+}
+```
+
+`TransactionRecorder::stream<T>(name)` is the type-erasure boundary. It owns
+the stream name and installs one per-type JSON writer when the stream is
+created. Each `write()` constructs a non-owning record view on the stack and
+invokes connected sinks synchronously. The view and its referenced transaction
+remain valid only for that call. This avoids converting every transaction into
+a heap-allocated string-to-value map before a sink asks for serialization.
+
+Built-in value encoders cover integers, finite floating-point values, symbolic
+enums, booleans, strings, `Bits`, `LogicBits`, arrays, and nested described
+types. Floating-point values use round-trip precision and reject NaN or
+infinity, which JSON cannot represent. Arrays and nested descriptors remain
+structured JSON; packed and four-state values use the same stable textual form
+as diagnostics. Descriptor fields must be direct data members. A field without
+a supported encoder fails at the enabled sink with an actionable exception
+rather than silently losing data.
 
 ## The same APB observation in other frameworks
 
@@ -224,23 +427,6 @@ class ApbMonitor : public TransactionMonitor<ApbTransaction<Bus>> {
     Bus bus_;
 };
 ```
-
-`TransactionMonitor<T>` is reusable component plumbing, not a second
-protocol layer. It owns `observed()`, applies the configured sampling delay,
-and provides four protected operations:
-
-| Operation | Meaning |
-|---|---|
-| `sample(clock)` | Wait for the next rising edge and then the configured sampling delay |
-| `sample_until(clock, predicate)` | Repeat `sample(clock)` until the typed predicate is true |
-| `now()` | Return the current simulation time |
-| `publish(started, value)` | Add the completion time and publish one typed observation |
-
-The APB setup, access, wait-state, response, and error rules remain visible in
-the monitor. The base only removes timestamps, output-port ownership, and the
-same edge-plus-delay loop that every passive synchronous monitor otherwise
-repeats. It uses static templates rather than virtual dispatch. Disabled-
-recorder overhead is qualified separately from enabled recording.
 
 <div class="cpptb-code-tab-label">Pure SystemVerilog</div>
 
@@ -377,383 +563,43 @@ recording for `begin_tr()` and `end_tr()` to produce database output. Pure SV
 and Cocotb need an authored sink or simulator-specific integration if a
 persistent transaction timeline is desired.
 
-## What the VC defines
-
-The user should not define APB fields repeatedly. `cpptb_vc` already has the
-protocol-neutral shape needed for APB observations:
-
-```cpp
-template <typename Address, typename Data, typename ByteEnable>
-struct MemoryTransaction {
-    MemoryOperation operation;
-    Address address;
-    Data data;
-    ByteEnable byte_enable;
-    MemoryStatus status;
-    uint32_t wait_cycles;
-};
-```
-
-The monitor publishes an envelope whose type is fixed by the API:
-
-```cpp
-enum class TransactionDisposition {
-    Completed,
-    Aborted,
-    Incomplete,
-};
-
-template <typename T>
-struct TransactionObservation {
-    coro::SimTime begin_time{};
-    coro::SimTime end_time{};
-    TransactionDisposition disposition =
-        TransactionDisposition::Completed;
-    T value{};
-};
-```
-
-`ApbMonitor::observed()` therefore returns an
-`AnalysisPort<TransactionObservation<transaction_type>>&`. Scoreboard,
-reference-model, and coverage inputs gain constrained `write(observation)`
-overloads that forward `observation.value` to their existing `write(value)`
-implementation. This resolves the envelope-versus-payload boundary without a
-second monitor port or a temporary projection adapter whose lifetime could end
-while an analysis connection still refers to it.
-
-Those compatibility overloads forward only `Completed` observations. An
-`Aborted` or `Incomplete` observation remains available to recorders and
-diagnostic subscribers but is not silently compared as a completed value.
-
-The recorder associates each C++ value type with a static descriptor. Export
-names such as `operation`, `address`, and `status` exist once in that
-descriptor. They are not passed through test code as free-form strings.
-`cpptb_vc` supplies a partial descriptor specialization for templated
-`MemoryTransaction<Address, Data, ByteEnable>` values.
-
-At completion, `ApbMonitor` publishes one observation equivalent to:
-
-```cpp
-this->publish(setup_time_, transaction_type{
-    .operation = write ? MemoryOperation::Write
-                       : MemoryOperation::Read,
-    .address = bus_.address.get(),
-    .data = write ? bus_.write_data.get() : bus_.read_data.get(),
-    .byte_enable = write ? strobe() : all_bytes(),
-    .status = error ? MemoryStatus::SlaveError : MemoryStatus::Okay,
-    .wait_cycles = wait_cycles_,
-});
-```
-
-Times represent the instants at which the monitor sampled the protocol, after
-any explicit monitor sampling delay. They do not claim to be the nominal clock
-edge before that delay.
-
-Publishing a completed record with explicit begin and end times avoids keeping
-an open recorder handle. It also has an important limitation: a transfer that
-never completes produces no completed observation. A slave that never asserts
-`PREADY`, a reset in the middle of a transfer, or monitor cancellation can
-therefore hide the operation most relevant to a hang. The current APB monitor
-publishes completed records only. If `PSEL` drops before completion, it
-discards the unfinished setup and resynchronizes at the next setup phase; it
-never combines fields from two transfers. `Aborted` and `Incomplete` are valid
-envelope dispositions for custom publishers and sinks, but automatic monitor
-flush or cancellation emission is deferred. A begin/end event-stream mode
-remains a later extension for live waveform-database integration.
-
-`ApbMonitor` does not add a `flush()` API and emits only `Completed`. The
-additional dispositions reserve the envelope shape for a later explicit flush
-or cancellation contract.
-
-Monitors publish records in completion order. Overlapping and out-of-order
-transactions remain self-contained, so their begin times need not be
-monotonic. The recorder preserves publication order and assigns a monotonically
-increasing sequence number within each named stream. Sinks receive that
-sequence unchanged. A viewer may sort by begin time, but consumers must not
-assume the sink has done so.
-
-## Typed descriptors and erasure
-
-C++20 cannot reflect aggregate member names, so a custom type needs one static
-descriptor beside its definition. Member pointers keep fields typed and
-refactorable; strings are export labels only:
-
-```cpp
-struct CommandTransaction {
-    uint8_t opcode;
-    Bits<48> payload;
-    bool accepted;
-};
-
-CPPTB_VC_DESCRIBE_TRANSACTION(
-    CommandTransaction, "command",
-    transaction_field<&CommandTransaction::opcode>("opcode"),
-    transaction_field<&CommandTransaction::payload>("payload"),
-    transaction_field<&CommandTransaction::accepted>("accepted"));
-```
-
-The macro defines an argument-dependent descriptor function. The equivalent
-explicit form is available when a component does not want to use a macro:
-
-```cpp
-constexpr auto cpptb_transaction_descriptor(
-    std::type_identity<CommandTransaction>) {
-    return describe_transaction<CommandTransaction>(
-        "command",
-        transaction_field<&CommandTransaction::opcode>("opcode"),
-        transaction_field<&CommandTransaction::payload>("payload"),
-        transaction_field<&CommandTransaction::accepted>("accepted"));
-}
-```
-
-`TransactionRecorder::stream<T>(name)` is the type-erasure boundary. It owns
-the stream name and installs one per-type JSON writer when the stream is
-created. Each `write()` constructs a non-owning record view on the stack and
-invokes connected sinks synchronously. The view and its referenced transaction
-remain valid only for that call. This avoids converting every transaction into
-a heap-allocated string-to-value map before a sink asks for serialization.
-
-Built-in value encoders cover integers, finite floating-point values, symbolic
-enums, booleans, strings, `Bits`, `LogicBits`, arrays, and nested described
-types. Floating-point values use round-trip precision and reject NaN or
-infinity, which JSON cannot represent. Arrays and nested descriptors remain
-structured JSON; packed and four-state values use the same stable textual form
-as diagnostics. Descriptor fields must be direct data members. A field without
-a supported encoder fails at the enabled sink with an actionable exception
-rather than silently losing data.
-
-## Why signal discovery alone is insufficient
-
-Generated DUT bindings can discover hierarchy, signal names, dimensions, and
-types. They cannot infer protocol semantics reliably:
-
-- APB has setup and access phases;
-- ready/valid transfers complete only when both signals are asserted;
-- AXI requests and responses are split across independent, pipelined channels;
-- burst beats, IDs, retries, and out-of-order completion must be correlated;
-- a custom interface does not declare which fields form one operation.
-
-Therefore the recorder should not subscribe directly to arbitrary signals.
-The **monitor** subscribes to signals and performs protocol decoding; the
-**recorder** subscribes to the monitor's typed transaction output. Known VCs
-make this automatic. A custom protocol requires a custom monitor or decoder.
-
-## Optional intent recording
-
-Driver-side recording can be enabled independently when the distinction
-between requested and observed traffic is useful:
-
-```cpp
-ApbMaster master{bus};
-master.record_intent_to(
-    recorder.stream<ApbIntent>("apb0.intent"));
-
-const auto response = co_await master.write(0x24u, 0x08u);
-```
-
-This proposed call would record the request accepted by the master and its
-eventual response. The passive APB monitor would still produce the independent
-pin-level observation. The user owns the recorder; `TestContext` does not gain
-a `cpptb_vc` accessor or dependency. A test that only needs observed traffic
-would not enable intent recording.
-
-When intent recording is implemented, one `ApbIntent` spans driver acceptance
-through the returned response and contains the request fields, final status,
-and wait count. A retried request is a separate intent record. The type and API
-remain illustrative until observed recording is complete.
-
-The current API does not automatically correlate these streams. A later
-typed correlator may publish an explicit parent reference consisting of a
-stream identity and sequence number. Address, data, and timing-window matching
-inside the recorder would be ambiguous and is intentionally excluded.
-
-## Custom protocol monitors
-
-Custom components should use a typed API, not a string field builder:
-
-```cpp
-class CommandMonitor : public TransactionMonitor<CommandTransaction> {
-  public:
-    CommandMonitor(TestContext test, CommandBus bus)
-        : TransactionMonitor{std::move(test)}, bus_{bus} {}
-
-    Task<void> run() {
-    while (true) {
-        co_await this->sample(bus_.clock);
-        if (bus_.valid.get() == 0 || bus_.ready.get() == 0) continue;
-
-        const auto sampled = this->now();
-        this->publish(sampled, CommandTransaction{
-            .opcode = bus_.opcode.get(),
-            .payload = bus_.payload.get(),
-            .accepted = true,
-        });
-    }
-    }
-
-  private:
-    CommandBus bus_;
-};
-```
-
-The descriptor shown above teaches sinks how to serialize
-`CommandTransaction`. It is authored once beside the component. A deliberately
-named `record_dynamic(...)` escape hatch could be considered later, but it
-should not define the normal API.
-
-The existing ready/valid monitor still publishes its bare `value_type` payload.
-Migrating it to a zero-duration observation, or adding a
-`ReadyValidTransfer<Value>` payload with preceding stall cycles, is a separate
-API change and remains deferred.
-
-## Architecture
-
-| Layer | Responsibility |
-|---|---|
-| Protocol monitor | Observe signals, identify boundaries, and construct typed transactions |
-| `AnalysisPort<TransactionObservation<T>>` | Fan one observation out to checking, coverage, models, and recording |
-| Transaction metadata | Begin/end sample time, completion disposition, named stream, per-stream sequence, and available provenance |
-| Typed recording stream | Establish type erasure and explicit component identity once at connection time |
-| Recorder | Apply global or per-stream enable policy and route records to sinks |
-| Sink | Serialize JSON, retain an in-memory trace, or integrate with a simulator database |
-
-The recorder and sinks should remain in `cpptb_vc`. They may consume public
-core facilities such as simulation time and process provenance, but the core
-scheduler must not depend on verification-component transaction types.
-
-The publishing process identifies the passive monitor, not necessarily the
-stimulus process that caused the traffic. A named stream such as
-`"apb0.observed"` is therefore the primary component identity. Intent records
-may additionally reuse the core logging layer's process provenance.
-
-Filtering that depends on `T` belongs in a typed analysis subscriber adapter,
-not behind the recorder's erased interface. The recorder only needs cheap
-global and per-stream enables. A filtered adapter must be stored in a named
-variable for at least as long as its analysis connection; connecting a
-temporary would violate the existing raw-subscriber lifetime contract.
-
-The disabled-path contract is measurable rather than literally zero work:
-recording disabled means no formatting, heap allocation, file I/O, or
-simulator-boundary traffic. A monitor with any passive consumer still builds a
-small observation envelope, captures sample time, and publishes it. Those costs
-remain part of the guarded monitor hot path.
-
-## API choices
-
-### A. Monitor-owned output, recorder as subscriber
-
-```cpp
-auto recording = monitor.observed().connect(
-    recorder.stream<Transaction>("apb0.observed"));
-```
-
-This is the shipped default. It reuses `AnalysisPort<T>`, lets one decoded
-transaction serve every passive consumer, and keeps recording optional.
-
-### B. Recorder configured directly on the monitor
-
-```cpp
-monitor.record_to(recorder);
-```
-
-This is shorter, but creates a second connection model beside analysis ports
-and can make recording look more privileged than scoreboarding or coverage.
-
-### C. Typed explicit recording stream
-
-```cpp
-auto& output = recorder.stream<CommandTransaction>("command0.observed");
-output.write(TransactionObservation<CommandTransaction>{
-    .begin_time = started,
-    .end_time = test.now(),
-    .value = CommandTransaction{opcode, payload, accepted},
-});
-```
-
-This is useful as the implementation-level primitive. It should rarely appear
-in a test sequence.
-
-### D. String-based dynamic recording
-
-```cpp
-recorder.record_dynamic("vendor.command")
-    .field("opcode", opcode)
-    .field("payload", payload);
-```
-
-This is flexible but typo-prone, difficult to refactor, and harder to optimize.
-If retained, it should be an explicitly dynamic escape hatch rather than the
-documented default.
-
-## Implemented slice
-
-The shipped first slice includes:
-
-1. `TransactionObservation<T>` with begin/end time and completion disposition.
-2. `TransactionMonitor<T>` with owned `observed()`, sampled-edge helpers, and
-   typed publication.
-3. Static typed descriptors, built-in field encoders, and a non-owning erased
-   record view.
-4. `TransactionRecorder`, unique named streams, RAII sink connections,
-   `InMemoryTransactionSink`, and `JsonLinesTransactionSink`.
-5. An APB monitor that publishes envelopes through finite `run(count)` and
-   `run_forever()` entry points.
-6. Direct completed-observation inputs for scoreboards, memory predictors,
-   register predictors, and register access coverage.
-
-The monitor API intentionally changed before 1.0: callers no longer create and
-pass an `AnalysisPort<T>&` into `run(...)`. The monitor owns its output, so one
-decoded observation can feed checking, coverage, models, and recording without
-duplicated ports or protocol work.
-
-## Performance qualification
-
-Qualification uses three distinct comparisons:
-
-1. Re-run the existing APB and ready/valid component pairs after envelope
-   publication is added but with no recorder connected. This measures the tax
-   paid by users who do not record transactions.
-2. The runnable `apb_trace` C++/pure-SV pair performs 256 identical transfers,
-   including 128 inserted wait cycles, retains equivalent record metadata and
-   JSON payloads, and checks the same decoded transactions. Both report 649
-   checks and 898 simulated cycles.
+## Performance
+
+Qualification uses four distinct comparisons:
+
+1. The existing `apb_component` C++/pure-SV pair is the disabled-recorder
+   guard: no recorder is constructed or connected, so it measures the
+   observation-envelope and monitor helper overhead paid by users who do not
+   record transactions. The disabled path performs no record formatting, heap
+   allocation, file I/O, or additional simulator crossings.
+2. The runnable [`apb_trace`](../examples/apb-trace.md) C++/pure-SV pair
+   performs 256 identical transfers, including 128 inserted wait cycles,
+   retains equivalent record metadata and JSON payloads, and checks the same
+   decoded transactions. Both report 649 checks and 898 simulated cycles.
 3. The `transaction_recording` authoring-core pair scales that workload to
    100,000 write/read pairs and retains 200,000 equivalent records in each
-   implementation. It is the enabled-recorder `1.10x` hard gate.
-4. Measure JSON Lines output separately. It becomes a hard comparison only if
-   the SV peer performs equivalent formatting and file writes with the same
+   implementation. It is the enabled-recorder `1.10x` hard gate, certified at
+   `1.0414x` in the August 8, 2026 admitted run, and it counts every analysis
+   operation with exact work counters rather than assigning totals afterward.
+4. JSON Lines output is measured separately. It becomes a hard comparison only
+   if the SV peer performs equivalent formatting and file writes with the same
    schema; filesystem variation must not hide framework overhead.
 
-The existing `apb_component` pair is the disabled-recorder guard: no recorder
-is constructed or connected, so it measures observation-envelope and monitor
-helper overhead only. The usual load gate, paired and independent samples,
-exact work counters, and `1.10x` policy apply. The disabled path performs no
-record formatting, file I/O, or additional simulator crossings.
+Both guarded pairs run under the repository's usual load gate, paired and
+independent samples, and `1.10x` policy.
 
-The 200,000-record semantic run passes with exact work counters. The July 20,
-2026 timing attempt was rejected because the host exceeded the normalized-load
-limit, so no noisy ratio is published from that attempt; the hard gate remains
-active for the next admitted serial run.
+## Design notes
 
-The enabled pair measures every analysis operation rather than assigning totals
-afterward: for `N` write/read pairs it observes `4N` publications and `6N`
-subscriber deliveries, including the recorder-to-sink hop.
-
-## Deferred semantics
-
-The current implementation deliberately defers:
-
-- automatic intent-to-observation correlation;
-- live begin/end event streaming and simulator waveform-database adapters;
-- explicit monitor flush and automatic aborted-record emission during arbitrary
-  coroutine cancellation;
-- a richer ready/valid transfer payload containing stall counts;
-- AXI burst-beat parent/child visualization; and
-- a dynamic string-to-value transaction schema.
-
-The completed-record envelope, named streams, and per-stream sequence numbers
-reserve a path to those features without making them part of the current
-public contract.
+The decision record behind this API — why the monitor owns its analysis output
+and the recorder subscribes like any other consumer, why string-based dynamic
+recording was rejected as the documented default, and why intent-to-observation
+correlation is deliberately excluded — is kept with the deliberately deferred
+extensions (intent recording, live event streaming, automatic aborted-record
+emission, and others) on the
+[roadmap](../roadmap.md#3-reusable-verification-components). One behavioral
+consequence worth knowing today: the existing ready/valid monitor still
+publishes its bare `value_type` payload rather than an observation envelope;
+its migration is among the deferred items.
 
 ## References
 

@@ -72,7 +72,6 @@ Task<void> packet_monitor(Dut dut, TestContext& test,
                           Covergroup<Packet>& coverage) {
     while (true) {
         co_await RisingEdge{dut.clk};
-        co_await ReadOnly{};
         if (!dut.valid.get() || !dut.ready.get()) continue;
 
         Packet packet{

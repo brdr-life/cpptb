@@ -89,3 +89,9 @@ cpptb is experimental and under active development. The
 [roadmap](roadmap.md) tracks every milestone with its current status, scope,
 and design constraints; [future directions](future-directions.md) collects
 unscheduled ideas.
+
+The framework is validated against real, third-party verification
+environments, not only its own examples: Ibex's core-level testlist runs on
+cpptb with the identical 912-of-944 outcome as the upstream UVM environment
+and 871,825 instructions co-simulated against Spike. See
+[Ports of real testbenches](open-core-ports.md).

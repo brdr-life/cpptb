@@ -87,34 +87,35 @@ Do not call `start_clock()` for an output clock. A divided, recovered, or gated
 DUT output is observed with the same `RisingEdge`, `FallingEdge`, and `Edge`
 primitives as any other one-bit signal.
 
-An edge wait resumes in the simulator callback associated with that edge. Use
-an explicit delay such as `Delay{1_ps}` when the testbench intends to observe
-logic after a later simulator time slot. Signal writes and backdoor operations
-never add that delay automatically.
+An edge wait resumes in the simulator callback associated with that edge. To
+observe logic after the design has evaluated, follow the edge with
+`co_await ReadOnly{}` — the settle idiom every clocked example uses. An
+explicit `Delay{1_ps}` remains the right tool only in clockless benches that
+step physical time directly. Signal writes and backdoor operations never
+settle anything automatically.
 
 ## Simulator phases
 
 Use phase waits when a test needs a specific point within the current or next
 simulator timestep, rather than a particular signal transition.
 
-`ReadWrite{}` is the drive anchor: the coroutine may read and drive, and any
-writes it makes are evaluated before a later `ReadOnly` waiter resumes.
-`ReadOnly{}` is the sample anchor: it is for observation and checking, and
-`set()`, `deposit()`, `force()`, and `release()` all report an error in that
-phase. `NextTimeStep{}` steps out of the current timestep entirely, resuming
-before the next one's HDL evaluation — which is how a test leaves `ReadOnly`
-in order to drive again.
+`ReadWrite{}` is the drive anchor: the coroutine may read and drive there. A
+coroutine resuming at `ReadWrite{}` finds its own queued writes freshly
+flushed but not yet re-evaluated, so reads at that point still see the
+pre-flush design state; by a later `ReadOnly{}` in the same timestep the
+flushed writes are evaluated and settled. `ReadOnly{}` is the sample anchor:
+it is for observation and checking, and `set()`, `deposit()`, `force()`, and
+`release()` all report an error in that phase. `NextTimeStep{}` steps out of
+the current timestep entirely, resuming before the next one's HDL
+evaluation — which is how a test leaves `ReadOnly` in order to drive again.
 
 ```cpp
-dut.request.set(request);
-co_await ReadWrite{};
+dut.request.set(request);   // queued; flushes at this timestep's ReadWrite
+co_await ReadOnly{};        // flushed and evaluated: safe to check
 test.expect_eq("combinational request", dut.request_seen.get(), request);
 
+co_await NextTimeStep{};    // leave ReadOnly before driving again
 dut.request.set(next_request);
-co_await ReadOnly{};
-test.expect_eq("stable response", dut.response.get(), expected_response);
-
-co_await NextTimeStep{};
 ```
 
 These waits describe simulator ordering, not arbitrary delays. Use `Delay` for
@@ -164,23 +165,19 @@ backend changes how fast the simulation runs and nothing else; see
 [Waveforms](waveforms.md#backend-identity) for what the dump comparison
 covers.
 
-!!! warning "`timing_backend` is required configuration"
-
-    Every cpptb project sets it. Without it the build links Verilator's own
-    `--binary` main, which owns clocks and timers but dispatches no phases, so
-    `ReadWrite`, `ReadOnly` and `NextTimeStep` fail at run time with a message
-    naming the key. There is no supported way to author a testbench against
-    that state; set the key.
-
-    Hand-assembled alternatives are rejected rather than left to answer
-    wrongly. `verilator_args = ["--vpi"]` used to build a bridge that placed
-    writes on the right edge while failing two of the five contract checks
-    silently -- `ReadOnly` did not observe a write settled in `ReadWrite` --
-    and the build tool now refuses it, naming the key. The timing defines
-    (`CPPTB_SV_DPI_TIMING` and friends) are likewise owned by the key: setting
-    them in `design.defines` or `build.cxx_flags` is an error, and the
-    remaining SV-DPI pump and calendar builds are reachable only through the
-    conformance runner, as experiments.
+:::{note}
+**There is no build without a timing backend.** `timing_backend` defaults to
+`"verilator-direct"`, so every build links a backend that dispatches the full
+phase contract without any configuration. Hand-assembled alternatives are
+rejected rather than left to answer wrongly: `verilator_args = ["--vpi"]`
+used to build a bridge that placed writes on the right edge while failing two
+of the five contract checks silently -- `ReadOnly` did not observe a write
+settled in `ReadWrite` -- and the build tool now refuses it, naming the key.
+The timing defines (`CPPTB_SV_DPI_TIMING` and friends) are likewise owned by
+the key: setting them in `design.defines` or `build.cxx_flags` is an error,
+and the remaining SV-DPI pump and calendar builds are reachable only through
+the conformance runner, as experiments.
+:::
 
 ## The write model
 
@@ -224,7 +221,7 @@ Queueing alone arms the phase: writes flush whether or not anything awaits
 
 ### Immediate writes are legacy
 
-A build with no `deferred_writes` applies `set()` immediately. That behavior
+A build with `deferred_writes = false` applies `set()` immediately. That behavior
 predates the timing backends and is intended for deprecation, so that cpptb
 matches cocotb's semantics without a per-project switch. It is not a supported
 authoring style: testbenches written against it need a drive-point convention
@@ -336,19 +333,16 @@ compose the same way. One difference changes how a driver must be written, and
 translating a testbench line for line will produce a driver that acts a cycle
 early.
 
-#### Writes translate directly under the standard model
+#### Writes translate directly
 
 In cocotb, assigning to a signal queues the write and applies it at the next
 `ReadWrite` point. Writing straight after `await RisingEdge(clk)` therefore
 cannot affect the edge just awaited; it behaves like a non-blocking assignment.
-
-With [the write model](#the-write-model) enabled, cpptb does the same thing,
-and a cocotb driver translates line for line. The rest of this section is what
-happens in a *legacy* build with `deferred_writes` unset -- the one case where
-the shapes differ.
+[The write model](#the-write-model) makes `set()` do exactly the same thing,
+so a cocotb driver translates line for line:
 
 ```python
-# cocotb: safe. The write is queued, so this edge is already over for it.
+# cocotb: the write is queued, so this edge is already over for it.
 async def driver(dut):
     while True:
         await RisingEdge(dut.clk)
@@ -356,35 +350,21 @@ async def driver(dut):
         dut.wvalid.value = 1
 ```
 
-Without `deferred_writes`, `set()` applies at once, and `co_await RisingEdge{}`
-resumes before the design has evaluated that edge, so the same shape drives
-into the edge being awaited:
-
 ```cpp
-// cpptb: wrong. The value is in place in time for this edge.
+// cpptb: identical shape, identical semantics.
 Task<void> driver(Dut dut) {
     while (true) {
         co_await RisingEdge{dut.clk};
-        dut.wdata.set(next_word());        // lands for *this* edge
+        dut.wdata.set(next_word());        // queued; lands for the *next* edge
         dut.wvalid.set(1);
     }
 }
 ```
 
-```cpp
-// cpptb: right. Drive off the edge, half a cycle before the next one.
-Task<void> driver(Dut dut) {
-    while (true) {
-        co_await FallingEdge{dut.clk};
-        dut.wdata.set(next_word());
-        dut.wvalid.set(1);
-    }
-}
-```
-
-The symptom when this is wrong is a register or memory read-back returning the
-value just written rather than the previous one, which reads as a design bug
-rather than a testbench one.
+Only a legacy `deferred_writes = false` build behaves differently — there
+`set()` applies at once and this shape drives into the edge being awaited.
+That mode needs a drive-point convention of its own and is
+[not a supported authoring style](#immediate-writes-are-legacy).
 
 #### Monitors
 
@@ -417,8 +397,9 @@ Task<void> monitor(Dut dut, Queue<uint32_t>& queue) {
 
 #### A driver and monitor together
 
-Sampling on the rising edge and driving on the falling one lets both live in
-one loop without racing each other:
+Because writes queue, one loop can sample and drive at the same anchor
+without racing itself: the reads see the cycle just ending, and the writes
+land for the next one.
 
 ```cpp
 Task<void> agent(Dut dut, RegisterModel& model) {
@@ -426,9 +407,8 @@ Task<void> agent(Dut dut, RegisterModel& model) {
         co_await RisingEdge{dut.clk};
         if (dut.access.get()) model.check(dut.addr.get(), dut.rdata.get());
 
-        co_await FallingEdge{dut.clk};
         const auto next = stimulus.next();
-        dut.addr.set(next.addr);
+        dut.addr.set(next.addr);           // queued; lands for the next edge
         dut.wdata.set(next.wdata);
         dut.access.set(next.valid);
     }
@@ -453,22 +433,9 @@ monitor: it yields the values the design is about to sample. It is the wrong
 anchor for a driver that reads protocol pins, which is
 [trap 1](coming-from-cocotb.md#1-risingedge-resumes-before-the-edge-evaluates).
 
-#### Phase waits need the timing backend
-
-cocotb always has `ReadOnly` and `ReadWrite`; here they are supplied by the
-timing backend. If `timing_backend` is missing from `cpptb.toml`, a testbench
-that awaits a phase compiles and then reports this at run time:
-
-```
-ReadWrite, ReadOnly, and NextTimeStep need a timing backend that dispatches
-simulator phases. This build has none: a default `cpptb build` links
-Verilator's own --binary main, which owns clocks and timers but dispatches no
-phases.
-```
-
-Set the key rather than reaching for `verilator_args = ["--vpi"]`: that makes
-the phase waits run but not to their documented contract, and the build tool
-rejects it by name. See [Timing backend support](#timing-backend-support).
+The three translation traps — where a bare edge read is right and where it is
+not — are worked through with symptoms in
+[Coming from cocotb](coming-from-cocotb.md#the-traps-in-one-worked-example).
 
 ### Bound producer pressure and shared resources
 
@@ -704,7 +671,7 @@ the same formatter. This ordering is important: taking the snapshot after
 cancellation would erase the wait that caused the timeout.
 
 ```cpp
-CPPTB_REGISTER_TEST(
+CPPTB_REGISTER_TEST_WITH_OPTIONS(
     response_test,
     TestOptions{.simulation_timeout = 2_us});
 ```

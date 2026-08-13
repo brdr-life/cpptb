@@ -64,7 +64,7 @@ elaboration verbatim, which is how string-typed SystemVerilog parameters
 | `simulator` | string | `"verilator"` | Simulator backend; currently Verilator |
 | `timing_backend` | `"verilator-direct"` or `"vpi"` | `"verilator-direct"` | How the simulator delivers the `ReadWrite{}`, `ReadOnly{}`, and `NextTimeStep{}` phase waits. Only these two names are accepted; there is no supported build without a backend |
 | `deferred_writes` | bool | `true` | `true` is cocotb's write model: `set()` queues and flushes at the ReadWrite point, so a write after an awaited edge lands on the next one. `false` restores legacy immediate writes and is on a deprecation path |
-| `optimization` | string | `"-O2"` | Optimization level for both the testbench and the Verilated model — Verilator optimizes neither by default. Lower to `-O0` for a debug build |
+| `optimization` | string | `"-O2"` | Optimization level applied to both the testbench and the Verilated model. Without it, Verilator's own default optimizes the model at `-Os` and leaves testbench sources unoptimized. Lower to `-O0` for a debug build |
 | `cxx_flags` | list of strings | none | Extra flags for testbench compilation, after the defaults so an explicit flag wins |
 | `verilator_args` | list of strings | none | Extra arguments passed to Verilator, e.g. lint waivers. Timing defines and a bare `--vpi` are rejected here — the timing keys own them |
 | `wave` | `true`, `"fst"`, or `"vcd"` | off | Build with waveform tracing and dump one wave file per test; `true` means FST. See [Waveforms](waveforms.md) |

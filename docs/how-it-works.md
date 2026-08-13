@@ -12,8 +12,8 @@ explaining.
 
 ## The three files you write
 
-A minimal project is the design, the testbench, and two lines of
-configuration:
+A minimal project is the design, the testbench, and — optionally — two lines
+of configuration:
 
 ```
 examples/counter/
@@ -25,13 +25,16 @@ examples/counter/
 `counter.sv` is fourteen lines: an `always_ff` counter with an async
 active-low reset. The testbench drives it in the cocotb shape — write after
 the awaited edge, sample at `ReadOnly` — and registers two tests.
-`cpptb.toml` names the write model every project builds on:
+`cpptb.toml` names the write model explicitly:
 
 ```toml
 [build]
 timing_backend = "verilator-direct"
 deferred_writes = true
 ```
+
+Both values are the defaults, so a project with no `cpptb.toml` at all builds
+identically; the example carries the file to make the choice visible.
 
 ## The pipeline
 
@@ -54,7 +57,8 @@ under `build/cpptb/counter/`:
  [3] cpptb-codegen  ──────────────────────────────
      │
      ├── generated/dpi_counter.sv       the SV wrapper: DUT instance,
-     │                                  clocks, phase calendar, DPI trunk
+     │                                  clocks, timers, DPI trunk
+     ├── generated/dpi_counter.cpp      the C++ DPI adapter
      ├── generated/counter_dut.hpp      the typed Dut struct
      ├── generated/counter_binding.hpp  signal metadata + binding call
      └── generated/dut.hpp             `using Dut = ...` alias
@@ -99,8 +103,12 @@ fails to compile with a `static_assert` naming the missing path.
 
 ## Step 3 — the generated sources
 
-`cpptb-codegen` now has everything it needs and emits four files into
-`generated/`.
+`cpptb-codegen` now has everything it needs and emits five files into
+`generated/`. The build actually invokes the generator twice: once before
+the discovery compile, so the testbench has a typed `Dut` to compile
+against, and again afterward to finalize the hierarchy transport from the
+recovered access set — which is why a probe of internal hierarchy appears
+in the generated struct only when the testbench actually uses it.
 
 **`counter_dut.hpp`** is the C++ face of the design — a plain struct with
 one typed member per port (plus one per discovered internal path):
@@ -136,16 +144,22 @@ on the SystemVerilog side:
 
 - the clock drivers for clocks registered by `test.start_clock(...)`,
   configured by querying the runtime at time zero;
-- the phase calendar — one process that owns edges, framework timers, and
-  the `ReadWrite` / `ReadOnly` / `NextTimeStep` dispatch points;
+- the edge watchers and the timer owner — processes that observe awaited
+  edges and hold the earliest framework timer deadline, waking the C++
+  scheduler when either fires;
 - the DPI trunk: an `import` for scheduler steps
   (`cpptb_counter_dpi_step`), an idempotent output pull, timer-deadline and
   edge-interest queries, and an `export` the C++ side calls to dispatch a
-  phase.
+  phase — the `ReadWrite` / `ReadOnly` / `NextTimeStep` points are driven by
+  the framework host loop through that export, not by a wrapper process.
 
 Signal values cross the boundary as packed word arrays, batched per step —
 for `counter`, one input word carries `count` toward C++, and three output
 words carry `clk`, `rst_n`, `enable` back.
+
+**`dpi_counter.cpp`** is the C++ end of the trunk: the generated adapter
+translation unit that receives scheduler steps and moves the packed words
+between the wrapper and the runtime.
 
 **`counter_binding.hpp`** carries the metadata that ties the two together —
 signal tables, the binding call, the registration entry point — consumed by
@@ -202,4 +216,4 @@ process exit code is the test verdict.
 - [Code generation](code-generation.md) — driving the generator directly,
   manifests, and register-model generation.
 - [Scheduling](scheduling.md) — the authoritative reference for phases,
-  edges, and the write model the generated calendar implements.
+  edges, and the write model the host loop and wrapper implement together.
