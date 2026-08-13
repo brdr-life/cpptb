@@ -108,3 +108,14 @@ in a few lines. Move to a [`Randomized`](constrained-transactions.md) class when
 - a directed test needs to add a one-call constraint;
 - nonrepeating `RandC` values are useful; or
 - named failures would make an illegal model easier to diagnose.
+
+## Related APIs
+
+- [Randomization library reference](../library/randomization.md) lists the
+  exact `Random` signatures behind `randint()`, `choice()`,
+  `weighted_choice()`, `randbits()`, `shuffle()`, and `next_u64()`.
+- [Policies and composite fields](policies-and-composition.md) defines the
+  solve-time `dist()` policy that `weighted_choice()` is deliberately
+  separate from.
+- [Seeds, streams, and replay](reproducibility.md) explains how each
+  `test.random()` stream derives from the recorded master seed.

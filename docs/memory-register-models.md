@@ -1374,7 +1374,7 @@ or adapter construction is kept outside the generated model in every case.
 
 ```cpp
 // Generate first:
-// uv run --extra peakrdl peakrdl cpptb registers.rdl
+// uv run --frozen --extra peakrdl peakrdl cpptb registers.rdl
 //   -o build/generated/registers.hpp --namespace generated_registers
 #include "generated/registers.hpp"
 

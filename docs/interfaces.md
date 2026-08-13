@@ -172,3 +172,11 @@ See the runnable [interfaces example](examples/interfaces.md) and the
 [hierarchy guide](hierarchy.md) for adjacent internal and array access. The
 [four-state guide](four-state.md) documents `LogicBits`, logic signal APIs, the
 experimental gate, and its enablement criteria.
+
+## Related APIs
+
+- [Signals reference](library/signals.md) — signatures for `set()`,
+  `set_now()`, `drive()`, `high_z()`, and the timing summary.
+- [Clocking](clocking.md) — interface-member clocks follow the same
+  ownership and initialization rules as top-level clocks.
+- [Reference card](refcard.md) — the signal operations at a glance.

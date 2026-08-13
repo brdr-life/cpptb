@@ -206,3 +206,13 @@ The upstream status is documented in Verilator's
 its [unsupported-option diagnostic](https://github.com/verilator/verilator/blob/v5.050/src/V3Options.cpp#L1051-L1057),
 and the [DPI conversion helpers](https://github.com/verilator/verilator/blob/v5.050/include/verilated_dpi.h#L69-L110)
 that currently discard or clear `bval`.
+
+## Related APIs
+
+- [Signals reference](library/signals.md) — the `_logic` operation variants
+  and their timing.
+- [cpptb.toml](cpptb-toml.md#build) and
+  [cpptb command line](cli.md) — where `experimental_four_state` /
+  `--experimental-four-state` are actually configured.
+- [Hierarchy](hierarchy.md) — the two-state backdoor operations these
+  variants extend.

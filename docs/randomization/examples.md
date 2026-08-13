@@ -493,3 +493,17 @@ The complete implementations are in
 `benchmarks/authoring_core/testbenches/systemverilog/authoring_core_sv_tb.sv`.
 See [Performance](../performance.md#deterministic-random-stimulus) for measured
 ratios and environment qualification.
+
+## Related pages
+
+- [Random value generation](value-generation.md) documents the direct
+  `test.random()` API used in the mixed-stimulus example.
+- [Constrained transactions](constrained-transactions.md) explains the
+  `Randomized` class, fields, and constraints in the packet example.
+- [Policies and composite fields](policies-and-composition.md) covers the
+  membership, distribution, soft-default, handle, nested, array, and packed
+  features in the extension example.
+- [Solvers and diagnostics](solvers-and-diagnostics.md) describes the
+  backends that solve these models and their failure diagnostics.
+- [Randomization library reference](../library/randomization.md) lists the
+  exact signatures used across every tab.

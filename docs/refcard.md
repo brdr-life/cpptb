@@ -52,7 +52,7 @@ Every common operation, one line each. Details:
 | Non-blocking transfer | `q.put_nowait(p)` → `bool`; `q.get_nowait()` → `optional` |
 | Broadcast notification (latching) | `Event e; e.set(); e.clear();` `co_await e.wait();` |
 | Mutual exclusion (FIFO handoff) | `Lock l; co_await l.acquire(); l.release();` |
-| Counting credits (starts at 0) | `Semaphore s{4}; co_await s.acquire(); s.release();` |
+| Counting credits (default-constructed: 0 permits) | `Semaphore s{4}; co_await s.acquire(); s.release();` |
 
 ## Clocks
 

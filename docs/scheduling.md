@@ -743,3 +743,16 @@ Scheduler-facing objects are simulation-thread confined. Do not access a
 `Process` from a worker OS thread. Authored coroutine processes remain
 concurrent in simulation time while executing through the one scheduler that
 owns deterministic ordering.
+
+## Related APIs
+
+- [Awaitables reference](library/awaitables.md) — exact signatures and
+  resume guarantees for every trigger and phase wait.
+- [Signals reference](library/signals.md) — the write operations and the
+  timing summary contrasting queued and immediate paths.
+- [Reference card](refcard.md) — the waiting and driving idioms, one line
+  each.
+- [Glossary](glossary.md) — settle point, drive anchor, phase contract, and
+  the write model, defined in one place.
+- [Troubleshooting](troubleshooting.md) — the phase-order and watchdog
+  diagnostics this page's rules produce.

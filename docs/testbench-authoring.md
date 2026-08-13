@@ -282,3 +282,14 @@ For typed transaction endpoints, analysis fan-out, and scoreboards built on
 these primitives, see
 [Verification components](verification-components.md). For exactly when each
 trigger resumes, see [Scheduling](scheduling.md).
+
+## Related APIs
+
+- [Coordination reference](library/coordination.md) — the signatures for
+  `Task`, `Join`, `First`, `with_timeout`, `Event`, `Queue`, `Lock`, and
+  `Semaphore`, with their cancellation guarantees.
+- [FIFO scoreboard example](examples/fifo-scoreboard.md) — the runnable
+  project behind this page's driver/monitor/scoreboard excerpts.
+- [Watchdog timeout example](examples/watchdog-timeout.md) — `with_timeout`
+  and recovery in a complete bench.
+- [Reference card](refcard.md) — the concurrency idioms, one line each.

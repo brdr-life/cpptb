@@ -502,6 +502,12 @@ control result was `0.824x`, a `1.7%` shift and below the `5%` investigation
 threshold. These are machine-specific measurements; the registry continues to
 enforce `1.10x` for both features.
 
+The separate `event` kernel doubles as the hot-path guard for the wait-graph
+instrumentation: it is certified at `0.8141x` under the `1.10x` gate with the
+wait graph active, so the diagnostics documented in
+[Scheduling](scheduling.md#wait-graphs-and-deadlock-diagnostics) cost nothing
+measurable on the passing path.
+
 ```sh
 make feature-test FEATURE=queue
 make feature-benchmark FEATURE=queue
@@ -771,6 +777,16 @@ make feature-benchmark FEATURE=register_wide
 
 The 100,000-iteration semantic contract is `2,000,000` transactions and
 `600,002` checks with the complete 128-bit values compared on both sides.
+
+The `register_split` and `register_wide` performance entries are published
+as **diagnostics** (`8.80x` and `43.82x`), not hard-gated ratios: their
+pure-SV peers encode the register-model *outcome* — direct word moves and
+compares — while the C++ side runs the typed model itself, so the pairs
+measure the price of the abstraction layer rather than equivalent work.
+`register_enum` (`10.21x`) is a diagnostic for the same reason. The
+[roadmap](roadmap.md#5-memory-and-register-verification-components) records
+the derived-work twin rewrite that is the template for returning these rows
+to the hard gate.
 
 ## Register access coverage
 

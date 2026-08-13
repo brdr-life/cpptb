@@ -548,6 +548,14 @@ an access.
 - [secworks AES register-model oracle](../examples/secworks-aes-regmodel.md)
   is the complete generated-model integration and validates it against an
   unchanged upstream testbench.
+- [Code generation](../code-generation.md) describes the separate DUT-binding
+  generation that `cpptb build` performs from RTL.
+- [cpptb.toml reference](../cpptb-toml.md) documents the `[testbench]` table,
+  including the `include_dirs` entry that exposes the generated header
+  directory.
+- [Library reference: verification components](../library/components.md) lists
+  the register handle, predictor, and sequence signatures that generated
+  models expose.
 - [PeakRDL input processing](https://peakrdl.readthedocs.io/en/latest/processing-input.html)
   documents top-level elaboration and supported inputs.
 - [SystemRDL 2.0](https://www.accellera.org/downloads/standards/systemrdl)

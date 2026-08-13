@@ -116,3 +116,13 @@ backend produces.
 Runtime start/stop windowing and scope selection remain on the
 [roadmap](roadmap.md#7-debugging-and-release-tooling); the whole-run dump
 is deliberately the only mode for now.
+
+## Related pages
+
+- [cpptb command line](cli.md) — the `--wave` option and where each file
+  lands.
+- [cpptb.toml](cpptb-toml.md#build) — the persistent `wave` key.
+- [Scheduling](scheduling.md#timing-backend-support) — the backend
+  equivalence machinery the dump-identity gate builds on.
+- [Troubleshooting](troubleshooting.md) — reading a hang from the wait
+  graph before reaching for a waveform.

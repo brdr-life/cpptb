@@ -40,6 +40,9 @@ derives the rest.
 | want working code to copy | [Examples](examples.md) — every one runnable, each with a pure-SystemVerilog twin |
 | want the cheat sheet | [Reference card](refcard.md) — every common operation, one line each |
 | are looking up an API | [Library reference](library/awaitables.md) — signatures and semantics, one page per API family |
+| need the exact option or key | [cpptb command line](cli.md) and [cpptb.toml](cpptb-toml.md) — the command and configuration references |
+| hit an error message | [Troubleshooting](troubleshooting.md) — the diagnostics in one place, each with its fix |
+| meet an unfamiliar term | [Glossary](glossary.md) — the vocabulary the rest of the docs uses |
 
 ## What you get
 

@@ -126,6 +126,20 @@ Multidimensional arrays take one index per dimension:
 dut.coefficients[1][3].deposit(7);
 ```
 
+Moving a whole region does not need a loop: memories carry allocation-free
+span forms that read or deposit a contiguous block in one call, starting at a
+given element index:
+
+```cpp
+std::array<uint32_t, 64> image{};
+dut.memory.get_into(0, image);        // read 64 words starting at index 0
+dut.memory.deposit(128, image);       // deposit them starting at index 128
+```
+
+These are the backdoor primitives the
+[memory models](memory-register-models.md) build on; the exact signatures are
+in the [signals reference](library/signals.md#memory).
+
 Elaborated instance and generate arrays use the same syntax and accept either
 a literal or runtime index:
 
@@ -221,3 +235,13 @@ compile-time diagnostic rather than a generic missing-member error. For a
 scheduler-owned clock, the diagnostic directs you back to
 `TestContext::start_clock()` and states that coherent clock pause and override
 are not yet supported.
+
+## Related APIs
+
+- [Signals reference](library/signals.md) — the exact signatures for every
+  port and hierarchy operation, with the timing summary that contrasts
+  queued `set()` against the immediate backdoors.
+- [Memory and register models](memory-register-models.md) — the typed layer
+  built on these backdoor primitives.
+- [Reference card](refcard.md) — the operations at a glance.
+- [Glossary](glossary.md) — backdoor, frontdoor, and transport, defined.

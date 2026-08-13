@@ -7,7 +7,9 @@ the file exists to make a project's choices persistent and visible.
 Command-line options override it for one invocation; see
 [cpptb command line](cli.md).
 
-A complete file, with every section present:
+A complete file, with every section present (three optional `[build]` keys —
+`target`, `wave`, and `experimental_four_state` — are omitted here; the
+tables below list them):
 
 ```toml
 [design]

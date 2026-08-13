@@ -125,3 +125,15 @@ make feature-benchmark FEATURE=constraint_extensions
 
 See [Performance](../performance.md#constraint-extensions) for the current
 measurements and environment qualification rules.
+
+## Related APIs
+
+- [Running tests](../running-tests.md) documents the `cpptb-run run --seed`
+  flow and the structured results that retain each seed.
+- [cpptb command line](../cli.md) covers `CPPTB_RANDOM_SEED` propagation
+  through `cpptb test` and the other environment variables a built
+  simulator reads.
+- [Solvers and diagnostics](solvers-and-diagnostics.md) explains how the
+  constraint backends consume the process stream during a solve.
+- [Randomization library reference](../library/randomization.md) lists the
+  `Random` constructor and stream signatures.
