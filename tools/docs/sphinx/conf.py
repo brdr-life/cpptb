@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_ext"))
 
 project = "cpptb"
 author = "cpptb contributors"
@@ -14,6 +16,7 @@ release = "0.1.0"
 extensions = [
     "myst_parser",
     "sphinx.ext.githubpages",
+    "api_links",
 ]
 
 source_suffix = {
@@ -117,6 +120,22 @@ code-generation
 
 verification-components
 random-stimulus
+```
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+:caption: Library reference
+
+Reference card <refcard>
+Triggers & phase waits <library/awaitables>
+Tasks & coordination <library/coordination>
+Signals & the Dut <library/signals>
+TestContext & checks <library/test-context>
+Randomization <library/randomization>
+Functional coverage <library/coverage>
+Verification components <library/components>
+Embedding & results <library/embedding>
 ```
 
 ```{toctree}
