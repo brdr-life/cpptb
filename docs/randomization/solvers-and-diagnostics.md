@@ -209,3 +209,13 @@ The problem carries typed field descriptors, named hard and soft constraints,
 active distributions, and current `RandC` exclusions. A backend must return one
 raw assignment per variable and use the supplied `Random` for replayable model
 selection. Backend-specific types should not leak into transaction classes.
+
+## Related APIs
+
+- [Constrained transactions](constrained-transactions.md) covers the
+  transaction classes and `randomize()` calls whose constraint problems
+  these backends solve.
+- [Seeds, streams, and replay](reproducibility.md) explains the seed and
+  process-stream contract every backend consumes.
+- [Randomization library reference](../library/randomization.md) lists the
+  signatures for the backends, `ConstraintBackend`, and `RandomizeResult`.

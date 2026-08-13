@@ -14,7 +14,8 @@ harness. The framework has four separable layers:
    assertions, process lifetime, and exception attribution.
 3. `dpi_runtime.hpp` translates simulator callbacks into scheduler steps and
    batches changed values across the DPI boundary.
-4. `cpptb-codegen` elaborates RTL and emits a typed DUT plus transport wrapper.
+4. `cpptb-codegen` elaborates RTL and emits a typed DUT plus transport
+   wrapper — the pipeline [How a build works](how-it-works.md) walks.
 
 The reference harness has two layers:
 
@@ -30,10 +31,11 @@ callbacks, or consume versioned JSON without using the command-line launcher.
 The lifecycle contract and its current limitations are documented in
 [Framework test lifecycle](test-lifecycle.md).
 
-The generated SystemVerilog wrapper owns clocks and simulator callback timing.
-The C++ scheduler owns coroutine readiness and cancellation. Signal reads and
-writes use generated IDs and typed bindings; no runtime hierarchical-name
-lookup is required on the optimized DPI path.
+The generated SystemVerilog wrapper owns clocks and simulator callback timing
+([Clocking](clocking.md) covers the user-facing contract). The C++ scheduler
+owns coroutine readiness and cancellation. Signal reads and writes use
+generated IDs and typed bindings; no runtime hierarchical-name lookup is
+required on the optimized DPI path.
 
 Every registered test invocation creates one shared lifecycle state. Processes
 started through its `TestContext` are retained as test-owned work. Normal root
@@ -57,7 +59,9 @@ OS threads may define `CPPTB_CORO_THREAD_LOCAL_FRAME_POOL` to give each thread
 its own pool; framework objects and callbacks must still remain on their owning
 simulator thread.
 
-Simulator-phase waits have a backend boundary below the public API. The
+Simulator-phase waits have a backend boundary below the public API; the
+user-facing selection and status table is
+[Timing backend support](scheduling.md#timing-backend-support). The
 portable path registers standard VPI callbacks for read/write synchronization,
 read-only synchronization, and the next timestep. When cpptb owns Verilator's
 host loop, its direct backend polls the same pending phase state at those exact
@@ -122,9 +126,13 @@ initialization or after `STEP_OUTPUTS_CHANGED`, so unchanged steps do not carry
 an output argument through the simulator ABI.
 
 `deposit()` performs the underlying SystemVerilog blocking assignment
-immediately. It does not insert a scheduler delay or observation phase;
-testbench code uses an explicit `co_await Delay{...}` when downstream RTL must
-evaluate before observation.
+immediately. A port `set()`, by contrast, queues in the scheduler's
+deferred-write buffer and flushes at the timestep's ReadWrite dispatch — the
+scheduler owns that queue and its flush point, and the transport only ever
+carries flushed words. Neither operation inserts a scheduler delay or
+observation phase; testbench code uses an explicit `co_await ReadOnly{}` or
+`Delay{...}` when downstream RTL must evaluate before observation. See
+[The write model](scheduling.md#the-write-model).
 
 ## Current scope
 

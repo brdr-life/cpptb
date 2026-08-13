@@ -13,9 +13,16 @@ stopping to explain. Each entry links to the page that treats it fully.
 **Backdoor**
 : Reading or depositing a value directly into design state (a memory word,
   a register field) without a bus transaction, through generated hierarchy
-  probes. The opposite is a **frontdoor** access, which goes through the
-  design's protocol interface and takes simulation time. See
+  probes. Backdoor operations are immediate. The opposite is a
+  **frontdoor** access. See
   [Memory and register models](memory-register-models.md).
+
+**Conformance suite**
+: The scheduler and timing regression that pins the documented semantics —
+  trigger ordering, the phase contract, the write model — on every
+  supported backend, run by every `make test`. A backend is supported only
+  while it passes the whole suite. See
+  [Scheduling](scheduling.md#timing-backend-support).
 
 **Drive point / drive anchor**
 : The instant within a clock cycle at which a driver writes its pins. In
@@ -34,6 +41,21 @@ stopping to explain. Each entry links to the page that treats it fully.
   flow, never by the preceding line of text. See
   [Coming from cocotb](coming-from-cocotb.md#the-three-traps).
 
+**Frontdoor**
+: An access that goes through the design's protocol interface — a bus
+  transaction driven on pins — and therefore takes simulation time. Its
+  pin drives queue like any port `set()` under the write model. The
+  opposite is a **backdoor** access. See
+  [Memory and register models](memory-register-models.md).
+
+**Harness and framework**
+: The load-bearing packaging distinction. The *framework* is the reusable
+  C++ API — scheduler, DUT access, lifecycle, results — that survives
+  embedding in someone else's build or CI system. The *harness* is the
+  optional reference tooling around it: the `cpptb` command, `cpptb-run`,
+  and their process policy. Framework milestones never block on harness
+  features. See [Running tests](running-tests.md).
+
 **Phase contract**
 : The guarantee attached to each simulator phase wait: what has already
   happened when it resumes. `ReadWrite` resumes after the timestep's
@@ -47,6 +69,7 @@ stopping to explain. Each entry links to the page that treats it fully.
 : The `ReadWrite` instant of a timestep — where evaluation has settled and
   the deferred write queue flushes. Writing from inside it re-arms it, so
   the queue drains within the timestep (cocotb's writes-until-stable loop).
+  See [Scheduling](scheduling.md#the-write-model).
 
 **Timing backend**
 : The mechanism that gives the C++ scheduler its simulator-phase waits.
@@ -58,7 +81,8 @@ stopping to explain. Each entry links to the page that treats it fully.
 **Transport**
 : The generated DPI path that moves signal values between the simulator and
   the C++ side — packed word arrays with generated signal IDs, batched per
-  scheduler step. No hierarchical name lookup happens at run time. See
+  scheduler step. No hierarchical name lookup happens at run time. The
+  build walkthrough calls its wrapper-side interface the *DPI trunk*. See
   [How a build works](how-it-works.md).
 
 **Twin bench / peer bench**
@@ -68,6 +92,14 @@ stopping to explain. Each entry links to the page that treats it fully.
   authoring-core benchmark kernels each have one; the equivalence and
   performance guards run against them. See
   [Performance](performance.md).
+
+**Wait graph**
+: The scheduler's structured snapshot of every parked process — spawn site,
+  process ID, and the exact edge, phase, event, queue, lock, or semaphore
+  it waits on — with a conservative deadlock classification. Captured
+  automatically before a timeout cancels the test, printed, and stored in
+  the result JSON. See
+  [Scheduling](scheduling.md#wait-graphs-and-deadlock-diagnostics).
 
 **Write model**
 : cpptb's documented write semantics, which are cocotb's: `set()` queues,

@@ -141,3 +141,13 @@ make feature-test FEATURE=coverage_sampling
 
 See [Performance](performance.md#deterministic-random-stimulus) for current
 measurements and the `1.10x` C++/pure-SV guard.
+
+## Related APIs
+
+- [Randomization library reference](library/randomization.md) lists the
+  signatures for `Random`, `Randomized`, `Rand`, `RandC`, `RandArray`,
+  `RandBits`, and `RandomizeResult`.
+- [Coverage library reference](library/coverage.md) lists the `Covergroup`,
+  `Coverpoint`, and `CoverageSnapshot` signatures.
+- [The reference card](refcard.md#randomization) condenses the randomization
+  API to one screen.

@@ -601,6 +601,15 @@ consequence worth knowing today: the existing ready/valid monitor still
 publishes its bare `value_type` payload rather than an observation envelope;
 its migration is among the deferred items.
 
+## Related APIs
+
+- [Library reference: verification components](../library/components.md) lists
+  the `TransactionRecorder`, `TransactionMonitor`, and sink signatures.
+- [Verification components](../verification-components.md) introduces the
+  analysis fan-out, monitors, and APB components that publish into a recorder.
+- [Waveforms](../waveforms.md) covers the signal-level tracing that recorded
+  transactions summarize and complement.
+
 ## References
 
 - The Accellera [UVM reference implementation](https://github.com/accellera-official/uvm-core)

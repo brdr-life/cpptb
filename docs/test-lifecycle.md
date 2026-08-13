@@ -240,3 +240,13 @@ CLI tag filtering, process launch policy, JUnit XML, waveform-on-failure
 reruns, wall-time enforcement, reproduction command rendering, and build
 diagnostic presentation remain harness concerns rather than framework
 lifecycle behavior.
+
+## Related APIs
+
+- [TestContext reference](library/test-context.md) — the signatures behind
+  every check, spawn, and registration macro on this page.
+- [Embedding and results](library/embedding.md) — `TestResult`,
+  `ResultSink`, and the versioned JSON contract.
+- [Scheduling](scheduling.md#wait-graphs-and-deadlock-diagnostics) — the
+  wait graph a simulation-time timeout captures before cancelling the test.
+- [Reference card](refcard.md) — checks and registration at a glance.

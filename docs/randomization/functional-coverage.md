@@ -214,3 +214,13 @@ certified at `0.7848x` (strata `0.7738`/`0.7898`, CPU corroboration valid),
 so the engine is faster than the language-native construct on the subset
 Verilator implements, not only faster than hand tallies. The repository
 enforces the ordinary `1.10x` hard guard on future changes to both pairs.
+
+## Related APIs
+
+- [Coverage library reference](../library/coverage.md) lists the
+  `Covergroup`, `Coverpoint`, and `CoverageSnapshot` signatures.
+- [Verification components](../verification-components.md) documents the
+  `cpptb::vc::AnalysisPort` used in the monitor example above.
+- [Randomization library reference](../library/randomization.md) lists the
+  signatures for the stimulus side that coverage deliberately does not
+  steer.

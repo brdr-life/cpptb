@@ -35,8 +35,12 @@ memory.load_file(0x8000, "firmware.bin");
 ```
 
 Regions may be writable, read-only, or inaccessible and may select little- or
-big-endian integer interpretation. Overlap and out-of-range accesses produce
-explicit statuses.
+big-endian integer interpretation. An access that is not fully contained in
+one mapped region — an unmapped address or a range straddling a region
+boundary — returns `MemoryStatus::DecodeError`, and a read or write that the
+containing region's permission forbids returns `MemoryStatus::SlaveError`.
+`add_region()` rejects a region that would overlap an existing one by throwing
+rather than by status.
 
 ## Access data
 
@@ -73,6 +77,39 @@ class PeripheralPolicy : public MemoryAccessCallback {
 };
 ```
 
+Attach the policy with the callback constructor or `set_callback()`; passing
+`nullptr` detaches it:
+
+```cpp
+PeripheralPolicy policy;
+SparseMemory memory{policy};   // Attach at construction...
+memory.set_callback(&policy);  // ...or attach, replace, or detach later.
+```
+
+`before_access()` runs before the region and permission checks and before any
+storage is touched. It can rewrite a write's data and byte-enable lanes, and
+setting a non-`Okay` status vetoes the access: the built-in checks and the
+storage update are skipped and that status is returned. `after_access()` runs
+once the checks and any storage update are complete — on a read, `data` then
+holds the returned bytes — so it is the place to inspect a finished access or
+translate its final status, as `PeripheralPolicy` does above.
+
+Both hooks receive one `MemoryAccessEvent` containing:
+
+- `operation` — `MemoryOperation::Read` or `MemoryOperation::Write`;
+- `address` — the first accessed byte address;
+- `data` — a mutable span holding the write payload or, after a read, the
+  returned bytes;
+- `byte_enable` — one entry per data byte on writes, where nonzero enables
+  the lane; empty on reads;
+- `status` — the access result, writable from either hook; and
+- `region` — the containing region's name, empty when no single region
+  contains the access.
+
+The callback observes the `read_bytes()`, `read_into()`, `read_word()`, and
+write operations. The direct `load()`, `fill()`, `inspect()`, and
+`dump_file()` maintenance operations bypass it.
+
 Keep timing in the protocol component. The callback is ordinary synchronous
 C++ and must not assume that a clock or delay is inserted around it.
 
@@ -94,7 +131,8 @@ co_await Join{sequence(master),
 test.expect_eq("memory mismatches", predictor.mismatches(), uint64_t{0});
 ```
 
-The complete `memory_model_apb_test` in
+The complete `memory_model_apb_test` in the
+[APB register-file example](../examples/apb-regfile.md)'s
 `examples/apb_regfile/testbench.cpp` combines an APB monitor, writable
 storage, a read-only image, and translated unmapped-address errors. The same
 memory model has no dependency on APB.
@@ -120,6 +158,13 @@ make feature-benchmark FEATURE=memory_model_direct
 Keep both measurements. The direct workload identifies container cost; the
 APB workload covers normal monitor and scheduler composition.
 
-See [Register abstraction layer](../memory-register-models.md) when the model
-needs named registers, fields, access policy, desired state, and mirrored
-prediction rather than general expected byte storage.
+## Related APIs
+
+- [Library reference: verification components](../library/components.md) lists
+  the `SparseMemory` and `MemoryPredictor` signatures and which operations
+  take simulation time.
+- [Verification components](../verification-components.md) introduces the
+  `AnalysisPort` fan-out and the passive monitors that feed a predictor.
+- [Register abstraction layer](../memory-register-models.md) provides named
+  registers, fields, access policy, desired state, and mirrored prediction
+  when the model needs more than general expected byte storage.

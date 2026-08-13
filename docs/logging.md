@@ -301,6 +301,8 @@ workload's description, the tabbed side-by-side implementations, and the
 
 ## Related APIs
 
+- [TestContext reference](library/test-context.md) — the `test.logger()`
+  signature and the `CPPTB_LOG_LEVEL` environment variable.
 - [Framework test lifecycle](test-lifecycle.md) defines result-changing
   warnings, checks, requirements, and process ownership.
 - [Scheduling](scheduling.md) explains the simulation time attached to each

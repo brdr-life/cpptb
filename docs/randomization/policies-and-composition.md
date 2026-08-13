@@ -177,3 +177,15 @@ significant bits. The top word is automatically bounded to the declared width.
 The current API deliberately supports fixed-size arrays. Dynamic random arrays,
 whole-value arbitrary-width arithmetic, and variable-size allocation policies
 remain future work rather than hidden solver-specific behavior.
+
+## Related APIs
+
+- [Constrained transactions](constrained-transactions.md) covers the hard
+  constraints, `Rand` fields, and inline `randomize_with()` calls these
+  policies layer onto.
+- [Solvers and diagnostics](solvers-and-diagnostics.md) explains how each
+  backend applies distributions and soft constraints and lists the
+  actionable backend errors.
+- [Randomization library reference](../library/randomization.md) lists the
+  signatures for `inside()`, `range()`, `dist()`, `weighted()`,
+  `ConstraintHandle`, `RandArray`, and `RandBits`.

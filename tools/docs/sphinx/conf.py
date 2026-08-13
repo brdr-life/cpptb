@@ -146,6 +146,7 @@ Embedding & results <library/embedding>
 running-tests
 cli
 cpptb-toml
+troubleshooting
 glossary
 ```
 

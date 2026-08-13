@@ -152,3 +152,13 @@ if (!result) {
 exhaustion, cycle exhaustion, and backend failure. See
 [Solvers and diagnostics](solvers-and-diagnostics.md) for the distinction and
 backend selection guidance.
+
+## Related APIs
+
+- [Randomization library reference](../library/randomization.md) lists the
+  signatures for `Randomized`, `Rand`, `RandC`, and `RandomizeResult`.
+- [Policies and composite fields](policies-and-composition.md) defines
+  `inside()`, `range()`, distributions, soft constraints, constraint
+  handles, and nested objects.
+- [Common errors](solvers-and-diagnostics.md#common-errors) tabulates the
+  diagnostic messages a failing solve reports.

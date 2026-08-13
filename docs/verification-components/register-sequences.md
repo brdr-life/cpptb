@@ -19,7 +19,9 @@ const auto access = co_await register_access_check(test, regs);
 const auto bash = co_await register_bit_bash(test, regs);
 ```
 
-None of these functions drives reset, starts a clock, or inserts a delay. Bus
+A running clock and a completed reset, authored by the test as above, are
+prerequisites before the frontdoor sequences run. None of these functions
+drives reset, starts a clock, or inserts a delay. Bus
 timing comes from the model's existing frontdoor master. Raw backdoor work is
 synchronous and uses generated SystemRDL HDL paths.
 
@@ -158,3 +160,14 @@ The semantic gate executes 100,000 iterations and requires exact transactions,
 checks, simulated time, and checksum agreement. Timing is published only from
 an admitted serial host-load window and must pass the repository's unchanged
 `1.10x` hard guard.
+
+## Related APIs
+
+- [Register abstraction layer](../memory-register-models.md) defines the
+  frontdoor and backdoor vocabulary, desired and mirrored state, and the model
+  behavior these sequences traverse.
+- [Generate register models](register-generation.md) explains where the
+  generated backdoor paths and register metadata come from.
+- [Library reference: verification components](../library/components.md) lists
+  the `register_reset_check`, `register_access_check`, and `register_bit_bash`
+  signatures and options.

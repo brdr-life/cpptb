@@ -183,7 +183,8 @@ ApbMonitor monitor{test, bus};
 ApbProtocolChecker checker{test, bus};
 ```
 
-The APB components carry both write models, though `deferred_writes = true`
+The APB components carry [both write models](scheduling.md#the-write-model),
+though `deferred_writes = true`
 is the documented configuration and the one the examples use. Under it they
 take the cocotb shape: drives anchor on the rising edge and apply after that
 edge's own updates, and the master's completion loop, the monitor, and the
@@ -479,3 +480,13 @@ The August 8, 2026 admitted run certified the pair under the standard `1.10x`
 hard guard at `1.0412x` C++ DPI over pure SystemVerilog at 100,000 write/read
 pairs. [Performance](performance.md#apb-verification-components) records the run
 history, including the superseded July 17 baseline.
+
+## Related APIs
+
+- [Library reference: verification components](library/components.md) lists
+  the endpoint, scoreboard, stream, and APB component signatures introduced
+  above.
+- [Scheduling](scheduling.md#the-write-model) specifies the write model that
+  fixes the APB drive and observation points.
+- [Reference card](refcard.md) condenses the common component operations to
+  one line each.
