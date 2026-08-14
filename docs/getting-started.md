@@ -190,7 +190,7 @@ transaction-based bench.
 | Concurrency, timeouts, events, queues, process control | [Tasks and concurrency](testbench-authoring.md) |
 | Exactly when each `co_await` resumes | [Scheduling](scheduling.md) |
 | The test workflow and structured results | [Running tests](running-tests.md) |
-| Every common operation on one page | [Reference card](refcard.md) |
+| Every common operation on one page | [API reference](refcard.md) |
 | Every command-line option and `cpptb.toml` key | [cpptb command line](cli.md) · [cpptb.toml](cpptb-toml.md) |
 | Reading and driving internal signals, not just ports | [Hierarchical DUT access](hierarchy.md) |
 | Working code for a DUT shaped like yours | [Examples](examples.md) |

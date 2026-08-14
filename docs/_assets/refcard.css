@@ -1,0 +1,18 @@
+/* API reference (refcard): keep every code snippet on its own line.
+ *
+ * The Syntax cells hold complete statements as inline code spans. By
+ * default a span wraps mid-statement wherever the column runs out of
+ * width, which shatters `co_await` expressions into unreadable
+ * fragments. Forbid wrapping inside a span: lines then break only
+ * BETWEEN statements, and a genuinely wide table scrolls horizontally
+ * in Furo's .table-wrapper instead of breaking the code.
+ */
+
+#api-reference table code {
+    white-space: nowrap;
+}
+
+/* Multiple statements in one cell read as a list, not a run-on line. */
+#api-reference table td {
+    line-height: 1.9;
+}

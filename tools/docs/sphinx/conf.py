@@ -54,7 +54,12 @@ html_baseurl = os.environ.get("SPHINX_HTML_BASE_URL", "")
 html_static_path = [
     os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../docs/_assets"))
 ]
-html_css_files = ["code-tabs.css", "roadmap-status.css"]
+html_css_files = [
+    "code-tabs.css",
+    "roadmap-status.css",
+    "sidebar-current.css",
+    "refcard.css",
+]
 html_js_files = ["code-tabs.js"]
 html_theme_options = {
     "navigation_with_keys": True,
@@ -127,7 +132,7 @@ random-stimulus
 :maxdepth: 1
 :caption: Library reference
 
-Reference card <refcard>
+API reference <refcard>
 Triggers & phase waits <library/awaitables>
 Tasks & coordination <library/coordination>
 Signals & the Dut <library/signals>

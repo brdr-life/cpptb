@@ -109,6 +109,6 @@ composition.
   testbench.
 - [TestContext reference](library/test-context.md) — `start_clock`'s
   signature and preconditions.
-- [Reference card](refcard.md) — the clock operations at a glance.
+- [API reference](refcard.md) — the clock operations at a glance.
 - [Roadmap milestone 8](roadmap.md#8-coherent-clock-and-reset-control) —
   planned runtime clock control and reusable reset components.

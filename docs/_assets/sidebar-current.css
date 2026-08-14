@@ -1,0 +1,20 @@
+/* Sidebar: make the current page unmistakable.
+ *
+ * Furo's own rule for the current page is only `font-weight: 700` in the
+ * ordinary link color, which is easy to miss. Give the exact current page
+ * (`.current-page`) a brand-colored accent bar, a soft matching fill, and
+ * the brand color itself; ancestor items of an expanded section keep
+ * Furo's defaults. The padding compensation keeps the label aligned with
+ * its siblings, since the base `.reference` is a full-width block with
+ * symmetric horizontal padding. `--color-brand-primary` is theme-aware,
+ * so light and dark both get a fitting highlight.
+ */
+
+.sidebar-tree .current-page > .reference {
+    background: rgba(128, 128, 128, 0.12); /* fallback without color-mix */
+    background: color-mix(in srgb, var(--color-brand-primary) 14%, transparent);
+    border-left: 0.1875rem solid var(--color-brand-primary);
+    border-radius: 0 0.25rem 0.25rem 0;
+    color: var(--color-brand-primary);
+    padding-left: calc(var(--sidebar-item-spacing-horizontal) - 0.1875rem);
+}

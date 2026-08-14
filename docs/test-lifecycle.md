@@ -249,4 +249,4 @@ lifecycle behavior.
   `ResultSink`, and the versioned JSON contract.
 - [Scheduling](scheduling.md#wait-graphs-and-deadlock-diagnostics) — the
   wait graph a simulation-time timeout captures before cancelling the test.
-- [Reference card](refcard.md) — checks and registration at a glance.
+- [API reference](refcard.md) — checks and registration at a glance.
