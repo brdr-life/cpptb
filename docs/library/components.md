@@ -216,8 +216,7 @@ monitor.observed().connect(predictor);   // checks reads against the model,
 
 ## Register abstraction
 
-The generated model (from SystemRDL, IP-XACT, or RgGen contracts — see
-[Generate a register model](../verification-components/register-generation.md))
+The generated register model (from SystemRDL, IP-XACT, or RgGen contracts)
 is constructed over any bus master and optionally a generated backdoor:
 
 ```cpp
@@ -225,82 +224,11 @@ peripheral_regs::RegModel<decltype(master)> regs{test, master, base_address};
 auto backdoor = peripheral_regs::make_backdoor<decltype(master)>(dut);
 ```
 
-### RegisterHandle
-
-```cpp
-co_await reg.read();                 // frontdoor; RegisterReadResponse
-co_await reg.write(value);
-co_await reg.update();               // write only stale staged state
-co_await reg.mirror();               // read and check against the model
-
-uint64_t v = reg.peek();             // backdoor; immediate
-reg.poke(value);
-
-reg.stage(value);              // model state; immediate
-reg.predict(value);   reg.reset();
-uint64_t d = reg.staged();   uint64_t m = reg.mirrored();
-```
-
-Field access follows the same split via `RegisterFieldHandle` (whole-
-register transactions underneath; no field-level peek/poke by design),
-enum-typed fields via generated enum handles, and >64-bit registers via
-wide handles carrying `Bits<W>`. `update()` on a register with unknown
-staged state throws rather than writing garbage.
-
-### RegisterMemoryHandle
-
-```cpp
-co_await mem.read(index);                    // frontdoor or backdoor path
-co_await mem.write(first_index, span);       // chunked bus transactions
-auto value = mem.peek(index);   mem.poke(index, value);   // raw HDL storage
-```
-
-Semantic accesses are awaitables that may complete synchronously — a
-backdoor-path request simply doesn't suspend; always `co_await` them.
-Offset- and absolute-address forms exist for both semantic and raw
-access.
-
-### RegisterAddressMap
-
-```cpp
-RegisterAddressMap<Master> map{"window", master, window_base};
-map.route(regs.control.descriptor(), 0x10);
-co_await regs.control.read(map);             // same register, other window
-```
-
-Alternate decode windows and custom frontdoor procedures.
-
-### RegisterPredictor
-
-```cpp
-RegisterPredictor predictor{test, regs.register_handles()};
-monitor.observed().connect(predictor);       // passive mirror updates
-regs.set_auto_predict(false);                // avoid double prediction
-```
-
-### register_reset_check
-### register_access_check
-### register_bit_bash
-
-```cpp
-auto result = co_await register_reset_check(test, regs);
-co_await register_access_check(test, regs);
-co_await register_bit_bash(test, regs, {.path = AccessPath::Backdoor});
-```
-
-The standard sequences. None drives reset or starts a clock; requesting a
-backdoor path where none is generated throws with the register named
-rather than silently falling back. Results carry visit counters; checks
-land on the `TestContext`.
-
-### RegisterAccessCoverage
-
-```cpp
-RegisterAccessCoverage coverage{regs.descriptor(), base_address};
-monitor.observed().connect(coverage);        // frontdoor sampling, free
-coverage.sample_register(reg.descriptor(), MemoryOperation::Read);  // backdoor, explicit
-auto snapshot = coverage.snapshot();
-```
+The complete surface — register, field, and memory handles, staging and
+mirroring, the standard sequences, passive prediction, access coverage, and
+the extension points — has its own page:
+[Register models](registers.md). The semantics live in
+[Registers & memory](../memory-register-models.md).
 
 ## What takes simulation time
 

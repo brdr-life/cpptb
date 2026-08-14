@@ -553,7 +553,7 @@ an access.
 - [cpptb.toml reference](../cpptb-toml.md) documents the `[testbench]` table,
   including the `include_dirs` entry that exposes the generated header
   directory.
-- [Library reference: verification components](../library/components.md) lists
+- [Library reference: register models](../library/registers.md) lists
   the register handle, predictor, and sequence signatures that generated
   models expose.
 - [PeakRDL input processing](https://peakrdl.readthedocs.io/en/latest/processing-input.html)
