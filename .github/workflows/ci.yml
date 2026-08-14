@@ -3,9 +3,30 @@ name: CI
 on:
   # Branches are covered by pull_request; without this filter every push to a
   # branch with an open pull request ran the whole matrix twice.
+  #
+  # Path-filtered to documentation for now: with the test matrix disabled
+  # below, CI's only live duty is building and deploying the docs, so a
+  # code-only push should not spend a run at all. Widen these paths again
+  # when the test matrix returns.
   push:
     branches: [main]
+    paths:
+      - "docs/**"
+      - "tools/docs/**"
+      - "zensical.toml"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/ci.yml"
   pull_request:
+    paths:
+      - "docs/**"
+      - "tools/docs/**"
+      - "zensical.toml"
+      - "Makefile"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/ci.yml"
 
 # A newer commit supersedes an older one, so let the older run go rather than
 # queueing behind it for a runner.
@@ -100,6 +121,12 @@ jobs:
 
   test:
     name: Test (${{ matrix.os }})
+    # Disabled 2026-08: the private repository's included Actions minutes are
+    # exhausted, and this matrix is what drained them -- a Verilator build
+    # per run, with the macOS leg metered at a 10x multiplier. The full
+    # regression still runs locally via `make test`. To re-enable: delete
+    # this `if`, and widen the workflow's `on:` paths above.
+    if: false
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
