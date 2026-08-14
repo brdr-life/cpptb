@@ -124,6 +124,7 @@ code-generation
 :caption: Advanced Verification
 
 verification-components
+Registers & memory <memory-register-models>
 random-stimulus
 ```
 
@@ -140,6 +141,7 @@ TestContext & checks <library/test-context>
 Randomization <library/randomization>
 Functional coverage <library/coverage>
 Verification components <library/components>
+Register models <library/registers>
 Embedding & results <library/embedding>
 ```
 
@@ -230,9 +232,16 @@ _VERIFICATION_COMPONENTS_TOCTREE = """
 
 verification-components/memory-model
 verification-components/transaction-recording
-memory-register-models
-verification-components/register-generation
-verification-components/register-sequences
+```
+"""
+
+_REGISTER_MODELS_TOCTREE = """
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+Generate a model <verification-components/register-generation>
+Standard sequences <verification-components/register-sequences>
 ```
 """
 
@@ -242,6 +251,7 @@ _NAVIGATION_TOCTREES = {
     "examples/advanced": _ADVANCED_EXAMPLES_TOCTREE,
     "random-stimulus": _RANDOMIZATION_TOCTREE,
     "verification-components": _VERIFICATION_COMPONENTS_TOCTREE,
+    "memory-register-models": _REGISTER_MODELS_TOCTREE,
 }
 
 

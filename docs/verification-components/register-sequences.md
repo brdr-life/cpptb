@@ -168,6 +168,6 @@ an admitted serial host-load window and must pass the repository's unchanged
   behavior these sequences traverse.
 - [Generate register models](register-generation.md) explains where the
   generated backdoor paths and register metadata come from.
-- [Library reference: verification components](../library/components.md) lists
+- [Library reference: register models](../library/registers.md) lists
   the `register_reset_check`, `register_access_check`, and `register_bit_bash`
   signatures and options.

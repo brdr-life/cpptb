@@ -998,7 +998,7 @@ Semantic frontdoor operations and `address(index)` also accept a final
 `RegisterAddressMap&`; raw `peek`/`poke` operations always use physical HDL
 storage and therefore do not accept a software map. Full signatures and
 response types are documented in the
-[library reference](library/components.md#register-abstraction).
+[register library reference](library/registers.md).
 
 Typed traversal keeps generated members and enum field types intact:
 
