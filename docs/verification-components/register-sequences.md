@@ -164,7 +164,7 @@ an admitted serial host-load window and must pass the repository's unchanged
 ## Related APIs
 
 - [Register abstraction layer](../memory-register-models.md) defines the
-  frontdoor and backdoor vocabulary, desired and mirrored state, and the model
+  frontdoor and backdoor vocabulary, staged and mirrored state, and the model
   behavior these sequences traverse.
 - [Generate register models](register-generation.md) explains where the
   generated backdoor paths and register metadata come from.

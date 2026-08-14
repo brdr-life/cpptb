@@ -185,7 +185,7 @@ class PeakRdlExporterTests(unittest.TestCase):
                         bool& passed) {
                         model.control.predict(
                             0, cpptb::vc::RegisterPrediction::Direct);
-                        model.control.custom.set_desired(0xa);
+                        model.control.custom.stage(0xa);
                         const auto response = co_await model.control.update();
                         passed = response.okay() &&
                                  model.control.mirrored() == 0xa;
@@ -476,7 +476,7 @@ class PeakRdlExporterTests(unittest.TestCase):
                                     reset.registers_skipped));
                         }
                         model.reset_all();
-                        model.control.enable.set_desired(0);
+                        model.control.enable.stage(0);
                         const auto response = co_await model.control.update();
                         cpptb::vc::RegisterAddressMap debug_map{
                             "debug", master, 0x8000};
@@ -524,8 +524,8 @@ class PeakRdlExporterTests(unittest.TestCase):
                                  master.writes[2].address == 0x8208 &&
                                  master.writes[3].address == 0x820c &&
                                  model.control.mirrored_valid_mask() == 0xf &&
-                                 model.status.pending.desired_valid_mask() == 0xff &&
-                                 model.status.sampled.desired_valid_mask() == 0;
+                                 model.status.pending.staged_valid_mask() == 0xff &&
+                                 model.status.sampled.staged_valid_mask() == 0;
                     }
 
                     int main() {
@@ -545,25 +545,25 @@ class PeakRdlExporterTests(unittest.TestCase):
                         generated_demo::RegModel model{
                             test, master, 0, &backdoor};
                         model.reset_all();
-                        model.control.mode.set_desired(
+                        model.control.mode.stage(
                             generated_demo::mode_e::ACTIVE);
-                        if (model.control.mode.desired() !=
+                        if (model.control.mode.staged() !=
                                 generated_demo::mode_e::ACTIVE ||
                             generated_demo::cpptb_diagnostic_name(
-                                model.control.mode.desired()) !=
+                                model.control.mode.staged()) !=
                                 "mode_e::ACTIVE") {
                             return 1;
                         }
-                        model.control.mode.raw().set_desired(5);
+                        model.control.mode.raw().stage(5);
                         if (static_cast<uint64_t>(
-                                model.control.mode.desired()) != 5) {
+                                model.control.mode.staged()) != 5) {
                             return 1;
                         }
-                        model.control.mode.set_desired(
+                        model.control.mode.stage(
                             generated_demo::mode_e::ACTIVE);
-                        model.security.key.key.set_desired(0x1234u);
-                        model.lane_control.template at<1>().value.set_desired(0x5au);
-                        model.bank.template at<0>().control.value.set_desired(0xa55au);
+                        model.security.key.key.stage(0x1234u);
+                        model.lane_control.template at<1>().value.stage(0x5au);
+                        model.bank.template at<0>().control.value.stage(0xa55au);
                         size_t visited_registers = 0;
                         model.for_each_register(
                             [&](auto&) { ++visited_registers; });
@@ -1077,12 +1077,12 @@ class PeakRdlExporterTests(unittest.TestCase):
                         wide_top::RegModel model{test, master, 0, &backdoor};
                         const auto value = cpptb::Bits<128>::from_hex(
                             "0x112233445566778899aabbccddeeff00");
-                        model.wide.value.set_desired(value);
+                        model.wide.value.stage(value);
                         model.wide.poke(value);
                         model.memory.poke(1, value);
                         std::size_t visited = 0;
                         model.for_each_register([&](auto&) { ++visited; });
-                        return model.wide.value.desired() == value &&
+                        return model.wide.value.staged() == value &&
                                    model.wide.peek() == value &&
                                    model.memory.peek(1) == value &&
                                    memory[1] == value && storage == value &&

@@ -67,8 +67,8 @@ Task<void> ipxact_register_model_test(Dut dut, TestContext& test) {
     const auto control_read = co_await regs.registers.control.read();
     test.expect_eq("control readback", control_read.data, 0x5u);
 
-    regs.registers.control.enable.set_desired(1u);
-    regs.registers.control.mode.set_desired(
+    regs.registers.control.enable.stage(1u);
+    regs.registers.control.mode.stage(
         ipxact_regs::mode_enum_t::STREAM);
     const auto field_update = co_await regs.registers.control.update();
     test.require("control field update", field_update.okay());

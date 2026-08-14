@@ -192,10 +192,10 @@ Scalar top-level registers remain direct members. Register files become nested
 views, and arrays use compile-time indexed `at<Index>()` access:
 
 ```cpp
-regs.control.enable.set_desired(1);
-regs.security.key.key.set_desired(0x1234);
-regs.bank.at<1>().control.value.set_desired(0xa55a);
-regs.lane_control.at<0>().value.set_desired(0x5a);
+regs.control.enable.stage(1);
+regs.security.key.key.stage(0x1234);
+regs.bank.at<1>().control.value.stage(0xa55a);
+regs.lane_control.at<0>().value.stage(0x5a);
 ```
 
 Array views also provide deterministic `for_each()` and
@@ -541,7 +541,7 @@ an access.
 
 ## Related documentation
 
-- [Register abstraction layer](../memory-register-models.md) explains desired,
+- [Register abstraction layer](../memory-register-models.md) explains staged,
   mirrored, frontdoor, backdoor, update, mirror, and prediction behavior.
 - [APB register-file example](../examples/apb-regfile.md) provides the smallest
   source contract and equivalent bus-level workflow.

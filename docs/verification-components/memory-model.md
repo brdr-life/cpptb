@@ -4,7 +4,7 @@
 expected memory contents, images, byte enables, permissions, and access
 callbacks. It is separate from the register abstraction layer: use it when a
 monitor or reference model needs scalable byte-addressable storage rather than
-desired and mirrored register state.
+staged and mirrored register state.
 
 The model does not drive a bus or advance simulation time. Tests can use it
 directly or connect it to passive transactions from APB, AXI-Lite, Wishbone,
@@ -166,5 +166,5 @@ APB workload covers normal monitor and scheduler composition.
 - [Verification components](../verification-components.md) introduces the
   `AnalysisPort` fan-out and the passive monitors that feed a predictor.
 - [Register abstraction layer](../memory-register-models.md) provides named
-  registers, fields, access policy, desired state, and mirrored prediction
+  registers, fields, access policy, staged state, and mirrored prediction
   when the model needs more than general expected byte storage.

@@ -64,8 +64,8 @@ Task<void> configure_device(Dut dut, TestContext& test) {
     generated_registers::RegModel<decltype(master)> regs{
         test, master, 0x4000'0000};
 
-    regs.control.enable.set_desired(1);
-    regs.control.mode.set_desired(3);
+    regs.control.enable.stage(1);
+    regs.control.mode.stage(3);
     const auto update = co_await regs.control.update();
     test.require_eq("control update", update.transport.status,
                     MemoryStatus::Okay);
@@ -89,7 +89,7 @@ end-to-end generated-model integration against an open-source core.
 Assume `regs` was constructed with both a bus master and the
 [generated backdoor adapter](#hierarchical-backdoor-access). Each operation
 selects its own access path; the model does not have a global "frontdoor mode"
-or "backdoor mode." The desired and mirrored vocabulary used below is defined
+or "backdoor mode." The staged and mirrored vocabulary used below is defined
 in [Register model semantics](#register-model-semantics).
 
 ### Register frontdoor
@@ -103,17 +103,17 @@ const auto control = co_await regs.control.read();
 test.expect_eq("control", control.data, 0x0000'0007u);
 ```
 
-Use desired state when the model should encode access policy such as W1C,
+Use staged state when the model should encode access policy such as W1C,
 W1S, or toggle fields before conditionally writing the register:
 
 ```cpp
-regs.status.pending.set_desired(0x03);
+regs.status.pending.stage(0x03);
 co_await regs.status.update();
 ```
 
 ### Field frontdoor
 
-A field can be written and read directly. `write()` applies desired state
+A field can be written and read directly. `write()` applies staged state
 through the parent register's `update()` and issues a whole-register bus write
 when needed. `read()` performs a whole-register bus read and extracts the named
 field:
@@ -128,8 +128,8 @@ Set several fields first and call the parent register's `update()` once to
 combine them into one conditional register write:
 
 ```cpp
-regs.control.enable.set_desired(1);
-regs.control.mode.set_desired(generated_registers::mode_e::ACTIVE);
+regs.control.enable.stage(1);
+regs.control.mode.stage(generated_registers::mode_e::ACTIVE);
 co_await regs.control.update();
 ```
 
@@ -178,9 +178,9 @@ test.expect_eq("visible status", status.data, 0x80u);
 ```
 
 `read()`, `write()`, `update()`, and `mirror()` are frontdoor operations.
-`peek()` and `poke()` are backdoor operations. `set_desired()`, `predict()`,
+`peek()` and `poke()` are backdoor operations. `stage()`, `predict()`,
 and `reset()` only change model state. Successful frontdoor and backdoor
-operations update the same desired and mirrored state, so they may be
+operations update the same staged and mirrored state, so they may be
 interleaved without maintaining separate models.
 
 The two paths also have different simulation timing. A frontdoor operation
@@ -205,16 +205,16 @@ intentionally named rather than hidden behind an ambiguous `get()`:
 
 | Value | Meaning | Changes when |
 |---|---|---|
-| Desired | State the test wants writable fields to reach | `set_desired()`, successful prediction, or `reset()` |
+| Staged | State the test wants writable fields to reach | `stage()`, successful prediction, or `reset()` |
 | Mirrored | State the model currently predicts is in the DUT | Successful reads/writes, `predict()`, `peek()`/`poke()`, or `reset()` |
 | DUT | Actual hardware storage | RTL behavior, frontdoor transactions, or a backdoor operation |
 
-`set_desired()` changes only model state. It performs no bus access. `update()`
-does nothing when desired and mirrored values already match; otherwise it
+`stage()` changes only model state. It performs no bus access. `update()`
+does nothing when staged and mirrored values already match; otherwise it
 encodes the write needed by each field policy and performs a frontdoor write.
 `mirror()` performs a frontdoor read, optionally checks the previous mirror,
 then updates prediction. This is the same conceptual separation described by
-UVM RAL, but cpptb uses explicit `desired()` and `mirrored()` names.
+UVM RAL, but cpptb uses explicit `staged()` and `mirrored()` names.
 
 #### Known and unknown model bits
 
@@ -230,7 +230,7 @@ test.expect_eq("known reset bits", known & 0x0000'ffffu, 0x0000'ffffu);
 test.expect_eq("known value", value & known, expected & known);
 ```
 
-`desired_valid_mask()` and `mirrored_valid_mask()` are available on both
+`staged_valid_mask()` and `mirrored_valid_mask()` are available on both
 register and field handles. Field masks are shifted down to the field width, so
 an eight-bit field reports `0xff` when every field bit is known.
 
@@ -245,9 +245,9 @@ prediction policy is supplied.
 `mirror(MirrorCheck::Enabled)` compares only readable, nonvolatile bits that
 were valid before the read. The first mirror of a register with no reset learns
 the value without reporting a false mismatch. A later mirror checks that learned
-prediction. `set_desired()` marks only the selected writable register or field
+prediction. `stage()` marks only the selected writable register or field
 bits as valid. `update()` rejects a full-register transaction if another
-writable bit still has unknown desired state, with a path-qualified diagnostic;
+writable bit still has unknown staged state, with a path-qualified diagnostic;
 read, predict, or set the complete writable value first.
 
 ### Choosing an operation
@@ -258,8 +258,8 @@ The right operation follows from the intent of the test:
 |---|---|---:|---|
 | Send an exact bus write | `co_await reg.write(value)` | Frontdoor write | Predicts write effects after success |
 | Read through the bus | `co_await reg.read()` | Frontdoor read | Predicts sampled value and read effects |
-| Request a future state | `reg.set_desired(value)` | None | Changes desired writable fields only |
-| Apply requested state if needed | `co_await reg.update()` | Conditional frontdoor write | Converges desired and mirrored state |
+| Request a future state | `reg.stage(value)` | None | Changes staged writable fields only |
+| Apply requested state if needed | `co_await reg.update()` | Conditional frontdoor write | Converges staged and mirrored state |
 | Read and compare with prediction | `co_await reg.mirror(check)` | Frontdoor read | Checks then updates the mirror |
 | Account for an observed transaction | `reg.predict(value, kind)` | None | Applies direct, read, or write prediction |
 | Inspect or deposit through hierarchy | `reg.peek()` / `reg.poke(value)` | Backdoor | Updates the mirror immediately |
@@ -294,8 +294,8 @@ reg {
 
 ```cpp
 // Ordinary RW state and a W1C field are combined into one bus update.
-regs.status.enable.set_desired(1);
-regs.status.pending.set_desired(0);
+regs.status.enable.stage(1);
+regs.status.pending.stage(0);
 co_await regs.status.update();
 
 // Volatile RO state is sampled but excluded from mirror comparisons.
@@ -310,7 +310,7 @@ test.expect_eq("events cleared", regs.status.events.mirrored(), 0u);
 co_await regs.unlock.key.write(0x51f1'5eadu);
 ```
 
-The model tracks `desired()` and `mirrored()` values and validity, reset values,
+The model tracks `staged()` and `mirrored()` values and validity, reset values,
 volatile fields, read-clear/read-set behavior, write-one/zero set, clear, and
 toggle behavior, and write-once access. Concurrent frontdoor accesses to one
 register are serialized. `mirror()` compares known, readable, nonvolatile
@@ -319,7 +319,7 @@ nor compared.
 
 `update()` warns when a requested state cannot be reached through a field's
 write policy. For example, a write-one-set field cannot clear an already-set
-bit. The transaction still occurs, and desired state converges to the predicted
+bit. The transaction still occurs, and staged state converges to the predicted
 hardware state so repeated `update()` calls do not loop forever.
 
 Encoded fields use generated C++ enums, split registers issue ordered
@@ -376,12 +376,12 @@ test.expect_eq("wide command", read.data, command);
 
 Bits<17> opcode;
 opcode.set_bit(16, true);
-regs.command.opcode.set_desired(opcode);
+regs.command.opcode.stage(opcode);
 co_await regs.command.update();
 ```
 
 `WideRegisterHandle<Width, Master>` and its generated typed field handles
-support reset, desired and mirrored values, validity masks, read/write effects,
+support reset, staged and mirrored values, validity masks, read/write effects,
 frontdoor `read()`, `write()`, `update()`, and `mirror()`. Reset values and
 masks are emitted as complete word arrays, so reset state is not truncated at
 64 bits. Each individual frontdoor transfer must still be byte aligned, divide
@@ -395,7 +395,7 @@ homogeneous narrow-only `register_handles()` span.
 
 ### Multiple address maps and custom frontdoors
 
-A generated handle has one logical desired/mirrored state but can be accessed
+A generated handle has one logical staged/mirrored state but can be accessed
 through several named bus views. Construct a `RegisterAddressMap` with the
 master and base for that view, then pass it explicitly to the operation:
 
@@ -468,7 +468,7 @@ field {
 ```
 
 ```cpp
-regs.control.mode.set_desired(registers::mode_e::ACTIVE);
+regs.control.mode.stage(registers::mode_e::ACTIVE);
 co_await regs.control.update();
 
 const auto sampled = co_await regs.control.mode.read();
@@ -488,7 +488,7 @@ test.expect_eq("reserved encoding", reserved.data, 0x5u);
 ```
 
 `raw()` is an escape hatch, not a second model: typed and raw operations share
-the same desired value, mirror, validity masks, access policy, frontdoor, and
+the same staged value, mirror, validity masks, access policy, frontdoor, and
 lock. Encoded fields are currently limited to 64 bits because C++ enum
 underlying types cannot represent a wider value.
 
@@ -990,8 +990,8 @@ access the DUT or advance simulation time.
 | Handle | Semantic operations | Raw backdoor | Model state and metadata |
 |---|---|---|---|
 | Model | `update_all()`, `mirror_all(check)` | — | `reset_all()`, `set_auto_predict(enabled)`, `descriptor()`, `for_each_register`, `for_each_memory` |
-| Register | `read`, `write`, `update`, `mirror`, `predict` | `peek()`, `poke(value)` | `set_desired()`, `reset()`, `desired()`, `mirrored()`, validity masks, mapping metadata |
-| Field | `read` and `write` through the parent register | explicit parent read-modify-write | `set_desired()`, `desired()`, `mirrored()`, validity masks, `raw()`, mapping metadata plus `lsb()` |
+| Register | `read`, `write`, `update`, `mirror`, `predict` | `peek()`, `poke(value)` | `stage()`, `reset()`, `staged()`, `mirrored()`, validity masks, mapping metadata |
+| Field | `read` and `write` through the parent register | explicit parent read-modify-write | `stage()`, `staged()`, `mirrored()`, validity masks, `raw()`, mapping metadata plus `lsb()` |
 | Memory | scalar and chunk `read`/`write` in entry, offset, and absolute coordinates | `peek`/`poke` families in the same coordinates | `slice(first, count)`, `address(index)`, `base_address()`, `end_address()`, `element_bytes()`, `size()`, `width()`, index conversions |
 
 Semantic frontdoor operations and `address(index)` also accept a final
@@ -1004,7 +1004,7 @@ Typed traversal keeps generated members and enum field types intact:
 
 ```cpp
 regs.control.for_each_field([&](const auto& field) {
-    inspect(field.path(), field.desired(), field.mirrored());
+    inspect(field.path(), field.staged(), field.mirrored());
 });
 
 regs.for_each_register([&](const auto& reg) {
@@ -1041,8 +1041,8 @@ policy-aware whole-model operations preserve those semantics.
 Generated register-file hierarchy follows the SystemRDL structure:
 
 ```cpp
-regs.security.key.key.set_desired(0x1234);
-regs.bank.at<1>().control.value.set_desired(0xa55a);
+regs.security.key.key.stage(0x1234);
+regs.bank.at<1>().control.value.stage(0xa55a);
 ```
 
 `at<Index>()` is compile-time indexed so each element retains its concrete
@@ -1060,7 +1060,7 @@ co_await regs.mirror_all(MirrorCheck::Enabled);
 
 `reset_all()` changes only model state. It does not drive a DUT reset or advance
 simulation time. `update_all()` issues only the writes required by each
-register's desired state. `mirror_all()` skips write-only registers and checks
+register's staged state. `mirror_all()` skips write-only registers and checks
 all other registers sequentially in ascending address order. The sequential
 ordering is intentional: it is deterministic and does not assume that the
 frontdoor can accept concurrent transfers. Reusable reset-check, access, and
@@ -1181,35 +1181,35 @@ if (status != UVM_IS_OK || actual != 'h1234_5678)
                               status.name(), actual))
 ```
 
-### Desired state, update, and mirror
+### Staged state, update, and mirror
 
-cpptb and UVM retain desired and mirrored state. Cocotb and pure SV show the
+cpptb and UVM retain staged and mirrored state. Cocotb and pure SV show the
 small amount of explicit shadow bookkeeping needed when no RAL supplies it.
 
-<div class="cpptb-code-tabs" data-tabs="4" data-tab-group="register-model-comparison" data-tab-label="Desired state and mirror checking"></div>
+<div class="cpptb-code-tabs" data-tabs="4" data-tab-group="register-model-comparison" data-tab-label="Staged state and mirror checking"></div>
 
 <div class="cpptb-code-tab-label">cpptb-vc (C++ DPI)</div>
 
 ```cpp
-regs.register_0.value.set_desired(0x0000'002a);
+regs.register_0.value.stage(0x0000'002a);
 if (regs.register_0.needs_update()) {
     co_await regs.register_0.update();
 }
 
 co_await regs.register_0.mirror(MirrorCheck::Enabled);
-test.expect_eq("desired converged", regs.register_0.desired(),
+test.expect_eq("staged converged", regs.register_0.staged(),
                regs.register_0.mirrored());
 ```
 
 <div class="cpptb-code-tab-label">Cocotb</div>
 
 ```python
-desired = 0x2A
+staged = 0x2A
 mirrored = 0
 
-if desired != mirrored:
-    await regs.register_0.write(desired)
-    mirrored = desired
+if staged != mirrored:
+    await regs.register_0.write(staged)
+    mirrored = staged
 
 actual = await regs.register_0.read()
 assert actual == mirrored
@@ -1219,13 +1219,13 @@ mirrored = actual
 <div class="cpptb-code-tab-label">Pure SystemVerilog</div>
 
 ```systemverilog
-logic [31:0] desired = 32'h2a;
+logic [31:0] staged = 32'h2a;
 logic [31:0] mirrored = 32'h0;
 
-if (desired != mirrored) begin
-  apb_write_word(8'h00, desired, error, wait_cycles);
+if (staged != mirrored) begin
+  apb_write_word(8'h00, staged, error, wait_cycles);
   expect_eq("update status", error, 0);
-  mirrored = desired;
+  mirrored = staged;
 end
 
 apb_read_word(8'h00, actual, error, wait_cycles);
@@ -1262,7 +1262,7 @@ read/write fields.
 ```cpp
 // Hardware currently reports pending bits 0 and 2.
 regs.status.predict(0x05, RegisterPrediction::Direct);
-regs.status.pending.set_desired(0x04);
+regs.status.pending.stage(0x04);
 co_await regs.status.update();  // Encodes a bus write of 0x01.
 
 const auto cause = co_await regs.events.cause.read();
@@ -1436,7 +1436,7 @@ configuration database, phase hierarchy, or adapter/predictor class tree:
 |---|---|---|
 | Literal frontdoor transaction | `co_await reg.write(value)` | `reg.write(status, value)` |
 | Read and predict | `co_await reg.read()` | `reg.read(status, value)` |
-| Change desired state only | `reg.set_desired(value)` | `reg.set(value)` |
+| Change staged state only | `reg.stage(value)` | `reg.set(value)` |
 | Update only when needed | `co_await reg.update()` | `reg.update(status)` |
 | Check against mirror | `co_await reg.mirror(Enabled)` | `reg.mirror(status, UVM_CHECK)` |
 | Raw backdoor access | `reg.peek()` / `reg.poke()` | `reg.peek()` / `reg.poke()` |

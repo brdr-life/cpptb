@@ -77,8 +77,8 @@ ipxact_regs::RegModel regs{test, master};
 
 co_await regs.registers.control.write(0x5u);
 
-regs.registers.control.enable.set_desired(1u);
-regs.registers.control.mode.set_desired(
+regs.registers.control.enable.stage(1u);
+regs.registers.control.mode.stage(
     ipxact_regs::mode_enum_t::STREAM);
 co_await regs.registers.control.update();
 
@@ -111,7 +111,7 @@ co_await regs.registers.control.write(0x5u);
 const auto control = co_await regs.registers.control.read();
 test.expect_eq("control readback", control.data, 0x5u);
 
-regs.registers.control.mode.set_desired(
+regs.registers.control.mode.stage(
     ipxact_regs::mode_enum_t::STREAM);
 co_await regs.registers.control.update();
 
