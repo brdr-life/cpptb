@@ -741,13 +741,13 @@ cpptb::coro::Task<void> exercise_register(
     cpptb::vc::RegisterHandle<FakeMaster>& reg, FakeMaster& master,
     bool& passed) {
     using namespace cpptb::vc;
-    passed &= expect("reset initializes desired and mirrored state",
-                     reg.desired() == 0x00aa'ff12 &&
+    passed &= expect("reset initializes staged and mirrored state",
+                     reg.staged() == 0x00aa'ff12 &&
                          reg.mirrored() == 0x00aa'ff12 &&
                          !reg.needs_update());
 
-    reg.set_desired(0x00aa'0f34);
-    passed &= expect("set_desired does not access the DUT",
+    reg.stage(0x00aa'0f34);
+    passed &= expect("stage does not access the DUT",
                      reg.needs_update() && master.writes.empty());
     const auto update = co_await reg.update();
     passed &= expect("update performs one frontdoor write",
@@ -755,9 +755,9 @@ cpptb::coro::Task<void> exercise_register(
                          master.writes[0].address == 0x1020 &&
                          master.writes[0].data == 0x0000'f034 &&
                          master.writes[0].byte_enable == 0xf);
-    passed &= expect("update encodes desired W1C state into bus data",
+    passed &= expect("update encodes staged W1C state into bus data",
                      reg.mirrored() == 0x00aa'0f34 &&
-                         reg.desired() == reg.mirrored());
+                         reg.staged() == reg.mirrored());
 
     master.next_read = {0x0055'aa77, MemoryStatus::Okay, 0};
     const auto read = co_await reg.read();
@@ -768,9 +768,9 @@ cpptb::coro::Task<void> exercise_register(
                      reg.mirrored() == 0x0000'aa77);
 
     auto control = reg.field(kFields[0]);
-    control.set_desired(0x5a);
-    passed &= expect("field desired state is explicit",
-                     control.desired() == 0x5a && reg.needs_update());
+    control.stage(0x5a);
+    passed &= expect("field staged state is explicit",
+                     control.staged() == 0x5a && reg.needs_update());
     static_cast<void>(co_await control.write(0x66));
     passed &= expect("field write uses a whole-register frontdoor update",
                      master.writes.back().data == 0x0000'0066 &&
@@ -794,7 +794,7 @@ cpptb::coro::Task<void> exercise_fieldless(
 
     static_cast<void>(co_await reg.write(0x1ab));
     passed &= expect("fieldless write reaches the mirror",
-                     reg.mirrored() == 0xab && reg.desired() == 0xab);
+                     reg.mirrored() == 0xab && reg.staged() == 0xab);
     passed &= expect("narrow fieldless write masks data and byte enables",
                      master.writes.back().data == 0xab &&
                          master.writes.back().byte_enable == 0x1);
@@ -880,7 +880,7 @@ cpptb::coro::Task<void> exercise_wide_register(
     const auto reset =
         Wide::from_hex("0xfedcba98765432100123456789abcdef");
     passed &= expect("wide reset words initialize complete model state",
-                     reg.desired() == reset && reg.mirrored() == reset);
+                     reg.staged() == reset && reg.mirrored() == reset);
 
     const auto value =
         Wide::from_hex("0x112233445566778899aabbccddeeff00");
@@ -918,9 +918,9 @@ cpptb::coro::Task<void> exercise_wide_register(
                          reg.mirrored() == deposited);
 
     auto field = reg.template field<128>(kWide128Fields[0]);
-    field.set_desired(value);
-    passed &= expect("wide named field exposes typed desired state",
-                     field.desired() == value && reg.needs_update());
+    field.stage(value);
+    passed &= expect("wide named field exposes typed staged state",
+                     field.staged() == value && reg.needs_update());
 }
 
 cpptb::coro::Task<void> exercise_wide_register_policies(
@@ -940,18 +940,18 @@ cpptb::coro::Task<void> exercise_wide_register_policies(
     passed &= expect("wide write-once policy rejects a second write",
                      second_write_rejected);
 
-    set_only.set_desired(Wide{});
+    set_only.stage(Wide{});
     const auto warnings_before = result.warnings;
     static_cast<void>(co_await set_only.update());
     passed &= expect(
-        "wide unreachable desired state records a path-qualified warning",
+        "wide unreachable staged state records a path-qualified warning",
         result.warnings == warnings_before + 1 &&
             !result.warning_records.empty() &&
             result.warning_records.back().label.find("block.wide128_set") !=
                 std::string::npos);
-    passed &= expect("wide unreachable desired state converges",
+    passed &= expect("wide unreachable staged state converges",
                      set_only.mirrored().bit(0) &&
-                         set_only.desired().bit(0));
+                         set_only.staged().bit(0));
 }
 
 cpptb::coro::Task<void> exercise_prediction_validity(
@@ -960,21 +960,21 @@ cpptb::coro::Task<void> exercise_prediction_validity(
     cpptb::vc::RegisterHandle<FakeMaster>& unknown_pair,
     FakeMaster& master, cpptb::TestResult& result, bool& passed) {
     passed &= expect("reset validity follows the descriptor reset mask",
-                     partial.desired() == 0x005a &&
+                     partial.staged() == 0x005a &&
                          partial.mirrored() == 0x005a &&
-                         partial.desired_valid_mask() == 0x00ff &&
+                         partial.staged_valid_mask() == 0x00ff &&
                          partial.mirrored_valid_mask() == 0x00ff);
 
     auto known = partial.field(kPartialResetFields[0]);
     auto unknown = partial.field(kPartialResetFields[1]);
     passed &= expect("field validity masks are field-local",
-                     known.desired_valid_mask() == 0xff &&
-                         unknown.desired_valid_mask() == 0);
+                     known.staged_valid_mask() == 0xff &&
+                         unknown.staged_valid_mask() == 0);
 
-    unknown.set_desired(0x12);
-    passed &= expect("field set only validates the selected desired field",
-                     partial.desired() == 0x125a &&
-                         partial.desired_valid_mask() == 0xffff &&
+    unknown.stage(0x12);
+    passed &= expect("field set only validates the selected staged field",
+                     partial.staged() == 0x125a &&
+                         partial.staged_valid_mask() == 0xffff &&
                          partial.mirrored_valid_mask() == 0x00ff &&
                          partial.needs_update());
     static_cast<void>(co_await partial.update());
@@ -995,9 +995,9 @@ cpptb::coro::Task<void> exercise_prediction_validity(
     passed &= expect("a successful read establishes prediction validity",
                      unknown_fieldless.mirrored() == 0xa5 &&
                          unknown_fieldless.mirrored_valid_mask() == 0xff &&
-                         unknown_fieldless.desired_valid_mask() == 0xff);
+                         unknown_fieldless.staged_valid_mask() == 0xff);
 
-    unknown_pair.field(kUnknownPairFields[0]).set_desired(0x33);
+    unknown_pair.field(kUnknownPairFields[0]).stage(0x33);
     bool rejected_unknown_sibling = false;
     try {
         static_cast<void>(co_await unknown_pair.update());
@@ -1005,7 +1005,7 @@ cpptb::coro::Task<void> exercise_prediction_validity(
         const std::string_view message{error.what()};
         rejected_unknown_sibling =
             message.find("block.unknown_pair") != std::string_view::npos &&
-            message.find("unknown desired writable bits") !=
+            message.find("unknown staged writable bits") !=
                 std::string_view::npos;
     }
     passed &= expect("update rejects unknown writable sibling state",
@@ -1016,13 +1016,13 @@ cpptb::coro::Task<void> exercise_mixed_access(
     cpptb::vc::RegisterHandle<FakeMaster>& reg, FakeMaster& master,
     cpptb::TestResult& result, bool& passed) {
     auto command = reg.field(kMixedFields[0]);
-    command.set_desired(0xa5);
+    command.stage(0xa5);
     master.next_read = {0x0056'7800, cpptb::vc::MemoryStatus::Okay, 0};
     static_cast<void>(co_await reg.read());
     passed &= expect("read prediction preserves write-only mirror state",
                      command.mirrored() == 0x5a);
     passed &= expect("read prediction preserves pending write-only intent",
-                     command.desired() == 0xa5 && reg.needs_update());
+                     command.staged() == 0xa5 && reg.needs_update());
 
     reg.predict(0x0011'225a);
     const auto failures_before = result.failures;
@@ -1035,16 +1035,16 @@ cpptb::coro::Task<void> exercise_mixed_access(
 cpptb::coro::Task<void> exercise_unreachable_update(
     cpptb::vc::RegisterHandle<FakeMaster>& reg, cpptb::TestResult& result,
     bool& passed) {
-    reg.set_desired(0);
+    reg.stage(0);
     const auto warnings_before = result.warnings;
     static_cast<void>(co_await reg.update());
-    passed &= expect("unreachable desired state records a warning",
+    passed &= expect("unreachable staged state records a warning",
                      result.warnings == warnings_before + 1 &&
                          !result.warning_records.empty() &&
                          result.warning_records.back().label.find(
                              "block.set_only") != std::string::npos);
-    passed &= expect("unreachable desired state converges to hardware state",
-                     reg.mirrored() == 1 && reg.desired() == 1);
+    passed &= expect("unreachable staged state converges to hardware state",
+                     reg.mirrored() == 1 && reg.staged() == 1);
 }
 
 cpptb::coro::Task<void> exercise_memory_access_errors(
@@ -1078,7 +1078,7 @@ bool exercise_write_effect_algebra() {
     using cpptb::vc::register_detail::apply_write_effect;
     using cpptb::vc::register_detail::apply_read_valid_mask;
     using cpptb::vc::register_detail::apply_write_valid_mask;
-    using cpptb::vc::register_detail::encode_desired_write;
+    using cpptb::vc::register_detail::encode_staged_write;
 
     bool passed = true;
     auto field = [](RegisterWriteEffect effect) {
@@ -1115,31 +1115,31 @@ bool exercise_write_effect_algebra() {
 
     const auto check_encoding = [&](const char* label,
                                     RegisterWriteEffect effect,
-                                    uint64_t previous, uint64_t desired) {
+                                    uint64_t previous, uint64_t staged) {
         const auto descriptor = field(effect);
         const auto encoded =
-            encode_desired_write(previous, desired, descriptor);
+            encode_staged_write(previous, staged, descriptor);
         passed &= expect(
             label,
-            apply_write_effect(previous, encoded, descriptor) == desired);
+            apply_write_effect(previous, encoded, descriptor) == staged);
     };
-    check_encoding("plain desired encoding", RegisterWriteEffect::None, 0x5,
+    check_encoding("plain staged encoding", RegisterWriteEffect::None, 0x5,
                    0xa);
-    check_encoding("write-one-set desired encoding",
+    check_encoding("write-one-set staged encoding",
                    RegisterWriteEffect::WriteOneSet, 0x5, 0xf);
-    check_encoding("write-one-clear desired encoding",
+    check_encoding("write-one-clear staged encoding",
                    RegisterWriteEffect::WriteOneClear, 0x5, 0x1);
-    check_encoding("write-one-toggle desired encoding",
+    check_encoding("write-one-toggle staged encoding",
                    RegisterWriteEffect::WriteOneToggle, 0x5, 0xa);
-    check_encoding("write-zero-set desired encoding",
+    check_encoding("write-zero-set staged encoding",
                    RegisterWriteEffect::WriteZeroSet, 0x5, 0xf);
-    check_encoding("write-zero-clear desired encoding",
+    check_encoding("write-zero-clear staged encoding",
                    RegisterWriteEffect::WriteZeroClear, 0x5, 0x1);
-    check_encoding("write-zero-toggle desired encoding",
+    check_encoding("write-zero-toggle staged encoding",
                    RegisterWriteEffect::WriteZeroToggle, 0x5, 0xa);
-    check_encoding("write-clear desired encoding", RegisterWriteEffect::Clear,
+    check_encoding("write-clear staged encoding", RegisterWriteEffect::Clear,
                    0x5, 0x0);
-    check_encoding("write-set desired encoding", RegisterWriteEffect::Set, 0x5,
+    check_encoding("write-set staged encoding", RegisterWriteEffect::Set, 0x5,
                    0xf);
 
     passed &= expect(
@@ -1175,7 +1175,7 @@ bool exercise_write_effect_algebra() {
     const auto unknown_w1s = field(RegisterWriteEffect::WriteOneSet);
     passed &= expect(
         "unknown write-one-set state emits deterministic set commands",
-        encode_desired_write(0, 0, 0xa, unknown_w1s) == 0xa);
+        encode_staged_write(0, 0, 0xa, unknown_w1s) == 0xa);
     return passed;
 }
 
@@ -1453,7 +1453,7 @@ cpptb::coro::Task<void> exercise_register_address_maps(
                          alias_predictor.unmapped() == 0 &&
                          duplicate_predictor_alias_rejected);
 
-    fieldless.set_desired(0x78);
+    fieldless.stage(0x78);
     static_cast<void>(co_await fieldless.update(debug));
     custom.storage = 0x78;
     static_cast<void>(co_await fieldless.mirror(
@@ -1716,7 +1716,7 @@ cpptb::coro::Task<void> exercise_user_effect_policy(
     cpptb::vc::RegisterHandle custom{
         test, master, kUserEffectRegister, nullptr, &policy};
     custom.predict(0, cpptb::vc::RegisterPrediction::Direct);
-    custom.set_desired(0x0a);
+    custom.stage(0x0a);
     const auto write = co_await custom.update();
     passed &= expect(
         "user write policy encodes and predicts update traffic",
@@ -1738,7 +1738,7 @@ cpptb::coro::Task<void> exercise_user_effect_policy(
     cpptb::vc::RegisterHandle packed_custom{
         test, master, kUserEffectRegister, nullptr, &field_policy};
     packed_custom.predict(0, cpptb::vc::RegisterPrediction::Direct);
-    packed_custom.set_desired(0x0a);
+    packed_custom.stage(0x0a);
     const auto packed_write = co_await packed_custom.update();
     packed_custom.predict(0x05, cpptb::vc::RegisterPrediction::Read);
     passed &= expect(
@@ -1770,7 +1770,7 @@ cpptb::coro::Task<void> exercise_user_effect_policy(
     const auto wide_valid = cpptb::Bits<128>::from_hex(
         "0xffffffffffffffffffffffffffffffff");
     wide.predict(cpptb::Bits<128>{}, cpptb::vc::RegisterPrediction::Direct);
-    wide.set_desired(wide_value);
+    wide.stage(wide_value);
     const auto wide_write = co_await wide.update();
     passed &= expect(
         "wide registers use the same user-effect policy",
@@ -2206,7 +2206,7 @@ int main() {
         exercise_split_registers(split, big_split, master, passed));
     passed &= expect("split-register sequence completes", scheduler.done());
     try {
-        static_cast<void>(wide.desired());
+        static_cast<void>(wide.staged());
     } catch (const std::logic_error& error) {
         wide_diagnostic = std::string_view{error.what()}.find("block.wide") !=
                           std::string_view::npos;

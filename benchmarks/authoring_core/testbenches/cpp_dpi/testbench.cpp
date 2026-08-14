@@ -1676,9 +1676,9 @@ Task<void> run_register_prediction_validity(Context context) {
         check(context, "register reset validity", model.mirrored_valid_mask(),
               0xff);
 
-        pending.set_desired(value >> 8u);
-        check(context, "register field desired validity",
-              model.desired_valid_mask(), 0xffff);
+        pending.stage(value >> 8u);
+        check(context, "register field staged validity",
+              model.staged_valid_mask(), 0xffff);
 
         model.predict(value, RegisterPrediction::Direct);
         check(context, "register direct prediction validity",
@@ -2658,13 +2658,13 @@ Task<void> run_register_user_effects(Context context) {
 
     for (uint32_t iteration = 0; iteration < context.iterations; ++iteration) {
         const uint32_t initial = stimulus(iteration * 2u) & 0xffu;
-        const uint32_t desired = stimulus(iteration * 2u + 1u) & 0xffu;
+        const uint32_t staged = stimulus(iteration * 2u + 1u) & 0xffu;
         master.storage = initial;
         model.predict(initial, RegisterPrediction::Direct);
-        model.set_desired(desired);
+        model.stage(staged);
         const auto write = co_await model.update();
-        check(context, "user effect write mirror", model.mirrored(), desired);
-        check(context, "user effect write DUT", master.storage, desired);
+        check(context, "user effect write mirror", model.mirrored(), staged);
+        check(context, "user effect write DUT", master.storage, staged);
 
         const auto read = co_await model.read();
         check(context, "user effect read mirror", model.mirrored(),
@@ -2673,7 +2673,7 @@ Task<void> run_register_user_effects(Context context) {
               static_cast<uint32_t>(model.mirrored_valid_mask() & 0xffu),
               0xffu);
         context.result.checksum =
-            (context.result.checksum ^ desired) * 0x0100'0193u;
+            (context.result.checksum ^ staged) * 0x0100'0193u;
         context.result.checksum =
             (context.result.checksum ^ (master.storage & 0xffu)) *
             0x0100'0193u;

@@ -59,7 +59,7 @@ layers the environment needs:
 |---|---|
 | [Transaction recording](verification-components/transaction-recording.md) | Record monitor-derived typed transactions to memory or JSON Lines |
 | [Sparse expected memory](verification-components/memory-model.md) | Images, expected byte storage, byte enables, permissions, and passive prediction |
-| [Register abstraction layer](memory-register-models.md) | Typed registers and fields, desired/mirrored state, frontdoor/backdoor access, and side effects |
+| [Register abstraction layer](memory-register-models.md) | Typed registers and fields, staged/mirrored state, frontdoor/backdoor access, and side effects |
 | [Generate register models](verification-components/register-generation.md) | SystemRDL, IP-XACT, or native RgGen input, build dependencies, naming, and limitations |
 | [Standard register sequences](verification-components/register-sequences.md) | Reset checks, frontdoor/backdoor agreement, bit-bash policy, summaries, and performance peer |
 
@@ -281,7 +281,7 @@ analysis components.
 The same APB monitor can feed a protocol-independent
 [sparse memory predictor](verification-components/memory-model.md). Use the
 [register abstraction layer](memory-register-models.md) when the environment
-also needs typed fields, desired/mirrored state, or generated SystemRDL access.
+also needs typed fields, staged/mirrored state, or generated SystemRDL access.
 
 ## One component in four frameworks
 

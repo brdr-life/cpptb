@@ -230,22 +230,22 @@ auto backdoor = peripheral_regs::make_backdoor<decltype(master)>(dut);
 ```cpp
 co_await reg.read();                 // frontdoor; RegisterReadResponse
 co_await reg.write(value);
-co_await reg.update();               // write only stale desired state
+co_await reg.update();               // write only stale staged state
 co_await reg.mirror();               // read and check against the model
 
 uint64_t v = reg.peek();             // backdoor; immediate
 reg.poke(value);
 
-reg.set_desired(value);              // model state; immediate
+reg.stage(value);              // model state; immediate
 reg.predict(value);   reg.reset();
-uint64_t d = reg.desired();   uint64_t m = reg.mirrored();
+uint64_t d = reg.staged();   uint64_t m = reg.mirrored();
 ```
 
 Field access follows the same split via `RegisterFieldHandle` (whole-
 register transactions underneath; no field-level peek/poke by design),
 enum-typed fields via generated enum handles, and >64-bit registers via
 wide handles carrying `Bits<W>`. `update()` on a register with unknown
-desired state throws rather than writing garbage.
+staged state throws rather than writing garbage.
 
 ### RegisterMemoryHandle
 
@@ -312,7 +312,7 @@ standard sequences.
 
 **Immediate, zero-time**: `AnalysisPort::write`/`connect`, every
 scoreboard/predictor/coverage `write`, all `*_nowait` forms, all
-`peek`/`poke`, model state (`set_desired`/`predict*`/`reset`), all
+`peek`/`poke`, model state (`stage`/`predict*`/`reset`), all
 metadata accessors, the entire `SparseMemory`, and the entire
 transaction-recording API.
 

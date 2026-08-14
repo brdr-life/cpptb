@@ -322,8 +322,8 @@ The first typed register-model slice is also implemented:
 - preserved `accesswidth`, generated-file provenance, and path-qualified
   diagnostics for unsupported widths and reset references;
 - fieldless and write-only prediction, readable-only mirror checking, and
-  warnings for desired states that field write effects cannot reach; and
-- reset-mask-aware desired and mirrored validity plus passive prediction from
+  warnings for staged states that field write effects cannot reach; and
+- reset-mask-aware staged and mirrored validity plus passive prediction from
   monitored bus transactions, including partial byte enables;
 - generated typed backdoor adapters from standard SystemRDL `hdl_path` and
   `hdl_path_slice` metadata, with compile-time hierarchy pruning and no
@@ -340,7 +340,7 @@ adapter exposes ordinary coroutine transactions, and a backdoor adapter
 performs explicit hierarchical operations. This keeps both models reusable
 across APB, AXI-Lite, Wishbone, and custom buses.
 
-Named generated field and memory handles, relocatable block bases, desired and
+Named generated field and memory handles, relocatable block bases, staged and
 mirrored values, every standard SystemRDL write effect, write-once policy,
 passive memory prediction, generated-model execution against a fake master,
 the APB-backed example, and a first-class IP-XACT register-and-memory example
@@ -397,7 +397,7 @@ the price of the abstraction layer rather than equivalent work.
 for returning these rows to the hard gate.
 
 Row 6 generates shared C++ enum types from SystemRDL `encode`, symbolic
-failure diagnostics, typed read/write/desired/mirror access, and an explicit
+failure diagnostics, typed read/write/stage/mirror access, and an explicit
 `.raw()` escape hatch for reserved encodings. Its `register_enum` C++/pure-SV
 semantic pair passes at 100,000 operations; its performance entry is a
 diagnostic (`10.21x`) for the same reason as rows 5's -- the peer encodes
@@ -414,7 +414,7 @@ admitted host-load window.
 
 Row 8 provides named `RegisterAddressMap` instances with independent masters,
 base addresses, per-register and per-memory aliases, and optional custom
-frontdoors. All views share one logical desired/mirrored state; backdoor paths
+frontdoors. All views share one logical staged/mirrored state; backdoor paths
 continue to describe physical RTL storage. Its exact `register_maps` pair
 executes the same primary, alias, and custom-frontdoor sequence in C++ and pure
 SystemVerilog.

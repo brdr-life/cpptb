@@ -1107,35 +1107,35 @@ inline constexpr uint64_t apply_read_valid_mask(
     return insert_field(previous_valid, next_valid, field);
 }
 
-inline constexpr uint64_t encode_desired_write(
-    uint64_t previous, uint64_t desired,
+inline constexpr uint64_t encode_staged_write(
+    uint64_t previous, uint64_t staged,
     const RegisterFieldDescriptor& field) noexcept {
     const uint64_t mask = register_mask(field.width);
     const uint64_t old_field = extract_field(previous, field);
-    const uint64_t desired_field = extract_field(desired, field);
-    uint64_t written = desired_field;
+    const uint64_t staged_field = extract_field(staged, field);
+    uint64_t written = staged_field;
     switch (field.write_effect) {
         case RegisterWriteEffect::None:
         case RegisterWriteEffect::User:
-            written = desired_field;
+            written = staged_field;
             break;
         case RegisterWriteEffect::WriteOneSet:
-            written = desired_field & ~old_field;
+            written = staged_field & ~old_field;
             break;
         case RegisterWriteEffect::WriteOneClear:
-            written = old_field & ~desired_field;
+            written = old_field & ~staged_field;
             break;
         case RegisterWriteEffect::WriteOneToggle:
-            written = old_field ^ desired_field;
+            written = old_field ^ staged_field;
             break;
         case RegisterWriteEffect::WriteZeroSet:
-            written = old_field | ~desired_field;
+            written = old_field | ~staged_field;
             break;
         case RegisterWriteEffect::WriteZeroClear:
-            written = ~old_field | desired_field;
+            written = ~old_field | staged_field;
             break;
         case RegisterWriteEffect::WriteZeroToggle:
-            written = ~(old_field ^ desired_field);
+            written = ~(old_field ^ staged_field);
             break;
         case RegisterWriteEffect::Clear:
         case RegisterWriteEffect::Set:
@@ -1145,36 +1145,36 @@ inline constexpr uint64_t encode_desired_write(
     return insert_field(0, written & mask, field);
 }
 
-inline constexpr uint64_t encode_desired_write(
-    uint64_t previous, uint64_t previous_valid, uint64_t desired,
+inline constexpr uint64_t encode_staged_write(
+    uint64_t previous, uint64_t previous_valid, uint64_t staged,
     const RegisterFieldDescriptor& field) noexcept {
     const uint64_t mask = register_mask(field.width);
     const uint64_t old_field = extract_field(previous, field);
     const uint64_t old_valid = extract_field(previous_valid, field);
-    const uint64_t desired_field = extract_field(desired, field);
-    uint64_t written = desired_field;
+    const uint64_t staged_field = extract_field(staged, field);
+    uint64_t written = staged_field;
     switch (field.write_effect) {
         case RegisterWriteEffect::None:
         case RegisterWriteEffect::User:
-            written = desired_field;
+            written = staged_field;
             break;
         case RegisterWriteEffect::WriteOneSet:
-            written = desired_field & (~old_field | ~old_valid);
+            written = staged_field & (~old_field | ~old_valid);
             break;
         case RegisterWriteEffect::WriteOneClear:
-            written = ~desired_field & (old_field | ~old_valid);
+            written = ~staged_field & (old_field | ~old_valid);
             break;
         case RegisterWriteEffect::WriteOneToggle:
-            written = old_valid & (old_field ^ desired_field);
+            written = old_valid & (old_field ^ staged_field);
             break;
         case RegisterWriteEffect::WriteZeroSet:
-            written = (old_field & old_valid) | ~desired_field;
+            written = (old_field & old_valid) | ~staged_field;
             break;
         case RegisterWriteEffect::WriteZeroClear:
-            written = (~old_field & old_valid) | desired_field;
+            written = (~old_field & old_valid) | staged_field;
             break;
         case RegisterWriteEffect::WriteZeroToggle:
-            written = (old_valid & ~(old_field ^ desired_field)) | ~old_valid;
+            written = (old_valid & ~(old_field ^ staged_field)) | ~old_valid;
             break;
         case RegisterWriteEffect::Clear:
         case RegisterWriteEffect::Set:
@@ -1219,9 +1219,9 @@ class RegisterFieldHandle {
                         const RegisterFieldDescriptor& descriptor)
         : parent_(&parent), descriptor_(&descriptor) {}
 
-    data_type desired() const {
+    data_type staged() const {
         return static_cast<data_type>(register_detail::extract_field(
-            parent_->desired(), *descriptor_));
+            parent_->staged(), *descriptor_));
     }
 
     data_type mirrored() const {
@@ -1229,9 +1229,9 @@ class RegisterFieldHandle {
             parent_->mirrored(), *descriptor_));
     }
 
-    data_type desired_valid_mask() const {
+    data_type staged_valid_mask() const {
         return static_cast<data_type>(register_detail::extract_field(
-            parent_->desired_valid_mask(), *descriptor_));
+            parent_->staged_valid_mask(), *descriptor_));
     }
 
     data_type mirrored_valid_mask() const {
@@ -1239,12 +1239,12 @@ class RegisterFieldHandle {
             parent_->mirrored_valid_mask(), *descriptor_));
     }
 
-    void set_desired(data_type value) {
+    void stage(data_type value) {
         if (!register_writable(descriptor_->access)) {
             throw std::logic_error("cpptb-vc: field is not writable: " +
                                    std::string{descriptor_->path});
         }
-        parent_->set_field_desired(value, *descriptor_);
+        parent_->stage_field(value, *descriptor_);
     }
 
     coro::Task<read_response_type> read() {
@@ -1266,13 +1266,13 @@ class RegisterFieldHandle {
     }
 
     coro::Task<write_response_type> write(data_type value) {
-        set_desired(value);
+        stage(value);
         co_return co_await parent_->update();
     }
 
     coro::Task<write_response_type> write(data_type value,
                                           RegisterAddressMap<Master>& map) {
-        set_desired(value);
+        stage(value);
         co_return co_await parent_->update(map);
     }
 
@@ -2794,13 +2794,13 @@ class RegisterHandle {
           descriptor_(&descriptor),
           backdoor_(backdoor),
           user_effects_(user_effects),
-          desired_(static_cast<data_type>(
+          staged_(static_cast<data_type>(
               descriptor.reset_value & descriptor.reset_mask &
               register_mask(descriptor.width))),
-          mirrored_(desired_),
-          desired_valid_mask_(static_cast<data_type>(
+          mirrored_(staged_),
+          staged_valid_mask_(static_cast<data_type>(
               descriptor.reset_mask & register_mask(descriptor.width))),
-          mirrored_valid_mask_(desired_valid_mask_) {
+          mirrored_valid_mask_(staged_valid_mask_) {
         if (base_address >
             std::numeric_limits<uint64_t>::max() - descriptor.address) {
             throw std::invalid_argument(
@@ -2838,17 +2838,17 @@ class RegisterHandle {
     void set_auto_predict(bool enabled) noexcept { auto_predict_ = enabled; }
     [[nodiscard]] bool auto_predict() const noexcept { return auto_predict_; }
 
-    data_type desired() const {
+    data_type staged() const {
         require_supported_access();
-        return desired_;
+        return staged_;
     }
     data_type mirrored() const {
         require_supported_access();
         return mirrored_;
     }
-    data_type desired_valid_mask() const {
+    data_type staged_valid_mask() const {
         require_supported_access();
-        return desired_valid_mask_;
+        return staged_valid_mask_;
     }
     data_type mirrored_valid_mask() const {
         require_supported_access();
@@ -2857,25 +2857,25 @@ class RegisterHandle {
     bool needs_update() const {
         require_supported_access();
         const data_type writable = static_cast<data_type>(writable_mask());
-        return (desired_valid_mask_ & writable &
-                ((desired_ ^ mirrored_) | ~mirrored_valid_mask_)) != 0;
+        return (staged_valid_mask_ & writable &
+                ((staged_ ^ mirrored_) | ~mirrored_valid_mask_)) != 0;
     }
 
-    void set_desired(data_type value) {
+    void stage(data_type value) {
         require_supported_access();
         if (descriptor_->fields.empty()) {
-            desired_ = static_cast<data_type>(value & width_mask_);
-            desired_valid_mask_ = static_cast<data_type>(width_mask_);
+            staged_ = static_cast<data_type>(value & width_mask_);
+            staged_valid_mask_ = static_cast<data_type>(width_mask_);
             return;
         }
-        uint64_t next = desired_;
+        uint64_t next = staged_;
         for (const auto& field : descriptor_->fields) {
             if (!register_writable(field.access)) continue;
             next = register_detail::insert_field(next, value >> field.lsb,
                                                  field);
         }
-        desired_ = static_cast<data_type>(next);
-        desired_valid_mask_ |= static_cast<data_type>(writable_mask());
+        staged_ = static_cast<data_type>(next);
+        staged_valid_mask_ |= static_cast<data_type>(writable_mask());
     }
 
     void predict(data_type value,
@@ -2883,16 +2883,16 @@ class RegisterHandle {
         require_supported_access();
         const uint64_t width_mask = width_mask_;
         uint64_t next = mirrored_;
-        uint64_t desired_next = desired_;
+        uint64_t staged_next = staged_;
         uint64_t next_valid = mirrored_valid_mask_;
-        uint64_t desired_next_valid = desired_valid_mask_;
+        uint64_t staged_next_valid = staged_valid_mask_;
         if (prediction == RegisterPrediction::Direct ||
             (descriptor_->fields.empty() &&
              prediction == RegisterPrediction::Read)) {
             next = static_cast<uint64_t>(value) & width_mask;
-            desired_next = next;
+            staged_next = next;
             next_valid = width_mask;
-            desired_next_valid = width_mask;
+            staged_next_valid = width_mask;
         } else if (prediction == RegisterPrediction::Write) {
             predict_write_masked(value, width_mask);
             return;
@@ -2901,10 +2901,10 @@ class RegisterHandle {
             return;
         }
         mirrored_ = static_cast<data_type>(next & width_mask);
-        desired_ = static_cast<data_type>(desired_next & width_mask);
+        staged_ = static_cast<data_type>(staged_next & width_mask);
         mirrored_valid_mask_ = static_cast<data_type>(next_valid & width_mask);
-        desired_valid_mask_ =
-            static_cast<data_type>(desired_next_valid & width_mask);
+        staged_valid_mask_ =
+            static_cast<data_type>(staged_next_valid & width_mask);
     }
 
     void predict_write(data_type value, byte_enable_type byte_enable) {
@@ -2950,12 +2950,12 @@ class RegisterHandle {
 
     void reset() {
         require_supported_access();
-        desired_ = static_cast<data_type>(
+        staged_ = static_cast<data_type>(
             descriptor_->reset_value & descriptor_->reset_mask & width_mask_);
-        mirrored_ = desired_;
-        desired_valid_mask_ =
+        mirrored_ = staged_;
+        staged_valid_mask_ =
             static_cast<data_type>(descriptor_->reset_mask & width_mask_);
-        mirrored_valid_mask_ = desired_valid_mask_;
+        mirrored_valid_mask_ = staged_valid_mask_;
         written_once_mask_ = 0;
     }
 
@@ -3005,27 +3005,27 @@ class RegisterHandle {
         co_await lock_.acquire();
         register_detail::LockGuard guard{lock_};
         if (!needs_update()) co_return write_response_type{};
-        const auto unknown_desired = static_cast<data_type>(
-            writable_mask() & ~static_cast<uint64_t>(desired_valid_mask_));
-        if (unknown_desired != 0) {
+        const auto unknown_staged = static_cast<data_type>(
+            writable_mask() & ~static_cast<uint64_t>(staged_valid_mask_));
+        if (unknown_staged != 0) {
             throw std::logic_error(
-                "cpptb-vc: register update has unknown desired writable bits: " +
+                "cpptb-vc: register update has unknown staged writable bits: " +
                 std::string{descriptor_->path} + " mask=" +
-                std::to_string(unknown_desired) +
+                std::to_string(unknown_staged) +
                 "; set the register, read it, or predict it first");
         }
-        const data_type write_value = desired_write_value();
+        const data_type write_value = staged_write_value();
         const auto reachable_state = predicted_write_state(write_value);
         const data_type reachable = reachable_state.value;
         const data_type reachable_valid = reachable_state.valid_mask;
         const auto mask = static_cast<data_type>(
-            writable_mask() & static_cast<uint64_t>(desired_valid_mask_));
-        if (((reachable ^ desired_) & mask) != 0 ||
+            writable_mask() & static_cast<uint64_t>(staged_valid_mask_));
+        if (((reachable ^ staged_) & mask) != 0 ||
             (reachable_valid & mask) != mask) {
-            test_.warn("register update cannot reach the requested desired "
+            test_.warn("register update cannot reach the requested staged "
                        "state: " +
                        std::string{descriptor_->path} + " requested=" +
-                       std::to_string(desired_ & mask) + " reachable=" +
+                       std::to_string(staged_ & mask) + " reachable=" +
                        std::to_string(reachable & mask));
         }
         enforce_write_access();
@@ -3153,10 +3153,10 @@ class RegisterHandle {
             const uint64_t next_valid =
                 static_cast<uint64_t>(mirrored_valid_mask_) | enabled_mask;
             mirrored_ = static_cast<data_type>(next & width_mask);
-            desired_ = mirrored_;
+            staged_ = mirrored_;
             mirrored_valid_mask_ =
                 static_cast<data_type>(next_valid & width_mask);
-            desired_valid_mask_ = mirrored_valid_mask_;
+            staged_valid_mask_ = mirrored_valid_mask_;
             return;
         }
 
@@ -3196,16 +3196,16 @@ class RegisterHandle {
                          (effected_valid & field_enabled);
         }
         const uint64_t mask = writable_mask() & enabled_mask;
-        const uint64_t desired_next =
-            (static_cast<uint64_t>(desired_) & ~mask) | (next & mask);
-        const uint64_t desired_next_valid =
-            (static_cast<uint64_t>(desired_valid_mask_) & ~mask) |
+        const uint64_t staged_next =
+            (static_cast<uint64_t>(staged_) & ~mask) | (next & mask);
+        const uint64_t staged_next_valid =
+            (static_cast<uint64_t>(staged_valid_mask_) & ~mask) |
             (next_valid & mask);
         mirrored_ = static_cast<data_type>(next & width_mask);
-        desired_ = static_cast<data_type>(desired_next & width_mask);
+        staged_ = static_cast<data_type>(staged_next & width_mask);
         mirrored_valid_mask_ = static_cast<data_type>(next_valid & width_mask);
-        desired_valid_mask_ =
-            static_cast<data_type>(desired_next_valid & width_mask);
+        staged_valid_mask_ =
+            static_cast<data_type>(staged_next_valid & width_mask);
         written_once_mask_ |= write_once_mask() & enabled_mask;
     }
 
@@ -3215,16 +3215,16 @@ class RegisterHandle {
         if (enabled_mask == 0) return;
         if (descriptor_->fields.empty()) {
             mirrored_ = (mirrored_ & ~enabled_mask) | (value & enabled_mask);
-            desired_ = (desired_ & ~enabled_mask) | (mirrored_ & enabled_mask);
+            staged_ = (staged_ & ~enabled_mask) | (mirrored_ & enabled_mask);
             mirrored_valid_mask_ |= enabled_mask;
-            desired_valid_mask_ |= enabled_mask;
+            staged_valid_mask_ |= enabled_mask;
             return;
         }
 
         uint64_t next = mirrored_;
         uint64_t next_valid = mirrored_valid_mask_;
-        uint64_t desired_next = desired_;
-        uint64_t desired_next_valid = desired_valid_mask_;
+        uint64_t staged_next = staged_;
+        uint64_t staged_next_valid = staged_valid_mask_;
         for (const auto& field : descriptor_->fields) {
             const uint64_t field_enabled =
                 register_field_mask(field) & enabled_mask;
@@ -3256,15 +3256,15 @@ class RegisterHandle {
             next = (next & ~field_enabled) | (effected & field_enabled);
             next_valid = (next_valid & ~field_enabled) |
                          (effected_valid & field_enabled);
-            desired_next = (desired_next & ~field_enabled) |
+            staged_next = (staged_next & ~field_enabled) |
                            (next & field_enabled);
-            desired_next_valid = (desired_next_valid & ~field_enabled) |
+            staged_next_valid = (staged_next_valid & ~field_enabled) |
                                  (next_valid & field_enabled);
         }
         mirrored_ = next & width_mask;
-        desired_ = desired_next & width_mask;
+        staged_ = staged_next & width_mask;
         mirrored_valid_mask_ = next_valid & width_mask;
-        desired_valid_mask_ = desired_next_valid & width_mask;
+        staged_valid_mask_ = staged_next_valid & width_mask;
     }
 
     uint64_t enabled_bit_mask(byte_enable_type byte_enable) const noexcept {
@@ -3302,12 +3302,12 @@ class RegisterHandle {
             (address - effective_address_) / (access_width() / 8u));
     }
 
-    void set_field_desired(data_type value,
+    void stage_field(data_type value,
                            const RegisterFieldDescriptor& field) {
         require_supported_access();
-        desired_ = static_cast<data_type>(register_detail::insert_field(
-            desired_, static_cast<uint64_t>(value), field));
-        desired_valid_mask_ |= static_cast<data_type>(register_field_mask(field));
+        staged_ = static_cast<data_type>(register_detail::insert_field(
+            staged_, static_cast<uint64_t>(value), field));
+        staged_valid_mask_ |= static_cast<data_type>(register_field_mask(field));
     }
 
     coro::Task<read_response_type> read_locked(
@@ -3468,8 +3468,8 @@ class RegisterHandle {
         return write_once_field_mask_;
     }
 
-    data_type desired_write_value() const {
-        if (descriptor_->fields.empty()) return desired_;
+    data_type staged_write_value() const {
+        if (descriptor_->fields.empty()) return staged_;
         uint64_t written = 0;
         for (const auto& field : descriptor_->fields) {
             if (!register_writable(field.access)) continue;
@@ -3481,11 +3481,11 @@ class RegisterHandle {
                         *descriptor_, field,
                         (mirrored_ >> field.lsb) & field_mask,
                         (mirrored_valid_mask_ >> field.lsb) & field_mask,
-                        (desired_ >> field.lsb) & field_mask});
+                        (staged_ >> field.lsb) & field_mask});
                 written |= (encoded & field_mask) << field.lsb;
             } else {
-                written |= register_detail::encode_desired_write(
-                    mirrored_, mirrored_valid_mask_, desired_, field);
+                written |= register_detail::encode_staged_write(
+                    mirrored_, mirrored_valid_mask_, staged_, field);
             }
         }
         return static_cast<data_type>(written);
@@ -3541,11 +3541,11 @@ class RegisterHandle {
     void commit_predicted_write_state(
         const PredictedWriteState& predicted) noexcept {
         const uint64_t mask = writable_mask() & width_mask_;
-        desired_ = static_cast<data_type>(
-            (static_cast<uint64_t>(desired_) & ~mask) |
+        staged_ = static_cast<data_type>(
+            (static_cast<uint64_t>(staged_) & ~mask) |
             (static_cast<uint64_t>(predicted.value) & mask));
-        desired_valid_mask_ = static_cast<data_type>(
-            (static_cast<uint64_t>(desired_valid_mask_) & ~mask) |
+        staged_valid_mask_ = static_cast<data_type>(
+            (static_cast<uint64_t>(staged_valid_mask_) & ~mask) |
             (static_cast<uint64_t>(predicted.valid_mask) & mask));
         mirrored_ = static_cast<data_type>(predicted.value & width_mask_);
         mirrored_valid_mask_ =
@@ -3690,9 +3690,9 @@ class RegisterHandle {
     RegisterUserEffectPolicy* user_effects_ = nullptr;
     bool auto_predict_ = true;
     coro::Lock lock_;
-    data_type desired_{};
+    data_type staged_{};
     data_type mirrored_{};
-    data_type desired_valid_mask_{};
+    data_type staged_valid_mask_{};
     data_type mirrored_valid_mask_{};
     uint64_t effective_address_ = 0;
     uint64_t written_once_mask_ = 0;
@@ -3740,14 +3740,14 @@ class WideRegisterFieldHandle {
         }
     }
 
-    [[nodiscard]] data_type desired() const {
-        return parent_->desired().template slice<FieldWidth>(descriptor_->lsb);
+    [[nodiscard]] data_type staged() const {
+        return parent_->staged().template slice<FieldWidth>(descriptor_->lsb);
     }
     [[nodiscard]] data_type mirrored() const {
         return parent_->mirrored().template slice<FieldWidth>(descriptor_->lsb);
     }
-    [[nodiscard]] data_type desired_valid_mask() const {
-        return parent_->desired_valid_mask().template slice<FieldWidth>(
+    [[nodiscard]] data_type staged_valid_mask() const {
+        return parent_->staged_valid_mask().template slice<FieldWidth>(
             descriptor_->lsb);
     }
     [[nodiscard]] data_type mirrored_valid_mask() const {
@@ -3755,12 +3755,12 @@ class WideRegisterFieldHandle {
             descriptor_->lsb);
     }
 
-    void set_desired(data_type value) {
+    void stage(data_type value) {
         if (!register_writable(descriptor_->access)) {
             throw std::logic_error("cpptb-vc: field is not writable: " +
                                    std::string{descriptor_->path});
         }
-        parent_->template set_field_desired<FieldWidth>(value, *descriptor_);
+        parent_->template stage_field<FieldWidth>(value, *descriptor_);
     }
 
     coro::Task<read_response_type> read() {
@@ -3792,13 +3792,13 @@ class WideRegisterFieldHandle {
     }
 
     coro::Task<write_response_type> write(data_type value) {
-        set_desired(value);
+        stage(value);
         co_return co_await parent_->update();
     }
 
     coro::Task<write_response_type> write(data_type value,
                                           RegisterAddressMap<Master>& map) {
-        set_desired(value);
+        stage(value);
         co_return co_await parent_->update(map);
     }
 
@@ -3857,20 +3857,20 @@ class RegisterEnumFieldHandle {
                             const RegisterFieldDescriptor& descriptor)
         : raw_(parent, descriptor) {}
 
-    [[nodiscard]] enum_type desired() const {
-        return decode(raw_.desired());
+    [[nodiscard]] enum_type staged() const {
+        return decode(raw_.staged());
     }
     [[nodiscard]] enum_type mirrored() const {
         return decode(raw_.mirrored());
     }
-    [[nodiscard]] raw_data_type desired_valid_mask() const {
-        return raw_.desired_valid_mask();
+    [[nodiscard]] raw_data_type staged_valid_mask() const {
+        return raw_.staged_valid_mask();
     }
     [[nodiscard]] raw_data_type mirrored_valid_mask() const {
         return raw_.mirrored_valid_mask();
     }
 
-    void set_desired(enum_type value) { raw_.set_desired(encode(value)); }
+    void stage(enum_type value) { raw_.stage(encode(value)); }
 
     coro::Task<read_response_type> read() {
         const auto raw_response = co_await raw_.read();
@@ -4025,10 +4025,10 @@ class WideRegisterHandle {
     void set_auto_predict(bool enabled) noexcept { auto_predict_ = enabled; }
     [[nodiscard]] bool auto_predict() const noexcept { return auto_predict_; }
 
-    [[nodiscard]] data_type desired() const noexcept { return desired_; }
+    [[nodiscard]] data_type staged() const noexcept { return staged_; }
     [[nodiscard]] data_type mirrored() const noexcept { return mirrored_; }
-    [[nodiscard]] data_type desired_valid_mask() const noexcept {
-        return desired_valid_mask_;
+    [[nodiscard]] data_type staged_valid_mask() const noexcept {
+        return staged_valid_mask_;
     }
     [[nodiscard]] data_type mirrored_valid_mask() const noexcept {
         return mirrored_valid_mask_;
@@ -4037,26 +4037,26 @@ class WideRegisterHandle {
     [[nodiscard]] bool needs_update() const noexcept {
         const auto writable = writable_mask();
         for (std::size_t bit = 0; bit < Width; ++bit) {
-            if (writable.bit(bit) && desired_valid_mask_.bit(bit) &&
+            if (writable.bit(bit) && staged_valid_mask_.bit(bit) &&
                 (!mirrored_valid_mask_.bit(bit) ||
-                 desired_.bit(bit) != mirrored_.bit(bit))) {
+                 staged_.bit(bit) != mirrored_.bit(bit))) {
                 return true;
             }
         }
         return false;
     }
 
-    void set_desired(const data_type& value) {
+    void stage(const data_type& value) {
         if (descriptor_->fields.empty()) {
-            desired_ = value;
-            desired_valid_mask_ = ones();
+            staged_ = value;
+            staged_valid_mask_ = ones();
             return;
         }
         for (const auto& field : descriptor_->fields) {
             if (!register_writable(field.access)) continue;
             for_each_field_bit(field, [&](std::size_t bit) {
-                desired_.set_bit(bit, value.bit(bit));
-                desired_valid_mask_.set_bit(bit, true);
+                staged_.set_bit(bit, value.bit(bit));
+                staged_valid_mask_.set_bit(bit, true);
             });
         }
     }
@@ -4064,9 +4064,9 @@ class WideRegisterHandle {
     void predict(const data_type& value,
                  RegisterPrediction prediction = RegisterPrediction::Direct) {
         if (prediction == RegisterPrediction::Direct) {
-            desired_ = value;
+            staged_ = value;
             mirrored_ = value;
-            desired_valid_mask_ = ones();
+            staged_valid_mask_ = ones();
             mirrored_valid_mask_ = ones();
         } else if (prediction == RegisterPrediction::Read) {
             predict_read_masked(value, ones());
@@ -4076,12 +4076,12 @@ class WideRegisterHandle {
     }
 
     void reset() {
-        desired_ = descriptor_bits(descriptor_->reset_value_words,
+        staged_ = descriptor_bits(descriptor_->reset_value_words,
                                    descriptor_->reset_value);
-        mirrored_ = desired_;
-        desired_valid_mask_ = descriptor_bits(
+        mirrored_ = staged_;
+        staged_valid_mask_ = descriptor_bits(
             descriptor_->reset_mask_words, descriptor_->reset_mask);
-        mirrored_valid_mask_ = desired_valid_mask_;
+        mirrored_valid_mask_ = staged_valid_mask_;
         written_once_mask_ = {};
     }
 
@@ -4151,15 +4151,15 @@ class WideRegisterHandle {
         if (!needs_update()) co_return write_response_type{};
         const auto writable = writable_mask();
         for (std::size_t bit = 0; bit < Width; ++bit) {
-            if (writable.bit(bit) && !desired_valid_mask_.bit(bit)) {
+            if (writable.bit(bit) && !staged_valid_mask_.bit(bit)) {
                 throw std::logic_error(
-                    "cpptb-vc: register update has unknown desired writable "
+                    "cpptb-vc: register update has unknown staged writable "
                     "bits: " +
                     std::string{descriptor_->path} +
                     "; set the register, read it, or predict it first");
             }
         }
-        const data_type write_value = desired_write_value();
+        const data_type write_value = staged_write_value();
         const data_type reachable = predicted_write_value(write_value);
         const data_type reachable_valid =
             predicted_write_valid_mask(write_value);
@@ -4167,17 +4167,17 @@ class WideRegisterHandle {
         bool unreachable = false;
         for (std::size_t bit = 0; bit < Width; ++bit) {
             if (mask.bit(bit) &&
-                (reachable.bit(bit) != desired_.bit(bit) ||
+                (reachable.bit(bit) != staged_.bit(bit) ||
                  !reachable_valid.bit(bit))) {
                 unreachable = true;
                 break;
             }
         }
         if (unreachable) {
-            test_.warn("register update cannot reach the requested desired "
+            test_.warn("register update cannot reach the requested staged "
                        "state: " +
                        std::string{descriptor_->path} + " requested=" +
-                       cpptb::detail::format_bits(desired_) + " reachable=" +
+                       cpptb::detail::format_bits(staged_) + " reachable=" +
                        cpptb::detail::format_bits(reachable));
         }
         co_return co_await write_unlocked(write_value, map);
@@ -4422,31 +4422,31 @@ class WideRegisterHandle {
         return false;
     }
 
-    static bool desired_write_bit(bool previous, bool previous_valid,
-                                  bool desired,
+    static bool staged_write_bit(bool previous, bool previous_valid,
+                                  bool staged,
                                   RegisterWriteEffect effect) noexcept {
         switch (effect) {
             case RegisterWriteEffect::None:
             case RegisterWriteEffect::User:
-                return desired;
+                return staged;
             case RegisterWriteEffect::WriteOneSet:
-                return desired && (!previous || !previous_valid);
+                return staged && (!previous || !previous_valid);
             case RegisterWriteEffect::WriteOneClear:
-                return !desired && (previous || !previous_valid);
+                return !staged && (previous || !previous_valid);
             case RegisterWriteEffect::WriteOneToggle:
-                return previous_valid && previous != desired;
+                return previous_valid && previous != staged;
             case RegisterWriteEffect::WriteZeroSet:
-                return (previous && previous_valid) || !desired;
+                return (previous && previous_valid) || !staged;
             case RegisterWriteEffect::WriteZeroClear:
-                return (!previous && previous_valid) || desired;
+                return (!previous && previous_valid) || staged;
             case RegisterWriteEffect::WriteZeroToggle:
-                return (previous_valid && previous == desired) ||
+                return (previous_valid && previous == staged) ||
                        !previous_valid;
             case RegisterWriteEffect::Clear:
             case RegisterWriteEffect::Set:
                 return false;
         }
-        return desired;
+        return staged;
     }
 
     void predict_write_masked(const data_type& value, const data_type& enabled) {
@@ -4454,9 +4454,9 @@ class WideRegisterHandle {
             for (std::size_t bit = 0; bit < Width; ++bit) {
                 if (!enabled.bit(bit)) continue;
                 mirrored_.set_bit(bit, value.bit(bit));
-                desired_.set_bit(bit, value.bit(bit));
+                staged_.set_bit(bit, value.bit(bit));
                 mirrored_valid_mask_.set_bit(bit, true);
-                desired_valid_mask_.set_bit(bit, true);
+                staged_valid_mask_.set_bit(bit, true);
             }
             return;
         }
@@ -4485,9 +4485,9 @@ class WideRegisterHandle {
                                             field.write_effect);
                 }
                 mirrored_.set_bit(bit, next);
-                desired_.set_bit(bit, next);
+                staged_.set_bit(bit, next);
                 mirrored_valid_mask_.set_bit(bit, valid);
-                desired_valid_mask_.set_bit(bit, valid);
+                staged_valid_mask_.set_bit(bit, valid);
                 if (field.access == RegisterAccess::WriteOnce ||
                     field.access == RegisterAccess::ReadWriteOnce) {
                     written_once_mask_.set_bit(bit, true);
@@ -4501,9 +4501,9 @@ class WideRegisterHandle {
             for (std::size_t bit = 0; bit < Width; ++bit) {
                 if (!enabled.bit(bit)) continue;
                 mirrored_.set_bit(bit, value.bit(bit));
-                desired_.set_bit(bit, value.bit(bit));
+                staged_.set_bit(bit, value.bit(bit));
                 mirrored_valid_mask_.set_bit(bit, true);
-                desired_valid_mask_.set_bit(bit, true);
+                staged_valid_mask_.set_bit(bit, true);
             }
             return;
         }
@@ -4532,15 +4532,15 @@ class WideRegisterHandle {
                     valid = field.read_effect != RegisterReadEffect::User;
                 }
                 mirrored_.set_bit(bit, next);
-                desired_.set_bit(bit, next);
+                staged_.set_bit(bit, next);
                 mirrored_valid_mask_.set_bit(bit, valid);
-                desired_valid_mask_.set_bit(bit, valid);
+                staged_valid_mask_.set_bit(bit, valid);
             });
         }
     }
 
-    data_type desired_write_value() const {
-        if (descriptor_->fields.empty()) return desired_;
+    data_type staged_write_value() const {
+        if (descriptor_->fields.empty()) return staged_;
         data_type result;
         for (const auto& field : descriptor_->fields) {
             if (!register_writable(field.access)) continue;
@@ -4554,13 +4554,13 @@ class WideRegisterHandle {
                                      static_cast<uint16_t>(bit - field.lsb),
                                      mirrored_.bit(bit),
                                      mirrored_valid_mask_.bit(bit),
-                                     desired_.bit(bit)}));
+                                     staged_.bit(bit)}));
                 } else {
                     result.set_bit(
                         bit,
-                        desired_write_bit(mirrored_.bit(bit),
+                        staged_write_bit(mirrored_.bit(bit),
                                           mirrored_valid_mask_.bit(bit),
-                                          desired_.bit(bit),
+                                          staged_.bit(bit),
                                           field.write_effect));
                 }
             });
@@ -4679,12 +4679,12 @@ class WideRegisterHandle {
     }
 
     template <std::size_t FieldWidth>
-    void set_field_desired(const Bits<FieldWidth>& value,
+    void stage_field(const Bits<FieldWidth>& value,
                            const RegisterFieldDescriptor& field) {
         for (std::size_t offset = 0; offset < FieldWidth; ++offset) {
             const std::size_t bit = field.lsb + offset;
-            desired_.set_bit(bit, value.bit(offset));
-            desired_valid_mask_.set_bit(bit, true);
+            staged_.set_bit(bit, value.bit(offset));
+            staged_valid_mask_.set_bit(bit, true);
         }
     }
 
@@ -4825,9 +4825,9 @@ class WideRegisterHandle {
     RegisterUserEffectPolicy* user_effects_ = nullptr;
     bool auto_predict_ = true;
     coro::Lock lock_;
-    data_type desired_{};
+    data_type staged_{};
     data_type mirrored_{};
-    data_type desired_valid_mask_{};
+    data_type staged_valid_mask_{};
     data_type mirrored_valid_mask_{};
     data_type written_once_mask_{};
     uint64_t effective_address_ = 0;

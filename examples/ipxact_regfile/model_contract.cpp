@@ -52,7 +52,7 @@ cpptb::coro::Task<void> exercise(
     ipxact_regs::RegModel<FakeMaster>& regs, FakeMaster& master,
     bool& passed) {
     const auto control = co_await regs.registers.control.write(0x5u);
-    regs.registers.control.mode.set_desired(
+    regs.registers.control.mode.stage(
         ipxact_regs::mode_enum_t::STREAM);
     const auto update = co_await regs.registers.control.update();
     const auto threshold =
