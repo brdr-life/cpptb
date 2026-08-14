@@ -243,5 +243,5 @@ are not yet supported.
   queued `set()` against the immediate backdoors.
 - [Memory and register models](memory-register-models.md) — the typed layer
   built on these backdoor primitives.
-- [Reference card](refcard.md) — the operations at a glance.
+- [API reference](refcard.md) — the operations at a glance.
 - [Glossary](glossary.md) — backdoor, frontdoor, and transport, defined.

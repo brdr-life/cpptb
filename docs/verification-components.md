@@ -488,5 +488,5 @@ history, including the superseded July 17 baseline.
   above.
 - [Scheduling](scheduling.md#the-write-model) specifies the write model that
   fixes the APB drive and observation points.
-- [Reference card](refcard.md) condenses the common component operations to
+- [API reference](refcard.md) condenses the common component operations to
   one line each.

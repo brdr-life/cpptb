@@ -292,4 +292,4 @@ trigger resumes, see [Scheduling](scheduling.md).
   project behind this page's driver/monitor/scoreboard excerpts.
 - [Watchdog timeout example](examples/watchdog-timeout.md) — `with_timeout`
   and recovery in a complete bench.
-- [Reference card](refcard.md) — the concurrency idioms, one line each.
+- [API reference](refcard.md) — the concurrency idioms, one line each.

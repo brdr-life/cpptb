@@ -1,7 +1,7 @@
-# Reference card
+# API reference
 
 Every common operation, one line each. Details:
-[Library reference](library/awaitables.md) for signatures and semantics,
+[Library reference](library/awaitables.md) for full signatures and semantics,
 [Scheduling](scheduling.md) for exactly when waits resume.
 
 ## Signals

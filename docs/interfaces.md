@@ -179,4 +179,4 @@ experimental gate, and its enablement criteria.
   `set_now()`, `drive()`, `high_z()`, and the timing summary.
 - [Clocking](clocking.md) — interface-member clocks follow the same
   ownership and initialization rules as top-level clocks.
-- [Reference card](refcard.md) — the signal operations at a glance.
+- [API reference](refcard.md) — the signal operations at a glance.
