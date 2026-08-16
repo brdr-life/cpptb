@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 import tomllib
+
+from cpptb_codegen import toolid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -408,12 +410,18 @@ def _top_cache_key(
             if path.is_file()
             and path.suffix.lower() in {".sv", ".svh", ".v", ".vh"}
         )
-    files.extend(
-        [
-            Path(__file__).resolve(),
-            (Path(__file__).resolve().parent / "frontends" / "slang.py"),
-        ]
-    )
+    if toolid.frozen():
+        # A frozen binary carries no .py sources; its own content hash is
+        # the toolchain identity (see toolid.py).
+        digest.update(b"cpptb-frozen:")
+        digest.update(toolid.frozen_identity())
+    else:
+        files.extend(
+            [
+                Path(__file__).resolve(),
+                (Path(__file__).resolve().parent / "frontends" / "slang.py"),
+            ]
+        )
     for path in sorted(dict.fromkeys(files)):
         digest.update(str(path).encode())
         digest.update(b"\0")
