@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 package cpptb_log_pkg;
   localparam int unsigned TRACE = 0;
   localparam int unsigned DEBUG = 1;
