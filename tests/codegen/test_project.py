@@ -251,7 +251,9 @@ experimental_four_state = true
                 spec = resolve_project(project=root)
                 self.assertEqual(spec.wave, expected)
 
-    def test_wave_needs_a_timing_backend_and_a_known_format(self):
+    def test_wave_rides_the_default_backend_and_rejects_unknown_formats(self):
+        # Since the default flip there is no backendless build for `wave` to
+        # need: a bare `wave = true` rides the defaulted timing backend.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "counter.sv").write_text("module counter; endmodule\n")
@@ -259,8 +261,9 @@ experimental_four_state = true
             (root / "cpptb.toml").write_text(
                 "[build]\nwave = true\n", encoding="utf-8"
             )
-            with self.assertRaisesRegex(ProjectError, "build.wave needs"):
-                resolve_project(project=root)
+            spec = resolve_project(project=root)
+            self.assertEqual(spec.wave, "fst")
+            self.assertEqual(spec.timing_backend, "verilator-direct")
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "counter.sv").write_text("module counter; endmodule\n")
@@ -312,9 +315,11 @@ experimental_four_state = true
             with self.assertRaisesRegex(ProjectError, "--binary"):
                 resolve_project(project=root)
 
-    def test_deferred_writes_requires_a_timing_backend(self):
-        # The queue flushes at the ReadWrite phase; without a backend nothing
-        # dispatches it and every write would be silently lost.
+    def test_deferred_writes_rides_the_default_backend(self):
+        # The queue flushes at the ReadWrite phase. Since the default flip a
+        # backendless build cannot exist: a bare `deferred_writes = true`
+        # rides the defaulted backend, and naming an empty backend is
+        # rejected rather than resolving to nothing.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "counter.sv").write_text("module counter; endmodule\n")
@@ -322,7 +327,17 @@ experimental_four_state = true
             (root / "cpptb.toml").write_text(
                 "[build]\ndeferred_writes = true\n", encoding="utf-8"
             )
-            with self.assertRaisesRegex(ProjectError, "timing_backend"):
+            spec = resolve_project(project=root)
+            self.assertTrue(spec.deferred_writes)
+            self.assertEqual(spec.timing_backend, "verilator-direct")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "counter.sv").write_text("module counter; endmodule\n")
+            (root / "testbench.cpp").write_text("int main() { return 0; }\n")
+            (root / "cpptb.toml").write_text(
+                '[build]\ntiming_backend = ""\n', encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ProjectError, "must be one of"):
                 resolve_project(project=root)
 
     def test_deferred_writes_rides_a_selected_backend(self):

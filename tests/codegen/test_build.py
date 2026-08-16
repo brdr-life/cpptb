@@ -38,6 +38,13 @@ def write_framework_fixture(include):
     (include / "cpptb" / "sv" / "cpptb_sv_log_bridge.cpp").write_text(
         "// bridge\n"
     )
+    # Every build links the framework host loop now that a timing backend is
+    # the default; the fixture carries the checkout-layout copy beside
+    # include/.
+    (include.parent / "src").mkdir(parents=True, exist_ok=True)
+    (include.parent / "src" / "verilator_timing_main.cpp").write_text(
+        "// host loop\n"
+    )
 
 
 def experimental_four_state_fixture(root):
