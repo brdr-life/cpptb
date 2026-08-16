@@ -9,6 +9,8 @@ import shlex
 import shutil
 import subprocess
 import sys
+
+from cpptb_codegen import toolid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -203,7 +205,13 @@ def _fingerprint(
                 and path.suffix.lower() in {".hpp", ".sv", ".svh", ".cpp"}
             )
         )
-    files.extend(sorted(Path(__file__).resolve().parent.rglob("*.py")))
+    if toolid.frozen():
+        # A frozen binary carries no .py sources; its own content hash is
+        # the toolchain identity (see toolid.py).
+        digest.update(b"cpptb-frozen:")
+        digest.update(toolid.frozen_identity())
+    else:
+        files.extend(sorted(Path(__file__).resolve().parent.rglob("*.py")))
     for path in sorted(dict.fromkeys(files)):
         _hash_file(digest, path)
     return digest.hexdigest()
