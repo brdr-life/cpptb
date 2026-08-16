@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 `ifndef CPPTB_LOG_SVH
 `define CPPTB_LOG_SVH
 

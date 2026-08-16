@@ -45,3 +45,21 @@ Verilator, Slang/pyslang, cocotb, Mojo, RgGen, PeakRDL-regblock, CMake, and uv
 are external tools or projects and are not redistributed as part of the cpptb
 framework unless an individual fixture explicitly contains generated output or
 retained source as described above.
+
+## Binary distributions
+
+A cpptb binary release bundles the following third-party Python components,
+each under the MIT license, with copyright and permission notices preserved
+in the distribution:
+
+- pyslang (the Slang SystemVerilog frontend's Python bindings),
+  copyright Michael Popoloski;
+- PyYAML, copyright Ingy dot Net and Kirill Simonov.
+
+The optional SystemRDL/IP-XACT register-generation path depends on the
+PeakRDL family (LGPLv3, with peakrdl-ipxact under GPLv3). Those packages are
+deliberately NOT bundled in binary releases: users install them separately,
+and cpptb's exporter plugin remains Apache-2.0, which is GPLv3-compatible.
+The built-in `cpptb-rggen` path has no such dependency. Verilator and a C++
+compiler are user-installed prerequisites and are never redistributed by
+cpptb.
