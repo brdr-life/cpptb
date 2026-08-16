@@ -206,12 +206,12 @@ def _reject_hand_rolled_timing(
     compile time in dpi_runtime.hpp, but the build tool says it first and
     names the key.
     """
-    if timing_backend == "" and "--vpi" in verilator_args:
+    if "--vpi" in verilator_args:
         raise ProjectError(
-            "build.verilator_args must not pass --vpi: on the default main it "
-            "builds a bridge that fails the phase timing contract silently. "
-            'Set build.timing_backend = "vpi" (or "verilator-direct"), which '
-            "emits the complete link"
+            "build.verilator_args must not pass --vpi: the timing backend "
+            "owns that flag and emits the complete host-loop link. "
+            'Set build.timing_backend = "vpi" (or "verilator-direct") '
+            "instead"
         )
     if timing_backend and "--binary" in verilator_args:
         raise ProjectError(

@@ -11,10 +11,11 @@ project CLI, and the first argument selects a lower-level tool by name --
 cpptb-rggen. None of those names collides with a `cpptb` subcommand.
 """
 
-import hashlib
 import os
 import shutil
 import sys
+
+from cpptb_codegen import toolid
 
 
 def _materialize_framework(bundle: str) -> str:
@@ -26,13 +27,10 @@ def _materialize_framework(bundle: str) -> str:
     A directory keyed by the executable's content hash is stable for one
     release and automatically fresh for the next.
     """
-    digest = hashlib.sha256()
-    with open(sys.executable, "rb") as exe:
-        for chunk in iter(lambda: exe.read(1 << 20), b""):
-            digest.update(chunk)
+    identity = toolid.frozen_identity().decode()
     cache_root = os.environ.get("XDG_CACHE_HOME") or os.path.join(
         os.path.expanduser("~"), ".cache")
-    target = os.path.join(cache_root, "cpptb", f"fw-{digest.hexdigest()[:16]}")
+    target = os.path.join(cache_root, "cpptb", f"fw-{identity[:16]}")
     marker = os.path.join(target, ".complete")
     if not os.path.exists(marker):
         staging = target + ".partial"
@@ -47,10 +45,18 @@ def _materialize_framework(bundle: str) -> str:
     return target
 
 
+def _frozen() -> bool:
+    # PyInstaller sets sys.frozen; Nuitka defines __compiled__ in every
+    # compiled module. Either means we are running from a bundle.
+    return bool(getattr(sys, "frozen", False)) or "__compiled__" in globals()
+
+
 def main() -> int:
-    if getattr(sys, "frozen", False):
+    if _frozen():
+        # PyInstaller extracts to _MEIPASS; under Nuitka the data files land
+        # beside the compiled main module, so its directory is the bundle.
         bundle = getattr(sys, "_MEIPASS", None) or os.path.dirname(
-            os.path.abspath(sys.executable))
+            os.path.abspath(__file__))
         os.environ.setdefault("CPPTB_ROOT", _materialize_framework(bundle))
 
     tool = sys.argv[1] if len(sys.argv) > 1 else ""
