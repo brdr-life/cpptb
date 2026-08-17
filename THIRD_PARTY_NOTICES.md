@@ -59,7 +59,8 @@ in the distribution:
 The optional SystemRDL/IP-XACT register-generation path depends on the
 PeakRDL family (LGPLv3, with peakrdl-ipxact under GPLv3). Those packages are
 deliberately NOT bundled in binary releases: users install them separately,
-and cpptb's exporter plugin remains Apache-2.0, which is GPLv3-compatible.
+and cpptb's exporter ships as the separate Apache-2.0 `cpptb-peakrdl` wheel,
+which is GPLv3-compatible.
 The built-in `cpptb-rggen` path has no such dependency. Verilator and a C++
 compiler are user-installed prerequisites and are never redistributed by
 cpptb.

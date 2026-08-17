@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 from types import SimpleNamespace
 
-from cpptb_codegen.register_codegen import (
+from cpptb_peakrdl.codegen import (
     Field,
     Memory,
     Register,

@@ -1,4 +1,4 @@
-<!-- api-headers: include/cpptb_vc/register_model.hpp include/cpptb_vc/register_sequences.hpp include/cpptb_vc/register_coverage.hpp include/cpptb_vc/memory_mapped.hpp tools/codegen/cpptb_codegen/register_codegen.py -->
+<!-- api-headers: include/cpptb_vc/register_model.hpp include/cpptb_vc/register_sequences.hpp include/cpptb_vc/register_coverage.hpp include/cpptb_vc/memory_mapped.hpp tools/peakrdl/cpptb_peakrdl/codegen.py -->
 
 # Register models
 
