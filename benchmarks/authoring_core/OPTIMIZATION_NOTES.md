@@ -370,7 +370,7 @@ independent ratios. The pure-SV testbench and workload contract were unchanged.
 
 ## Scheduler architecture review (2026-07-12)
 
-A max-effort Fable review covered the coroutine runtime, DPI runtime, generated
+A max-effort adversarial review covered the coroutine runtime, DPI runtime, generated
 transport, generated Verilator implementation, exact C++/SV twins, profiles,
 and the complete rejected-experiment history. The review agrees with the local
 profile: the basic transaction engine is competitive (`control` at `0.913x`
@@ -439,7 +439,7 @@ fresh 32-pair exact guard. The existing `1.10x` hard stop remains unchanged.
 
 ## Clock-agnostic timer owner (2026-07-12)
 
-Fable's finalized E2 generated-SV architecture replaces steady-state
+The finalized E2 generated-SV architecture replaces steady-state
 per-deadline forks with one persistent timer owner. This change does not modify
 the C++ scheduler or DPI runtime. The
 owner sleeps only for a positive interval, parks on `timer_kick` when the
@@ -919,7 +919,7 @@ layout and pooled allocation matter more than the small metadata copies.
 
 ## Fresh-build audit and measurement hardening (2026-07-18)
 
-An independent Fable review found that the formal `1.179x` `dynamic_spawn`
+An independent review found that the formal `1.179x` `dynamic_spawn`
 failure had used `--skip-build` on a dirty tree. The measured C++ binary hash
 was `22e0fc38...`; both scheduler headers were modified after that executable
 was produced. A clean rebuild generated `b0170d2d...`, and exact 100,000-
@@ -1115,10 +1115,10 @@ attempted: cancellation currently relies on eagerly adopted parent/child
 ownership, so a correct implementation would require parent-chain adoption at
 every park, exception, join, timeout, and reclaim boundary.
 
-An independent Fable profile review agreed that the remaining samples are
+An independent profile review agreed that the remaining samples are
 coroutine scheduling, ownership, and virtual-policy abstraction rather than DPI
 transport. It estimated a `2.2x` to `2.9x` floor for this zero-time kernel in its
-current abstraction shape. Fable recommended retaining the bare-SV pair as an
+current abstraction shape. That review recommended retaining the bare-SV pair as an
 absolute abstraction-tax diagnostic, adding an equivalent-abstraction SV peer
 for framework-specific comparison, and using timed bus workloads for the
 repository-wide `1.10x` goal. A formal paired rerun was rejected before sampling

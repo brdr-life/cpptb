@@ -313,6 +313,10 @@ def _elaborate_hierarchy(pyslang: Any, top: Any) -> HierarchyCatalog:
                     return
                 value = int(converted.value)
             except Exception:
+                # pyslang raises assorted types for parameters with no
+                # integral conversion (strings, reals, unpacked aggregates).
+                # Such parameters are deliberately absent from the hierarchy
+                # catalog rather than misrepresented as integers.
                 return
             parameters.setdefault(
                 hdl_path,

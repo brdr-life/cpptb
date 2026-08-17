@@ -300,6 +300,9 @@ than stale. It found that UVM builds and executes: `data1_test` passes 3/3 and
 `data0_test` 2/3, while `random_test` and `many_random_test` execute but report
 scoreboard errors 0/3. So a lot of a UVM testbench does work now, and what does
 not is the constrained-random part, which is exactly what riscv-dv leans on.
+The two full environments ported in this tree confirm the
+build-and-execute half at scale: the icache environment passes all ten of
+its tests and core_ibex passes 912 of 944 on the same Verilator.
 
 That is the argument for doing E1 first. It gets random stimulus checked against
 Spike without depending on the part that currently fails, and it establishes the

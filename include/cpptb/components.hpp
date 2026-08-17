@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-// Compatibility header for code written before verification components moved
-// into the independently packageable cpptb_vc include tree.
+// Convenience umbrella: verification components live in the independently
+// packageable cpptb_vc include tree; this header forwards to it.
 #include "cpptb_vc/cpptb_vc.hpp"
 
 namespace cpptb {

@@ -360,7 +360,7 @@ overlays. They fall into three groups, all listed with their evidence in
 `PYGEN_PATCHES`.
 
 Three are bugs on pyflow's signature-handshake path, which is what core_ibex
-uses to talk to the program and which evidently nobody has run:
+uses to talk to the program and which no upstream flow appears to exercise:
 
 | Bug | Effect |
 | --- | --- |
@@ -1234,7 +1234,7 @@ each family fails for a reason that does not depend on where TEST_MEM lands.
 
 The vendored tests came from
 [lowrisc/riscv-isa-sim](https://github.com/lowRISC/riscv-isa-sim) branch
-`mseccfg_tests`, and commit `a7c5d5d` ("Copy over changes made by Saad525")
+`mseccfg_tests`, and commit `a7c5d5d`
 moved them from Spike's memory map to Ibex's and gave them a way to signal a
 result. Both changes are in the diff of the two skeletons, and each one broke
 an assumption the generator still makes.

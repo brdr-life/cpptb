@@ -1,6 +1,8 @@
 [project]
 name = "cpptb-codegen"
 version = "0.1.0"
+description = "cpptb toolchain: typed DUT generation, build orchestration, and test running for C++20 coroutine testbenches"
+license = { text = "Apache-2.0" }
 requires-python = ">=3.11"
 dependencies = [
   "pyslang==11.0.0",
@@ -12,6 +14,10 @@ dependencies = [
 peakrdl = [
   "cpptb-peakrdl[peakrdl,ipxact]",
 ]
+
+[project.urls]
+Documentation = "https://cpptb-docs.pages.dev"
+Repository = "https://github.com/brdr-life/cpptb"
 
 [project.scripts]
 cpptb = "cpptb_codegen.cli:main"

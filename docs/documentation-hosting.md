@@ -10,13 +10,14 @@ kept out of the site navigation. The rest of the repository workflow is in
 `CONTRIBUTING.md`.
 :::
 
-The Sphinx documentation is published to Cloudflare Pages and gated by
-Cloudflare Access, so the rendered site stays private while the repository
-remains private.
+The Sphinx documentation is published publicly to Cloudflare Pages at
+<https://cpptb-docs.pages.dev>. Cloudflare Access gating (step 4 below) is
+optional and was designed for the period before the repository went public;
+a public project has no reason to enable it.
 
-GitHub Pages is not used. A Pages site is served publicly, and restricting one
-to authorised users requires GitHub Enterprise Cloud, which does not apply to a
-repository owned by a personal account.
+GitHub Pages is not used: the Cloudflare pipeline predates the repository
+being public, has unlimited free bandwidth, and supports the optional Access
+gating that GitHub Pages on a personal account cannot.
 
 Until Cloudflare is configured the deployment step reports why it skipped and
 succeeds. The rendered documentation is uploaded by the `Documentation` job as
