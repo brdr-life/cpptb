@@ -21,7 +21,8 @@ That is deliberate. The other eight classes in that file need the interrupt
 agent, the debug agent and the integrity/glitch machinery, and they exist to
 serve the riscv-dv testlist rather than the directed one.
 `ports/core_ibex_uvm/README.md` records what those entries are worth on the
-baseline: of the 30 riscv-dv entries it passes, **17 are hollow** -- a plain
+baseline: of the 30 riscv-dv entries it passes, **17 are hollow under pyflow**
+(upstream runs the SystemVerilog generator instead) -- a plain
 random program under a name whose defining `gen_opts` pyflow cannot produce --
 and the eight non-base classes contribute one pass each on such a program.
 Porting the agents would reproduce tests that do not test what their names

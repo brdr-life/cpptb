@@ -7,6 +7,10 @@ license = { text = "Apache-2.0" }
 readme = "README.md"
 dependencies = []
 
+[project.urls]
+Documentation = "https://cpptb-docs.pages.dev/verification-components/register-generation"
+Repository = "https://github.com/brdr-life/cpptb"
+
 [project.optional-dependencies]
 peakrdl = ["peakrdl>=1.5,<2"]
 ipxact = ["peakrdl-ipxact>=3.5,<4"]

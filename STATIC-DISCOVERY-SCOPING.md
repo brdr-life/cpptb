@@ -245,7 +245,7 @@ get strictly less accuracy. No consumer needs anything A1 cannot provide.
 - It buys almost nothing for clocks: the runtime already rejects `start_clock`
   after the first await, so legal clock registrations are prologue-only, which
   the current non-advancing scheduler already covers. Fuel's only marginal gain
-  is discovering clocks in *illegal* testbenches (my edge-wait probe), which
+  is discovering clocks in *illegal* testbenches (the edge-wait probe), which
   then abort at runtime anyway.
 - Under-approximation on value-dependent prologues remains (fabricated reads
   pick branches). On the core_ibex port specifically the question is moot: its

@@ -1,24 +1,23 @@
 # cpptb
 
-cpptb is an experimental C++20 coroutine testbench framework for
-SystemVerilog simulators. It generates a typed DUT interface and a
-standards-based DPI wrapper, then lets testbench code drive signals and await
-simulator events directly:
+**Write SystemVerilog testbenches as C++20 coroutines.**
+
+cpptb reads your RTL, generates a typed `Dut` you drive with ordinary C++,
+and runs your test inside the simulator. Writes carry cocotb's semantics —
+queued, applied at the settle point — and every point where simulation time
+advances is a visible `co_await`:
 
 ```cpp
 #include <cpptb/cpptb.hpp>
 #include "dut.hpp"
 
 using cpptb::TestContext;
-using cpptb::coro::Delay;
-using cpptb::coro::RisingEdge;
-using cpptb::coro::Task;
 using cpptb::Dut;
 using namespace cpptb::coro;
 
-Task<void> sequence(Dut dut, TestContext& test) {
-    dut.clk.set(0);
-    test.start_clock(dut.clk, 10_ns);
+Task<void> counter_sequence(Dut dut, TestContext& test) {
+    dut.clk.set_now(0);
+    test.start_clock(dut.clk, 10_ns);   // the testbench owns clock timing
 
     dut.rst_n.set(0);
     dut.enable.set(0);
@@ -26,21 +25,33 @@ Task<void> sequence(Dut dut, TestContext& test) {
 
     dut.rst_n.set(1);
     dut.enable.set(1);
+
     co_await RisingEdge{dut.clk};
-    co_await Delay{1_ps};
-    test.expect_eq("first count", dut.count.get(), 1);
+    co_await ReadOnly{};                // let the design settle, then check
+    test.expect_eq("enabled count", dut.count.get(), 1u);
 }
 
-CPPTB_REGISTER_TEST(sequence);
+CPPTB_REGISTER_TEST(counter_sequence);
 ```
 
-The framework currently targets Verilator for end-to-end testing, while its
-generated transport uses standard SystemVerilog DPI constructs. Slang provides
-simulator-independent elaboration for ports, parameters, hierarchy, and packed
-types.
+There is no manifest to write, no hand-authored DPI wrapper, and no Makefile
+to maintain: point the `cpptb` command at your RTL and a `testbench.cpp` and
+it derives the rest. The framework currently targets Verilator for
+end-to-end testing, while its generated transport uses standard
+SystemVerilog DPI constructs; Slang provides simulator-independent
+elaboration for ports, parameters, hierarchy, and packed types.
+
+**Documentation: <https://cpptb-docs.pages.dev>** — a short on-ramp, the
+mental model, a cocotb translation guide, runnable examples, and the
+complete API reference.
 
 ## What works
 
+- The cocotb write model as the default: `set()` queues and flushes at the
+  timestep's ReadWrite point, `set_now()` is the immediate escape hatch, and
+  the `ReadWrite{}`/`ReadOnly{}`/`NextTimeStep{}` phase waits are supplied by
+  a timing backend in every build (`verilator-direct` by default, `vpi` as
+  the portable alternative), contract-checked on every run.
 - Concurrent coroutine processes with `spawn`, `spawn_detached`, and `Join`.
 - Rising, falling, or either-edge waits and arbitrary-clock cycle waits.
 - Absolute `Delay`, trigger and task timeouts, and `First` races.
@@ -58,38 +69,33 @@ types.
   solver fallback, and explicit functional coverage with bins and crosses.
 - An optional `cpptb_vc` layer with transaction ports, in-order and keyed
   scoreboards, ready/valid helpers, and APB verification components.
+- A register abstraction layer: typed register/field/memory handles with
+  staged and mirrored state, frontdoor/backdoor access, passive prediction,
+  access coverage, and standard sequences — generated from SystemRDL,
+  IP-XACT (via the `cpptb-peakrdl` plugin wheel), or native RgGen contracts.
 - An apples-to-apples C++ DPI versus SystemVerilog benchmark suite with a hard
   1.10 performance-ratio guard and one documented direct-force transport
   waiver.
 
-See [core ideas](docs/core-ideas.md),
+The same guides rendered on the [documentation site](https://cpptb-docs.pages.dev):
+[core ideas](docs/core-ideas.md),
+[coming from cocotb](docs/coming-from-cocotb.md),
 [tasks and concurrency](docs/testbench-authoring.md),
 [randomization and coverage](docs/random-stimulus.md),
+[registers and memory](docs/memory-register-models.md),
 [running tests](docs/running-tests.md),
 [hierarchical DUT access](docs/hierarchy.md),
-[scheduling](docs/scheduling.md), and [code generation](docs/code-generation.md)
-for the detailed contracts.
+[scheduling](docs/scheduling.md), and [code generation](docs/code-generation.md).
 
 ## What does not work yet
 
 Stated here rather than discovered the hard way:
 
-- **Scheduler phase waits need one line of opt-in.** `co_await ReadWrite{}`,
-  `ReadOnly{}`, and `NextTimeStep{}` error out in a default build — the
-  default link dispatches no simulator phases — and work under
-  `timing_backend = "verilator-direct"` or `"vpi"` in `cpptb.toml`, both
-  contract-checked on every CI run. Projects that also set
-  `deferred_writes = true` get cocotb's write model: `set()` after an edge
-  wait lands on the next edge, with `set_now()` as the immediate escape
-  hatch. Without the opt-in, sample after `RisingEdge` and drive after
-  `FallingEdge`; [scheduling](docs/scheduling.md) covers both styles.
 - **Verilator is the only end-to-end simulator.** The generated transport is
   standard SV-DPI and elaboration is simulator-independent through Slang, but
-  nothing else is exercised in CI yet.
-- **The build-time discovery pass runs your testbench.** A testbench that hangs
-  or exits at time zero therefore fails the *build*, and the failure reads like
-  a compile error. If a first build stalls, suspect the testbench's own control
-  flow before the toolchain.
+  nothing else is exercised in CI yet. Four-state X/Z propagation is
+  consequently unavailable today; [docs/four-state.md](docs/four-state.md)
+  records exactly what does and does not work.
 - **Coverage is explicit.** There are no automatic per-value bins for a sampled
   type and no `default` bin; every bin is declared. `with (expr)` cross filters
   are matched at bin granularity — exact whenever the expression is constant
@@ -102,10 +108,12 @@ Stated here rather than discovered the hard way:
   random streams: two testbenches that draw from the same seed produce
   identical stimulus only if they wake the same processes in the same order.
 
-The measurements behind the performance and equivalence claims — and forty-one
-findings from porting Ibex's UVM testbenches, with reduced cases — live under
-[experiments/open_core_ports](experiments/open_core_ports/), which fetches
-several GB of external dependencies and is not part of the installable package.
+The measurements behind the performance and equivalence claims — and
+forty-two findings from porting Ibex's UVM testbenches, with reduced cases —
+live under [experiments/open_core_ports](experiments/open_core_ports/), which
+fetches several GB of external dependencies and is not part of the
+installable package. The docs site summarizes them in
+[Ports of real testbenches](docs/open-core-ports.md).
 
 ## Requirements
 
@@ -153,8 +161,6 @@ sudo apt-get install -y autoconf bison flex libfl-dev help2man \
 
 The packaged `libz3-dev` is currently older than 4.15.5, so the optional Z3
 adapter needs Z3 built from source on those distributions.
-
-Mojo is only needed for the historical experiments under `experiments/`.
 
 ## Build and test
 
@@ -219,18 +225,18 @@ an equivalent pure-SystemVerilog testbench and runs under `make examples-test`.
 
 ## Documentation site
 
-The Markdown under `docs/` is the shared source for two static HTML builds.
-Build both variants or preview either one locally:
+The published documentation lives at <https://cpptb-docs.pages.dev>, built
+with Sphinx (MyST + Furo) from the Markdown under `docs/`. Preview locally
+with:
 
 ```sh
-make docs-build
 make docs-sphinx-serve    # http://localhost:8001
-make docs-zensical-serve  # http://localhost:8002
 ```
 
-The Sphinx build uses MyST and Furo; the parallel Zensical build uses its
-modern theme and built-in search. Generated HTML stays under `build/docs/` and
-is not committed.
+`make docs-check` is the gate CI runs: both diagram and API-name checkers,
+plus a warnings-as-errors build. (A parallel Zensical build still runs in CI
+but is deprecated and being retired; see `zensical.toml`.) Generated HTML
+stays under `build/docs/` and is not committed.
 
 ## Benchmarks
 
@@ -267,11 +273,16 @@ only the selected core.
 - `include/cpptb/`: installable C++ framework headers.
 - `include/cpptb_vc/`: optional reusable verification-component headers.
 - `tools/codegen/`: public `cpptb` CLI and lower-level Slang code generator.
+- `tools/peakrdl/`: the `cpptb-peakrdl` SystemRDL/IP-XACT exporter wheel.
+- `tools/release/` and `tools/docs/`: single-binary packaging and the
+  documentation toolchain.
 - `examples/`: end-to-end C++ DPI examples and SystemVerilog equivalents.
 - `tests/`: unit, generator, and simulator conformance tests.
 - `benchmarks/`: reproducible feature and four-mode comparison suites.
 - `docs/`: user guide, architecture, scheduling, and performance notes.
-- `experiments/`: historical Mojo, VPI, C API, and UVM investigations.
+- `experiments/`: porting studies and historical prototypes (Ibex UVM ports,
+  Mojo, VPI, UVM comparisons); Mojo is needed only here, never for cpptb
+  itself.
 
 cpptb is a research-stage framework. The conformance suite captures the
 supported contract; portability beyond the tested simulator set remains active

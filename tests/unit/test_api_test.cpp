@@ -1,6 +1,9 @@
+#include <unistd.h>
+
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <cstring>
 #include <optional>
 #include <stdexcept>
@@ -1581,7 +1584,11 @@ int main() {
     passed &= expect("deadlock Event includes resource and provenance",
                      found_deadlocked_event, true);
 
-    const char* deadlock_json_path = "/tmp/cpptb-deadlock-result.json";
+    const std::string deadlock_json_owned =
+        (std::filesystem::temp_directory_path() /
+         ("cpptb-deadlock-result-" + std::to_string(::getpid()) + ".json"))
+            .string();
+    const char* deadlock_json_path = deadlock_json_owned.c_str();
     passed &= expect("deadlock JSON written",
                      cpptb::write_test_result_json(deadlock_json_path,
                                                    deadlock_result),

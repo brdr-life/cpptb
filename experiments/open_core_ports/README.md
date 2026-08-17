@@ -76,11 +76,14 @@ made elsewhere in this repository. Each port should record:
 ## Comparison peers
 
 Verilator runs plain SystemVerilog and cocotb dependably, and both are already
-modes in the four-mode harness. UVM runs but is not yet dependable there:
-`experiments/uvm_comparison` measured one test passing three times out of
-three, one segfaulting, and both random tests reporting scoreboard errors. Use
-UVM as an ergonomics peer, and plain SystemVerilog or cocotb when a number has
-to mean something. See [future directions](../../docs/future-directions.md).
+modes in the four-mode harness. UVM's constrained-random path was not
+dependable on the small tutorial bench in `experiments/uvm_comparison`: one
+test passed three times out of three, one segfaulted, and both random tests
+reported scoreboard errors. The two full UVM environments ported in this tree
+run far better on the same Verilator — the icache environment passes all ten
+of its tests and core_ibex passes 912 of 944 — once their solver setup and
+workaround set are in place. Use UVM as an ergonomics peer, and plain
+SystemVerilog or cocotb when a number has to mean something. See [future directions](../../docs/future-directions.md).
 
 ## Coverage
 
@@ -160,7 +163,8 @@ reaches the same verdict on the same 944 tests.
   Scoped to `core_ibex_base_test`, which 943 of the 944 entries name, plus the
   thirty-line class the 944th needs. The other eight test classes and the
   interrupt and debug agents serve the riscv-dv testlist, where the baseline's
-  own accounting says 17 of its 30 passes are hollow.
+  own accounting says 17 of its 30 passes are hollow under pyflow -- which
+  is not the SystemVerilog generator upstream actually runs.
 
   Both harnesses run byte-identical program binaries: the cpptb runner imports
   the baseline's compile rather than reimplementing it. Record-and-replay closes
