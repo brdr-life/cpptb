@@ -175,9 +175,9 @@ CPPTB_CODEGEN_SOURCES := \
 	tools/codegen/cpptb_codegen/build.py \
 	tools/codegen/cpptb_codegen/cli.py \
 	tools/codegen/cpptb_codegen/design_ir.py \
-	tools/codegen/cpptb_codegen/peakrdl_plugin.py \
+	tools/peakrdl/cpptb_peakrdl/plugin.py \
 	tools/codegen/cpptb_codegen/project.py \
-	tools/codegen/cpptb_codegen/register_codegen.py \
+	tools/peakrdl/cpptb_peakrdl/codegen.py \
 	tools/codegen/cpptb_codegen/rggen_codegen.py \
 	tools/codegen/cpptb_codegen/runner.py \
 	tools/codegen/cpptb_codegen/verilator_capabilities.py \

@@ -12,7 +12,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-from cpptb_codegen.register_codegen import (
+from cpptb_peakrdl.codegen import (
     BackdoorSlice,
     Field,
     Memory,

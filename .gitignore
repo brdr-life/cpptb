@@ -38,3 +38,4 @@ experiments/open_core_ports/ports/*/build-deferred*/
 
 # Claude Code local session state
 .claude/
+.wrangler/

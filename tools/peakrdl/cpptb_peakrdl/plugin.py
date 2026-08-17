@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from peakrdl.plugins.exporter import ExporterSubcommandPlugin
 
-from cpptb_codegen.register_codegen import export_register_model
+from cpptb_peakrdl.codegen import export_register_model
 
 if TYPE_CHECKING:
     from systemrdl.node import AddrmapNode
