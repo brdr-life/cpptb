@@ -16,10 +16,13 @@ upstream's own tests: 944 directed programs, an architectural test suite,
 and a UVM block environment, with upstream sources pinned by exact commit
 and never modified.
 
-Nothing under `experiments/` is wired into `make test`, the benchmark
-registry, or the performance guard. Each port's `README.md` and `RESULTS.md`
-are the authoritative record. This page carries the shape and the headline
-numbers.
+The experiments tree lives on the repository's
+[`experiments` branch](https://github.com/brdr-life/cpptb/tree/experiments/experiments/open_core_ports)
+rather than on `main`: nothing in it is wired into `make test`, the
+benchmark registry, or the performance guard, and it fetches several GB of
+upstream dependencies. Each port's `README.md` and `RESULTS.md` there are
+the authoritative record; every `experiments/...` path on this page refers
+to that branch. This page carries the shape and the headline numbers.
 
 ## The ports at a glance
 
@@ -170,10 +173,12 @@ defects were fixed in the framework and the rest are recorded.
 
 ## Reproducing
 
-Everything is pinned and fetched, never vendored. `sources.toml` records
-exact commits, licenses, and the purpose of every dependency, and `fetch.py`
-(standard library only) verifies and unpacks them. The per-port commands
-live in each port's README; the shared prerequisites are the three `make`
-targets shown [above](#spike-co-simulation). Ports write only under their
-own directory, `work/`, or `results/`. Upstream sources under `deps/` are
-never modified.
+Check out the
+[`experiments` branch](https://github.com/brdr-life/cpptb/tree/experiments)
+first; everything below runs from its tree. Sources are pinned and fetched,
+never vendored: `sources.toml` records exact commits, licenses, and the
+purpose of every dependency, and `fetch.py` (standard library only) verifies
+and unpacks them. The per-port commands live in each port's README; the
+shared prerequisites are the three `make` targets shown
+[above](#spike-co-simulation). Ports write only under their own directory,
+`work/`, or `results/`. Upstream sources under `deps/` are never modified.

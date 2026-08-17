@@ -110,10 +110,11 @@ Stated here rather than discovered the hard way:
 
 The measurements behind the performance and equivalence claims — and
 forty-two findings from porting Ibex's UVM testbenches, with reduced cases —
-live under [experiments/open_core_ports](experiments/open_core_ports/), which
-fetches several GB of external dependencies and is not part of the
-installable package. The docs site summarizes them in
-[Ports of real testbenches](docs/open-core-ports.md).
+live in `experiments/open_core_ports` on the
+[`experiments` branch](https://github.com/brdr-life/cpptb/tree/experiments/experiments/),
+which is kept off `main` because it fetches several GB of external
+dependencies and is not part of the installable package. The docs site
+summarizes it in [Ports of real testbenches](docs/open-core-ports.md).
 
 ## Requirements
 
@@ -280,9 +281,10 @@ only the selected core.
 - `tests/`: unit, generator, and simulator conformance tests.
 - `benchmarks/`: reproducible feature and four-mode comparison suites.
 - `docs/`: user guide, architecture, scheduling, and performance notes.
-- `experiments/`: porting studies and historical prototypes (Ibex UVM ports,
-  Mojo, VPI, UVM comparisons); Mojo is needed only here, never for cpptb
-  itself.
+- The [`experiments` branch](https://github.com/brdr-life/cpptb/tree/experiments/experiments/)
+  carries the porting studies and historical prototypes (Ibex UVM ports,
+  Mojo, VPI, UVM comparisons), kept off `main` deliberately; Mojo is needed
+  only there, never for cpptb itself.
 
 cpptb is a research-stage framework. The conformance suite captures the
 supported contract; portability beyond the tested simulator set remains active
