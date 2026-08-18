@@ -163,6 +163,15 @@ sudo apt-get install -y autoconf bison flex libfl-dev help2man \
 The packaged `libz3-dev` is currently older than 4.15.5, so the optional Z3
 adapter needs Z3 built from source on those distributions.
 
+On macOS, FST waveform builds (`--wave`) additionally need lz4: Verilator's
+FST writer includes `<lz4.h>` when it compiles into a model, and Apple clang
+does not search Homebrew's include tree by default:
+
+```sh
+brew install lz4 zstd
+export CPATH="$(brew --prefix)/include" LIBRARY_PATH="$(brew --prefix)/lib"
+```
+
 ## Build and test
 
 ```sh

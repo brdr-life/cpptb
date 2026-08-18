@@ -136,11 +136,14 @@ jobs:
         run: |
           sudo apt-get update
           # Installed on cache hits too: pkg-config and zlib are needed to
-          # build against Verilator, not only to build Verilator itself.
-          # No libz3-dev: the packaged Z3 predates the 4.15.5 the adapter
-          # needs. `make z3-toolchain` supplies a portable one below.
+          # build against Verilator, not only to build Verilator itself, and
+          # liblz4-dev serves the FST writer Verilator compiles into traced
+          # models (present on today's runner image, pinned here so a
+          # slimmer image cannot break wave builds). No libz3-dev: the
+          # packaged Z3 predates the 4.15.5 the adapter needs.
+          # `make z3-toolchain` supplies a portable one below.
           sudo apt-get install -y autoconf bison flex libfl-dev help2man \
-            zlib1g-dev pkg-config
+            zlib1g-dev liblz4-dev pkg-config
 
       - name: Build Verilator (Ubuntu)
         if: runner.os == 'Linux' && steps.verilator-cache.outputs.cache-hit != 'true'
@@ -162,6 +165,17 @@ jobs:
       - name: Install Verilator (macOS)
         if: runner.os == 'macOS'
         run: brew install verilator
+
+      # Verilator 5.050's FST writer includes <lz4.h> when it compiles into
+      # a model, and Apple clang does not search Homebrew's include tree by
+      # default; CPATH/LIBRARY_PATH make the headers and libraries visible
+      # to every model build in the regression.
+      - name: Expose Homebrew headers and libraries (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install lz4 zstd
+          echo "CPATH=$(brew --prefix)/include" >> "$GITHUB_ENV"
+          echo "LIBRARY_PATH=$(brew --prefix)/lib" >> "$GITHUB_ENV"
 
       - name: Sync Python tools
         run: uv sync --frozen
