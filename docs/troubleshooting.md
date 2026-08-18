@@ -17,6 +17,7 @@ on stderr, prefixed `cpptb:`.
 | `design.defines`/`build.cxx_flags` `must not set 'CPPTB_…TIMING'` | The timing defines are owned by `timing_backend` so an incomplete phase bridge cannot be assembled by hand. Remove the define and set the key |
 | `build.verilator_args must not set OPT_FAST` | Two optimization settings would leave whichever Verilator applies last in charge. Use `build.optimization`, which covers the testbench and the model together |
 | `could not find … verilator_timing_main.cpp; looked in: …` | The framework host loop was not found from the resolved framework root. Point `--framework-root` at a cpptb checkout or install prefix |
+| `fatal error: 'lz4.h' file not found` in an FST `--wave` build (macOS) | Verilator's FST writer needs lz4, and Apple clang does not search Homebrew's include tree: `brew install lz4 zstd`, then export `CPATH="$(brew --prefix)/include"` and `LIBRARY_PATH="$(brew --prefix)/lib"` |
 | An ambiguous top module | More than one candidate root elaborates; the message lists them. Select one with `--top` or `[design] top` |
 
 ## Testbench compile errors
