@@ -204,12 +204,13 @@ model shipped and became the default precisely so a cocotb driver
 translates line for line. The edge instant is the one place convergence
 would have cost more than it bought, three times over.
 
-**It is the hot path.** The generated calendar toggles a clock and
-dispatches the scheduler in the same Active-region statement sequence: one
-call per edge, before the design evaluates. Resuming where cocotb resumes
-would take a second, settle-region dispatch on every edge wait — or the
-NBA-barrier phase pump, which [Architecture](architecture.md) records as
-measured and slower than portable VPI. The performance identity against
+**It is the hot path.** The generated wrapper toggles each registered
+clock in simulator time and calls the scheduler in the same Active-region
+statement sequence: one call per edge, before the design evaluates (see
+[Clocking](clocking.md#delays-and-clock-cycles)). Resuming where cocotb
+resumes would take a second, settle-region dispatch on every edge wait — or
+the NBA-barrier phase pump, which [Architecture](architecture.md) records
+as slower than portable VPI. The performance identity against
 pure SystemVerilog — measured ratios between 0.76x and 1.08x of
 hand-written SV, with [Performance](performance.md) carrying the gated
 benchmarks behind them — rests on that single dispatch, and a bench full
@@ -228,9 +229,10 @@ would have made one of them unreachable.
 **It matches SystemVerilog.** A plain `@(posedge clk)` in an SV testbench
 process also resumes in the Active region, before that edge's nonblocking
 updates commit — the same instant as `co_await RisingEdge{}`. Every
-example and benchmark in this repository is held against a pure-SV twin,
-so matching cocotb here would have meant diverging from the language the
-twins are written in.
+[example](examples.md) in this repository ships with a pure-SV twin and
+every benchmark is measured against SystemVerilog baselines, so matching
+cocotb here would have meant diverging from the language those twins and
+baselines are written in.
 
 [Simulator event regions](event-regions.md) locates all of these instants
 in the LRM's time-slot model. The helper-pair convention that manages the

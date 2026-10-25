@@ -48,6 +48,7 @@ nav = [
     { "Framework test lifecycle" = "test-lifecycle.md" },
     { "Clocking" = "clocking.md" },
     { "Scheduling" = "scheduling.md" },
+    { "Simulator event regions" = "event-regions.md" },
     { "Structured logging" = "logging.md" },
     { "Waveforms" = "waveforms.md" },
   ] },
